@@ -76,6 +76,50 @@ defmodule AuroraMeter do
     Counter.all_for(Tenant.to_key(tenant), Period.current(tenant).start)
   end
 
+  @doc "Assigns `plan_id` to `tenant` locally. See `AuroraMeter.Entitlements.subscribe/2`."
+  @spec subscribe(term(), atom() | String.t()) ::
+          {:ok, AuroraMeter.Schema.Subscription.t()} | {:error, Ecto.Changeset.t()}
+  defdelegate subscribe(tenant, plan_id), to: AuroraMeter.Entitlements
+
+  @doc "Returns `tenant`'s current plan. See `AuroraMeter.Entitlements.plan/1`."
+  @spec plan(term()) :: AuroraMeter.Plan.t() | nil
+  defdelegate plan(tenant), to: AuroraMeter.Entitlements
+
+  @doc "Checks whether `tenant` may use `feature`. See `AuroraMeter.Entitlements.check/2`."
+  @spec check(term(), atom()) :: :ok | {:error, :limit_exceeded | :not_entitled}
+  defdelegate check(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc "Whether `check/2` currently returns `:ok`."
+  @spec allowed?(term(), atom()) :: boolean()
+  defdelegate allowed?(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc "Whether the plan grants access to `feature` (ignores quota)."
+  @spec entitled?(term(), atom()) :: boolean()
+  defdelegate entitled?(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc "Remaining quota for a hard-limited feature, or `:unlimited`."
+  @spec remaining(term(), atom()) :: non_neg_integer() | :unlimited
+  defdelegate remaining(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc "Atomically reserves usage against the plan. See `AuroraMeter.Entitlements.reserve/3`."
+  @spec reserve(term(), atom()) :: :ok | {:error, :limit_exceeded | :not_entitled}
+  defdelegate reserve(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc "Atomically reserves `qty` usage against the plan."
+  @spec reserve(term(), atom(), pos_integer()) :: :ok | {:error, :limit_exceeded | :not_entitled}
+  defdelegate reserve(tenant, feature, qty), to: AuroraMeter.Entitlements
+
+  @doc "Gates, runs, and meters in one step. See `AuroraMeter.Entitlements.with_quota/4`."
+  @spec with_quota(term(), atom(), (-> result)) :: {:ok, result} | {:error, term()}
+        when result: term()
+  defdelegate with_quota(tenant, feature, fun), to: AuroraMeter.Entitlements
+
+  @doc "Gates, runs, and meters `qty` in one step."
+  @spec with_quota(term(), atom(), pos_integer(), (-> result)) ::
+          {:ok, result} | {:error, term()}
+        when result: term()
+  defdelegate with_quota(tenant, feature, qty, fun), to: AuroraMeter.Entitlements
+
   @spec maybe_write_event(String.t(), atom(), integer(), keyword()) :: :ok
   defp maybe_write_event(tenant_key, feature, qty, opts) do
     if durable?(feature, opts) do

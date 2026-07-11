@@ -292,15 +292,15 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** the gate, plan resolution, atomic `with_quota`, and the provider seam (so core works standalone and Pro can plug in).
 
-- [ ] `AuroraMeter.subscribe(tenant, plan_id) :: {:ok, Subscription.t} | {:error, _}` — `Storage.put_subscription/1` with `status: "active"`, `plan_id`, no provider fields (local).
-- [ ] `AuroraMeter.plan(tenant) :: Plan.t` — subscription's plan, else `Config.default_plan/0`.
-- [ ] `AuroraMeter.Entitlements`:
+- [x] `AuroraMeter.subscribe(tenant, plan_id) :: {:ok, Subscription.t} | {:error, _}` — `Storage.put_subscription/1` with `status: "active"`, `plan_id`, no provider fields (local).
+- [x] `AuroraMeter.plan(tenant) :: Plan.t` — subscription's plan, else `Config.default_plan/0`.
+- [x] `AuroraMeter.Entitlements`:
   - `check(tenant, feature) :: :ok | {:error, :limit_exceeded | :not_entitled}` per **D12**: `{:feature, false}` → `:not_entitled`; `{:limit, n, :hard}` → `usage >= n` ? `:limit_exceeded` : `:ok`; `{:metered, _, _}` → `:ok`; undeclared → `:ok` (+ dev warning).
   - `allowed?/2` (bool), `entitled?/2` (feature access only), `remaining/2 :: non_neg_integer | :unlimited`.
   - `reserve(tenant, feature, qty \\ 1)` → resolves hard `limit` (nil for metered/undeclared) then `Counter.reserve/5`.
   - `with_quota(tenant, feature, qty \\ 1, fun)` → `case reserve: :ok -> try fun; on raise release + reraise; return {:ok, result}` ; `{:error, e} -> {:error, e}`. **No separate `track` call** — `reserve` already incremented (avoids double count).
-- [ ] `AuroraMeter.Billing.Provider` behaviour (defined in **core**): `create_checkout_session(tenant, opts)`, `billing_portal_url(tenant, opts)`, `sync_subscription(payload)`, `report_usage(entries)`. `AuroraMeter.Billing.Noop` implements all as `{:error, :not_configured}` and is the default `Config.provider/0`.
-- [ ] `AuroraMeter.Billing.checkout/3`, `portal_url/2` — thin facades delegating to `Config.provider/0`.
+- [x] `AuroraMeter.Billing.Provider` behaviour (defined in **core**): `create_checkout_session(tenant, opts)`, `billing_portal_url(tenant, opts)`, `sync_subscription(payload)`, `report_usage(entries)`. `AuroraMeter.Billing.Noop` implements all as `{:error, :not_configured}` and is the default `Config.provider/0`.
+- [x] `AuroraMeter.Billing.checkout/3`, `portal_url/2` — thin facades delegating to `Config.provider/0`.
 
 **Tests:** hard-limit blocks exactly at cap; metered always `:ok`; undeclared permissive; `remaining` math (incl. `:unlimited`); `with_quota` **concurrency** (K tasks racing a cap of n → exactly n succeed, K−n get `:limit_exceeded`, final usage == n); `release` on `fun` raising restores the counter; Noop provider returns `:not_configured`.
 

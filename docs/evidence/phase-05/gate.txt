@@ -1,0 +1,28 @@
+Phase 5 — Verification Gate evidence
+Date: 2026-07-11
+
+Scope: AuroraMeter.Entitlements (subscribe/2, plan/1, check/2, allowed?/2,
+entitled?/2, remaining/2, reserve/2,3, with_quota/3,4 with atomic reserve +
+release-on-raise), AuroraMeter.Billing.Provider behaviour + Billing.Noop default
++ Billing facade (checkout/portal_url), AuroraMeter facade delegates.
+
+Gate: format --check-formatted && compile --warnings-as-errors && credo --strict
+      && dialyzer && test   => PHASE5_FULL_PASS
+
+Results:
+  credo --strict -> 0 issues
+  dialyzer       -> Total errors: 0
+  test           -> "Result: 41 passed (1 doctest, 1 property, 39 tests)"
+
+Key tests:
+  - hard cap blocks at limit; remaining math; metered always :ok / :unlimited.
+  - feature access gated (free api_access=false -> :not_entitled; pro -> :ok).
+  - default plan applies without a subscription.
+  - undeclared feature permissive.
+  - with_quota concurrency: 60 concurrent -> exactly 50 :ok, 10 :limit_exceeded,
+    usage == 50 (atomic reserve correctness).
+  - with_quota releases the reservation when fun raises (usage back to 0).
+  - Noop provider returns {:error, :not_configured}.
+
+Note: undeclared-feature warning uses a compile-time :dev switch (no runtime dead
+branch), keeping dialyzer clean.
