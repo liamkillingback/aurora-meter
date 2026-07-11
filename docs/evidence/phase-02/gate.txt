@@ -1,0 +1,23 @@
+Phase 2 — Verification Gate evidence
+Date: 2026-07-11
+
+Scope: Ecto schemas (Subscription, Counter, Event; binary_id PKs w/ gen_random_uuid
+default), AuroraMeter.Storage behaviour + dispatch, AuroraMeter.Storage.Ecto
+adapter (insert_all upserts, absolute-value conflict replace, subscription upsert
+by tenant_key), AuroraMeter.Migration (up/down; host migration delegates to it),
+mix aurora_meter.gen.migration + aurora_meter.install, test_repo migration.
+
+Gate: mix format --check-formatted && mix compile --warnings-as-errors --force
+      && mix credo --strict && mix test.setup && mix test
+
+Results:
+  format         -> ok
+  compile (w-as-e) -> 0 warnings
+  credo --strict -> 0 issues
+  test.setup     -> ecto.create + ecto.migrate applied AuroraMeter.Migration.up/0
+  test           -> "Result: 18 passed (1 doctest, 17 tests)"
+  marker         -> PHASE2_GATE_PASS
+
+Verified against real Postgres (5490): counter upsert replaces (no duplicate),
+load_counter atom/string feature parity, subscription upsert idempotent, events
+appended.

@@ -242,11 +242,11 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** schemas, the Storage behaviour + Ecto adapter, the installer migration, and the test-repo migration — all sandbox-tested.
 
-- [ ] Schemas (`binary_id`): `AuroraMeter.Schema.Subscription`, `.Counter`, `.Event` — fields per [Appendix A](#appendix-a--canonical-migration). Each with `@type t`, changeset, and validations.
-- [ ] `AuroraMeter.Storage` behaviour: `upsert_counters(rows) :: :ok`, `load_counter(tenant_key, feature, period_start) :: integer | nil`, `get_subscription(tenant_key) :: Subscription.t | nil`, `put_subscription(attrs) :: {:ok, Subscription.t} | {:error, changeset}`, `insert_events(rows) :: :ok`, `stream_counters(period_start) :: Enumerable.t` (for Pro rollups).
-- [ ] `AuroraMeter.Storage.Ecto` — implements it against `Config.repo/0`. `upsert_counters/1` = `Repo.insert_all(Counter, rows, on_conflict: {:replace, [:value, :updated_at]}, conflict_target: [:tenant_key, :feature, :period_start])`. `put_subscription/1` upserts on `conflict_target: [:tenant_key]`.
-- [ ] `priv/templates/migration.eex` — canonical migration ([Appendix A](#appendix-a--canonical-migration)). `Mix.Tasks.AuroraMeter.Gen.Migration` / `AuroraMeter.Install` — copies it into the host `priv/repo/migrations` with a timestamp; prints post-install config snippet.
-- [ ] `priv/test_repo/migrations/*_create_aurora_meter.exs` — same DDL for the library's own test DB; `test.setup` alias runs `ecto.create` + `ecto.migrate` for `TestRepo`.
+- [x] Schemas (`binary_id`): `AuroraMeter.Schema.Subscription`, `.Counter`, `.Event` — fields per [Appendix A](#appendix-a--canonical-migration). Each with `@type t`, changeset, and validations.
+- [x] `AuroraMeter.Storage` behaviour: `upsert_counters(rows) :: :ok`, `load_counter(tenant_key, feature, period_start) :: integer | nil`, `get_subscription(tenant_key) :: Subscription.t | nil`, `put_subscription(attrs) :: {:ok, Subscription.t} | {:error, changeset}`, `insert_events(rows) :: :ok`, `stream_counters(period_start) :: Enumerable.t` (for Pro rollups).
+- [x] `AuroraMeter.Storage.Ecto` — implements it against `Config.repo/0`. `upsert_counters/1` = `Repo.insert_all(Counter, rows, on_conflict: {:replace, [:value, :updated_at]}, conflict_target: [:tenant_key, :feature, :period_start])`. `put_subscription/1` upserts on `conflict_target: [:tenant_key]`.
+- [x] `priv/templates/migration.eex` — canonical migration ([Appendix A](#appendix-a--canonical-migration)). `Mix.Tasks.AuroraMeter.Gen.Migration` / `AuroraMeter.Install` — copies it into the host `priv/repo/migrations` with a timestamp; prints post-install config snippet.
+- [x] `priv/test_repo/migrations/*_create_aurora_meter.exs` — same DDL for the library's own test DB; `test.setup` alias runs `ecto.create` + `ecto.migrate` for `TestRepo`.
 
 **Tests:** adapter round-trips (upsert then load; conflict replaces not duplicates); subscription upsert idempotent; `insert_events` writes rows; migration applies cleanly on the test DB.
 

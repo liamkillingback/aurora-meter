@@ -1,6 +1,8 @@
 import Config
 
 if config_env() == :test do
+  config :logger, level: :warning
+
   config :aurora_meter, ecto_repos: [AuroraMeter.TestRepo]
 
   config :aurora_meter,
