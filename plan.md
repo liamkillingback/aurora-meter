@@ -342,11 +342,11 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** a second repo that compiles against the core via a path dep.
 
-- [ ] `product-workspaces/aurora_meter_pro/` — `mix new`, namespace `AuroraMeter.Pro`. `mix.exs`: **commercial** `package` (or unpublished), `LICENSE.commercial` (all-rights-reserved + per-app commercial grant, Sidekiq-Pro-style), `@version "0.0.1"`.
-- [ ] Deps: `{:aurora_meter, path: "../aurora_meter"}` (dev) / `"~> 0.1"` (release), `{:oban, "~> 2.17"}`, `{:stripity_stripe, "~> 3.2"}`, `{:plug, "~> 1.15"}`, `{:phoenix_live_view, "~> 0.20 or ~> 1.0"}`, dev/test: `ex_doc credo dialyxir stream_data`.
-- [ ] `AGENTS.md` (Pro variant — same contract + "never call the real Stripe API in tests; use the fake"), `CLAUDE.md`, `.credo.exs`, `.formatter.exs`, `.github/workflows/ci.yml` (no Stripe secrets — tests use the fake provider), `.gitignore`.
-- [ ] `docs/adr/0001-pro-scope.md` (D4/D16/D17).
-- [ ] `git init`; `phase-08: scaffold pro`.
+- [x] `product-workspaces/aurora_meter_pro/` — `mix new`, namespace `AuroraMeter.Pro`. `mix.exs`: **commercial** `package` (or unpublished), `LICENSE.commercial` (all-rights-reserved + per-app commercial grant, Sidekiq-Pro-style), `@version "0.0.1"`.
+- [x] Deps: `{:aurora_meter, path: "../aurora_meter"}` (dev) / `"~> 0.1"` (release), `{:oban, "~> 2.17"}`, `{:stripity_stripe, "~> 3.2"}`, `{:plug, "~> 1.15"}`, `{:phoenix_live_view, "~> 0.20 or ~> 1.0"}`, dev/test: `ex_doc credo dialyxir stream_data`.
+- [x] `AGENTS.md` (Pro variant — same contract + "never call the real Stripe API in tests; use the fake"), `CLAUDE.md`, `.credo.exs`, `.formatter.exs`, `.github/workflows/ci.yml` (no Stripe secrets — tests use the fake provider), `.gitignore`.
+- [x] `docs/adr/0001-pro-scope.md` (D4/D16/D17).
+- [x] `git init`; `phase-08: scaffold pro`.
 
 **Verification Gate 8:** Pro `mix check` green with the path dep resolved; 0 tests; `docs/evidence/phase-08/gate.txt`.
 
