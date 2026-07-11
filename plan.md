@@ -368,10 +368,10 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** metered overage flows to Stripe exactly once; periods align to the subscription.
 
-- [ ] Migration: `aurora_meter_usage_reports` (`tenant_key, feature, period_start, last_reported bigint, updated_at`; unique `[tenant_key, feature, period_start]`). Ship as a Pro installer migration + Pro test-repo migration.
-- [ ] `AuroraMeter.Pro.UsageReporter` (Oban worker): for each active tenant × metered feature: `delta = usage - last_reported`; if `> 0`, `Stripe` meter-events call (`stripe_meters[feature]`, tenant's `provider_customer_id`, `value: delta`, idempotency key `=(tenant,feature,period,ts_bucket)`); then update `last_reported`. Idempotent and crash-safe (delta ledger).
-- [ ] Oban cron plugin config: run every 5 min + a boundary run. Document the host's `Oban` config requirement (Pro requires the host to run Oban).
-- [ ] `AuroraMeter.Pro.Period` + set `config :aurora_meter, period_source: AuroraMeter.Pro.Period` so `Period.current/2` returns subscription bounds when a subscription exists, else calendar (D11). Core's `Period` must call the configured source (add a 1-line indirection in Phase 3's `Period` — noted in ADR 0003; the seam is `Config.period_source/0` defaulting to `AuroraMeter.Period.Calendar`).
+- [x] Migration: `aurora_meter_usage_reports` (`tenant_key, feature, period_start, last_reported bigint, updated_at`; unique `[tenant_key, feature, period_start]`). Ship as a Pro installer migration + Pro test-repo migration.
+- [x] `AuroraMeter.Pro.UsageReporter` (Oban worker): for each active tenant × metered feature: `delta = usage - last_reported`; if `> 0`, `Stripe` meter-events call (`stripe_meters[feature]`, tenant's `provider_customer_id`, `value: delta`, idempotency key `=(tenant,feature,period,ts_bucket)`); then update `last_reported`. Idempotent and crash-safe (delta ledger).
+- [x] Oban cron plugin config: run every 5 min + a boundary run. Document the host's `Oban` config requirement (Pro requires the host to run Oban).
+- [x] `AuroraMeter.Pro.Period` + set `config :aurora_meter, period_source: AuroraMeter.Pro.Period` so `Period.current/2` returns subscription bounds when a subscription exists, else calendar (D11). Core's `Period` must call the configured source (add a 1-line indirection in Phase 3's `Period` — noted in ADR 0003; the seam is `Config.period_source/0` defaulting to `AuroraMeter.Period.Calendar`).
 
 > ⚠️ **Back-edit note:** Phase 3 must ship `Period` with a `Config.period_source/0` seam (default `Calendar`). If Phase 3 was built without it, add the seam here and re-run Phase 3's gate before proceeding.
 
