@@ -323,12 +323,12 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** a polished, documented, publishable free core — the adoption front door.
 
-- [ ] Typespecs on **every** public function; `@moduledoc`/`@doc` with `## Examples`; doctests where cheap. `mix dialyzer` clean (0 warnings).
-- [ ] `README.md` — headline, install, 60-second quickstart (the 3 jobs), config table, "what's free vs Pro", links. Optimize for **AI-legibility** (the shadcn lesson): plain, copy-pasteable, self-explaining.
-- [ ] Guides in `docs/`: `getting-started`, `configuration`, `metering`, `entitlements`, `plans`, `telemetry` ([Appendix C](#appendix-c--telemetry-events)), `testing`. Wire `extras`/`groups_for_extras` in `mix.exs` `docs/0`.
-- [ ] `demo/` — a Phoenix 1.7+ app depending on `{:aurora_meter, path: ".."}`, with a plans module, one gated action, and a `/usage` LiveView using `<.usage_meter>`. Proves the install story end to end. README documents booting it.
-- [ ] `CHANGELOG.md` → `0.1.0`; bump `@version`; verify `package.files`; `mix hex.build` (dry run) clean; `mix docs` builds.
-- [ ] **Manual step (flag, do not automate):** `mix hex.publish` and pushing the GitHub repo — leave a `docs/RELEASE.md` checklist; a human runs it. Tag `v0.1.0` locally.
+- [x] Typespecs on **every** public function; `@moduledoc`/`@doc` with `## Examples`; doctests where cheap. `mix dialyzer` clean (0 warnings).
+- [x] `README.md` — headline, install, 60-second quickstart (the 3 jobs), config table, "what's free vs Pro", links. Optimize for **AI-legibility** (the shadcn lesson): plain, copy-pasteable, self-explaining.
+- [x] Guides in `docs/`: `getting-started`, `configuration`, `metering`, `entitlements`, `plans`, `telemetry` ([Appendix C](#appendix-c--telemetry-events)), `testing`. Wire `extras`/`groups_for_extras` in `mix.exs` `docs/0`.
+- [x] `demo/` — a Phoenix 1.7+ app depending on `{:aurora_meter, path: ".."}`, with a plans module, one gated action, and a `/usage` LiveView using `<.usage_meter>`. Proves the install story end to end. README documents booting it.
+- [x] `CHANGELOG.md` → `0.1.0`; bump `@version`; verify `package.files`; `mix hex.build` (dry run) clean; `mix docs` builds.
+- [x] **Manual step (flag, do not automate):** `mix hex.publish` and pushing the GitHub repo — leave a `docs/RELEASE.md` checklist; a human runs it. Tag `v0.1.0` locally.
 
 **Verification Gate 7:** `mix check` green on the full matrix locally (1.15 + 1.18); `demo` boots and the `/usage` page updates live (screenshot → `docs/evidence/phase-07/usage.png`); `mix docs` output archived; `git tag v0.1.0`.
 

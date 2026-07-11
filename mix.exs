@@ -1,7 +1,7 @@
 defmodule AuroraMeter.MixProject do
   use Mix.Project
 
-  @version "0.0.1"
+  @version "0.1.0"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do
@@ -82,7 +82,20 @@ defmodule AuroraMeter.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "CHANGELOG.md", "LICENSE", "NOTICE.md"],
+      extras: [
+        "README.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "NOTICE.md",
+        "docs/getting-started.md",
+        "docs/configuration.md",
+        "docs/metering.md",
+        "docs/entitlements.md",
+        "docs/plans.md",
+        "docs/telemetry.md",
+        "docs/testing.md"
+      ],
+      groups_for_extras: [Guides: ~r/docs\/.?/],
       source_ref: "v#{@version}",
       source_url: @source_url,
       formatters: ["html"]

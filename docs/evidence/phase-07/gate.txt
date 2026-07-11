@@ -1,0 +1,33 @@
+Phase 7 — Verification Gate evidence (free core v0.1.0)
+Date: 2026-07-11
+
+Scope: specs/docs across the public API, README quickstart, 7 guides (docs/*.md)
+wired into ex_doc, CHANGELOG 0.1.0, @version bump 0.0.1 -> 0.1.0, docs/RELEASE.md
+checklist, and a real external demo/ app that installs aurora_meter by path.
+
+Gate: mix check  => AURORA_CHECK_PASS
+  format --check-formatted : ok
+  compile --warnings-as-errors --force : 0 warnings
+  credo --strict : 0 issues
+  dialyzer : Total errors: 0
+  test : 44 passed (1 doctest, 1 property, 42 tests)
+  docs : generated (2 non-fatal README dir-link warnings, since fixed)
+
+End-to-end demo (mix run -e "Demo.run()" in demo/, a separate app depending on
+aurora_meter by path):
+  subscribed to plan: free
+  tracked 100 api_calls -> usage = 100 ; remaining = 0
+  check(api_calls) at cap = {:error, :limit_exceeded}
+  with_quota at cap = {:error, :limit_exceeded}
+  entitled?(webhooks) on free = false
+  upgraded to plan: pro -> check = :ok ; remaining = 9900 ; webhooks entitled = true
+  flushed 1 counter to Postgres ; usage persists = 100
+  billing checkout (no Pro) = {:error, :not_configured}
+  DEMO OK
+
+Note: component rendering (usage_meter/usage_summary) and PubSub broadcast are
+verified in the test suite (realtime_test). The demo is headless (proves the
+library install + full API in an external app) rather than a browser app; the
+Phoenix HTTP layer is not part of the library's surface.
+
+Publish + git tag v0.1.0 are left as manual steps in docs/RELEASE.md.

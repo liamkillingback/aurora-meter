@@ -10,3 +10,5 @@ erl_crash.dump
 .elixir_ls/
 /priv/plts/*.plt
 /priv/plts/*.plt.hash
+/demo/_build/
+/demo/deps/
