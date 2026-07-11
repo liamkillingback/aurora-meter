@@ -1,0 +1,35 @@
+Phase 14 — Integration proof + launch handoff
+Date: 2026-07-12
+
+INTEGRATION PROOF (end-to-end, verified with certainty):
+  1. External core demo (demo/, a separate app depending on aurora_meter by path):
+     subscribe(free) -> track 100 -> hit cap {:error, :limit_exceeded} ->
+     entitled?(webhooks)=false -> upgrade(pro) -> check=:ok, remaining=9900,
+     webhooks=true -> Flusher.flush persists to Postgres -> billing seam returns
+     {:error, :not_configured}.  Output: "DEMO OK".
+  2. Assembled core+Pro integration test (aurora_meter_pro integration_test.exs,
+     real Postgres): subscribe(scale) -> track 1500 over included 1000 ->
+     UsageReporter reports delta 1500 to provider -> Flusher.flush -> Rollup builds
+     month bucket 1500 -> usage_dashboard renders. Passes.
+
+FINAL REGRESSION (2026-07-12):
+  core:  Result: 44 passed (1 doctest, 1 property, 42 tests)
+  demo:  DEMO OK
+  pro:   Result: 21 passed (1 doctest, 20 tests)
+  Total: 65 tests + external demo, both packages green (credo + dialyzer clean).
+
+REAL-PRODUCT WIRING — FINDING + HANDOFF:
+  The older catalog products (PHX SaaS Starter, AI Document) run Phoenix 1.7 /
+  LiveView 0.19, which is BELOW aurora_meter's components requirement (~> 0.20 or
+  ~> 1.0; the components use LV 1.0 curly interpolation). Adding aurora_meter to
+  phx_saas conflicts on phoenix_live_view. The correct integration target is a
+  NEWER product (Aurora Commerce LV 1.2, or Data Agent LV 1.1). The core metering/
+  entitlements (no components) are stack-agnostic and work on any of them.
+  -> Handed off as background tasks (touches the owner's product repo; and the
+     storefront catalog/pricing is explicitly the owner's decision per plan.md).
+
+GTM DRAFTS (not published): docs/launch/gtm.md — landing section, ElixirForum post,
+README badge, distribution notes.
+
+RELEASES: aurora_meter v0.1.0 (MIT) and aurora_meter_pro v0.1.0 (commercial) tagged.
+Publishing to Hex / private repo is a manual step (docs/RELEASE.md in each).

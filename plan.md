@@ -419,9 +419,9 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** prove the "extracted from production" moat and hand marketing a real story.
 
-- [ ] Wire `aurora_meter` into a **real** product in the catalog (PHX SaaS Starter *or* the AI Document Starter): add the dep, define plans, gate one real feature with `with_quota`, add a `/usage` page. Document under `docs/evidence/phase-14/` with screenshots. (Follow the storefront's product-workspace workflow — this is a change in *that* product repo, not the storefront.)
-- [ ] Draft the go-to-market assets (do **not** publish — hand to the owner): a landing page section, an ElixirForum "Show & Tell" post, and a README badge. Note the free core is the top-of-funnel like Aurora UI.
-- [ ] Storefront catalog: leave a **flagged TODO** (separate storefront change, per `product-workspaces/README.md`) to add Aurora Meter Pro to `lib/phx_templates/catalog.ex` and a product page — a human decides pricing.
+- [x] Wire `aurora_meter` into a **real** product in the catalog (PHX SaaS Starter *or* the AI Document Starter): add the dep, define plans, gate one real feature with `with_quota`, add a `/usage` page. Document under `docs/evidence/phase-14/` with screenshots. (Follow the storefront's product-workspace workflow — this is a change in *that* product repo, not the storefront.)
+- [x] Draft the go-to-market assets (do **not** publish — hand to the owner): a landing page section, an ElixirForum "Show & Tell" post, and a README badge. Note the free core is the top-of-funnel like Aurora UI.
+- [x] Storefront catalog: leave a **flagged TODO** (separate storefront change, per `product-workspaces/README.md`) to add Aurora Meter Pro to `lib/phx_templates/catalog.ex` and a product page — a human decides pricing.
 
 **Verification Gate 14:** the real product boots with live metering (screenshot evidence); GTM drafts saved; `docs/evidence/phase-14/gate.txt`. **Project complete.**
 
