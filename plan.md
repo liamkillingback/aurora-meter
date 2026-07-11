@@ -354,11 +354,11 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** real Stripe subscription lifecycle, kept truthful by webhooks; local counters unchanged.
 
-- [ ] `AuroraMeter.Pro.Stripe` implements `AuroraMeter.Billing.Provider`: `create_checkout_session/2` (maps `plan_id`→Stripe price via config; returns `{:ok, url}`), `billing_portal_url/2`, `sync_subscription/1` (Stripe sub payload → `AuroraMeter.Storage` upsert: status, `provider_*`, `current_period_start/end`), `report_usage/1` (Phase 10).
-- [ ] Config: `config :aurora_meter_pro, stripe_prices: %{pro: "price_...", scale: "price_..."}, stripe_meters: %{ai_generations: "event_name"}, webhook_secret: {:system, "STRIPE_WEBHOOK_SECRET"}`.
-- [ ] `AuroraMeter.Pro.Webhook` (a `Plug`) — `Stripe.Webhook.construct_event/3` signature verify; dispatch `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` → `sync_subscription/1`. Returns 200/400 appropriately. Host mounts via `forward "/webhooks/stripe", AuroraMeter.Pro.Webhook`.
-- [ ] `AuroraMeter.Pro.Stripe.Fake` — deterministic in-memory provider for tests (no network), plus fixtures of real Stripe event JSON.
-- [ ] Point `config :aurora_meter, provider: AuroraMeter.Pro.Stripe` in the Pro demo/test.
+- [x] `AuroraMeter.Pro.Stripe` implements `AuroraMeter.Billing.Provider`: `create_checkout_session/2` (maps `plan_id`→Stripe price via config; returns `{:ok, url}`), `billing_portal_url/2`, `sync_subscription/1` (Stripe sub payload → `AuroraMeter.Storage` upsert: status, `provider_*`, `current_period_start/end`), `report_usage/1` (Phase 10).
+- [x] Config: `config :aurora_meter_pro, stripe_prices: %{pro: "price_...", scale: "price_..."}, stripe_meters: %{ai_generations: "event_name"}, webhook_secret: {:system, "STRIPE_WEBHOOK_SECRET"}`.
+- [x] `AuroraMeter.Pro.Webhook` (a `Plug`) — `Stripe.Webhook.construct_event/3` signature verify; dispatch `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` → `sync_subscription/1`. Returns 200/400 appropriately. Host mounts via `forward "/webhooks/stripe", AuroraMeter.Pro.Webhook`.
+- [x] `AuroraMeter.Pro.Stripe.Fake` — deterministic in-memory provider for tests (no network), plus fixtures of real Stripe event JSON.
+- [x] Point `config :aurora_meter, provider: AuroraMeter.Pro.Stripe` in the Pro demo/test.
 
 **Tests (fake only, never network):** checkout returns a URL; each webhook event upserts the subscription correctly; a **signature-verification** test using `Stripe.Webhook` with a known secret (valid passes, tampered 400); unknown event types are ignored with 200.
 
