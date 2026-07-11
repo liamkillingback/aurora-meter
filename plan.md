@@ -310,10 +310,10 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** live usage over PubSub and drop-in HEEx meters.
 
-- [ ] Add optional deps `:phoenix_live_view` / `:phoenix_html` (D15); update `.formatter.exs` (`import_deps: [..., :phoenix, :phoenix_live_view]`, add `Phoenix.LiveView.HTMLFormatter` plugin).
-- [ ] `AuroraMeter.Broadcaster` (GenServer) — every `broadcast_interval`, for each tenant/feature touched since last tick, `Phoenix.PubSub.broadcast(pubsub, topic, {:aurora_meter, :usage, %{feature:, value:, period_start:}})` (D14). Track "touched" via the dirty set snapshot (read-only; does not clear it — Flusher owns clearing). Emits `[:aurora_meter, :broadcast]`.
-- [ ] `AuroraMeter.Components` (`use Phoenix.Component`): `usage_meter/1` (attrs `tenant`, `feature`, optional `label`; renders current/limit + a bar) and `usage_summary/1` (all plan features). Typed `attr`s; `attr :rest, :global`.
-- [ ] `AuroraMeter.LiveView.on_mount/4` (or `subscribe/1` helper) — subscribes the LiveView to the tenant topic and handles the `{:aurora_meter, :usage, _}` message to update assigns. Document the 3-line wiring in `docs/liveview` (Phase 7).
+- [x] Add optional deps `:phoenix_live_view` / `:phoenix_html` (D15); update `.formatter.exs` (`import_deps: [..., :phoenix, :phoenix_live_view]`, add `Phoenix.LiveView.HTMLFormatter` plugin).
+- [x] `AuroraMeter.Broadcaster` (GenServer) — every `broadcast_interval`, for each tenant/feature touched since last tick, `Phoenix.PubSub.broadcast(pubsub, topic, {:aurora_meter, :usage, %{feature:, value:, period_start:}})` (D14). Track "touched" via the dirty set snapshot (read-only; does not clear it — Flusher owns clearing). Emits `[:aurora_meter, :broadcast]`.
+- [x] `AuroraMeter.Components` (`use Phoenix.Component`): `usage_meter/1` (attrs `tenant`, `feature`, optional `label`; renders current/limit + a bar) and `usage_summary/1` (all plan features). Typed `attr`s; `attr :rest, :global`.
+- [x] `AuroraMeter.LiveView.on_mount/4` (or `subscribe/1` helper) — subscribes the LiveView to the tenant topic and handles the `{:aurora_meter, :usage, _}` message to update assigns. Document the 3-line wiring in `docs/liveview` (Phase 7).
 
 **Tests:** Floki render tests for both components (roles, values, `aria` on the bar via `role="progressbar"` + `aria-valuenow/max`); a PubSub test asserting a subscribed process receives a `:usage` message within `2 * broadcast_interval` after a `track`.
 

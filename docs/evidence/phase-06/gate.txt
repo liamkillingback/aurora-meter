@@ -1,0 +1,16 @@
+Phase 6 — Verification Gate evidence
+Date: 2026-07-11
+
+Scope: AuroraMeter.Broadcaster (interval PubSub fan-out, broadcast_now/0, topic/1;
+message {:aurora_meter, :usage, %{feature, value, period_start}}), AuroraMeter.
+Components (usage_meter/1, usage_summary/1 — compiled only when Phoenix.Component
+is available), AuroraMeter.LiveView.subscribe/1.
+
+Gate: format --check-formatted && compile --warnings-as-errors && credo --strict
+      && test   => PHASE6_GATE_PASS ; plus mix dialyzer => Total errors: 0.
+
+Tests: "Result: 44 passed (1 doctest, 1 property, 42 tests)"
+  - usage_meter renders role="progressbar", aria-valuenow/aria-valuemax, "10 / 50".
+  - usage_summary renders a meter per plan feature.
+  - broadcaster fans usage on the tenant topic; subscriber receives
+    {:aurora_meter, :usage, %{feature: :ai_generations, value: 3}}.
