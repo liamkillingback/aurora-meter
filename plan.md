@@ -396,9 +396,9 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** proactive limit alerts and drift detection.
 
-- [ ] Migration: `aurora_meter_alerts` (`tenant_key, feature, period_start, threshold int, notified_at`; unique — dedupe per period/threshold).
-- [ ] Alert hook: on flush/broadcast, when `usage/limit` crosses configured thresholds (default `[80, 100]`), emit `[:aurora_meter, :alert]` telemetry and, if `config :aurora_meter_pro, alert_webhook:` set, POST a signed JSON payload once per (tenant, feature, period, threshold).
-- [ ] `AuroraMeter.Pro.Reconcile` (Oban, optional/off by default): best-effort compare local period totals vs Stripe meter summaries; log/telemetry drift beyond a tolerance. Never mutates.
+- [x] Migration: `aurora_meter_alerts` (`tenant_key, feature, period_start, threshold int, notified_at`; unique — dedupe per period/threshold).
+- [x] Alert hook: on flush/broadcast, when `usage/limit` crosses configured thresholds (default `[80, 100]`), emit `[:aurora_meter, :alert]` telemetry and, if `config :aurora_meter_pro, alert_webhook:` set, POST a signed JSON payload once per (tenant, feature, period, threshold).
+- [x] `AuroraMeter.Pro.Reconcile` (Oban, optional/off by default): best-effort compare local period totals vs Stripe meter summaries; log/telemetry drift beyond a tolerance. Never mutates.
 
 **Tests:** threshold fires exactly once per period/threshold (dedupe); webhook payload shape + signature; reconcile flags injected drift (fake provider).
 
