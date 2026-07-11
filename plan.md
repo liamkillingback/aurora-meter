@@ -408,10 +408,10 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** documented, licensed, distributable Pro.
 
-- [ ] Dialyzer/credo clean; specs+docs on all public Pro functions.
-- [ ] `README.md` (install from the private hex repo, Oban requirement, config, the free↔Pro boundary table), `docs/` guides (billing, usage-reporting, dashboard, alerts), `CHANGELOG.md` → `0.1.0`.
-- [ ] `docs/RELEASE.md` — **manual** steps: set up a private hex repo (`mix hex.repo add` / org repo, oban.pro-style), publish, license-key issuance. Flag as human-run business ops; do not automate credentials.
-- [ ] Pro `demo/` (or extend the core demo behind a flag) exercising checkout → webhook → metered reporting with the fake provider in CI and real Stripe test keys locally (human-run, documented).
+- [x] Dialyzer/credo clean; specs+docs on all public Pro functions.
+- [x] `README.md` (install from the private hex repo, Oban requirement, config, the free↔Pro boundary table), `docs/` guides (billing, usage-reporting, dashboard, alerts), `CHANGELOG.md` → `0.1.0`.
+- [x] `docs/RELEASE.md` — **manual** steps: set up a private hex repo (`mix hex.repo add` / org repo, oban.pro-style), publish, license-key issuance. Flag as human-run business ops; do not automate credentials.
+- [x] Pro `demo/` (or extend the core demo behind a flag) exercising checkout → webhook → metered reporting with the fake provider in CI and real Stripe test keys locally (human-run, documented).
 
 **Verification Gate 13:** Pro `mix check` green on the matrix; end-to-end fake-provider flow test (subscribe → track over included → reporter sends delta → dashboard shows it) passes; `git tag v0.1.0`; `docs/evidence/phase-13/gate.txt`.
 
