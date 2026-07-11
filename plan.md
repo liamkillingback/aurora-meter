@@ -383,10 +383,10 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** history and a UI worth paying for.
 
-- [ ] Migration: `aurora_meter_rollups` (`tenant_key, feature, bucket_kind ("day"|"month"), bucket_start date, value bigint`; unique `[tenant_key, feature, bucket_kind, bucket_start]`).
-- [ ] `AuroraMeter.Pro.Rollup` (Oban daily): aggregate `counters` → day and month buckets via `Storage.stream_counters/1`; upsert rollups.
-- [ ] `AuroraMeter.Pro.Live.Dashboard` — a mountable LiveView: per-tenant current usage (live via the core PubSub topic) + historical bars from rollups; an admin overview across tenants. Keep charts dependency-free (inline SVG bars); **do not** add a charting dep in v1.
-- [ ] `AuroraMeter.Pro.Export` — a controller action / function producing CSV of a tenant's usage for a range.
+- [x] Migration: `aurora_meter_rollups` (`tenant_key, feature, bucket_kind ("day"|"month"), bucket_start date, value bigint`; unique `[tenant_key, feature, bucket_kind, bucket_start]`).
+- [x] `AuroraMeter.Pro.Rollup` (Oban daily): aggregate `counters` → day and month buckets via `Storage.stream_counters/1`; upsert rollups.
+- [x] `AuroraMeter.Pro.Live.Dashboard` — a mountable LiveView: per-tenant current usage (live via the core PubSub topic) + historical bars from rollups; an admin overview across tenants. Keep charts dependency-free (inline SVG bars); **do not** add a charting dep in v1.
+- [x] `AuroraMeter.Pro.Export` — a controller action / function producing CSV of a tenant's usage for a range.
 
 **Tests:** rollup aggregation correctness (seed counters across days → assert day+month buckets); dashboard renders live + historical (Floki); CSV shape.
 
