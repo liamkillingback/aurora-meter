@@ -1,0 +1,23 @@
+Phase 0 — Verification Gate evidence
+Date: 2026-07-11
+Environment: WSL Ubuntu-24.04, Elixir/mix via Homebrew
+
+Command:
+  mix deps.get
+  mix format && mix format --check-formatted
+  mix compile --warnings-as-errors --force
+  mix credo --strict
+  mix test
+
+Results:
+  deps.get           -> OK (hex/rebar installed, all deps fetched)
+  format             -> FORMAT_OK (mix format --check-formatted passed)
+  compile (w-as-e)   -> OK, "Generated aurora_meter app", 0 warnings
+  credo --strict     -> "3 mods/funs, found no issues." (69 checks)
+  test               -> "Result: 2 passed (1 doctest, 1 test)"
+
+Not run at this gate (part of `mix check`, exercised from Phase 1 onward):
+  dialyzer, docs — configured in mix.exs; PLT builds on first `mix check`.
+
+Remaining Phase 0 checkbox:
+  git init + initial commit `phase-00: scaffold` (left for the maintainer).

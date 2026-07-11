@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Library: format, warnings-as-errors compile, credo, tests, audits, docs ──
+  library:
+    name: Library (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.15"
+            otp: "25"
+          - elixir: "1.18"
+            otp: "27"
+    env:
+      MIX_ENV: test
+      # config/test.exs reads DB_PORT (defaults to 5432); CI uses the service on 5432,
+      # local dev uses the dedicated Docker Postgres on 5490.
+      DB_PORT: "5432"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Restore deps/build/plt cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+            priv/plts
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.elixir }}-
+
+      - run: mix deps.get
+      - name: Check formatting
+        run: mix format --check-formatted
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors --force
+      - name: Unused deps check
+        run: mix deps.unlock --check-unused
+      - name: Credo
+        run: mix credo --strict
+      - name: Dependency audit
+        run: mix deps.audit
+      - name: Hex retirement/audit
+        run: mix hex.audit
+      # test.setup (ecto.create + migrate) is a no-op until Phase 2 adds the test
+      # repo + migrations; the `-` guard keeps it green in the meantime.
+      - name: Set up test database
+        run: mix test.setup || echo "::notice::no test repo yet (pre-Phase-2)"
+      - name: Tests
+        run: mix test
+      - name: Docs build
+        if: matrix.elixir == '1.18'
+        env:
+          MIX_ENV: dev
+        run: mix deps.get && mix docs
+
+  # ── Secret scanning ──
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
