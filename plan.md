@@ -280,9 +280,9 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** compile-time, validated plan definitions.
 
-- [ ] `AuroraMeter.Plan` — `%Plan{id, price, features: %{atom => feature_cfg}}` where `feature_cfg` is `{:limit, n, :hard}` | `{:metered, included, unit_price}` | `{:feature, boolean}`. `@type`.
-- [ ] `AuroraMeter.Plans` — `defmacro __using__/1` accumulating via module attrs; macros `plan/2`, `price/1`, `limit/3` (`limit :f, n, :hard`), `metered/2` (`metered :f, included: i, unit_price: p`), `feature/2`. Compiles to `__aurora_plans__/0 :: %{atom => Plan.t}`. **Compile-time validation**: duplicate feature in a plan → raise; unknown limit mode → raise; negative numbers → raise.
-- [ ] Runtime helpers: `AuroraMeter.Plans.all/0`, `get/1`, `feature_config/2` (plan_id, feature), reading the module from `Config.plans/0`.
+- [x] `AuroraMeter.Plan` — `%Plan{id, price, features: %{atom => feature_cfg}}` where `feature_cfg` is `{:limit, n, :hard}` | `{:metered, included, unit_price}` | `{:feature, boolean}`. `@type`.
+- [x] `AuroraMeter.Plans` — `defmacro __using__/1` accumulating via module attrs; macros `plan/2`, `price/1`, `limit/3` (`limit :f, n, :hard`), `metered/2` (`metered :f, included: i, unit_price: p`), `feature/2`. Compiles to `__aurora_plans__/0 :: %{atom => Plan.t}`. **Compile-time validation**: duplicate feature in a plan → raise; unknown limit mode → raise; negative numbers → raise.
+- [x] Runtime helpers: `AuroraMeter.Plans.all/0`, `get/1`, `feature_config/2` (plan_id, feature), reading the module from `Config.plans/0`.
 
 **Tests:** a `test/support/plans_fixture.ex` with free/pro/scale (matching the spec); `get/1`, `feature_config/2`, `all/0`; compile-error tests via `Code.eval_string` asserting raises.
 

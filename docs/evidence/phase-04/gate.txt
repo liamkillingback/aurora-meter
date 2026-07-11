@@ -1,0 +1,17 @@
+Phase 4 — Verification Gate evidence
+Date: 2026-07-11
+
+Scope: AuroraMeter.Plan struct (feature_config: {:limit,n,:hard} | {:metered,
+included,unit_price} | {:feature,bool}), AuroraMeter.Plans DSL (use + plan/price/
+limit/metered/feature macros -> __aurora_plans__/0), compile-time validation
+(duplicate features, invalid modes, negatives raise), runtime lookups all/0,
+get/1, feature_config/2. Real TestPlans (free/pro/scale). .formatter.exs exports
+locals_without_parens so the DSL stays paren-free for consumers.
+
+Gate: mix format --check-formatted && mix compile --warnings-as-errors --force
+      && mix credo --strict && mix test   => PHASE4_GATE_PASS
+
+Tests: "Result: 31 passed (1 doctest, 1 property, 29 tests)"
+  - all/0 / get/1 / feature_config/2 for limit, metered, feature kinds.
+  - duplicate feature raises at compile time (Code.eval_string + catch_error).
+  - negative limit raises at compile time.
