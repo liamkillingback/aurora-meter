@@ -227,12 +227,12 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** `AuroraMeter` starts under a host supervision tree, validates config, and owns its ETS tables.
 
-- [ ] `AuroraMeter.Config` — `NimbleOptions` schema ([Appendix B](#appendix-b--config--deps-reference)); `validate!/0` reads `Application.get_all_env(:aurora_meter)`, raises on invalid; typed accessors `repo/0 pubsub/0 plans/0 tenant/0 flush_interval/0 broadcast_interval/0 default_plan/0 storage/0 provider/0`.
-- [ ] `AuroraMeter.Tenant` behaviour: `@callback to_key(term) :: String.t()`. `AuroraMeter.Tenant.Default` → `to_string/1` (raise on non-`String.Chars`). `AuroraMeter.Tenant.to_key/1` dispatches via config.
-- [ ] `AuroraMeter.Store` — a tiny GenServer that **owns** two named ETS tables created in `init/1`: `:aurora_meter_counters` (`:set, :public, read_concurrency: true, write_concurrency: true`) and `:aurora_meter_dirty` (`:set, :public, write_concurrency: true`). Never a bottleneck — it only owns tables; readers/writers hit ETS directly.
-- [ ] `AuroraMeter.Supervisor` (`use Supervisor`): children = `[{Registry, keys: :unique, name: AuroraMeter.Registry}, AuroraMeter.Store, AuroraMeter.Flusher, AuroraMeter.Broadcaster]`. (Flusher/Broadcaster are stubs until Phase 3/6.)
-- [ ] `AuroraMeter.child_spec/1` + `start_link/1` delegating to the Supervisor, so a host adds `AuroraMeter` (or `{AuroraMeter, opts}`) to its tree. `AuroraMeter.start_link/1` calls `Config.validate!/0` first.
-- [ ] `test/support/test_repo.ex` (Ecto Postgres repo), `test/support/data_case.ex` (sandbox), `test/test_helper.exs`: `Application.put_env` test config, `ExUnit.start()`, start `AuroraMeter` via `start_supervised!/1` in the case template.
+- [x] `AuroraMeter.Config` — `NimbleOptions` schema ([Appendix B](#appendix-b--config--deps-reference)); `validate!/0` reads `Application.get_all_env(:aurora_meter)`, raises on invalid; typed accessors `repo/0 pubsub/0 plans/0 tenant/0 flush_interval/0 broadcast_interval/0 default_plan/0 storage/0 provider/0`.
+- [x] `AuroraMeter.Tenant` behaviour: `@callback to_key(term) :: String.t()`. `AuroraMeter.Tenant.Default` → `to_string/1` (raise on non-`String.Chars`). `AuroraMeter.Tenant.to_key/1` dispatches via config.
+- [x] `AuroraMeter.Store` — a tiny GenServer that **owns** two named ETS tables created in `init/1`: `:aurora_meter_counters` (`:set, :public, read_concurrency: true, write_concurrency: true`) and `:aurora_meter_dirty` (`:set, :public, write_concurrency: true`). Never a bottleneck — it only owns tables; readers/writers hit ETS directly.
+- [x] `AuroraMeter.Supervisor` (`use Supervisor`): children = `[{Registry, keys: :unique, name: AuroraMeter.Registry}, AuroraMeter.Store, AuroraMeter.Flusher, AuroraMeter.Broadcaster]`. (Flusher/Broadcaster are stubs until Phase 3/6.)
+- [x] `AuroraMeter.child_spec/1` + `start_link/1` delegating to the Supervisor, so a host adds `AuroraMeter` (or `{AuroraMeter, opts}`) to its tree. `AuroraMeter.start_link/1` calls `Config.validate!/0` first.
+- [x] `test/support/test_repo.ex` (Ecto Postgres repo), `test/support/data_case.ex` (sandbox), `test/test_helper.exs`: `Application.put_env` test config, `ExUnit.start()`, start `AuroraMeter` via `start_supervised!/1` in the case template.
 
 **Tests:** config validation (valid boots; missing `:repo`/`:pubsub`/`:plans` raises with a clear message); `Tenant.to_key/1` for binary/integer/struct-with-`String.Chars`; Store creates both ETS tables; Supervisor starts and children are alive.
 

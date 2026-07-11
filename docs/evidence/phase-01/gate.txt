@@ -1,0 +1,20 @@
+Phase 1 — Verification Gate evidence
+Date: 2026-07-11
+
+Scope: Config (NimbleOptions validate! + accessors), Tenant behaviour + Default,
+Store (owns ETS counter/dirty tables), Supervisor (Registry + Store + Flusher +
+Broadcaster stubs), AuroraMeter.child_spec/1 + start_link/1, test harness
+(TestRepo, TestPubSub, DataCase sandbox, unique_tenant/1).
+
+Gate: mix format --check-formatted && mix compile --warnings-as-errors --force
+      && mix credo --strict && mix test
+
+Results:
+  format         -> FMT_OK
+  compile (w-as-e) -> "Generated aurora_meter app", 0 warnings
+  credo --strict -> "45 mods/funs, found no issues." (69 checks, 16 files)
+  test           -> "Result: 13 passed (1 doctest, 12 tests)"
+  marker         -> PHASE1_GATE_PASS
+
+Test DB: Docker postgres:16 on localhost:5490 (aurora_meter_test), created via
+`mix test.setup`. No migrations yet (Phase 2).
