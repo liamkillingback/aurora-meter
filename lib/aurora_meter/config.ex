@@ -18,6 +18,7 @@ defmodule AuroraMeter.Config do
             storage: [type: :atom, default: AuroraMeter.Storage.Ecto],
             provider: [type: :atom, default: AuroraMeter.Billing.Noop],
             period_source: [type: :atom, default: AuroraMeter.Period.Calendar],
+            durable_features: [type: {:list, :atom}, default: []],
             flush_interval: [type: :pos_integer, default: 5_000],
             broadcast_interval: [type: :pos_integer, default: 1_000]
           )
@@ -72,6 +73,10 @@ defmodule AuroraMeter.Config do
   @doc "The configured period source."
   @spec period_source() :: module()
   def period_source, do: get(:period_source, AuroraMeter.Period.Calendar)
+
+  @doc "Features that also write a durable event row on every `track`."
+  @spec durable_features() :: [atom()]
+  def durable_features, do: get(:durable_features, [])
 
   @doc "Milliseconds between durable flushes of dirty counters to the database."
   @spec flush_interval() :: pos_integer()

@@ -92,8 +92,7 @@ defmodule AuroraMeter.MixProject do
   defp dialyzer do
     [
       plt_add_apps: [:ex_unit, :mix],
-      plt_local_path: "priv/plts",
-      flags: [:error_handling, :extra_return, :missing_return, :underspecs]
+      plt_local_path: "priv/plts"
     ]
   end
 

@@ -10,8 +10,10 @@ if config_env() == :test do
     pubsub: AuroraMeter.TestPubSub,
     plans: AuroraMeter.TestPlans,
     default_plan: :free,
-    flush_interval: 50,
-    broadcast_interval: 20
+    # Large intervals so the periodic timers never fire mid-suite; metering tests
+    # drive Flusher.flush/0 and the broadcaster explicitly for determinism.
+    flush_interval: 60_000,
+    broadcast_interval: 60_000
 
   config :aurora_meter, AuroraMeter.TestRepo,
     username: "postgres",

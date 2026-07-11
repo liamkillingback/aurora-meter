@@ -22,6 +22,12 @@ defmodule AuroraMeter do
   `usage/2`, `remaining/2`, `subscribe/2`) is added in later phases; see `plan.md`.
   """
 
+  alias AuroraMeter.Config
+  alias AuroraMeter.Counter
+  alias AuroraMeter.Period
+  alias AuroraMeter.Storage
+  alias AuroraMeter.Tenant
+
   @version Mix.Project.config()[:version]
 
   @doc """
@@ -35,6 +41,61 @@ defmodule AuroraMeter do
   """
   @spec version() :: String.t()
   def version, do: @version
+
+  @doc """
+  Records `qty` usage of `feature` for `tenant` in the current period.
+
+  Runs on the ETS hot path (no database round-trip) unless the feature is durable
+  (`opts[:durable]` or configured in `:durable_features`), in which case a raw
+  event row is also written. Options: `:durable` (boolean), `:metadata` (map).
+  """
+  @spec track(term(), atom(), integer(), keyword()) :: :ok
+  def track(tenant, feature, qty \\ 1, opts \\ []) do
+    tenant_key = Tenant.to_key(tenant)
+    period_start = Period.current(tenant).start
+    Counter.incr(tenant_key, feature, qty, period_start)
+    maybe_write_event(tenant_key, feature, qty, opts)
+
+    :telemetry.execute([:aurora_meter, :track], %{count: qty}, %{
+      tenant_key: tenant_key,
+      feature: feature
+    })
+
+    :ok
+  end
+
+  @doc "Returns `tenant`'s usage of `feature` in the current period."
+  @spec usage(term(), atom()) :: integer()
+  def usage(tenant, feature) do
+    Counter.value(Tenant.to_key(tenant), feature, Period.current(tenant).start)
+  end
+
+  @doc "Returns a map of `feature => value` for `tenant`'s warm counters this period."
+  @spec usage_all(term()) :: %{atom() => integer()}
+  def usage_all(tenant) do
+    Counter.all_for(Tenant.to_key(tenant), Period.current(tenant).start)
+  end
+
+  @spec maybe_write_event(String.t(), atom(), integer(), keyword()) :: :ok
+  defp maybe_write_event(tenant_key, feature, qty, opts) do
+    if durable?(feature, opts) do
+      Storage.insert_events([
+        %{
+          tenant_key: tenant_key,
+          feature: feature,
+          quantity: qty,
+          metadata: Map.new(Keyword.get(opts, :metadata, %{}))
+        }
+      ])
+    end
+
+    :ok
+  end
+
+  @spec durable?(atom(), keyword()) :: boolean()
+  defp durable?(feature, opts) do
+    Keyword.get(opts, :durable, false) or feature in Config.durable_features()
+  end
 
   @doc false
   @spec child_spec(keyword()) :: Supervisor.child_spec()

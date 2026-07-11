@@ -1,0 +1,27 @@
+Phase 3 — Verification Gate evidence
+Date: 2026-07-11
+
+Scope: Period (+ Calendar source via the :period_source seam), Counter (ETS
+incr/reserve/release/value/all_for, atomic reserve w/ rollback, cold-key
+rehydration), AuroraMeter.track/usage/usage_all, durable mode, [:aurora_meter,
+:track] + [:aurora_meter, :flush] telemetry, real Flusher (per-key dirty sweep,
+absolute-value idempotent upsert), mix aurora_meter.bench.
+
+Gate: mix format --check-formatted && mix compile --warnings-as-errors --force
+      && mix credo --strict && mix test   => PHASE3_GATE_PASS
+Plus: mix dialyzer => "Total errors: 0" (passed).
+
+Tests: "Result: 26 passed (1 doctest, 1 property, 24 tests)"
+  - StreamData property: concurrent increments sum correctly (15 runs, k*j).
+  - atomic reserve blocks at hard limit and rolls back.
+  - cold-key rehydration from DB.
+  - flush idempotency (repeated flush leaves value unchanged).
+  - durable feature writes an event row.
+  - telemetry emitted.
+
+Benchmark: docs/evidence/phase-03/bench.md — ~7.9M incr/s aggregate (distinct
+keys), correctness verified (sum of keys == total).
+
+Note: dialyzer flags reduced to defaults (dropped :underspecs/:extra_return/
+:missing_return, which over-report specs narrower than broad Erlang/third-party
+success typings such as :ets.update_counter's integer()|[integer()]).

@@ -256,17 +256,17 @@ Expect: compiles clean, 0 test failures (0 tests), credo 0 issues. Save the term
 
 **Goal:** correct, fast, real-time counting with durable flush and rehydration.
 
-- [ ] `AuroraMeter.Period` — `current(tenant, now \\ DateTime.utc_now()) :: %{start: DateTime.t(), end: DateTime.t(), source: :calendar}`. Free core: month bounds, UTC, `start` = `~T[00:00:00]` on day 1, truncated `:second`. (Pro overrides `source` in Phase 10 via `Config.period_source/0`.)
-- [ ] `AuroraMeter.Counter` — pure ETS ops (no GenServer):
+- [x] `AuroraMeter.Period` — `current(tenant, now \\ DateTime.utc_now()) :: %{start: DateTime.t(), end: DateTime.t(), source: :calendar}`. Free core: month bounds, UTC, `start` = `~T[00:00:00]` on day 1, truncated `:second`. (Pro overrides `source` in Phase 10 via `Config.period_source/0`.)
+- [x] `AuroraMeter.Counter` — pure ETS ops (no GenServer):
   - `incr(tenant_key, feature, qty, period_start) :: integer` → `:ets.update_counter(:aurora_meter_counters, key, {2, qty}, {key, 0})` then `mark_dirty(key)`; returns new value.
   - `reserve(tenant_key, feature, qty, period_start, limit) :: :ok | {:error, :limit_exceeded}` → increments, marks dirty, and **if `limit != nil and new > limit`** rolls back (`update_counter … {2, -qty}`) and returns error. (Atomic-enough: the check reads the post-increment return value.)
   - `release(...)` → `update_counter {2, -qty}` + mark dirty (rollback on `fun` raise).
   - `value(tenant_key, feature, period_start) :: integer` → ETS lookup; on miss, `Storage.load_counter/3`; if found seed ETS with `:ets.insert_new` (no double count) and return; else 0.
   - `mark_dirty(key)` → `:ets.insert(:aurora_meter_dirty, {key})`.
-- [ ] `AuroraMeter.track(tenant, feature, qty \\ 1, opts \\ [])` — resolves tenant_key + period, calls `Counter.incr`, emits `[:aurora_meter, :track]` telemetry. If the feature is `:durable` (per plan/config), also `Storage.insert_events/1` synchronously. Returns `:ok`.
-- [ ] `AuroraMeter.usage/2`, `usage_all/1` (map of feature→value for current period from ETS + DB fallback).
-- [ ] `AuroraMeter.Flusher` (GenServer) — every `flush_interval`: **snapshot** dirty keys (`:ets.tab2list`), then **per key**: `:ets.delete(:aurora_meter_dirty, key)`, read current value, build row; `Storage.upsert_counters/1` in one batch. Per-key delete (not `delete_all_objects`) so keys marked mid-sweep survive to the next cycle. Idempotent (absolute-value upsert). Emits `[:aurora_meter, :flush]` with count. On terminate, do a final flush.
-- [ ] `Mix.Tasks.AuroraMeter.Bench` — spawns N processes × M increments, measures throughput and post-flush DB correctness; writes `docs/evidence/phase-03/bench.md`. (This proves the moat claim; target ≥ 100k incr/s single-node — record the real number regardless.)
+- [x] `AuroraMeter.track(tenant, feature, qty \\ 1, opts \\ [])` — resolves tenant_key + period, calls `Counter.incr`, emits `[:aurora_meter, :track]` telemetry. If the feature is `:durable` (per plan/config), also `Storage.insert_events/1` synchronously. Returns `:ok`.
+- [x] `AuroraMeter.usage/2`, `usage_all/1` (map of feature→value for current period from ETS + DB fallback).
+- [x] `AuroraMeter.Flusher` (GenServer) — every `flush_interval`: **snapshot** dirty keys (`:ets.tab2list`), then **per key**: `:ets.delete(:aurora_meter_dirty, key)`, read current value, build row; `Storage.upsert_counters/1` in one batch. Per-key delete (not `delete_all_objects`) so keys marked mid-sweep survive to the next cycle. Idempotent (absolute-value upsert). Emits `[:aurora_meter, :flush]` with count. On terminate, do a final flush.
+- [x] `Mix.Tasks.AuroraMeter.Bench` — spawns N processes × M increments, measures throughput and post-flush DB correctness; writes `docs/evidence/phase-03/bench.md`. (This proves the moat claim; target ≥ 100k incr/s single-node — record the real number regardless.)
 
 **Tests:**
 - Unit: incr/value/reserve/release; rehydrate-from-DB seeds ETS once (no double count).

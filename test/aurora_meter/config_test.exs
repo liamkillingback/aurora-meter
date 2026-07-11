@@ -21,8 +21,9 @@ defmodule AuroraMeter.ConfigTest do
     assert Config.storage() == AuroraMeter.Storage.Ecto
     assert Config.provider() == AuroraMeter.Billing.Noop
     assert Config.period_source() == AuroraMeter.Period.Calendar
-    assert Config.flush_interval() == 50
-    assert Config.broadcast_interval() == 20
+    assert Config.durable_features() == []
+    assert Config.flush_interval() == 60_000
+    assert Config.broadcast_interval() == 60_000
   end
 
   test "validate!/0 raises when a required key is missing" do
