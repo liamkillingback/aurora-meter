@@ -205,17 +205,17 @@ Each phase: **Goal → Tasks (checkboxes with exact paths/signatures) → Tests 
 
 **Goal:** an empty, CI-green library repo that compiles, formats, lints, and runs zero tests.
 
-- [ ] `mix new aurora_meter` (library; **no** `--sup`). Set project root at `product-workspaces/aurora_meter/`.
-- [ ] `mix.exs`: `@version "0.0.1"`, `@source_url "https://github.com/liamkillingback/aurora-meter"`, `elixir: "~> 1.15"`, `elixirc_options: [warnings_as_errors: true]`, `elixirc_paths` splitting `test/support`, `test_coverage: [summary: [threshold: 0]]`, `deps/0` ([Appendix B deps](#appendix-b--config--deps-reference)), `package/0` (`licenses: ["MIT"]`, `maintainers: ["Liam Killingback"]`, links GitHub/Docs/PHXTemplates, `files` list), `docs/0`, and the `check` alias (§5) plus `test.setup`/`db.reset` aliases.
-- [ ] `.formatter.exs`: `import_deps: [:ecto, :ecto_sql]`, `inputs: ["*.{ex,exs}", "{lib,test,priv}/**/*.{ex,exs}"]`. (Add `:phoenix`, `:phoenix_live_view` + the HTMLFormatter plugin in Phase 6.)
-- [ ] `.credo.exs` — strict config.
-- [ ] Dialyzer: `dialyzer: [plt_add_apps: [:ex_unit, :mix], flags: [:error_handling, :extra_return, :missing_return, :underspecs]]` in `mix.exs`; cache PLT in CI.
-- [ ] `LICENSE` (MIT, "Liam Killingback"), `NOTICE.md`, `CHANGELOG.md` (Keep a Changelog, `Unreleased`), `README.md` skeleton (headline + "not yet released").
-- [ ] `AGENTS.md` — copy verbatim from [Appendix H](#appendix-h--agentsmd-contract-verbatim). `CLAUDE.md` — 6 lines pointing to it.
-- [ ] `.gitignore` — `/deps /_build /doc erl_crash.dump *.ez /priv/plts /.elixir_ls`.
-- [ ] `.github/workflows/ci.yml` — [Appendix F](#appendix-f--ci-workflow-core).
-- [ ] `docs/adr/0001-resolved-decisions.md` — record D1–D22 (§2) as the founding ADR. Add `0002-ets-counter-substrate.md` and `0003-buffered-vs-durable.md` capturing D7/D8 with rationale.
-- [ ] `git init`; initial commit `phase-00: scaffold`.
+- [x] `mix new aurora_meter` (library; **no** `--sup`). Set project root at `product-workspaces/aurora_meter/`.
+- [x] `mix.exs`: `@version "0.0.1"`, `@source_url "https://github.com/liamkillingback/aurora-meter"`, `elixir: "~> 1.15"`, `elixirc_options: [warnings_as_errors: true]`, `elixirc_paths` splitting `test/support`, `test_coverage: [summary: [threshold: 0]]`, `deps/0` ([Appendix B deps](#appendix-b--config--deps-reference)), `package/0` (`licenses: ["MIT"]`, `maintainers: ["Liam Killingback"]`, links GitHub/Docs/PHXTemplates, `files` list), `docs/0`, and the `check` alias (§5) plus `test.setup`/`db.reset` aliases.
+- [x] `.formatter.exs`: `import_deps: [:ecto, :ecto_sql]`, `inputs: ["*.{ex,exs}", "{lib,test,priv}/**/*.{ex,exs}"]`. (Add `:phoenix`, `:phoenix_live_view` + the HTMLFormatter plugin in Phase 6.)
+- [x] `.credo.exs` — strict config.
+- [x] Dialyzer: `dialyzer: [plt_add_apps: [:ex_unit, :mix], flags: [:error_handling, :extra_return, :missing_return, :underspecs]]` in `mix.exs`; cache PLT in CI.
+- [x] `LICENSE` (MIT, "Liam Killingback"), `NOTICE.md`, `CHANGELOG.md` (Keep a Changelog, `Unreleased`), `README.md` skeleton (headline + "not yet released").
+- [x] `AGENTS.md` — copy verbatim from [Appendix H](#appendix-h--agentsmd-contract-verbatim). `CLAUDE.md` — 6 lines pointing to it.
+- [x] `.gitignore` — `/deps /_build /doc erl_crash.dump *.ez /priv/plts /.elixir_ls`.
+- [x] `.github/workflows/ci.yml` — [Appendix F](#appendix-f--ci-workflow-core).
+- [x] `docs/adr/0001-resolved-decisions.md` — record D1–D22 (§2) as the founding ADR. Add `0002-ets-counter-substrate.md` and `0003-buffered-vs-durable.md` capturing D7/D8 with rationale.
+- [x] `git init`; initial commit `phase-00: scaffold`.
 
 **Verification Gate 0:**
 ```
