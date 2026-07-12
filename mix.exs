@@ -64,7 +64,7 @@ defmodule AuroraMeter.MixProject do
 
   defp description do
     "Real-time usage metering, plan entitlements, and Stripe-ready billing " <>
-      "primitives for Phoenix — count, gate, and bill on the BEAM."
+      "primitives for Phoenix: count, gate, and bill on the BEAM."
   end
 
   defp package do
@@ -75,7 +75,10 @@ defmodule AuroraMeter.MixProject do
         "GitHub" => @source_url,
         "PHXTemplates" => "https://phxtemplates.com"
       },
-      files: ~w(lib priv .formatter.exs mix.exs README.md LICENSE CHANGELOG.md NOTICE.md)
+      # priv/ holds only the lib's own test-repo migration and dialyzer PLTs, so it
+      # is deliberately excluded — consumers generate their migration via
+      # `mix aurora_meter.gen.migration`, which embeds the template in code.
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md NOTICE.md)
     ]
   end
 
