@@ -96,9 +96,12 @@ defmodule AuroraMeter.MixProject do
         "docs/entitlements.md",
         "docs/plans.md",
         "docs/telemetry.md",
-        "docs/testing.md"
+        "docs/testing.md",
+        "docs/adr/0001-resolved-decisions.md",
+        "docs/adr/0002-ets-counter-substrate.md",
+        "docs/adr/0003-buffered-vs-durable-and-period-seam.md"
       ],
-      groups_for_extras: [Guides: ~r/docs\/.?/],
+      groups_for_extras: [Guides: ~r/docs\/[^\/]+$/, ADRs: ~r/docs\/adr\//],
       source_ref: "v#{@version}",
       source_url: @source_url,
       formatters: ["html"]
