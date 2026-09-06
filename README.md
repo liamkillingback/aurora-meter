@@ -18,7 +18,7 @@ service — your app keeps its data). It does three tightly-coupled jobs:
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.1"}]
+  [{:aurora_meter, "~> 0.2"}]
 end
 ```
 
@@ -91,7 +91,17 @@ end
 # gate + run + meter, atomically (correct under concurrency):
 AuroraMeter.with_quota(org, :ai_generations, fn -> run_generation() end)
 # => {:ok, result} | {:error, :limit_exceeded | :not_entitled}
+
+AuroraMeter.quota(org, :ai_generations)          # dashboard-ready snapshot
+# => %{kind: :hard, used: 1, limit: 1_000, remaining: 999, percent: 0, period: %{...}, ...}
+
+AuroraMeter.history(org, :ai_generations, days: 30)   # daily points for a chart
+# => [%{date: ~D[2026-08-08], value: 0}, ..., %{date: ~D[2026-09-06], value: 1}]
 ```
+
+Plan lookups are cached in ETS and invalidated on every subscription write (on
+every node), so the whole gate is database-free per request. The flusher
+persists counters on an interval and once more on shutdown.
 
 Live usage in a LiveView:
 
@@ -101,6 +111,16 @@ if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
 
 # in the template
 <.usage_meter tenant={@org} feature={:ai_generations} />
+```
+
+## Upgrading from 0.1
+
+0.2 adds the `aurora_meter_history` table (schema version 2). Generate and run
+the upgrade migration:
+
+```bash
+mix aurora_meter.gen.migration -r MyApp.Repo --from 2
+mix ecto.migrate
 ```
 
 ## Free vs Pro

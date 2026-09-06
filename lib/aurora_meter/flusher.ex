@@ -1,11 +1,13 @@
 defmodule AuroraMeter.Flusher do
   @moduledoc """
-  Periodically persists dirty ETS counters to the database.
+  Periodically persists dirty ETS counters to the database, and once more on
+  shutdown so a deploy never drops the last interval of usage.
 
   Each cycle snapshots the dirty-key set and, per key, deletes the dirty mark,
   reads the current ETS value, and batches an absolute-value upsert. Deleting
   per key (not the whole table) means a key re-marked mid-sweep survives to the
-  next cycle; absolute-value upserts make repeated flushes idempotent.
+  next cycle; absolute-value upserts make repeated flushes idempotent. Period
+  counters go to `aurora_meter_counters`, day buckets to `aurora_meter_history`.
   """
 
   use GenServer
@@ -23,6 +25,9 @@ defmodule AuroraMeter.Flusher do
 
   @impl GenServer
   def init(_opts) do
+    # Trap exits so `terminate/2` runs on a supervisor shutdown and the final
+    # flush happens before the VM (and the repo) go away.
+    Process.flag(:trap_exit, true)
     interval = AuroraMeter.Config.flush_interval()
     schedule(interval)
     {:ok, %{interval: interval}}
@@ -34,6 +39,8 @@ defmodule AuroraMeter.Flusher do
     schedule(state.interval)
     {:noreply, state}
   end
+
+  def handle_info(_other, state), do: {:noreply, state}
 
   @impl GenServer
   def handle_call(:flush, _from, state) do
@@ -51,8 +58,10 @@ defmodule AuroraMeter.Flusher do
 
   @spec do_flush() :: non_neg_integer()
   defp do_flush do
-    rows =
-      Enum.map(Counter.dirty_keys(), fn {tenant_key, feature, period_start} = key ->
+    {history_keys, period_keys} = Enum.split_with(Counter.dirty_keys(), &Counter.history_key?/1)
+
+    counter_rows =
+      Enum.map(period_keys, fn {tenant_key, feature, period_start} = key ->
         Counter.clear_dirty(key)
 
         %{
@@ -63,9 +72,23 @@ defmodule AuroraMeter.Flusher do
         }
       end)
 
-    if rows != [], do: Storage.upsert_counters(rows)
+    history_rows =
+      Enum.map(history_keys, fn {tenant_key, feature, {:day, date}} = key ->
+        Counter.clear_dirty(key)
 
-    :telemetry.execute([:aurora_meter, :flush], %{count: length(rows)}, %{})
-    length(rows)
+        %{
+          tenant_key: tenant_key,
+          feature: feature,
+          date: date,
+          value: Counter.day_value(tenant_key, feature, date)
+        }
+      end)
+
+    if counter_rows != [], do: Storage.upsert_counters(counter_rows)
+    if history_rows != [], do: Storage.upsert_history(history_rows)
+
+    count = length(counter_rows) + length(history_rows)
+    :telemetry.execute([:aurora_meter, :flush], %{count: count}, %{})
+    count
   end
 end

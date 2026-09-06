@@ -27,6 +27,26 @@ AuroraMeter.entitled?(tenant, feature)    # plan grants access at all?
 AuroraMeter.remaining(tenant, feature)    # non_neg_integer | :unlimited
 ```
 
+## Subscription status
+
+A subscription grants its plan only while its `status` is one of
+`AuroraMeter.Schema.Subscription.entitled_statuses/0` (`active`, `trialing`,
+`past_due`). Any other status — `canceled`, `unpaid`, `incomplete`, ... — falls
+back to the configured `:default_plan`, so a cancellation synced from the
+billing provider revokes access without a separate downgrade step.
+
+## quota — everything a dashboard needs
+
+```elixir
+AuroraMeter.quota(tenant, :ai_generations)
+# %{feature: :ai_generations, kind: :hard, used: 812, limit: 1_000, included: 1_000,
+#   remaining: 188, overage: 0, percent: 81, period: %{start: ..., end: ..., source: :calendar},
+#   enabled: true, unit_price: nil}
+```
+
+`kind` is `:hard`, `:metered`, `:boolean` or `:undeclared`; metered features
+report `included`, `unit_price` and `overage` instead of `limit`/`remaining`.
+
 ## with_quota — gate, run, meter, atomically
 
 `check/2` then `track/3` has a race: two concurrent requests can both pass a

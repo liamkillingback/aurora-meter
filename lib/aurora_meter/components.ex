@@ -4,47 +4,50 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Drop-in HEEx components for showing live usage. Compiled only when
     `Phoenix.Component` is available (the LiveView deps are optional).
 
-    Pair with `AuroraMeter.LiveView.subscribe/1` for live updates.
+    They are unstyled by design (BEM-style `aurora-meter__*` classes) so they
+    inherit your app's look; the Pro dashboard ships a styled version. Pair with
+    `AuroraMeter.LiveView.subscribe/1` for live updates.
     """
 
     use Phoenix.Component
 
-    @doc "Renders a labelled usage bar for one feature."
+    @doc """
+    Renders a labelled usage bar for one feature, driven by `AuroraMeter.quota/2`.
+
+    Hard caps show `used / limit`; metered features show `used / included` and
+    flag overage; boolean features show whether they are enabled.
+    """
     attr(:tenant, :any, required: true)
     attr(:feature, :atom, required: true)
     attr(:label, :string, default: nil)
     attr(:rest, :global)
 
     def usage_meter(assigns) do
-      used = AuroraMeter.usage(assigns.tenant, assigns.feature)
-
-      limit =
-        case AuroraMeter.remaining(assigns.tenant, assigns.feature) do
-          :unlimited -> nil
-          remaining -> used + remaining
-        end
+      quota = AuroraMeter.quota(assigns.tenant, assigns.feature)
 
       assigns =
         assigns
-        |> assign(:used, used)
-        |> assign(:limit, limit)
-        |> assign(:pct, percent(used, limit))
+        |> assign(:quota, quota)
         |> assign(:label, assigns.label || to_string(assigns.feature))
-        |> assign(:usage_text, usage_text(used, limit))
+        |> assign(:usage_text, usage_text(quota))
 
       ~H"""
-      <div class="aurora-meter" {@rest}>
+      <div class={["aurora-meter", "aurora-meter--#{@quota.kind}"]} {@rest}>
         <span class="aurora-meter__label">{@label}</span>
         <div
+          :if={@quota.kind in [:hard, :metered]}
           class="aurora-meter__bar"
           role="progressbar"
           aria-label={@label}
-          aria-valuenow={@used}
-          aria-valuemax={@limit}
+          aria-valuenow={@quota.used}
+          aria-valuemax={@quota.limit || @quota.included}
         >
-          <div class="aurora-meter__fill" style={"width: #{@pct}%"}></div>
+          <div class="aurora-meter__fill" style={"width: #{@quota.percent}%"}></div>
         </div>
         <span class="aurora-meter__value">{@usage_text}</span>
+        <span :if={@quota.overage > 0} class="aurora-meter__overage">
+          +{@quota.overage} over
+        </span>
       </div>
       """
     end
@@ -57,7 +60,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       features =
         case AuroraMeter.plan(assigns.tenant) do
           nil -> []
-          plan -> Map.keys(plan.features)
+          plan -> plan.features |> Map.keys() |> Enum.sort()
         end
 
       assigns = assign(assigns, :features, features)
@@ -69,11 +72,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    defp percent(_used, nil), do: 0
-    defp percent(used, limit) when limit > 0, do: min(100, round(used / limit * 100))
-    defp percent(_used, _limit), do: 0
-
-    defp usage_text(used, nil), do: "#{used}"
-    defp usage_text(used, limit), do: "#{used} / #{limit}"
+    defp usage_text(%{kind: :hard, used: used, limit: limit}), do: "#{used} / #{limit}"
+    defp usage_text(%{kind: :metered, used: used, included: inc}), do: "#{used} / #{inc}"
+    defp usage_text(%{kind: :boolean, enabled: true}), do: "enabled"
+    defp usage_text(%{kind: :boolean, enabled: false}), do: "not included"
+    defp usage_text(%{used: used}), do: "#{used}"
   end
 end

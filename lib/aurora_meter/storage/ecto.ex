@@ -11,6 +11,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   alias AuroraMeter.Schema.Counter
   alias AuroraMeter.Schema.Event
+  alias AuroraMeter.Schema.History
   alias AuroraMeter.Schema.Subscription
 
   @impl AuroraMeter.Storage
@@ -47,6 +48,60 @@ defmodule AuroraMeter.Storage.Ecto do
           c.tenant_key == ^tenant_key and c.feature == ^feature and
             c.period_start == ^period_start,
         select: c.value
+      )
+    )
+  end
+
+  @impl AuroraMeter.Storage
+  def upsert_history(rows) do
+    now = DateTime.utc_now()
+
+    entries =
+      Enum.map(rows, fn row ->
+        %{
+          tenant_key: row.tenant_key,
+          feature: to_string(row.feature),
+          bucket_kind: "day",
+          bucket_start: row.date,
+          value: row.value,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    repo().insert_all(History, entries,
+      on_conflict: {:replace, [:value, :updated_at]},
+      conflict_target: [:tenant_key, :feature, :bucket_kind, :bucket_start]
+    )
+
+    :ok
+  end
+
+  @impl AuroraMeter.Storage
+  def load_history(tenant_key, feature, date) do
+    feature = to_string(feature)
+
+    repo().one(
+      from(h in History,
+        where:
+          h.tenant_key == ^tenant_key and h.feature == ^feature and h.bucket_kind == "day" and
+            h.bucket_start == ^date,
+        select: h.value
+      )
+    )
+  end
+
+  @impl AuroraMeter.Storage
+  def load_history_range(tenant_key, feature, from, to) do
+    feature = to_string(feature)
+
+    repo().all(
+      from(h in History,
+        where:
+          h.tenant_key == ^tenant_key and h.feature == ^feature and h.bucket_kind == "day" and
+            h.bucket_start >= ^from and h.bucket_start <= ^to,
+        order_by: [asc: h.bucket_start],
+        select: %{date: h.bucket_start, value: h.value}
       )
     )
   end

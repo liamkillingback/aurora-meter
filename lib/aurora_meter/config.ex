@@ -20,7 +20,17 @@ defmodule AuroraMeter.Config do
             period_source: [type: :atom, default: AuroraMeter.Period.Calendar],
             durable_features: [type: {:list, :atom}, default: []],
             flush_interval: [type: :pos_integer, default: 5_000],
-            broadcast_interval: [type: :pos_integer, default: 1_000]
+            broadcast_interval: [type: :pos_integer, default: 1_000],
+            history: [
+              type: :boolean,
+              default: true,
+              doc: "Maintain UTC day buckets for `AuroraMeter.history/3`."
+            ],
+            subscription_cache_ttl: [
+              type: :non_neg_integer,
+              default: 5_000,
+              doc: "Milliseconds a subscription lookup is cached; 0 disables the cache."
+            ]
           )
 
   @doc """
@@ -85,6 +95,14 @@ defmodule AuroraMeter.Config do
   @doc "Milliseconds between live PubSub broadcasts of touched counters."
   @spec broadcast_interval() :: pos_integer()
   def broadcast_interval, do: get(:broadcast_interval, 1_000)
+
+  @doc "Whether UTC day buckets are maintained for `AuroraMeter.history/3` (default `true`)."
+  @spec history?() :: boolean()
+  def history?, do: get(:history, true)
+
+  @doc "Milliseconds a subscription lookup stays cached (default 5_000; `0` disables)."
+  @spec subscription_cache_ttl() :: non_neg_integer()
+  def subscription_cache_ttl, do: get(:subscription_cache_ttl, 5_000)
 
   @spec get(atom(), term()) :: term()
   defp get(key, default), do: Application.get_env(:aurora_meter, key, default)

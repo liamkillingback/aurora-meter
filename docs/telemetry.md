@@ -5,6 +5,7 @@ Aurora Meter emits `:telemetry` events you can attach to for metrics and logs.
 | Event | Measurements | Metadata |
 |---|---|---|
 | `[:aurora_meter, :track]` | `%{count}` | `%{tenant_key, feature}` |
+| `[:aurora_meter, :reserve]` | `%{qty}` | `%{tenant_key, feature, result}` — `result` is `:ok`, `:limit_exceeded` or `:not_entitled` |
 | `[:aurora_meter, :flush]` | `%{count}` | `%{}` |
 | `[:aurora_meter, :broadcast]` | `%{count}` | `%{}` |
 

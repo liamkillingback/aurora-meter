@@ -7,21 +7,47 @@ defmodule AuroraMeter.Entitlements do
   an undeclared feature is permissive. `with_quota/4` reserves atomically so hard
   limits are correct under concurrency, releasing the reservation if the wrapped
   function raises.
+
+  Plans resolve through `AuroraMeter.Subscriptions` (cached), and only a
+  subscription in an entitled status (`AuroraMeter.Schema.Subscription.entitled_statuses/0`)
+  grants its plan; anything else gets the default plan.
   """
 
   alias AuroraMeter.Config
   alias AuroraMeter.Counter
   alias AuroraMeter.Period
   alias AuroraMeter.Plans
+  alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Storage
+  alias AuroraMeter.Subscriptions
   alias AuroraMeter.Tenant
 
   @typedoc "Result of an entitlement check."
   @type check_result :: :ok | {:error, :limit_exceeded | :not_entitled}
 
+  @typedoc """
+  A dashboard-ready view of one feature's quota. `kind` is `:hard`, `:metered`,
+  `:boolean` or `:undeclared`; `limit` is set for hard caps, `included` for
+  metered allowances; `percent` is used relative to whichever applies (nil when
+  neither does).
+  """
+  @type quota :: %{
+          feature: atom(),
+          kind: :hard | :metered | :boolean | :undeclared,
+          enabled: boolean(),
+          used: integer(),
+          limit: non_neg_integer() | nil,
+          included: non_neg_integer() | nil,
+          unit_price: number() | nil,
+          remaining: non_neg_integer() | :unlimited,
+          overage: non_neg_integer(),
+          percent: non_neg_integer() | nil,
+          period: Period.t()
+        }
+
   @doc "Assigns `plan_id` to `tenant` locally (no billing provider)."
   @spec subscribe(term(), atom() | String.t()) ::
-          {:ok, AuroraMeter.Schema.Subscription.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
   def subscribe(tenant, plan_id) do
     Storage.put_subscription(%{
       tenant_key: Tenant.to_key(tenant),
@@ -30,15 +56,21 @@ defmodule AuroraMeter.Entitlements do
     })
   end
 
-  @doc "Returns the plan for `tenant` (its subscription's plan, else the default)."
+  @doc """
+  Returns the plan for `tenant`: its subscription's plan when the subscription is
+  in an entitled status, else the default plan.
+  """
   @spec plan(term()) :: AuroraMeter.Plan.t() | nil
   def plan(tenant) do
-    case Storage.get_subscription(Tenant.to_key(tenant)) do
-      nil ->
-        Plans.get(Config.default_plan())
+    default = Plans.get(Config.default_plan())
 
-      subscription ->
-        Plans.get(plan_atom(subscription.plan_id)) || Plans.get(Config.default_plan())
+    case Subscriptions.get(tenant) do
+      %Subscription{status: status, plan_id: plan_id}
+      when status in ~w(active trialing past_due) ->
+        Plans.get(plan_atom(plan_id)) || default
+
+      _none_or_inactive ->
+        default
     end
   end
 
@@ -86,19 +118,82 @@ defmodule AuroraMeter.Entitlements do
     end
   end
 
+  @doc """
+  A dashboard-ready snapshot of `feature` for `tenant`: kind, usage, cap or
+  allowance, remaining, overage, percentage and the current period.
+  """
+  @spec quota(term(), atom()) :: quota()
+  def quota(tenant, feature) do
+    used = usage(tenant, feature)
+    period = Period.current(tenant)
+
+    base = %{
+      feature: feature,
+      kind: :undeclared,
+      enabled: true,
+      used: used,
+      limit: nil,
+      included: nil,
+      unit_price: nil,
+      remaining: :unlimited,
+      overage: 0,
+      percent: nil,
+      period: period
+    }
+
+    case feature_config(tenant, feature) do
+      {:limit, n, :hard} ->
+        %{
+          base
+          | kind: :hard,
+            limit: n,
+            included: n,
+            remaining: max(0, n - used),
+            percent: percent(used, n)
+        }
+
+      {:metered, included, unit_price} ->
+        %{
+          base
+          | kind: :metered,
+            included: included,
+            unit_price: unit_price,
+            overage: max(0, used - included),
+            percent: percent(used, included)
+        }
+
+      {:feature, enabled} ->
+        %{base | kind: :boolean, enabled: enabled}
+
+      nil ->
+        base
+    end
+  end
+
   @doc "Atomically reserves `qty` of `feature` against the plan (increments the counter)."
   @spec reserve(term(), atom(), pos_integer()) :: :ok | {:error, :limit_exceeded | :not_entitled}
   def reserve(tenant, feature, qty \\ 1) do
-    case feature_config(tenant, feature) do
-      {:feature, false} ->
-        {:error, :not_entitled}
+    tenant_key = Tenant.to_key(tenant)
 
-      {:limit, n, :hard} ->
-        Counter.reserve(Tenant.to_key(tenant), feature, qty, period_start(tenant), n)
+    result =
+      case feature_config(tenant, feature) do
+        {:feature, false} ->
+          {:error, :not_entitled}
 
-      _other ->
-        Counter.reserve(Tenant.to_key(tenant), feature, qty, period_start(tenant), nil)
-    end
+        {:limit, n, :hard} ->
+          Counter.reserve(tenant_key, feature, qty, period_start(tenant), n)
+
+        _other ->
+          Counter.reserve(tenant_key, feature, qty, period_start(tenant), nil)
+      end
+
+    :telemetry.execute([:aurora_meter, :reserve], %{qty: qty}, %{
+      tenant_key: tenant_key,
+      feature: feature,
+      result: result_tag(result)
+    })
+
+    result
   end
 
   @doc """
@@ -147,6 +242,14 @@ defmodule AuroraMeter.Entitlements do
 
   @spec period_start(term()) :: DateTime.t()
   defp period_start(tenant), do: Period.current(tenant).start
+
+  @spec percent(integer(), non_neg_integer()) :: non_neg_integer()
+  defp percent(_used, 0), do: 0
+  defp percent(used, total), do: max(0, min(100, div(used * 100, total)))
+
+  @spec result_tag(:ok | {:error, atom()}) :: atom()
+  defp result_tag(:ok), do: :ok
+  defp result_tag({:error, reason}), do: reason
 
   @spec plan_atom(String.t()) :: atom() | nil
   defp plan_atom(plan_id) do

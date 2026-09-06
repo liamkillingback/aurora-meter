@@ -28,11 +28,27 @@ Usage is bucketed by billing period. The free core uses the calendar month (UTC)
 a new period starts a fresh counter automatically (no reset job). With the Pro
 package, periods align to the tenant's subscription.
 
+## History
+
+Alongside the period counter, `track/4`, `reserve/3` and `with_quota/4` also
+bump a UTC **day bucket** for the same feature (still ETS, still no database on
+the hot path). The flusher persists it to `aurora_meter_history`, and
+
+```elixir
+AuroraMeter.history(tenant, :ai_generations, days: 30)
+# => [%{date: ~D[2026-08-08], value: 0}, ..., %{date: ~D[2026-09-06], value: 12}]
+```
+
+returns one point per day, oldest first, with today's live value merged in.
+This is what usage charts read. Disable with `config :aurora_meter, history: false`
+if you truly never chart usage.
+
 ## Durability
 
 By default metering is **buffered**: counters live in ETS and are flushed to
-Postgres every `:flush_interval` ms, so a hard crash can lose at most one interval
-of increments — fine for dashboards and soft quotas. For billing-grade exactness,
+Postgres every `:flush_interval` ms and once more on a clean shutdown, so only a
+hard crash can lose increments (at most one interval's worth) — fine for
+dashboards and soft quotas. For billing-grade exactness,
 mark a feature **durable** and `track/4` also writes a raw event row synchronously:
 
 ```elixir

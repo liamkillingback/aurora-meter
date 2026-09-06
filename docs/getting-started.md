@@ -7,7 +7,7 @@ bills via Stripe — from inside your Phoenix app.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.1"}]
+  [{:aurora_meter, "~> 0.2"}]
 end
 ```
 
@@ -18,7 +18,10 @@ mix aurora_meter.gen.migration -r MyApp.Repo
 mix ecto.migrate
 ```
 
-This generates a thin migration that delegates to `AuroraMeter.Migration`.
+This generates a thin migration that delegates to `AuroraMeter.Migration`, which
+is versioned: when a later release adds tables, run
+`mix aurora_meter.gen.migration -r MyApp.Repo --from N` for a migration that
+applies only the new versions.
 
 ## 3. Define plans
 

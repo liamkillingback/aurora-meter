@@ -17,6 +17,8 @@ validated at boot by `AuroraMeter.Config.validate!/0` (called from
 | `:durable_features` | list of atoms | — | `[]` |
 | `:flush_interval` | ms | — | `5_000` |
 | `:broadcast_interval` | ms | — | `1_000` |
+| `:history` | boolean | — | `true` — keep UTC day buckets for `AuroraMeter.history/3` |
+| `:subscription_cache_ttl` | ms | — | `5_000` — how long a plan lookup is cached; `0` disables |
 
 ```elixir
 config :aurora_meter,
@@ -28,6 +30,16 @@ config :aurora_meter,
   flush_interval: 5_000,
   broadcast_interval: 1_000
 ```
+
+## Subscription cache
+
+`AuroraMeter.plan/1` (and therefore every `check`, `reserve` and `with_quota`)
+resolves the tenant's subscription through `AuroraMeter.Subscriptions`, an ETS
+cache with a short TTL. Every write through `AuroraMeter.Storage.put_subscription/1`
+evicts the entry locally and broadcasts the eviction on the configured PubSub,
+so other nodes drop it too. If you write to `aurora_meter_subscriptions` some
+other way, call `AuroraMeter.Subscriptions.invalidate/1` afterwards (or set the
+TTL to `0`).
 
 ## Tenants
 

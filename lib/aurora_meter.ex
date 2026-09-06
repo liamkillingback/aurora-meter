@@ -18,8 +18,9 @@ defmodule AuroraMeter do
         MyAppWeb.Endpoint
       ]
 
-  The public metering/entitlement API (`track/4`, `check/2`, `with_quota/4`,
-  `usage/2`, `remaining/2`, `subscribe/2`) is added in later phases; see `plan.md`.
+  The public API: `track/4`, `usage/2`, `usage_all/1`, `history/3` (metering);
+  `check/2`, `allowed?/2`, `entitled?/2`, `remaining/2`, `quota/2`, `reserve/3`,
+  `with_quota/4` (entitlements); `subscribe/2`, `plan/1`, `period/1` (plans).
   """
 
   alias AuroraMeter.Config
@@ -76,6 +77,40 @@ defmodule AuroraMeter do
     Counter.all_for(Tenant.to_key(tenant), Period.current(tenant).start)
   end
 
+  @doc """
+  Returns `tenant`'s daily usage of `feature` as a list of
+  `%{date: Date.t(), value: integer()}` points, one per UTC day, oldest first.
+
+  Options: `:days` (default 30, ending today), or explicit `:from` / `:to`
+  dates. Days with no usage are present with a value of `0`. Requires
+  `:history` (on by default) and schema version 2.
+
+      AuroraMeter.history(org, :ai_generations, days: 7)
+      #=> [%{date: ~D[2026-09-01], value: 12}, ..., %{date: ~D[2026-09-07], value: 3}]
+  """
+  @spec history(term(), atom(), keyword()) :: [Storage.history_point()]
+  def history(tenant, feature, opts \\ []) do
+    tenant_key = Tenant.to_key(tenant)
+    to = Keyword.get(opts, :to, Date.utc_today())
+    days = Keyword.get(opts, :days, 30)
+    from = Keyword.get(opts, :from, Date.add(to, -(days - 1)))
+
+    stored =
+      tenant_key
+      |> Storage.load_history_range(feature, from, to)
+      |> Map.new(&{&1.date, &1.value})
+
+    live = Counter.warm_day_values(tenant_key, feature)
+
+    for date <- Date.range(from, to) do
+      %{date: date, value: Map.get(live, date) || Map.get(stored, date, 0)}
+    end
+  end
+
+  @doc "Returns the current billing period for `tenant` (`%{start:, end:, source:}`)."
+  @spec period(term()) :: Period.t()
+  def period(tenant), do: Period.current(tenant)
+
   @doc "Assigns `plan_id` to `tenant` locally. See `AuroraMeter.Entitlements.subscribe/2`."
   @spec subscribe(term(), atom() | String.t()) ::
           {:ok, AuroraMeter.Schema.Subscription.t()} | {:error, Ecto.Changeset.t()}
@@ -100,6 +135,10 @@ defmodule AuroraMeter do
   @doc "Remaining quota for a hard-limited feature, or `:unlimited`."
   @spec remaining(term(), atom()) :: non_neg_integer() | :unlimited
   defdelegate remaining(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc "A dashboard-ready quota snapshot. See `AuroraMeter.Entitlements.quota/2`."
+  @spec quota(term(), atom()) :: AuroraMeter.Entitlements.quota()
+  defdelegate quota(tenant, feature), to: AuroraMeter.Entitlements
 
   @doc "Atomically reserves usage against the plan. See `AuroraMeter.Entitlements.reserve/3`."
   @spec reserve(term(), atom()) :: :ok | {:error, :limit_exceeded | :not_entitled}
