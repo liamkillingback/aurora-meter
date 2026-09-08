@@ -7,11 +7,21 @@ bills via Stripe — from inside your Phoenix app.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.2"}]
+  [{:aurora_meter, "~> 0.3"}]
 end
 ```
 
-## 2. Create the tables
+## 2. Install
+
+With [Igniter](https://hexdocs.pm/igniter) in your dev deps, one command does
+steps 2 to 4 (config, supervision child, a starter plans module, the migration):
+
+```bash
+mix igniter.install aurora_meter
+mix ecto.migrate
+```
+
+Without Igniter, generate the migration and follow the printed steps:
 
 ```bash
 mix aurora_meter.gen.migration -r MyApp.Repo
@@ -58,6 +68,11 @@ AuroraMeter.subscribe(org, :free)
 AuroraMeter.track(org, :api_calls)
 AuroraMeter.check(org, :api_calls)   # :ok | {:error, :limit_exceeded}
 ```
+
+`org` is your tenant: the organisation or account being metered. Strings,
+integers and atoms work as they are; pass your own struct by configuring a
+`tenant:` module that implements `AuroraMeter.Tenant` (see the README section
+"What `org` is"). Subscribe and track with the same term.
 
 Next: [Metering](metering.md) · [Entitlements](entitlements.md) ·
 [Configuration](configuration.md).

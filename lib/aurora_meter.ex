@@ -18,6 +18,26 @@ defmodule AuroraMeter do
         MyAppWeb.Endpoint
       ]
 
+  ## Tenants: the first argument everywhere
+
+  Every function takes a tenant first (`org` in the examples). It is whatever
+  identifies the customer being metered: the organisation or account that owns
+  the subscription, not the individual user. Strings, integers and atoms work
+  as they are (`"org_42"`, `42`, `:acme`); to pass your own struct, configure a
+  module that implements `AuroraMeter.Tenant`:
+
+      defmodule MyApp.Tenant do
+        @behaviour AuroraMeter.Tenant
+        def to_key(%MyApp.Accounts.Org{id: id}), do: "org_\#{id}"
+        def to_key(key) when is_binary(key), do: key
+      end
+
+      config :aurora_meter, tenant: MyApp.Tenant
+
+  The resolved key must be stable and unique per customer: it is the key for the
+  ETS counters, the persisted counter rows and the PubSub topics. Subscribe a
+  plan (`subscribe/2`) with the same term you meter with.
+
   The public API: `track/4`, `usage/2`, `usage_all/1`, `history/3` (metering);
   `check/2`, `allowed?/2`, `entitled?/2`, `remaining/2`, `quota/2`, `reserve/3`,
   `with_quota/4` (entitlements); `subscribe/2`, `plan/1`, `period/1` (plans).
@@ -45,6 +65,9 @@ defmodule AuroraMeter do
 
   @doc """
   Records `qty` usage of `feature` for `tenant` in the current period.
+
+  `tenant` is any term that identifies the customer (a string, an id, or your
+  own struct via a configured `AuroraMeter.Tenant`); see the module docs.
 
   Runs on the ETS hot path (no database round-trip) unless the feature is durable
   (`opts[:durable]` or configured in `:durable_features`), in which case a raw
@@ -120,7 +143,13 @@ defmodule AuroraMeter do
   @spec plan(term()) :: AuroraMeter.Plan.t() | nil
   defdelegate plan(tenant), to: AuroraMeter.Entitlements
 
-  @doc "Checks whether `tenant` may use `feature`. See `AuroraMeter.Entitlements.check/2`."
+  @doc """
+  Checks whether `tenant` may use `feature`. See `AuroraMeter.Entitlements.check/2`.
+
+  Advisory: this reads the counter and compares, so two concurrent callers can
+  both see `:ok` at the cap. To enforce a hard limit atomically use
+  `reserve/3` or `with_quota/4`.
+  """
   @spec check(term(), atom()) :: :ok | {:error, :limit_exceeded | :not_entitled}
   defdelegate check(tenant, feature), to: AuroraMeter.Entitlements
 

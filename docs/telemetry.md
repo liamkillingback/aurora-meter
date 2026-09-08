@@ -6,8 +6,10 @@ Aurora Meter emits `:telemetry` events you can attach to for metrics and logs.
 |---|---|---|
 | `[:aurora_meter, :track]` | `%{count}` | `%{tenant_key, feature}` |
 | `[:aurora_meter, :reserve]` | `%{qty}` | `%{tenant_key, feature, result}` — `result` is `:ok`, `:limit_exceeded` or `:not_entitled` |
-| `[:aurora_meter, :flush]` | `%{count}` | `%{}` |
-| `[:aurora_meter, :broadcast]` | `%{count}` | `%{}` |
+| `[:aurora_meter, :flush]` | `%{count, delta_sum}` | `%{}` |
+| `[:aurora_meter, :flush, :error]` | `%{count}` | `%{error}` — the database write failed; the deltas stay pending |
+| `[:aurora_meter, :broadcast]` | `%{count, deltas}` | `%{}` |
+| `[:aurora_meter, :cluster, :apply]` | `%{count}` | `%{kind, origin}` — deltas or totals applied from another node |
 
 Example — count tracked usage with `Telemetry.Metrics`:
 

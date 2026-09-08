@@ -11,6 +11,7 @@ defmodule AuroraMeter.Supervisor do
     children = [
       {Registry, keys: :unique, name: AuroraMeter.Registry},
       AuroraMeter.Store,
+      AuroraMeter.Cluster,
       AuroraMeter.Flusher,
       AuroraMeter.Broadcaster
     ]

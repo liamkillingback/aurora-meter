@@ -49,7 +49,7 @@ laptop, Elixir 1.20 / OTP 29):
 
 | Load shape | Throughput |
 |---|---|
-| 8 processes, distinct counters (realistic) | ~7.9M increments/s |
+| 8 processes, distinct counters (realistic) | ~5.5M increments/s (0.3, cluster-wide rows; 7.9M in 0.2) |
 | 8 processes, one hot counter (worst case) | ~53k increments/s |
 
 The full run is in [docs/evidence/phase-03/bench.md](docs/evidence/phase-03/bench.md).
@@ -62,7 +62,7 @@ node, so the entitlement check is also database-free per request.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.2"}]
+  [{:aurora_meter, "~> 0.3"}]
 end
 ```
 
@@ -121,6 +121,44 @@ end
 That is the whole setup. `mix aurora_meter.install` generates the migration and
 prints the config to add, and the [getting started guide](docs/getting-started.md)
 covers the rest.
+
+## What `org` is
+
+Every call takes a tenant first. `org` is whatever identifies the customer you
+are metering: usually the organisation or account that owns the subscription,
+not the individual user. It must be stable (the same customer always resolves
+to the same value) and unique per customer, because it becomes the key for the
+ETS counters, the `aurora_meter_counters` rows and the PubSub topics.
+
+Out of the box `AuroraMeter.Tenant.Default` accepts:
+
+```elixir
+AuroraMeter.track("org_42", :ai_generations)     # a string, used as-is
+AuroraMeter.track(42, :ai_generations)           # an integer, stored as "42"
+AuroraMeter.track(:acme, :ai_generations)        # anything with String.Chars
+```
+
+Pass an Ecto struct or any other term and tell Aurora Meter how to read the key:
+
+```elixir
+defmodule MyApp.Tenant do
+  @behaviour AuroraMeter.Tenant
+
+  @impl true
+  def to_key(%MyApp.Accounts.Org{id: id}), do: "org_#{id}"
+  def to_key(%MyApp.Accounts.Scope{org_id: id}), do: "org_#{id}"
+  def to_key(key) when is_binary(key), do: key
+end
+
+# config/config.exs
+config :aurora_meter, tenant: MyApp.Tenant
+```
+
+Then `AuroraMeter.track(current_org, :ai_generations)` and
+`<.usage_meter tenant={@current_org} ... />` work with the struct you already
+have in your assigns. Plans are attached to the same key with
+`AuroraMeter.subscribe(org, :pro)`, so subscribe with exactly the term you
+meter with.
 
 ## The three jobs
 
@@ -183,10 +221,17 @@ Read this before you rely on it. The design choices are recorded as
   (`config :aurora_meter, durable_features: [:ai_generations]` or
   `track(..., durable: true)`) and every increment also writes a raw event row
   synchronously. Use this for anything you invoice.
-- **Counters are per node.** The ETS table is local to the VM and flushes are
-  absolute-value upserts. Run the meter on one node, or use durable features
-  for exact cross-node totals. Subscription cache invalidation is already
-  cluster-wide; multi-node counter merging is on the roadmap.
+- **Cluster-wide counters.** Every node meters into its own ETS table and
+  flushes *deltas* (`value = value + Δ`), so nodes add up instead of
+  overwriting each other: the Postgres row is the cluster total. Nodes exchange
+  deltas over PubSub every `:broadcast_interval` (1 s) and re-base on the
+  persisted total every `:flush_interval` (5 s), so a value read on any node is
+  the true total minus at most the other nodes' last second of increments.
+  Hard limits are enforced against that local view, so a burst across N nodes
+  can overshoot a cap by what the other N−1 nodes admitted in one
+  `:broadcast_interval`. Needs a distributed `Phoenix.PubSub` (the one you
+  already run for LiveView); on one node nothing changes. See the
+  [clustering guide](docs/clustering.md).
 - **Periods are UTC calendar months** in the free core. A new period starts a
   fresh counter with no reset job. Pro aligns periods to the Stripe
   subscription.
@@ -213,8 +258,12 @@ a separate commercial package for when Stripe should start charging.
 | Quota alerts and reconciliation | | ✓ |
 
 Pro plugs into the same config (`provider: AuroraMeter.Pro.Stripe`) and adds no
-runtime dependency to the core. Details and pricing:
-[phxtemplates.com/aurora-meter](https://phxtemplates.com/aurora-meter).
+runtime dependency to the core. Details, docs and pricing live at
+[aurorameter.com](https://aurorameter.com) ([pricing](https://aurorameter.com/pricing),
+[Pro preview](https://aurorameter.com/pro)). Aurora Meter is built by the team behind
+[PhxTemplates](https://www.phxtemplates.com), whose
+[Aurora API Starter](https://www.phxtemplates.com/templates/phx_api) ships a complete
+metered-API SaaS on this core.
 
 ## How it compares
 

@@ -1,17 +1,30 @@
 defmodule AuroraMeter.Broadcaster do
   @moduledoc """
   Fans live counter values out over `Phoenix.PubSub` on an interval, decoupled
-  from the (slower) database flush.
+  from the (slower) database flush, and ships this node's deltas to the other
+  nodes.
 
-  Each tick broadcasts the current value of every counter touched since the
-  previous tick on its tenant topic (`"aurora_meter:tenant:" <> tenant_key`) as
-  `{:aurora_meter, :usage, %{feature:, value:, period_start:}}`. The touched set
-  is independent of the flusher's dirty set, so a flush landing between a track
-  and the next tick can never swallow an update.
+  Each tick, for every counter touched since the previous tick:
+
+    * the delta this node accumulated since its last tick (`pending_gossip`) is
+      taken and collected; one `{:aurora_meter, :deltas, node, [...]}` message
+      per tick goes to `AuroraMeter.Cluster` on every other node
+    * period counters are broadcast on their tenant topic
+      (`"aurora_meter:tenant:" <> tenant_key`) as
+      `{:aurora_meter, :usage, %{feature:, value:, period_start:}}`
+
+  With cluster sync on (the default) tenant broadcasts are **node-local**: every
+  node informs its own LiveViews from its own converged view, so a browser
+  connected to node B never receives node A's slightly different number. With
+  `cluster_sync: false` they fan out cluster-wide as before.
+
+  The touched set is independent of the flusher's dirty set, so a flush landing
+  between a track and the next tick can never swallow an update.
   """
 
   use GenServer
 
+  alias AuroraMeter.Cluster
   alias AuroraMeter.Config
   alias AuroraMeter.Counter
   alias Phoenix.PubSub
@@ -42,6 +55,8 @@ defmodule AuroraMeter.Broadcaster do
     {:noreply, state}
   end
 
+  def handle_info(_other, state), do: {:noreply, state}
+
   @impl GenServer
   def handle_call(:broadcast, _from, state), do: {:reply, do_broadcast(), state}
 
@@ -50,29 +65,43 @@ defmodule AuroraMeter.Broadcaster do
 
   @spec do_broadcast() :: :ok
   defp do_broadcast do
-    keys = Counter.touched_keys()
+    cluster? = Cluster.enabled?()
 
-    count =
-      Enum.reduce(keys, 0, fn key, acc ->
+    {count, deltas} =
+      Enum.reduce(Counter.touched_keys(), {0, []}, fn key, {count, deltas} ->
         Counter.clear_touched(key)
+        deltas = take_gossip(key, deltas)
 
         if Counter.history_key?(key) do
-          acc
+          {count, deltas}
         else
-          {tenant_key, feature, period_start} = key
-          value = Counter.value(tenant_key, feature, period_start)
-
-          PubSub.broadcast(
-            Config.pubsub(),
-            topic(tenant_key),
-            {:aurora_meter, :usage, %{feature: feature, value: value, period_start: period_start}}
-          )
-
-          acc + 1
+          publish_usage(key, cluster?)
+          {count + 1, deltas}
         end
       end)
 
-    :telemetry.execute([:aurora_meter, :broadcast], %{count: count}, %{})
+    Cluster.publish_deltas(deltas)
+    :telemetry.execute([:aurora_meter, :broadcast], %{count: count, deltas: length(deltas)}, %{})
     :ok
+  end
+
+  defp take_gossip(key, deltas) do
+    case Counter.take_pending(key, :gossip) do
+      0 -> deltas
+      delta -> [{key, delta} | deltas]
+    end
+  end
+
+  defp publish_usage({tenant_key, feature, period_start}, cluster?) do
+    value = Counter.value(tenant_key, feature, period_start)
+
+    message =
+      {:aurora_meter, :usage, %{feature: feature, value: value, period_start: period_start}}
+
+    if cluster? do
+      PubSub.local_broadcast(Config.pubsub(), topic(tenant_key), message)
+    else
+      PubSub.broadcast(Config.pubsub(), topic(tenant_key), message)
+    end
   end
 end

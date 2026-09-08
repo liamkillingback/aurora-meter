@@ -30,6 +30,13 @@ defmodule AuroraMeter.Config do
               type: :non_neg_integer,
               default: 5_000,
               doc: "Milliseconds a subscription lookup is cached; 0 disables the cache."
+            ],
+            cluster_sync: [
+              type: :boolean,
+              default: true,
+              doc:
+                "Exchange counter deltas and flushed totals between nodes over PubSub " <>
+                  "so every node converges on the cluster-wide value."
             ]
           )
 
@@ -103,6 +110,10 @@ defmodule AuroraMeter.Config do
   @doc "Milliseconds a subscription lookup stays cached (default 5_000; `0` disables)."
   @spec subscription_cache_ttl() :: non_neg_integer()
   def subscription_cache_ttl, do: get(:subscription_cache_ttl, 5_000)
+
+  @doc "Whether nodes exchange deltas and totals so counters are cluster-wide (default `true`)."
+  @spec cluster_sync?() :: boolean()
+  def cluster_sync?, do: get(:cluster_sync, true)
 
   @spec get(atom(), term()) :: term()
   defp get(key, default), do: Application.get_env(:aurora_meter, key, default)

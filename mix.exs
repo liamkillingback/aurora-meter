@@ -1,7 +1,7 @@
 defmodule AuroraMeter.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.2"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do
@@ -49,6 +49,9 @@ defmodule AuroraMeter.MixProject do
       {:jason, "~> 1.4"},
       {:phoenix_live_view, "~> 0.20 or ~> 1.0", optional: true},
       {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true},
+      # Optional: powers the one-step `mix aurora_meter.install`. Hosts without
+      # it get the print-the-steps fallback.
+      {:igniter, "~> 0.8", optional: true},
 
       # Dev/test tooling — never shipped to consumers. ex_doc and dialyxir are
       # available in :test too so the `check` alias (which runs in :test) can
@@ -64,7 +67,8 @@ defmodule AuroraMeter.MixProject do
 
   defp description do
     "Real-time usage metering, plan entitlements, and Stripe-ready billing " <>
-      "primitives for Phoenix: count, gate, and bill on the BEAM."
+      "primitives for Phoenix: count, gate, and bill on the BEAM. The free core of " <>
+      "aurorameter.com."
   end
 
   defp package do
@@ -72,8 +76,10 @@ defmodule AuroraMeter.MixProject do
       licenses: ["MIT"],
       maintainers: ["Liam Killingback"],
       links: %{
+        "Website" => "https://aurorameter.com",
+        "Aurora Meter Pro" => "https://aurorameter.com/pricing",
         "GitHub" => @source_url,
-        "PHXTemplates" => "https://phxtemplates.com"
+        "PhxTemplates" => "https://www.phxtemplates.com"
       },
       # priv/ holds only the lib's own test-repo migration and dialyzer PLTs, so it
       # is deliberately excluded — consumers generate their migration via
@@ -97,9 +103,11 @@ defmodule AuroraMeter.MixProject do
         "docs/plans.md",
         "docs/telemetry.md",
         "docs/testing.md",
+        "docs/clustering.md",
         "docs/adr/0001-resolved-decisions.md",
         "docs/adr/0002-ets-counter-substrate.md",
-        "docs/adr/0003-buffered-vs-durable-and-period-seam.md"
+        "docs/adr/0003-buffered-vs-durable-and-period-seam.md",
+        "docs/adr/0004-cluster-wide-counters.md"
       ],
       groups_for_extras: [Guides: ~r/docs\/[^\/]+$/, ADRs: ~r/docs\/adr\//],
       source_ref: "v#{@version}",

@@ -39,9 +39,43 @@ defmodule AuroraMeter.Storage do
           optional(:metadata) => map()
         }
 
+  @typedoc "A counter delta to add: `value = value + delta`."
+  @type counter_delta :: %{
+          required(:tenant_key) => String.t(),
+          required(:feature) => atom() | String.t(),
+          required(:period_start) => DateTime.t(),
+          required(:delta) => integer()
+        }
+
+  @typedoc "A day-bucket delta to add."
+  @type history_delta :: %{
+          required(:tenant_key) => String.t(),
+          required(:feature) => atom() | String.t(),
+          required(:date) => Date.t(),
+          required(:delta) => integer()
+        }
+
+  @typedoc "A total as returned after adding deltas. `feature` is a string."
+  @type counter_total :: %{
+          tenant_key: String.t(),
+          feature: String.t(),
+          period_start: DateTime.t(),
+          value: integer()
+        }
+
+  @typedoc "A day-bucket total as returned after adding deltas."
+  @type history_total :: %{
+          tenant_key: String.t(),
+          feature: String.t(),
+          date: Date.t(),
+          value: integer()
+        }
+
   @callback upsert_counters([counter_row()]) :: :ok
+  @callback add_counters([counter_delta()]) :: {:ok, [counter_total()]}
   @callback load_counter(String.t(), atom() | String.t(), DateTime.t()) :: integer() | nil
   @callback upsert_history([history_row()]) :: :ok
+  @callback add_history([history_delta()]) :: {:ok, [history_total()]}
   @callback load_history(String.t(), atom() | String.t(), Date.t()) :: integer() | nil
   @callback load_history_range(String.t(), atom() | String.t(), Date.t(), Date.t()) ::
               [history_point()]
@@ -50,9 +84,27 @@ defmodule AuroraMeter.Storage do
   @callback insert_events([event_row()]) :: :ok
   @callback stream_counters(DateTime.t()) :: [Counter.t()]
 
-  @doc "Upserts counter snapshots (absolute values) by `{tenant_key, feature, period_start}`."
+  @doc """
+  Sets counter snapshots to absolute values by `{tenant_key, feature,
+  period_start}`. For backfills and test fixtures; the flusher uses
+  `add_counters/1` so that nodes add up instead of overwriting one another.
+  """
   @spec upsert_counters([counter_row()]) :: :ok
   def upsert_counters(rows), do: impl().upsert_counters(rows)
+
+  @doc """
+  Adds deltas to counters (`value = value + delta`, inserting at `delta` when
+  the row is new) and returns the resulting totals. This is what makes
+  cluster-wide counting correct: each node writes only what it added.
+  """
+  @spec add_counters([counter_delta()]) :: {:ok, [counter_total()]}
+  def add_counters([]), do: {:ok, []}
+  def add_counters(rows), do: impl().add_counters(rows)
+
+  @doc "Adds deltas to day buckets and returns the resulting totals. See `add_counters/1`."
+  @spec add_history([history_delta()]) :: {:ok, [history_total()]}
+  def add_history([]), do: {:ok, []}
+  def add_history(rows), do: impl().add_history(rows)
 
   @doc "Loads a single flushed counter value, or `nil` if absent."
   @spec load_counter(String.t(), atom() | String.t(), DateTime.t()) :: integer() | nil

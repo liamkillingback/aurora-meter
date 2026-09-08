@@ -24,12 +24,20 @@ defmodule Mix.Tasks.AuroraMeter.Bench do
   @impl Mix.Task
   def run(args) do
     {procs, per} = parse(args)
+    # The store subscribes to the invalidation topic at boot, so give it a
+    # PubSub; nothing else about the runtime is started (no repo, no flusher).
+    {:ok, _} = Application.ensure_all_started(:phoenix_pubsub)
+    {:ok, _} = Phoenix.PubSub.Supervisor.start_link(name: AuroraMeter.BenchPubSub)
+    Application.put_env(:aurora_meter, :pubsub, AuroraMeter.BenchPubSub)
+    # Measure the period-counter path only: day buckets would seed from the
+    # (absent) database on first touch.
+    Application.put_env(:aurora_meter, :history, false)
     {:ok, _} = Store.start_link([])
 
     # Warm one distinct key per worker so the seeding path never touches the
     # (absent) database and workers do not contend on a single ETS row.
     for i <- 1..procs,
-        do: :ets.insert(Store.counters_table(), {{tenant(i), @feature, @period}, 0})
+        do: :ets.insert(Store.counters_table(), {{tenant(i), @feature, @period}, 0, 0, 0})
 
     {micros, :ok} = :timer.tc(fn -> hammer(procs, per) end)
 

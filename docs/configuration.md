@@ -19,6 +19,7 @@ validated at boot by `AuroraMeter.Config.validate!/0` (called from
 | `:broadcast_interval` | ms | — | `1_000` |
 | `:history` | boolean | — | `true` — keep UTC day buckets for `AuroraMeter.history/3` |
 | `:subscription_cache_ttl` | ms | — | `5_000` — how long a plan lookup is cached; `0` disables |
+| `:cluster_sync` | boolean | — | `true` — exchange deltas and flushed totals between nodes so counters are cluster-wide ([clustering](clustering.md)) |
 
 ```elixir
 config :aurora_meter,

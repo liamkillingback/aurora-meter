@@ -39,6 +39,86 @@ defmodule AuroraMeter.Storage.Ecto do
   end
 
   @impl AuroraMeter.Storage
+  def add_counters(rows) do
+    now = DateTime.utc_now()
+
+    entries =
+      Enum.map(rows, fn row ->
+        %{
+          tenant_key: row.tenant_key,
+          feature: to_string(row.feature),
+          period_start: row.period_start,
+          value: row.delta,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    {_count, returned} =
+      repo().insert_all(Counter, entries,
+        on_conflict:
+          from(c in Counter,
+            update: [
+              set: [
+                value: fragment("? + EXCLUDED.value", c.value),
+                updated_at: fragment("EXCLUDED.updated_at")
+              ]
+            ]
+          ),
+        conflict_target: [:tenant_key, :feature, :period_start],
+        returning: [:tenant_key, :feature, :period_start, :value]
+      )
+
+    {:ok,
+     Enum.map(returned, fn c ->
+       %{
+         tenant_key: c.tenant_key,
+         feature: c.feature,
+         period_start: c.period_start,
+         value: c.value
+       }
+     end)}
+  end
+
+  @impl AuroraMeter.Storage
+  def add_history(rows) do
+    now = DateTime.utc_now()
+
+    entries =
+      Enum.map(rows, fn row ->
+        %{
+          tenant_key: row.tenant_key,
+          feature: to_string(row.feature),
+          bucket_kind: "day",
+          bucket_start: row.date,
+          value: row.delta,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    {_count, returned} =
+      repo().insert_all(History, entries,
+        on_conflict:
+          from(h in History,
+            update: [
+              set: [
+                value: fragment("? + EXCLUDED.value", h.value),
+                updated_at: fragment("EXCLUDED.updated_at")
+              ]
+            ]
+          ),
+        conflict_target: [:tenant_key, :feature, :bucket_kind, :bucket_start],
+        returning: [:tenant_key, :feature, :bucket_start, :value]
+      )
+
+    {:ok,
+     Enum.map(returned, fn h ->
+       %{tenant_key: h.tenant_key, feature: h.feature, date: h.bucket_start, value: h.value}
+     end)}
+  end
+
+  @impl AuroraMeter.Storage
   def load_counter(tenant_key, feature, period_start) do
     feature = to_string(feature)
 

@@ -7,13 +7,13 @@ Hand-off drafts for the owner to review, edit, and publish. Nothing here is live
 **Laravel Cashier + OpenMeter for Phoenix** — subscriptions, real-time usage
 metering, and plan-gating as a few function calls, on the BEAM.
 
-## Landing section (phxtemplates.com)
+## Landing section (aurorameter.com; a shorter version links out from phxtemplates.com)
 
 > ### Aurora Meter — the metering layer Phoenix was missing
 > Every SaaS meters usage, gates features by plan, and bills for overage. On
 > Phoenix you hand-roll all of it. Aurora Meter is a free, MIT library that does
 > the three jobs — **count, gate, bill** — with an ETS hot path that sustains
-> ~8M increments/sec and never touches your database on the write path.
+> ~5.5M increments/sec and never touches your database on the write path.
 >
 > ```elixir
 > AuroraMeter.track(org, :ai_generations)
@@ -33,7 +33,7 @@ metering, and plan-gating as a few function calls, on the BEAM.
 > Phoenix SaaS, and there was no library for it (OpenMeter ships SDKs for
 > Node/Python/Go but not Elixir). So I extracted Aurora Meter.
 >
-> - **Meter**: ETS-backed counters, ~8M incr/sec, nothing on the DB hot path.
+> - **Meter**: ETS-backed counters, ~5.5M incr/sec, nothing on the DB hot path.
 > - **Entitle**: `check/2` and an atomic `with_quota/4` (correct hard limits under
 >   concurrency).
 > - **Plans**: a small compile-time DSL.

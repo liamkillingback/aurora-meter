@@ -26,6 +26,42 @@ defmodule AuroraMeter.StorageTest do
     assert Enum.count(Storage.stream_counters(@period), &(&1.tenant_key == tenant)) == 1
   end
 
+  test "add_counters/1 inserts at the delta, then adds, and returns the totals" do
+    tenant = unique_tenant()
+
+    assert {:ok, [%{tenant_key: ^tenant, feature: "ai", value: 5}]} =
+             Storage.add_counters([
+               %{tenant_key: tenant, feature: :ai, period_start: @period, delta: 5}
+             ])
+
+    assert {:ok, [%{value: 8}]} =
+             Storage.add_counters([
+               %{tenant_key: tenant, feature: "ai", period_start: @period, delta: 3}
+             ])
+
+    assert {:ok, [%{value: 6}]} =
+             Storage.add_counters([
+               %{tenant_key: tenant, feature: :ai, period_start: @period, delta: -2}
+             ])
+
+    assert Storage.load_counter(tenant, :ai, @period) == 6
+    assert Enum.count(Storage.stream_counters(@period), &(&1.tenant_key == tenant)) == 1
+    assert Storage.add_counters([]) == {:ok, []}
+  end
+
+  test "add_history/1 adds to day buckets and returns the totals" do
+    tenant = unique_tenant()
+    date = ~D[2026-07-03]
+
+    assert {:ok, [%{feature: "ai", date: ^date, value: 4}]} =
+             Storage.add_history([%{tenant_key: tenant, feature: :ai, date: date, delta: 4}])
+
+    assert {:ok, [%{value: 9}]} =
+             Storage.add_history([%{tenant_key: tenant, feature: :ai, date: date, delta: 5}])
+
+    assert Storage.load_history(tenant, :ai, date) == 9
+  end
+
   test "load_counter/3 returns nil for a missing key" do
     assert Storage.load_counter(unique_tenant(), :ai, @period) == nil
   end

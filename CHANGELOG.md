@@ -4,6 +4,68 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-09-08
+
+Documentation and package metadata only; no code or schema changes.
+
+### Changed
+
+- Aurora Meter now has its own home at https://aurorameter.com. The package
+  links, README, NOTICE and description point there for the product, pricing
+  and Pro, and keep the PhxTemplates links for the templates built on the core.
+
+## [0.3.1] - 2026-09-08
+
+Documentation only; no code or schema changes.
+
+### Changed
+
+- Explained what the tenant argument (`org` in every example) is and what a
+  good key looks like: in the README ("What `org` is"), the `AuroraMeter`
+  and `AuroraMeter.Tenant` module docs, the metering and entitlements guides,
+  the getting-started guide and the installer's quickstart output.
+
+## [0.3.0] - 2026-09-07
+
+**No migration required** (schema version stays 2).
+
+### Added
+
+- **Cluster-wide counters.** Every node still meters into its own ETS table,
+  but the flusher now writes *deltas* (`value = value + Δ`) and re-bases on the
+  total Postgres returns, so nodes add up instead of overwriting each other.
+  Nodes exchange deltas over PubSub every `:broadcast_interval` and announce
+  flushed totals every `:flush_interval`; a value read on any node is the true
+  total minus at most the other nodes' last tick of increments. See
+  [docs/clustering.md](docs/clustering.md) and ADR 0004.
+- `AuroraMeter.Cluster` — the supervised process behind it; config
+  `cluster_sync: true` (default).
+- `AuroraMeter.Storage.add_counters/1` and `add_history/1` (new required
+  callbacks on the behaviour) alongside the absolute `upsert_*`.
+- `AuroraMeter.Test` — `reset!/0`, `flush!/0`, `broadcast!/0`,
+  `unique_tenant/1`, `checkout/1`, `simulate_node/3`, `simulate_flush/2` and a
+  `use AuroraMeter.Test` macro, replacing the boilerplate the testing guide
+  used to ask hosts to copy.
+- **One-step installer.** With `igniter` in your deps, `mix igniter.install
+  aurora_meter` (or `mix aurora_meter.install`) writes the config, adds
+  `AuroraMeter` to your supervision tree after the repo and PubSub, creates a
+  starter plans module and generates the migration. Without Igniter the task
+  keeps printing the steps.
+- Telemetry: `[:aurora_meter, :cluster, :apply]` and
+  `[:aurora_meter, :flush, :error]`; `[:aurora_meter, :flush]` gains
+  `delta_sum`, `[:aurora_meter, :broadcast]` gains `deltas`.
+
+### Changed
+
+- ETS counter rows are now `{key, value, pending_flush, pending_gossip}`
+  (anyone reading `:aurora_meter_counters` directly needs the new shape).
+- With `cluster_sync` on, tenant usage broadcasts are node-local: each node
+  informs its own LiveViews from its own converged view.
+- A failed flush no longer crashes the flusher: taken deltas are restored and
+  re-marked dirty, the error is logged and reported via telemetry.
+- `AuroraMeter.check/2` is documented as advisory (a read then a compare); use
+  `reserve/3` or `with_quota/4` to enforce a hard limit atomically.
+
 ## [0.2.0] - 2026-09-07
 
 Schema version 2. Existing installs add one migration:

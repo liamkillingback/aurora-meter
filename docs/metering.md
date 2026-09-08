@@ -1,5 +1,11 @@
 # Metering
 
+> **The `tenant` argument.** Every call takes the tenant first: the organisation
+> or account being metered (`"org_42"`, an integer id, or your own struct through
+> a configured `AuroraMeter.Tenant`). It must be stable and unique per customer.
+> See "What `org` is" in the README and the `:tenant` option in
+> [Configuration](configuration.md).
+
 ## Recording usage
 
 ```elixir
