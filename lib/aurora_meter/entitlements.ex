@@ -27,14 +27,16 @@ defmodule AuroraMeter.Entitlements do
 
   @typedoc """
   A dashboard-ready view of one feature's quota. `kind` is `:hard`, `:metered`,
-  `:boolean` or `:undeclared`; `limit` is set for hard caps, `included` for
-  metered allowances; `percent` is used relative to whichever applies (nil when
-  neither does).
+  `:boolean`, `:feature` (an integer plan value, carried in `value`) or
+  `:undeclared`; `limit` is set for hard caps, `included` for metered
+  allowances; `percent` is used relative to whichever applies (nil when neither
+  does).
   """
   @type quota :: %{
           feature: atom(),
-          kind: :hard | :metered | :boolean | :undeclared,
+          kind: :hard | :metered | :boolean | :feature | :undeclared,
           enabled: boolean(),
+          value: non_neg_integer() | nil,
           used: integer(),
           limit: non_neg_integer() | nil,
           included: non_neg_integer() | nil,
@@ -81,7 +83,7 @@ defmodule AuroraMeter.Entitlements do
       {:feature, false} ->
         {:error, :not_entitled}
 
-      {:feature, true} ->
+      {:feature, _true_or_integer} ->
         :ok
 
       {:limit, n, :hard} ->
@@ -109,6 +111,23 @@ defmodule AuroraMeter.Entitlements do
     end
   end
 
+  @doc """
+  The value of a `feature :name, value` declaration on `tenant`'s plan, or
+  `default` when the plan does not declare it (or declares it as a limit or a
+  metered feature). Booleans and non-negative integers are both values:
+
+      AuroraMeter.feature_value(org, :seats, 1)       # 5 on :pro, 1 on :free
+      AuroraMeter.feature_value(org, :api_access)     # true | false | nil
+  """
+  @spec feature_value(term(), atom(), default) :: boolean() | non_neg_integer() | default
+        when default: term()
+  def feature_value(tenant, feature, default \\ nil) do
+    case feature_config(tenant, feature) do
+      {:feature, value} -> value
+      _other -> default
+    end
+  end
+
   @doc "Remaining quota for a hard-limited feature, or `:unlimited`."
   @spec remaining(term(), atom()) :: non_neg_integer() | :unlimited
   def remaining(tenant, feature) do
@@ -131,6 +150,7 @@ defmodule AuroraMeter.Entitlements do
       feature: feature,
       kind: :undeclared,
       enabled: true,
+      value: nil,
       used: used,
       limit: nil,
       included: nil,
@@ -162,8 +182,11 @@ defmodule AuroraMeter.Entitlements do
             percent: percent(used, included)
         }
 
-      {:feature, enabled} ->
+      {:feature, enabled} when is_boolean(enabled) ->
         %{base | kind: :boolean, enabled: enabled}
+
+      {:feature, value} when is_integer(value) ->
+        %{base | kind: :feature, value: value}
 
       nil ->
         base

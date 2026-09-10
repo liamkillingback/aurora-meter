@@ -15,17 +15,19 @@ defmodule AuroraMeter.Migration do
   Upgrading an existing install to a newer schema version, add a migration that
   runs only the new versions:
 
-      def up, do: AuroraMeter.Migration.up(from: 2)
-      def down, do: AuroraMeter.Migration.down(to: 2)
+      def up, do: AuroraMeter.Migration.up(from: 3)
+      def down, do: AuroraMeter.Migration.down(to: 3)
 
   ## Versions
 
     * **1** — `aurora_meter_subscriptions`, `aurora_meter_counters`,
       `aurora_meter_events`
     * **2** — `aurora_meter_history` (UTC day buckets for `AuroraMeter.history/3`)
+    * **3** — `aurora_meter_credit_balances`, `aurora_meter_credit_transactions`
+      (the prepaid ledger behind `AuroraMeter.Credits`)
   """
 
-  @latest 2
+  @latest 3
 
   @doc """
   The newest schema version this release of Aurora Meter knows about.
@@ -33,7 +35,7 @@ defmodule AuroraMeter.Migration do
   ## Examples
 
       iex> AuroraMeter.Migration.latest_version()
-      2
+      3
 
   """
   @spec latest_version() :: pos_integer()
@@ -162,6 +164,79 @@ defmodule AuroraMeter.Migration.V2 do
   @spec down() :: :ok
   def down do
     drop_if_exists table(:aurora_meter_history)
+    :ok
+  end
+end
+
+defmodule AuroraMeter.Migration.V3 do
+  @moduledoc false
+
+  import Ecto.Migration
+
+  # ADR: amounts are signed bigints in micro-dollars (1e-6 USD) so the ledger can
+  # carry per-token AI prices (fractions of a cent) without floats or Decimal on
+  # the hot path; `AuroraMeter.Credits.Money` converts at the edges. The
+  # transactions table is append-only and every row snapshots `balance_after`
+  # / `held_after`, so the balance can be audited or rebuilt from the log.
+  @spec up() :: :ok
+  def up do
+    create_if_not_exists table(:aurora_meter_credit_balances, primary_key: false) do
+      add :id, :binary_id, primary_key: true, default: fragment("gen_random_uuid()")
+      add :tenant_key, :string, null: false
+      add :balance, :bigint, null: false, default: 0
+      add :held, :bigint, null: false, default: 0
+      add :promotional, :bigint, null: false, default: 0
+      add :low_balance_threshold, :bigint
+      add :currency, :string, null: false, default: "usd"
+      timestamps(type: :utc_datetime_usec)
+    end
+
+    create_if_not_exists unique_index(:aurora_meter_credit_balances, [:tenant_key])
+
+    create_if_not_exists table(:aurora_meter_credit_transactions, primary_key: false) do
+      add :id, :binary_id, primary_key: true, default: fragment("gen_random_uuid()")
+      add :tenant_key, :string, null: false
+      add :kind, :string, null: false
+      add :category, :string
+      add :amount, :bigint, null: false
+      add :held_delta, :bigint, null: false, default: 0
+      add :balance_after, :bigint, null: false
+      add :held_after, :bigint, null: false
+      add :reference, :string
+      add :status, :string
+      add :settled_amount, :bigint
+      add :expires_at, :utc_datetime
+      add :expired_at, :utc_datetime
+      add :metadata, :map, null: false, default: fragment("'{}'::jsonb")
+      add :inserted_at, :utc_datetime_usec, null: false
+    end
+
+    # One grant / hold / debit per reference: the idempotency key for retries.
+    create_if_not_exists unique_index(
+                           :aurora_meter_credit_transactions,
+                           [:kind, :reference],
+                           where: "reference IS NOT NULL",
+                           name: :aurora_meter_credit_transactions_kind_reference_index
+                         )
+
+    create_if_not_exists index(:aurora_meter_credit_transactions, [:tenant_key, :inserted_at])
+
+    # Promotional grants still waiting to expire — what `Credits.expire_due/1` scans.
+    create_if_not_exists index(
+                           :aurora_meter_credit_transactions,
+                           [:expires_at],
+                           where:
+                             "kind = 'grant' AND category = 'promotional' AND expired_at IS NULL",
+                           name: :aurora_meter_credit_transactions_promo_expiry_index
+                         )
+
+    :ok
+  end
+
+  @spec down() :: :ok
+  def down do
+    drop_if_exists table(:aurora_meter_credit_transactions)
+    drop_if_exists table(:aurora_meter_credit_balances)
     :ok
   end
 end

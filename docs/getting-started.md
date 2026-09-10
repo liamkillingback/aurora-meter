@@ -7,7 +7,7 @@ bills via Stripe — from inside your Phoenix app.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.3"}]
+  [{:aurora_meter, "~> 0.4"}]
 end
 ```
 

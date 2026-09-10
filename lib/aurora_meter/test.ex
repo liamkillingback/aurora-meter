@@ -24,11 +24,15 @@ defmodule AuroraMeter.Test do
   Cross-node behaviour can be exercised on one node: `simulate_node/3` applies
   deltas as if another node had gossiped them, and `simulate_flush/2` applies
   totals as if another node had flushed.
+
+  For the credit ledger, `fund!/3` and `drain!/1` put a tenant at a known
+  balance without inventing references, and `credit_balance/1` reads it back.
   """
 
   alias AuroraMeter.Broadcaster
   alias AuroraMeter.Cluster
   alias AuroraMeter.Config
+  alias AuroraMeter.Credits
   alias AuroraMeter.Flusher
   alias AuroraMeter.Period
   alias AuroraMeter.Store
@@ -122,6 +126,48 @@ defmodule AuroraMeter.Test do
   def simulate_flush(origin, totals, period_start \\ nil) do
     Cluster.apply(:totals, origin, keyed(totals, period_start))
   end
+
+  @doc """
+  Grants `amount` micro-dollars to `tenant` as an `:adjustment` with a unique
+  reference (so it never collides with an earlier grant), returning the entry.
+  Any `AuroraMeter.Credits.grant/3` option can be overridden in `opts`.
+
+      fund!(org, Money.from_cents(1_000))
+      fund!(org, 500_000, category: :promotional, expires_at: tomorrow)
+  """
+  @spec fund!(term(), pos_integer(), keyword()) :: Credits.txn()
+  def fund!(tenant, amount, opts \\ []) do
+    opts =
+      Keyword.merge(
+        [reference: "fund:#{System.unique_integer([:positive])}", category: :adjustment],
+        opts
+      )
+
+    {:ok, txn} = Credits.grant(tenant, amount, opts)
+    txn
+  end
+
+  @doc """
+  Debits everything `tenant` has available (nothing when the available balance
+  is zero or negative), returning the amount drained.
+  """
+  @spec drain!(term()) :: non_neg_integer()
+  def drain!(tenant) do
+    case Credits.available(tenant) do
+      available when available > 0 ->
+        {:ok, _txn} =
+          Credits.debit(tenant, available, "drain:#{System.unique_integer([:positive])}")
+
+        available
+
+      _nothing ->
+        0
+    end
+  end
+
+  @doc "The tenant's credit balance snapshot; see `AuroraMeter.Credits.balance/1`."
+  @spec credit_balance(term()) :: Credits.balance()
+  def credit_balance(tenant), do: Credits.balance(tenant)
 
   defp keyed(entries, period_start) do
     Enum.map(entries, fn {tenant, feature, amount} ->

@@ -37,6 +37,32 @@ defmodule AuroraMeter.Config do
               doc:
                 "Exchange counter deltas and flushed totals between nodes over PubSub " <>
                   "so every node converges on the cluster-wide value."
+            ],
+            credits_currency: [
+              type: :string,
+              default: "usd",
+              doc: "ISO 4217 code stamped on new `AuroraMeter.Credits` balance rows."
+            ],
+            credits_overdraft_tolerance: [
+              type: :non_neg_integer,
+              default: 0,
+              doc:
+                "Micro-dollars a hold or debit may take the available balance below zero " <>
+                  "before `:insufficient_credits`."
+            ],
+            credits_low_balance_threshold: [
+              type: {:or, [:integer, nil]},
+              default: nil,
+              doc:
+                "Micro-dollars; when the available balance drops below it the low-balance " <>
+                  "event fires. A balance row's own threshold overrides it."
+            ],
+            credits_low_balance_handler: [
+              type: {:or, [{:fun, 1}, nil]},
+              default: nil,
+              doc:
+                "Called with `%{tenant_key, available, threshold}` after a low-balance " <>
+                  "crossing commits (a place to email or to auto-recharge)."
             ]
           )
 
@@ -114,6 +140,22 @@ defmodule AuroraMeter.Config do
   @doc "Whether nodes exchange deltas and totals so counters are cluster-wide (default `true`)."
   @spec cluster_sync?() :: boolean()
   def cluster_sync?, do: get(:cluster_sync, true)
+
+  @doc "Currency code for new credit balance rows (default `\"usd\"`)."
+  @spec credits_currency() :: String.t()
+  def credits_currency, do: get(:credits_currency, "usd")
+
+  @doc "Micro-dollars the available credit balance may go below zero on a hold or debit (default `0`)."
+  @spec credits_overdraft_tolerance() :: non_neg_integer()
+  def credits_overdraft_tolerance, do: get(:credits_overdraft_tolerance, 0)
+
+  @doc "Default low-balance threshold in micro-dollars, or `nil` for none."
+  @spec credits_low_balance_threshold() :: integer() | nil
+  def credits_low_balance_threshold, do: get(:credits_low_balance_threshold, nil)
+
+  @doc "The low-balance callback (`fun/1`), or `nil`."
+  @spec credits_low_balance_handler() :: (map() -> term()) | nil
+  def credits_low_balance_handler, do: get(:credits_low_balance_handler, nil)
 
   @spec get(atom(), term()) :: term()
   defp get(key, default), do: Application.get_env(:aurora_meter, key, default)

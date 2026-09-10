@@ -62,7 +62,7 @@ node, so the entitlement check is also database-free per request.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.3"}]
+  [{:aurora_meter, "~> 0.4"}]
 end
 ```
 
@@ -108,12 +108,14 @@ defmodule MyApp.Plans do
     price 2_000
     limit :ai_generations, 1_000, :hard
     feature :api_access, true
+    feature :seats, 5
   end
 
   plan :scale do
     price 2_000
     metered :ai_generations, included: 1_000, unit_price: 2
     feature :api_access, true
+    feature :seats, 25
   end
 end
 ```
@@ -176,6 +178,7 @@ AuroraMeter.history(org, :ai_generations, days: 30)
 # Entitle
 AuroraMeter.check(org, :ai_generations)           # :ok | {:error, :limit_exceeded | :not_entitled}
 AuroraMeter.entitled?(org, :api_access)           # plan grants the feature, ignores quota
+AuroraMeter.feature_value(org, :seats, 1)         # a plan value: 5 on :pro
 AuroraMeter.with_quota(org, :ai_generations, fn -> run_generation() end)
 
 # Dashboard-ready snapshot
@@ -187,6 +190,37 @@ AuroraMeter.quota(org, :ai_generations)
 function, and rolls the reservation back if the function raises. The
 reservation is the usage, so two concurrent calls cannot both squeeze through
 the last unit of a hard limit.
+
+### Prepaid credits
+
+For pay-as-you-go pricing — AI tokens, API calls, anything priced per unit
+rather than per plan — `AuroraMeter.Credits` keeps a prepaid balance per
+tenant next to the plan counters. Amounts are integer micro-dollars
+(`AuroraMeter.Credits.Money` converts), every write is a row lock plus an
+append-only ledger entry, and `with_credits/4` holds an estimate, runs your
+function and settles the actual cost:
+
+```elixir
+alias AuroraMeter.Credits
+alias AuroraMeter.Credits.Money
+
+Credits.grant(org, Money.from_cents(2_000), reference: "stripe:pi_123")   # idempotent
+
+Credits.with_credits(org, estimate, "job:#{job.id}", fn ->
+  {:ok, output, cost} = run_completion(job)
+  {:ok, output, cost}                                   # settles cost, frees the hold
+end)
+# => {:ok, output} | {:error, :insufficient_credits}
+
+Credits.balance(org)
+# => %{balance: 19_580_000, held: 0, available: 19_580_000, promotional: 0, ...}
+Money.format(Credits.available(org))                    # => "$19.58"
+```
+
+Promotional grants are consumed first and can expire; a low-balance threshold
+fires telemetry, a PubSub message and an optional handler once per crossing.
+See the [credits guide](docs/credits.md). Stripe top-ups and auto-recharge are
+part of Pro.
 
 ### Live usage in LiveView
 
@@ -205,9 +239,10 @@ if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
 
 ### Telemetry
 
-`[:aurora_meter, :track]`, `[:aurora_meter, :reserve]` and `[:aurora_meter, :flush]`
-events carry quantities and outcomes, ready for `Telemetry.Metrics` and
-LiveDashboard. See the [telemetry guide](docs/telemetry.md).
+`[:aurora_meter, :track]`, `[:aurora_meter, :reserve]`, `[:aurora_meter, :flush]`
+and `[:aurora_meter, :credits, kind]` events carry quantities and outcomes,
+ready for `Telemetry.Metrics` and LiveDashboard. See the
+[telemetry guide](docs/telemetry.md).
 
 ## Guarantees and limits
 
@@ -250,6 +285,8 @@ a separate commercial package for when Stripe should start charging.
 | Plan DSL and atomic `with_quota` gate | ✓ | ✓ |
 | LiveView usage components | ✓ | ✓ |
 | Postgres persistence, daily history, telemetry | ✓ | ✓ |
+| Prepaid credit ledger (holds, settlements, promotional credit) | ✓ | ✓ |
+| Stripe top-ups and auto-recharge | | ✓ |
 | Stripe Checkout and webhook sync | | ✓ |
 | Metered usage reported to Stripe Billing Meters | | ✓ |
 | Subscription-aligned billing periods | | ✓ |
@@ -276,14 +313,17 @@ metered-API SaaS on this core.
 - **Hand-rolled** `UPDATE usage SET count = count + 1` works until it is on the
   hot path of every request. Moving the increment to ETS is the whole point.
 
-## Upgrading from 0.1
+## Upgrading
 
-0.2 adds the `aurora_meter_history` table (schema version 2):
+0.4 adds the credit ledger tables (schema version 3):
 
 ```bash
-mix aurora_meter.gen.migration -r MyApp.Repo --from 2
+mix aurora_meter.gen.migration -r MyApp.Repo --from 3
 mix ecto.migrate
 ```
+
+An 0.1 install also needs the history table from 0.2: use `--from 2`, which
+runs versions 2 and 3.
 
 See the [changelog](CHANGELOG.md) for everything else that changed.
 
@@ -292,7 +332,8 @@ See the [changelog](CHANGELOG.md) for everything else that changed.
 Guides: [Getting started](docs/getting-started.md) ·
 [Configuration](docs/configuration.md) · [Metering](docs/metering.md) ·
 [Entitlements](docs/entitlements.md) · [Plans](docs/plans.md) ·
-[Telemetry](docs/telemetry.md) · [Testing](docs/testing.md)
+[Credits](docs/credits.md) · [Telemetry](docs/telemetry.md) ·
+[Testing](docs/testing.md)
 
 API reference on [HexDocs](https://hexdocs.pm/aurora_meter).
 

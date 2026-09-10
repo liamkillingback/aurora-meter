@@ -1,0 +1,14 @@
+Phase 15 — Prepaid credit ledger (0.4.0, schema version 3)
+Date: 2026-09-10
+
+mix check (format, compile --warnings-as-errors, credo --strict, dialyzer, test, docs):
+  credo:    386 mods/funs, found no issues
+  dialyzer: Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+  test:     Result: 136 passed (28 doctests, 4 properties, 104 tests)
+  docs:     built; one pre-existing warning (README links docs/evidence/phase-03/bench.md)
+
+Concurrency proof (test/aurora_meter/credits_concurrency_test.exs, real non-sandbox
+connections): 20 concurrent $0.10 holds against $1.00 -> exactly 10 admitted,
+held_after snapshots 0.10..1.00; 10 concurrent settle/release of one hold -> one wins.
+
+Decision record: docs/adr/0005-prepaid-credit-ledger.md.

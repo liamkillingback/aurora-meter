@@ -50,6 +50,29 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.check(pro, :api_access) == :ok
   end
 
+  test "an integer feature is always entitled and readable with feature_value/3" do
+    free = unique_tenant()
+    AuroraMeter.subscribe(free, :free)
+    assert AuroraMeter.check(free, :seats) == :ok
+    assert AuroraMeter.entitled?(free, :seats)
+    assert AuroraMeter.remaining(free, :seats) == :unlimited
+    assert AuroraMeter.feature_value(free, :seats) == 1
+    assert AuroraMeter.feature_value(free, :api_access) == false
+    assert AuroraMeter.feature_value(free, :ai_generations, :none) == :none
+    assert AuroraMeter.feature_value(free, :nothing, 0) == 0
+
+    assert %{kind: :feature, value: 1, enabled: true, remaining: :unlimited} =
+             AuroraMeter.quota(free, :seats)
+
+    pro = unique_tenant()
+    AuroraMeter.subscribe(pro, :pro)
+    assert AuroraMeter.feature_value(pro, :seats) == 5
+    assert AuroraMeter.reserve(pro, :seats) == :ok
+
+    # No subscription: the default plan's value.
+    assert AuroraMeter.feature_value(unique_tenant(), :seats) == 1
+  end
+
   test "an undeclared feature is permissive" do
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :free)

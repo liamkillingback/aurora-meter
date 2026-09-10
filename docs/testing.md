@@ -65,6 +65,22 @@ AuroraMeter.Test.broadcast!()
 assert_receive {:aurora_meter, :usage, %{feature: :ai_generations, value: 3}}
 ```
 
+## Credits
+
+`fund!/3` grants with a unique reference (category `:adjustment`) so a test
+never trips the idempotency check, `drain!/1` debits whatever is available and
+`credit_balance/1` reads the snapshot:
+
+```elixir
+fund!(tenant, Money.from_cents(1_000))
+{:ok, _} = AuroraMeter.Credits.hold(tenant, 250_000, "job:1")
+assert credit_balance(tenant).available == 9_750_000
+drain!(tenant)
+```
+
+Ledger tests can be `async: true` with unique tenants: each write is its own
+transaction on the tenant's row, and the sandbox isolates the rows.
+
 ## Simulating other nodes
 
 Cluster behaviour can be exercised on one node:

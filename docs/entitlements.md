@@ -23,6 +23,7 @@ AuroraMeter.check(tenant, :ai_generations)
 | `metered f, ...` | always `:ok` (overage is billed) |
 | `feature f, true` | `:ok` |
 | `feature f, false` | `{:error, :not_entitled}` |
+| `feature f, n` (integer) | `:ok` — a plan value, read with `feature_value/3` |
 | undeclared | `:ok` (permissive; logs a warning in `:dev`) |
 
 Helpers:
@@ -31,6 +32,7 @@ Helpers:
 AuroraMeter.allowed?(tenant, feature)     # boolean (check == :ok)
 AuroraMeter.entitled?(tenant, feature)    # plan grants access at all?
 AuroraMeter.remaining(tenant, feature)    # non_neg_integer | :unlimited
+AuroraMeter.feature_value(tenant, :seats, 1)  # the plan's value (boolean or integer), else 1
 ```
 
 ## Subscription status
@@ -50,8 +52,9 @@ AuroraMeter.quota(tenant, :ai_generations)
 #   enabled: true, unit_price: nil}
 ```
 
-`kind` is `:hard`, `:metered`, `:boolean` or `:undeclared`; metered features
-report `included`, `unit_price` and `overage` instead of `limit`/`remaining`.
+`kind` is `:hard`, `:metered`, `:boolean`, `:feature` (an integer plan value,
+carried in `value`) or `:undeclared`; metered features report `included`,
+`unit_price` and `overage` instead of `limit`/`remaining`.
 
 ## with_quota — gate, run, meter, atomically
 

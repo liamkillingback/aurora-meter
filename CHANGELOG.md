@@ -4,6 +4,49 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-10
+
+Schema version 3. Existing installs add one migration:
+
+```elixir
+def up, do: AuroraMeter.Migration.up(from: 3)
+def down, do: AuroraMeter.Migration.down(to: 3)
+```
+
+(`mix aurora_meter.gen.migration -r MyApp.Repo --from 3` generates it.)
+
+### Added
+
+- **Prepaid credit ledger** — `AuroraMeter.Credits`: `grant/3` (idempotent per
+  reference; `:paid`, `:promotional` or `:adjustment`), `hold/4`, `settle/3`,
+  `release/1`, `debit/4`, `with_credits/4` (hold, run, settle or release —
+  also on raise), `balance/1`, `available/1`, `sufficient?/2`, `history/2`,
+  `set_low_balance_threshold/2`, `expire_due/1`, `subscribe/1` and `topic/1`.
+  Amounts are integer micro-dollars; every write is a `FOR UPDATE` row lock
+  plus an append-only `aurora_meter_credit_transactions` entry, so concurrent
+  holds cannot overspend. Promotional credit is consumed first and can expire.
+  Requires the Ecto storage. See [docs/credits.md](docs/credits.md) and ADR 0005.
+- `AuroraMeter.Credits.Money` — `from_cents/1`, `to_cents/2`, `from_decimal/1`
+  and `format/2` for converting at the edges of the ledger.
+- **Integer features** in the plans DSL: `feature :seats, 5` declares a plan
+  value (always entitled, never metered) read with
+  `AuroraMeter.feature_value/3` or `AuroraMeter.Plans.feature_value/3`;
+  `quota/2` reports them as `kind: :feature` with a `value`.
+- Telemetry: `[:aurora_meter, :credits, kind]` for every ledger entry (with
+  `duplicate` and `overrun` in the metadata) and
+  `[:aurora_meter, :credits, :low_balance]` once per crossing; PubSub
+  `{:aurora_meter, :credits, ...}` and `{:aurora_meter, :low_balance, ...}` on
+  `AuroraMeter.Credits.topic/1`.
+- Config: `:credits_currency`, `:credits_overdraft_tolerance`,
+  `:credits_low_balance_threshold`, `:credits_low_balance_handler`.
+- `AuroraMeter.Test` — `fund!/3`, `drain!/1`, `credit_balance/1`.
+- `AuroraMeter.Schema.CreditBalance` and `AuroraMeter.Schema.CreditTransaction`.
+
+### Changed
+
+- `AuroraMeter.quota/2` maps gain a `value` key (`nil` except for
+  integer features) and `kind` may now be `:feature`.
+
 ## [0.3.2] - 2026-09-08
 
 Documentation and package metadata only; no code or schema changes.

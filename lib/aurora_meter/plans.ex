@@ -17,6 +17,7 @@ defmodule AuroraMeter.Plans do
           price 2_000
           limit :ai_generations, 1_000, :hard
           feature :api_access, true
+          feature :seats, 5
         end
 
         plan :scale do
@@ -94,13 +95,21 @@ defmodule AuroraMeter.Plans do
     end
   end
 
-  @doc "Declares plain feature access: `feature :feature, boolean`."
-  defmacro feature(name, enabled) do
+  @doc """
+  Declares plain feature access or a plan-level value.
+
+  `feature :api_access, true` grants (or, with `false`, denies) access with no
+  quota behind it. `feature :seats, 5` declares a non-negative integer the plan
+  carries for the host to read with `AuroraMeter.feature_value/3` (seats,
+  retention days, projects); integer features are always entitled and never
+  metered.
+  """
+  defmacro feature(name, value) do
     quote do
       Module.put_attribute(
         __MODULE__,
         :aurora_features,
-        {unquote(name), {:feature, unquote(enabled)}}
+        {unquote(name), {:feature, unquote(value)}}
       )
     end
   end
@@ -133,6 +142,35 @@ defmodule AuroraMeter.Plans do
     end
   end
 
+  @doc """
+  Returns the value of a `feature` declaration in `plan_id`, or `default`.
+
+  Only `feature :name, value` declarations (booleans and integers) have a value;
+  a `limit`, a `metered` feature, an undeclared feature or an unknown plan all
+  return `default`. To resolve the plan from a tenant use
+  `AuroraMeter.feature_value/3`.
+
+  ## Examples
+
+      iex> AuroraMeter.Plans.feature_value(:pro, :seats)
+      5
+
+      iex> AuroraMeter.Plans.feature_value(:free, :seats, 1)
+      1
+
+      iex> AuroraMeter.Plans.feature_value(:pro, :api_access)
+      true
+
+  """
+  @spec feature_value(atom(), atom(), default) :: boolean() | non_neg_integer() | default
+        when default: term()
+  def feature_value(plan_id, feature, default \\ nil) do
+    case feature_config(plan_id, feature) do
+      {:feature, value} -> value
+      _other -> default
+    end
+  end
+
   @spec plans_module() :: module()
   defp plans_module, do: AuroraMeter.Config.plans()
 
@@ -158,13 +196,22 @@ defmodule AuroraMeter.Plans do
       when is_integer(included) and included >= 0 and unit_price >= 0 ->
         :ok
 
-      {:feature, enabled} when is_boolean(enabled) ->
-        :ok
+      {:feature, value} ->
+        if feature_value?(value),
+          do: :ok,
+          else: raise(ArgumentError, invalid_feature_message(id, feature, config))
 
       _other ->
-        raise ArgumentError,
-              "plan #{inspect(id)} has invalid config for #{inspect(feature)}: #{inspect(config)}"
+        raise ArgumentError, invalid_feature_message(id, feature, config)
     end
+  end
+
+  @spec feature_value?(term()) :: boolean()
+  defp feature_value?(value), do: is_boolean(value) or (is_integer(value) and value >= 0)
+
+  @spec invalid_feature_message(atom(), atom(), term()) :: String.t()
+  defp invalid_feature_message(id, feature, config) do
+    "plan #{inspect(id)} has invalid config for #{inspect(feature)}: #{inspect(config)}"
   end
 
   @spec validate_price!(atom(), term()) :: :ok

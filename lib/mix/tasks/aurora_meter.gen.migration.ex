@@ -10,9 +10,11 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
   changes ship as new versions of that module rather than as edits to your
   migration file. To upgrade an existing install to a newer schema version:
 
-      mix aurora_meter.gen.migration -r MyApp.Repo --from 2
+      mix aurora_meter.gen.migration -r MyApp.Repo --from 3
 
-  which generates a migration running only versions `2..latest`.
+  which generates a migration running only versions `3..latest` (version 3 adds
+  the prepaid credit ledger tables; `--from 2` on an 0.1 install also adds the
+  usage history table). See `AuroraMeter.Migration` for the version list.
   """
 
   use Mix.Task

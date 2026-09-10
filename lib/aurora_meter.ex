@@ -39,8 +39,13 @@ defmodule AuroraMeter do
   plan (`subscribe/2`) with the same term you meter with.
 
   The public API: `track/4`, `usage/2`, `usage_all/1`, `history/3` (metering);
-  `check/2`, `allowed?/2`, `entitled?/2`, `remaining/2`, `quota/2`, `reserve/3`,
-  `with_quota/4` (entitlements); `subscribe/2`, `plan/1`, `period/1` (plans).
+  `check/2`, `allowed?/2`, `entitled?/2`, `remaining/2`, `quota/2`,
+  `feature_value/3`, `reserve/3`, `with_quota/4` (entitlements);
+  `subscribe/2`, `plan/1`, `period/1` (plans).
+
+  Prepaid balances live in `AuroraMeter.Credits`: `grant/3`, `hold/4`,
+  `settle/3`, `release/1`, `debit/4` and `with_credits/4` keep a per-tenant
+  ledger in micro-dollars, next to (not instead of) the plan counters above.
   """
 
   alias AuroraMeter.Config
@@ -164,6 +169,17 @@ defmodule AuroraMeter do
   @doc "Remaining quota for a hard-limited feature, or `:unlimited`."
   @spec remaining(term(), atom()) :: non_neg_integer() | :unlimited
   defdelegate remaining(tenant, feature), to: AuroraMeter.Entitlements
+
+  @doc """
+  The value of a `feature :name, value` declaration on `tenant`'s plan
+  (a boolean or a non-negative integer), or `default` when the plan does not
+  carry one. See `AuroraMeter.Entitlements.feature_value/3`.
+
+      AuroraMeter.feature_value(org, :seats, 1)   # => 5
+  """
+  @spec feature_value(term(), atom(), default) :: boolean() | non_neg_integer() | default
+        when default: term()
+  defdelegate feature_value(tenant, feature, default \\ nil), to: AuroraMeter.Entitlements
 
   @doc "A dashboard-ready quota snapshot. See `AuroraMeter.Entitlements.quota/2`."
   @spec quota(term(), atom()) :: AuroraMeter.Entitlements.quota()

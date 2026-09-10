@@ -17,6 +17,7 @@ defmodule MyApp.Plans do
     price 2_000                               # $20.00 / month
     limit :ai_generations, 1_000, :hard
     feature :api_access, true
+    feature :seats, 5                         # a plan value, read with feature_value/3
   end
 
   plan :scale do
@@ -34,6 +35,10 @@ end
   it. `included`/`unit_price` are for local estimates and display — Stripe is the
   billing source of truth.
 - `feature :f, boolean` — plain on/off access (no quota).
+- `feature :f, n` (non-negative integer) — a value the plan carries for your
+  code to read (seats, projects, retention days). Always entitled, never
+  counted; `AuroraMeter.feature_value(tenant, :f, default)` returns `n`, and
+  `quota/2` reports `kind: :feature, value: n`.
 
 ## Lookups
 
@@ -41,6 +46,8 @@ end
 AuroraMeter.Plans.all()                              # %{id => %AuroraMeter.Plan{}}
 AuroraMeter.Plans.get(:pro)                           # %AuroraMeter.Plan{}
 AuroraMeter.Plans.feature_config(:free, :ai_generations)  # {:limit, 50, :hard}
+AuroraMeter.Plans.feature_value(:pro, :seats)             # 5
+AuroraMeter.Plans.feature_value(:free, :seats, 1)         # 1 (default when undeclared)
 ```
 
 Point config at your module: `config :aurora_meter, plans: MyApp.Plans`. Add the

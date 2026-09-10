@@ -20,6 +20,10 @@ validated at boot by `AuroraMeter.Config.validate!/0` (called from
 | `:history` | boolean | — | `true` — keep UTC day buckets for `AuroraMeter.history/3` |
 | `:subscription_cache_ttl` | ms | — | `5_000` — how long a plan lookup is cached; `0` disables |
 | `:cluster_sync` | boolean | — | `true` — exchange deltas and flushed totals between nodes so counters are cluster-wide ([clustering](clustering.md)) |
+| `:credits_currency` | string | — | `"usd"` — stamped on new credit balance rows ([credits](credits.md)) |
+| `:credits_overdraft_tolerance` | micro-dollars | — | `0` — how far below zero a hold or debit may take the available balance |
+| `:credits_low_balance_threshold` | micro-dollars or `nil` | — | `nil` — fire the low-balance event when the available balance drops below it; a tenant's own threshold overrides it |
+| `:credits_low_balance_handler` | `fun/1` or `nil` | — | `nil` — called with `%{tenant_key, available, threshold}` after a low-balance crossing commits |
 
 ```elixir
 config :aurora_meter,

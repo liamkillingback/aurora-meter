@@ -15,7 +15,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Renders a labelled usage bar for one feature, driven by `AuroraMeter.quota/2`.
 
     Hard caps show `used / limit`; metered features show `used / included` and
-    flag overage; boolean features show whether they are enabled.
+    flag overage; boolean features show whether they are enabled; integer
+    features show their plan value.
     """
     attr(:tenant, :any, required: true)
     attr(:feature, :atom, required: true)
@@ -76,6 +77,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp usage_text(%{kind: :metered, used: used, included: inc}), do: "#{used} / #{inc}"
     defp usage_text(%{kind: :boolean, enabled: true}), do: "enabled"
     defp usage_text(%{kind: :boolean, enabled: false}), do: "not included"
+    defp usage_text(%{kind: :feature, value: value}), do: "#{value}"
     defp usage_text(%{used: used}), do: "#{used}"
   end
 end

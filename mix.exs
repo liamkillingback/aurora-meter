@@ -1,7 +1,7 @@
 defmodule AuroraMeter.MixProject do
   use Mix.Project
 
-  @version "0.3.2"
+  @version "0.4.0"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do
@@ -101,13 +101,15 @@ defmodule AuroraMeter.MixProject do
         "docs/metering.md",
         "docs/entitlements.md",
         "docs/plans.md",
+        "docs/credits.md",
         "docs/telemetry.md",
         "docs/testing.md",
         "docs/clustering.md",
         "docs/adr/0001-resolved-decisions.md",
         "docs/adr/0002-ets-counter-substrate.md",
         "docs/adr/0003-buffered-vs-durable-and-period-seam.md",
-        "docs/adr/0004-cluster-wide-counters.md"
+        "docs/adr/0004-cluster-wide-counters.md",
+        "docs/adr/0005-prepaid-credit-ledger.md"
       ],
       groups_for_extras: [Guides: ~r/docs\/[^\/]+$/, ADRs: ~r/docs\/adr\//],
       source_ref: "v#{@version}",

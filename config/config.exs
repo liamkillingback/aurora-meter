@@ -22,5 +22,6 @@ if config_env() == :test do
     port: String.to_integer(System.get_env("DB_PORT") || "5490"),
     database: "aurora_meter_test",
     pool: Ecto.Adapters.SQL.Sandbox,
-    pool_size: 10
+    # 30: the credits concurrency test opens 20 real (non-sandbox) connections at once.
+    pool_size: 30
 end

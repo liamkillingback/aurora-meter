@@ -43,6 +43,6 @@ defmodule AuroraMeter.FlusherTest do
   end
 
   test "the migration module reports its latest version" do
-    assert AuroraMeter.Migration.latest_version() == 2
+    assert AuroraMeter.Migration.latest_version() == 3
   end
 end
