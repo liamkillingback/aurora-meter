@@ -263,11 +263,11 @@ defmodule AuroraMeter.ClusterTest do
       Application.delete_env(:aurora_meter, :storage)
       {:ok, _n} = Flusher.flush()
 
-      # Six was written by the failing storage and six went back in, so the
-      # row is twelve - the old, honest over-count. What matters is that the
-      # usage is still there: nothing was thrown away because the view had
-      # moved for a reason the database had not.
-      assert Storage.load_counter(tenant, :ops, p) >= 6
+      # Twelve: six the failing storage wrote and six put back, the old and
+      # honest over-count on an indeterminate write. `>= 6` would have been
+      # satisfied by the dropped-delta behaviour too - that writes exactly six
+      # and throws the delta away - so the number has to be the number.
+      assert Storage.load_counter(tenant, :ops, p) == 12
     end
 
     test "gossip marks the key as no longer speaking for the database" do
