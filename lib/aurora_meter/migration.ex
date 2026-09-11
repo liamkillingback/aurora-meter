@@ -27,7 +27,7 @@ defmodule AuroraMeter.Migration do
       (the prepaid ledger behind `AuroraMeter.Credits`)
   """
 
-  @latest 4
+  @latest 5
 
   @doc """
   The newest schema version this release of Aurora Meter knows about.
@@ -35,7 +35,7 @@ defmodule AuroraMeter.Migration do
   ## Examples
 
       iex> AuroraMeter.Migration.latest_version()
-      3
+      5
 
   """
   @spec latest_version() :: pos_integer()
@@ -164,6 +164,41 @@ defmodule AuroraMeter.Migration.V2 do
   @spec down() :: :ok
   def down do
     drop_if_exists table(:aurora_meter_history)
+    :ok
+  end
+end
+
+defmodule AuroraMeter.Migration.V5 do
+  @moduledoc false
+
+  import Ecto.Migration
+
+  # An index for `pending_holds/1`.
+  #
+  # A host looking for reservations nothing will ever close asks for every
+  # open hold older than a cutoff, and there was no index that led with `kind`
+  # or `status` — so on a cron that runs every five minutes, the question was
+  # a sequential scan of an append-only table that only grows. Partial, because
+  # a pending hold is a vanishing fraction of the log: everything else has been
+  # settled or released.
+  @spec up() :: :ok
+  def up do
+    create_if_not_exists index(
+                           :aurora_meter_credit_transactions,
+                           [:inserted_at],
+                           where: "kind = 'hold' AND status = 'pending'",
+                           name: :aurora_meter_pending_holds_index
+                         )
+
+    :ok
+  end
+
+  @spec down() :: :ok
+  def down do
+    drop_if_exists index(:aurora_meter_credit_transactions, [:inserted_at],
+                     name: :aurora_meter_pending_holds_index
+                   )
+
     :ok
   end
 end

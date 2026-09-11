@@ -43,6 +43,11 @@ defmodule AuroraMeter.FlusherTest do
   end
 
   test "the migration module reports its latest version" do
-    assert AuroraMeter.Migration.latest_version() == 4
+    # Whatever the number, the module has to have a version for it — the
+    # doctest beside it said 3 while `@latest` said 4, and nothing ran it.
+    latest = AuroraMeter.Migration.latest_version()
+    assert is_integer(latest) and latest > 0
+    assert Code.ensure_loaded?(Module.concat(AuroraMeter.Migration, "V#{latest}"))
+    refute Code.ensure_loaded?(Module.concat(AuroraMeter.Migration, "V#{latest + 1}"))
   end
 end
