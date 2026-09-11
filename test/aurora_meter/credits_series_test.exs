@@ -214,6 +214,22 @@ defmodule AuroraMeter.CreditsSeriesTest do
       end
     end
 
+    test ":kinds rejects grants, which are already counted on the other side" do
+      # `:grant` is the one kind whose amount is positive. Passed as a spend
+      # kind it is scored twice: `spent` negates it into a negative number -
+      # which its own type says cannot happen, and which renders as a dollar
+      # amount with a minus sign - and `net` counts the same money twice.
+      tenant = unique_tenant()
+
+      assert_raise ArgumentError, ~r/grants are reported separately/, fn ->
+        Credits.spend_history(tenant, kinds: [:grant, :settle])
+      end
+
+      assert_raise ArgumentError, ~r/grants are reported separately/, fn ->
+        Credits.spend_total(tenant, kinds: [:grant])
+      end
+    end
+
     test "an invalid bucket or an inverted range raises" do
       tenant = unique_tenant()
 

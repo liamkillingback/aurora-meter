@@ -75,13 +75,28 @@ defmodule AuroraMeter.Credits.Series do
 
     case Enum.filter(kinds, &(&1 in @excluded_kinds)) do
       [] ->
-        kinds
+        reject_grant(kinds)
 
       bad ->
         raise ArgumentError,
               ":kinds cannot include #{inspect(bad)} — holds and releases move `held`, not " <>
                 "`balance`, so they are never spend"
     end
+  end
+
+  # `:grant` is the one kind whose amount is positive, and it is already scored
+  # by the grant arm of every query here. Passed as a spend kind it is scored
+  # twice: `spent` negates it into a negative number — which its own type says
+  # cannot happen, and which renders as a dollar amount with a minus sign — and
+  # `net` counts the same money in both directions.
+  defp reject_grant(kinds) do
+    if Enum.any?(kinds, &(&1 in @grant_kinds)) do
+      raise ArgumentError,
+            ":kinds cannot include #{inspect(@grant_kinds)} — grants are reported separately, " <>
+              "and counting one as spend scores it twice with opposite signs"
+    end
+
+    kinds
   end
 
   @doc "The bucket option: `:day` (default) or `:month`."
