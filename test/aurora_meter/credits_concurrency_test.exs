@@ -29,6 +29,45 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
     {:ok, tenant: tenant}
   end
 
+  test "a refusal does not destroy the caller's own transaction", %{tenant: tenant} do
+    # A host wraps a ledger call in its own transaction — a settle beside the
+    # status flip it arms, say — and the ledger refuses, because the hold was
+    # already settled by a delivery that arrived twice. Answered with
+    # `repo.rollback/1` that refusal took the host's transaction with it:
+    # `rollback/1` in a nested transaction marks the whole thing whatever the
+    # mode, Postgres aborts back to the outermost BEGIN, the host's own writes
+    # are undone and its next statement fails too.
+    #
+    # Not a DataCase test: the sandbox already holds a transaction, so the
+    # ledger's would be nested inside *it* and the abort would unwind no
+    # further than the sandbox's own savepoint. The bug is invisible there,
+    # which is how it survived a round of auditing with a passing test.
+    {:ok, _} = Credits.grant(tenant, 1_000_000, reference: "seed:#{tenant}")
+    reference = "refused:#{tenant}"
+    :ok = Credits.hold(tenant, 100_000, reference) |> then(fn {:ok, _} -> :ok end)
+    {:ok, _} = Credits.settle(reference, 100_000)
+
+    outcome =
+      TestRepo.transaction(fn ->
+        {:ok, _} = TestRepo.insert(%CreditBalance{tenant_key: tenant <> ":witness"})
+
+        # The same settle again, as a redelivery does.
+        refused = Credits.settle(reference, 100_000)
+
+        # The caller's connection is still usable, which it would not be if the
+        # refusal had aborted the transaction.
+        {:ok, %{rows: [[1]]}} = Ecto.Adapters.SQL.query(TestRepo, "SELECT 1", [])
+        refused
+      end)
+
+    assert {:ok, {:error, :already_settled}} = outcome
+
+    # And the caller's own write committed.
+    assert TestRepo.get_by(CreditBalance, tenant_key: tenant <> ":witness")
+
+    TestRepo.delete_all(from(b in CreditBalance, where: b.tenant_key == ^(tenant <> ":witness")))
+  end
+
   test "twenty concurrent $0.10 holds against $1.00 admit exactly ten", %{tenant: tenant} do
     {:ok, _} = Credits.grant(tenant, 1_000_000, reference: "seed:#{tenant}")
 

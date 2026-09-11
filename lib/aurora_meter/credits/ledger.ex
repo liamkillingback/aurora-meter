@@ -121,19 +121,22 @@ defmodule AuroraMeter.Credits.Ledger do
       row = locked_row(repo, tenant_key)
 
       cond do
-        find(repo, tenant_key, :hold, reference) -> repo.rollback(:duplicate_reference)
-        not sufficient?(row, amount) -> repo.rollback(:insufficient_credits)
-        true -> :ok
-      end
+        find(repo, tenant_key, :hold, reference) ->
+          refuse(:duplicate_reference)
 
-      apply_entry(repo, row, %{
-        kind: :hold,
-        amount: 0,
-        held_delta: amount,
-        reference: reference,
-        status: :pending,
-        metadata: Map.new(Keyword.get(opts, :metadata, %{}))
-      })
+        not sufficient?(row, amount) ->
+          refuse(:insufficient_credits)
+
+        true ->
+          apply_entry(repo, row, %{
+            kind: :hold,
+            amount: 0,
+            held_delta: amount,
+            reference: reference,
+            status: :pending,
+            metadata: Map.new(Keyword.get(opts, :metadata, %{}))
+          })
+      end
     end)
     |> duplicate_reference_error()
   end
@@ -142,21 +145,26 @@ defmodule AuroraMeter.Credits.Ledger do
           {:ok, CreditTransaction.t()} | {:error, :not_found | :already_settled}
   def settle(reference, actual, opts) do
     transact(fn repo ->
-      hold = pending_hold!(repo, reference)
-      row = locked_row(repo, hold.tenant_key)
+      case pending_hold(repo, reference) do
+        {:error, reason} ->
+          refuse(reason)
 
-      outcome =
-        apply_entry(repo, row, %{
-          kind: :settle,
-          amount: -actual,
-          held_delta: -hold.held_delta,
-          reference: reference,
-          settled_amount: actual,
-          metadata: Map.new(Keyword.get(opts, :metadata, %{}))
-        })
+        {:ok, hold} ->
+          row = locked_row(repo, hold.tenant_key)
 
-      close_hold!(repo, hold, status: :settled, settled_amount: actual)
-      %{outcome | overrun: actual > hold.held_delta}
+          outcome =
+            apply_entry(repo, row, %{
+              kind: :settle,
+              amount: -actual,
+              held_delta: -hold.held_delta,
+              reference: reference,
+              settled_amount: actual,
+              metadata: Map.new(Keyword.get(opts, :metadata, %{}))
+            })
+
+          close_hold!(repo, hold, status: :settled, settled_amount: actual)
+          %{outcome | overrun: actual > hold.held_delta}
+      end
     end)
   end
 
@@ -164,19 +172,24 @@ defmodule AuroraMeter.Credits.Ledger do
           {:ok, CreditTransaction.t()} | {:error, :not_found | :already_settled}
   def release(reference) do
     transact(fn repo ->
-      hold = pending_hold!(repo, reference)
-      row = locked_row(repo, hold.tenant_key)
+      case pending_hold(repo, reference) do
+        {:error, reason} ->
+          refuse(reason)
 
-      outcome =
-        apply_entry(repo, row, %{
-          kind: :release,
-          amount: 0,
-          held_delta: -hold.held_delta,
-          reference: reference
-        })
+        {:ok, hold} ->
+          row = locked_row(repo, hold.tenant_key)
 
-      close_hold!(repo, hold, status: :released)
-      outcome
+          outcome =
+            apply_entry(repo, row, %{
+              kind: :release,
+              amount: 0,
+              held_delta: -hold.held_delta,
+              reference: reference
+            })
+
+          close_hold!(repo, hold, status: :released)
+          outcome
+      end
     end)
   end
 
@@ -193,20 +206,22 @@ defmodule AuroraMeter.Credits.Ledger do
     transact(fn repo ->
       row = locked_row(repo, tenant_key)
 
-      cond do
-        find(repo, tenant_key, :debit, reference) -> repo.rollback(:duplicate_reference)
-        allow_negative? -> :ok
-        not sufficient?(row, amount) -> repo.rollback(:insufficient_credits)
-        true -> :ok
+      entry = fn ->
+        apply_entry(repo, row, %{
+          kind: :debit,
+          category: category,
+          amount: -amount,
+          reference: reference,
+          metadata: Map.new(metadata)
+        })
       end
 
-      apply_entry(repo, row, %{
-        kind: :debit,
-        category: category,
-        amount: -amount,
-        reference: reference,
-        metadata: Map.new(metadata)
-      })
+      cond do
+        find(repo, tenant_key, :debit, reference) -> refuse(:duplicate_reference)
+        allow_negative? -> entry.()
+        not sufficient?(row, amount) -> refuse(:insufficient_credits)
+        true -> entry.()
+      end
     end)
     |> duplicate_reference_error()
   end
@@ -257,29 +272,37 @@ defmodule AuroraMeter.Credits.Ledger do
       grant =
         repo.one!(from(t in CreditTransaction, where: t.id == ^id, lock: "FOR UPDATE"))
 
-      if grant.expired_at, do: repo.rollback(:already_expired)
+      if grant.expired_at do
+        refuse(:already_expired)
+      else
+        expire_locked(repo, grant, now)
+      end
+    end)
+  end
 
-      row = locked_row(repo, grant.tenant_key)
+  defp expire_locked(repo, grant, now) do
+    row = locked_row(repo, grant.tenant_key)
 
-      # Never claw back credit a pending hold has already reserved. `hold/4`
-      # promises the money will be there when the work settles, and expiry ran
-      # straight through that promise: it took the balance below `held`, and
-      # the settle that followed took the balance itself negative — which the
-      # tenant then repays out of their next top-up without ever being told.
-      #
-      # What the hold has reserved stays. If that leaves part of the grant
-      # unexpired, the grant keeps its `expired_at` unset so a later pass
-      # finishes the job once the hold settles.
-      spendable = max(row.balance - row.held, 0)
-      remaining = remaining_on_grant(repo, grant, row)
-      amount = Enum.min([remaining, row.promotional, spendable]) |> max(0)
-      fully_expired? = amount >= remaining
+    # Never claw back credit a pending hold has already reserved. `hold/4`
+    # promises the money will be there when the work settles, and expiry ran
+    # straight through that promise: it took the balance below `held`, and
+    # the settle that followed took the balance itself negative — which the
+    # tenant then repays out of their next top-up without ever being told.
+    #
+    # What the hold has reserved stays. If that leaves part of the grant
+    # unexpired, the grant keeps its `expired_at` unset so a later pass
+    # finishes the job once the hold settles.
+    spendable = max(row.balance - row.held, 0)
+    remaining = remaining_on_grant(repo, grant, row)
+    amount = Enum.min([remaining, row.promotional, spendable]) |> max(0)
+    fully_expired? = amount >= remaining
 
-      # Entirely spoken for by a hold: leave it alone and try again next pass,
-      # rather than writing a zero-value row every half hour until the work
-      # settles.
-      if amount == 0 and not fully_expired?, do: repo.rollback(:held)
-
+    # Entirely spoken for by a hold: leave it alone and try again next pass,
+    # rather than writing a zero-value row every half hour until the work
+    # settles.
+    if amount == 0 and not fully_expired? do
+      refuse(:held)
+    else
       outcome =
         apply_entry(repo, row, %{
           kind: :expire,
@@ -299,7 +322,7 @@ defmodule AuroraMeter.Credits.Ledger do
       end
 
       outcome
-    end)
+    end
   end
 
   # How much of *this* grant is left, with promotional spending attributed to
@@ -360,7 +383,21 @@ defmodule AuroraMeter.Credits.Ledger do
   defp transact_outcome(fun) do
     repo = Config.repo()
 
+    # A refusal returns; it does not roll back.
+    #
+    # An already-settled hold, a duplicate reference, a balance that cannot
+    # cover a debit — these are answers, and every one of them is decided
+    # *before* anything is written, so there is nothing to undo. Answering them
+    # with `repo.rollback/1` destroyed the caller's transaction as well as this
+    # one: `rollback/1` in a nested transaction marks the whole thing for
+    # rollback, savepoint or not (it is documented, and Postgres aborts back to
+    # the outermost BEGIN). A host that wrapped a ledger call in its own
+    # transaction — a settle beside the status flip it arms, say — lost its own
+    # writes to a duplicate delivery, and its next statement failed too.
     case repo.transaction(fn -> fun.(repo) end) do
+      {:ok, {:refused, reason}} ->
+        {:error, reason}
+
       {:ok, outcome} ->
         emit(outcome)
         {:ok, outcome}
@@ -369,6 +406,11 @@ defmodule AuroraMeter.Credits.Ledger do
         {:error, reason}
     end
   end
+
+  # A refusal decided before anything was written. Returned rather than rolled
+  # back, so an enclosing transaction of the caller's own survives it.
+  @spec refuse(term()) :: {:refused, term()}
+  defp refuse(reason), do: {:refused, reason}
 
   # Ensures the tenant has a balance row and returns it locked for the rest of
   # the transaction. Every write to a tenant's ledger serialises on this lock;
@@ -469,8 +511,9 @@ defmodule AuroraMeter.Credits.Ledger do
 
   # Locks the hold row so two settles of the same reference serialise and the
   # second sees the first one's status.
-  @spec pending_hold!(module(), String.t()) :: CreditTransaction.t()
-  defp pending_hold!(repo, reference) do
+  @spec pending_hold(module(), String.t()) ::
+          {:ok, CreditTransaction.t()} | {:error, :not_found | :already_settled}
+  defp pending_hold(repo, reference) do
     query =
       from(t in CreditTransaction,
         where: t.kind == ^:hold and t.reference == ^reference,
@@ -478,9 +521,9 @@ defmodule AuroraMeter.Credits.Ledger do
       )
 
     case repo.one(query) do
-      nil -> repo.rollback(:not_found)
-      %CreditTransaction{status: :pending} = hold -> hold
-      %CreditTransaction{} -> repo.rollback(:already_settled)
+      nil -> {:error, :not_found}
+      %CreditTransaction{status: :pending} = hold -> {:ok, hold}
+      %CreditTransaction{} -> {:error, :already_settled}
     end
   end
 
