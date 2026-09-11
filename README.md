@@ -52,7 +52,7 @@ laptop, Elixir 1.20 / OTP 29):
 | 8 processes, distinct counters (realistic) | ~5.5M increments/s (0.3, cluster-wide rows; 7.9M in 0.2) |
 | 8 processes, one hot counter (worst case) | ~53k increments/s |
 
-The full run is in [docs/evidence/phase-03/bench.md](docs/evidence/phase-03/bench.md).
+The full run is in [docs/evidence/phase-03/bench.md](https://github.com/liamkillingback/aurora-meter/blob/main/docs/evidence/phase-03/bench.md).
 Plan lookups are cached in ETS and evicted on every subscription write, on every
 node, so the entitlement check is also database-free per request.
 

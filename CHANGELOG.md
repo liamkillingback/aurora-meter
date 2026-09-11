@@ -4,6 +4,117 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-11
+
+**Schema versions 4 and 5.** Existing installs add one migration
+(`mix aurora_meter.gen.migration -r MyApp.Repo --from 4` generates it):
+
+```elixir
+def up, do: AuroraMeter.Migration.up(from: 4)
+def down, do: AuroraMeter.Migration.down(to: 4)
+```
+
+Version 4 adds `promotional_after` to `aurora_meter_credit_transactions` and
+the ledger writes it on **every** entry, so this migration is required, not
+optional. Version 5 adds a partial index for the open-hold sweep.
+
+### Fixed
+
+- **A refusal no longer rolls back the caller's transaction.** Every refusal in
+  the ledger — an already-settled hold, a duplicate reference, a balance that
+  cannot cover a debit, a grant a hold has spoken for — is decided before
+  anything is written, and every one of them answered with `repo.rollback/1`.
+  In a nested transaction that marks the *whole* transaction, `mode: :savepoint`
+  or not: Postgres aborts back to the outermost `BEGIN`. A host that wrapped a
+  ledger call in its own transaction lost its own writes to a duplicate
+  delivery, and its next statement on that connection failed too. Refusals
+  return `{:error, reason}` and the transaction commits having done nothing,
+  which is what rolling back a write-free transaction amounted to anyway. The
+  returned tuples are unchanged, so callers that already matched on them need
+  no edit.
+
+  Worth knowing if you are testing this yourself: the bug is **invisible under
+  an `Ecto.Adapters.SQL.Sandbox` DataCase**, because the sandbox holds a
+  transaction of its own and the abort unwinds no further than its savepoint.
+  The regression test lives in `credits_concurrency_test.exs`, unsandboxed, for
+  that reason.
+- **`with_quota/4` releases its reservation on an exit**, not only on a raise.
+  An exit is how gated work usually fails — a `GenServer.call`, a `Task.await`
+  or a database checkout all time out by exiting — and an exit unwinds straight
+  past a `rescue`, so the reservation was counted for good and a hard limit
+  ratcheted down every time a call timed out.
+- **`reserve` and release now use the same billing period.** `with_quota/4`
+  captured the period so work spanning a boundary released from the counter it
+  reserved in, but only the release was given the captured value; `reserve`
+  asked `Period.current/1` again on its own way in. The day bucket behind
+  `bump_history/4` had the same fault against the clock.
+- **A refund no longer eats promotional credit or reads as spend.** Reversals
+  were written as plain negative debits, indistinguishable from spending: the
+  sign-up bonus was quietly consumed, `expire_due/1` found nothing left to
+  reclaim and the trial grant stayed live for ever, while the customer saw
+  refunded money in their spend chart and in the burn rate the runway estimate
+  divides by. Reversals carry `category: :reversal`, count against `granted`
+  rather than spend, and leave `promotional` alone.
+- **Expiry respects holds and grant boundaries.** A promotional grant expired
+  credit a pending hold had reserved — taking the balance below `held`, so the
+  settle that followed went negative, a debt the tenant silently repaid out of
+  their next top-up. A grant now expires only its own remainder, with
+  promotional spend attributed soonest-expiring-first.
+- **The flusher no longer bills usage twice, or drops usage it counted.** Its
+  two writes are no longer all-or-nothing under one `rescue` (a failure in the
+  second restored deltas for both, including the batch that had already
+  committed); exits are caught as well as exceptions; and a failed write is
+  checked against what the row actually holds before its delta goes back, since
+  a statement that times out client-side can have committed server-side a
+  moment earlier. On a cluster that check only runs while no gossiped delta has
+  moved this node's view, which `Counter.remote_since_rebase/1` now reports —
+  without it, a clustered node discarded real usage on every flush failure.
+- `Series.kinds/1` refuses `:grant`. A grant passed as a spend kind was scored
+  twice with opposite signs: `spent` came back negative, which its own type
+  forbids and which renders as a dollar amount with a minus sign.
+- The `metered` plan validator guarded `unit_price` with `>= 0` alone, and every
+  atom sorts above every number in Elixir — so `metered :x, included: 1000` with
+  no price compiled and validated cleanly.
+
+### Added
+
+- `AuroraMeter.Credits.reverse/4` — takes credit back for money that has already
+  left the payment provider (a refund, a chargeback). Unlike `debit/3` it is
+  never refused for want of balance, because refusing would only make the ledger
+  disagree with reality; the balance may go negative, which is the honest record
+  of a debt. Still idempotent on the reference.
+- `AuroraMeter.Credits.grant_with_status/3` — reports new-or-duplicate from
+  inside the balance row's lock. Callers were probing for the reference
+  beforehand and racing: two concurrent deliveries of one payment both found
+  nothing, both called themselves new, and the host announced the payment twice.
+- `AuroraMeter.Credits.pending_holds/1` — open holds older than `:older_than`,
+  oldest first, optionally filtered by reference prefix. A hold is taken before
+  the row that remembers it exists, and those two cannot be one write, so a
+  process killed in between leaves money reserved against a tenant with nothing
+  pointing at it. Only the host can tell such a hold from work that is still
+  running, so the ledger's part is to list them.
+- `AuroraMeter.Counter.remote_since_rebase/1`.
+- `promotional_after` on every ledger entry (schema version 4), so the
+  promotional figure can be rebuilt from the log like `balance` and `held`
+  already could. It is consumed before paid credit and clamped to the balance
+  after every entry, so it moves for reasons no single `amount` explains; with
+  no snapshot the balance row was the only copy and nothing could tell a clamp
+  from a bug.
+
+### Changed
+
+- `AuroraMeter.Entitlements.reserve/3` gains an optional fourth argument, the
+  captured period start. `AuroraMeter.Counter.release/4` and `rebase/2` likewise
+  gain optional arguments. The existing arities still work unchanged.
+- `rebase/3` clears `remote` only for this node's own flush. A total announced by
+  another node is a database total *that* node saw, and this one may have applied
+  gossiped deltas since.
+- Test-database migrations are pinned to the version they add. Unpinned, `up()`
+  meant "everything known today", so a database created before a later version
+  existed and one created after it ran the same migration and ended with
+  different schemas — which is how the test database came to be missing the
+  version 5 index.
+
 ## [0.5.0] - 2026-09-11
 
 **No migration required** — the schema version stays 3.

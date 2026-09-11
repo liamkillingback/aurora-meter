@@ -25,6 +25,10 @@ defmodule AuroraMeter.Migration do
     * **2** — `aurora_meter_history` (UTC day buckets for `AuroraMeter.history/3`)
     * **3** — `aurora_meter_credit_balances`, `aurora_meter_credit_transactions`
       (the prepaid ledger behind `AuroraMeter.Credits`)
+    * **4** — `promotional_after` on `aurora_meter_credit_transactions`, so the
+      promotional figure can be rebuilt from the log like `balance` and `held`
+    * **5** — a partial index on open holds, so the sweep for reservations
+      nothing will ever close does not scan the whole ledger
   """
 
   @latest 5

@@ -59,6 +59,30 @@ same reference for the same tenant returns the original entry as
 double-fund an account. `:category` is `:paid` (default), `:promotional` or
 `:adjustment`; `:metadata` is a map stored on the entry.
 
+`grant_with_status/3` returns `{:ok, txn, :new}` or `{:ok, txn, :duplicate}`
+when you need to tell the two apart — to announce the payment to the customer
+exactly once, say. Ask it rather than probing for the reference beforehand:
+the status is decided inside the balance row's lock, and two concurrent
+deliveries of one payment that both look first both find nothing.
+
+## Refunds and chargebacks
+
+```elixir
+Credits.reverse(org, 2_000_000, "stripe:re_123", %{"source" => "refund"})
+```
+
+`reverse/4` takes credit back for money that has already left the payment
+provider. Unlike `debit/3` it is **never refused for want of balance** —
+refusing would only make the ledger disagree with reality — so the balance may
+go negative, which is the honest record of a debt. It is still idempotent on
+the reference.
+
+Reversals are written with `category: :reversal`, which keeps them out of two
+places a negative debit did not belong: they do not consume promotional
+credit, and the money series counts them against `granted` rather than as
+spend, so a refund does not appear in a customer's spend chart or inflate the
+burn rate behind `runway_days`.
+
 ## Hold, settle, release
 
 Most metered work has an estimate up front and a real cost afterwards. A hold
@@ -96,9 +120,26 @@ end)
 ```
 
 If the function raises, throws or exits the hold is released and the error
-propagates. A hold that is never settled or released stays pending: pick
-references you can find again (the job id) and release stragglers from the
-code path that abandons the work.
+propagates.
+
+### Holds nothing will ever close
+
+A hold is taken before the row that remembers it exists, and those two cannot
+be one write — the ledger is a different schema and often a different
+database. A process killed in between leaves money reserved against a tenant
+with nothing anywhere pointing at it.
+
+Only the host can tell such a hold from one whose work is simply still
+running, so the ledger's part is to list them:
+
+```elixir
+Credits.pending_holds(older_than: 3600, prefix: "job:")
+#=> [%CreditTransaction{kind: :hold, status: :pending, reference: "job:42", ...}]
+```
+
+Oldest first, filtered by age and optionally by reference prefix. Run it on a
+schedule, decide from your own records whether the work is still alive, and
+`release/1` the ones that are not. Pick references you can find again.
 
 ## Promotional credit and expiry
 
@@ -294,6 +335,25 @@ against that locked row, and the row is updated before commit. Twenty
 concurrent $0.10 holds against $1.00 admit exactly ten (there is a test that
 does exactly that). Two settlements of the same hold serialise on the hold
 row; the second sees `:already_settled`.
+
+### Calling from inside your own transaction
+
+Safe, and intended: `config :aurora_meter, repo:` is your repo, so a ledger
+call inside your own `Repo.transaction/1` joins it, and settling a job beside
+the row that records its result is one atomic write.
+
+Every refusal — `:insufficient_credits`, `:duplicate_reference`,
+`:already_settled`, a grant a hold has spoken for — is decided **before**
+anything is written and comes back as `{:error, reason}` with your transaction
+still open and still yours to commit. Before 0.6 these refusals called
+`Repo.rollback/1`, which in a nested transaction marks the whole transaction
+whatever `:mode` you passed, so a duplicate webhook delivery took the host's
+own writes down with it.
+
+If you are testing this yourself, note that an `Ecto.Adapters.SQL.Sandbox`
+DataCase cannot see that class of bug: the sandbox holds a transaction of its
+own, so yours is nested inside it and an abort unwinds no further than its
+savepoint. The regression test for it is deliberately unsandboxed.
 
 ## Testing
 
