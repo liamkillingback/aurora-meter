@@ -208,10 +208,19 @@ defmodule AuroraMeter.Entitlements do
     end
   end
 
-  @doc "Atomically reserves `qty` of `feature` against the plan (increments the counter)."
-  @spec reserve(term(), atom(), pos_integer()) :: :ok | {:error, :limit_exceeded | :not_entitled}
-  def reserve(tenant, feature, qty \\ 1) do
+  @doc """
+  Atomically reserves `qty` of `feature` against the plan (increments the
+  counter).
+
+  `period_start` names the period to count it against; without it the current
+  one is used. A caller that will release the reservation later has to hold on
+  to the period it reserved in — see `with_quota/4`.
+  """
+  @spec reserve(term(), atom(), pos_integer(), DateTime.t() | nil) ::
+          :ok | {:error, :limit_exceeded | :not_entitled}
+  def reserve(tenant, feature, qty \\ 1, period_start \\ nil) do
     tenant_key = Tenant.to_key(tenant)
+    period = period_start || period_start(tenant)
 
     result =
       case feature_config(tenant, feature) do
@@ -219,15 +228,15 @@ defmodule AuroraMeter.Entitlements do
           {:error, :not_entitled}
 
         {:limit, n, :hard} ->
-          Counter.reserve(tenant_key, feature, qty, period_start(tenant), n)
+          Counter.reserve(tenant_key, feature, qty, period, n)
 
         {:counter} ->
           # Explicit rather than falling through: a counter must keep counting
           # (no cap argument) and must never be turned into a gate later.
-          Counter.reserve(tenant_key, feature, qty, period_start(tenant), nil)
+          Counter.reserve(tenant_key, feature, qty, period, nil)
 
         _other ->
-          Counter.reserve(tenant_key, feature, qty, period_start(tenant), nil)
+          Counter.reserve(tenant_key, feature, qty, period, nil)
       end
 
     :telemetry.execute([:aurora_meter, :reserve], %{qty: qty}, %{
@@ -256,14 +265,16 @@ defmodule AuroraMeter.Entitlements do
           {:ok, result} | {:error, term()}
         when result: term()
   def with_quota(tenant, feature, qty, fun) when is_function(fun, 0) do
-    # Capture the period once. Recomputing it on the way out meant that work
-    # spanning a period boundary — a long-running call started at 23:59:59 on
-    # the last of the month — released the reservation from the *new* period's
-    # counter, leaving the old one permanently over-counted and the new one
-    # under.
+    # Capture the period once, and reserve *and* release against that one.
+    # Recomputing it meant that work spanning a period boundary — a
+    # long-running call started at 23:59:59 on the last of the month —
+    # released the reservation from the new period's counter, leaving the old
+    # one permanently over-counted and the new one under. Passing it only to
+    # the release left the same asymmetry one call deeper, because `reserve/3`
+    # asked `Period.current/1` again on its own way in.
     period_start = period_start(tenant)
 
-    case reserve(tenant, feature, qty) do
+    case reserve(tenant, feature, qty, period_start) do
       :ok ->
         try do
           {:ok, fun.()}
