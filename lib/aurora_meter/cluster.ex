@@ -109,8 +109,11 @@ defmodule AuroraMeter.Cluster do
         case Counter.base(key) do
           # Only move forward: a late announcement must not undo a fresher
           # base; the next flush re-bases this node unconditionally anyway.
-          base when is_integer(base) and total >= base -> Counter.rebase(key, total) == :ok
-          _cold_or_stale -> false
+          base when is_integer(base) and total >= base ->
+            Counter.rebase(key, total, :gossip) == :ok
+
+          _cold_or_stale ->
+            false
         end
       end)
 

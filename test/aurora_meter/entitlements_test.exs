@@ -169,6 +169,28 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.usage(tenant, :ai_generations) == 50
   end
 
+  test "and when it exits, which is how gated work usually fails" do
+    # A `GenServer.call`, a `Task.await`, a database checkout: they all time
+    # out by exiting rather than raising, and an exit unwinds straight past a
+    # `rescue`. The reservation was counted for good, so a plan's hard limit
+    # ratcheted down every time a call timed out.
+    tenant = unique_tenant()
+    AuroraMeter.subscribe(tenant, :pro)
+
+    catch_exit(AuroraMeter.with_quota(tenant, :ai_generations, fn -> exit(:timeout) end))
+
+    assert AuroraMeter.usage(tenant, :ai_generations) == 0
+  end
+
+  test "and when it throws" do
+    tenant = unique_tenant()
+    AuroraMeter.subscribe(tenant, :pro)
+
+    catch_throw(AuroraMeter.with_quota(tenant, :ai_generations, fn -> throw(:nope) end))
+
+    assert AuroraMeter.usage(tenant, :ai_generations) == 0
+  end
+
   test "with_quota releases the reservation when the function raises" do
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :pro)

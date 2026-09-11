@@ -13,6 +13,7 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.TestRepo
+  alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
 
   setup do
@@ -56,7 +57,7 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
 
         # The caller's connection is still usable, which it would not be if the
         # refusal had aborted the transaction.
-        {:ok, %{rows: [[1]]}} = Ecto.Adapters.SQL.query(TestRepo, "SELECT 1", [])
+        {:ok, %{rows: [[1]]}} = SQL.query(TestRepo, "SELECT 1", [])
         refused
       end)
 

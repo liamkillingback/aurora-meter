@@ -224,7 +224,7 @@ defmodule AuroraMeter.Plans do
     do: :ok
 
   defp validate_feature!(_id, {_feature, {:metered, included, unit_price}})
-       when is_integer(included) and included >= 0 and unit_price >= 0,
+       when is_integer(included) and included >= 0 and is_number(unit_price) and unit_price >= 0,
        do: :ok
 
   defp validate_feature!(_id, {_feature, {:counter}}), do: :ok

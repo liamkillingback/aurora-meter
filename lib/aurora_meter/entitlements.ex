@@ -273,15 +273,22 @@ defmodule AuroraMeter.Entitlements do
     # the release left the same asymmetry one call deeper, because `reserve/3`
     # asked `Period.current/1` again on its own way in.
     period_start = period_start(tenant)
+    on = Date.utc_today()
 
     case reserve(tenant, feature, qty, period_start) do
       :ok ->
+        # `catch`, not just `rescue`: an exit is the common failure in gated
+        # work — a `GenServer.call`, a `Task.await`, a database checkout all
+        # time out by exiting rather than raising — and it unwound straight
+        # past a `rescue`, leaving the reservation counted for good. The two
+        # siblings in this codebase were both taught this already
+        # (`Credits.run_held/2`, `Flusher.flush_batch/3`).
         try do
           {:ok, fun.()}
-        rescue
-          exception ->
-            Counter.release(Tenant.to_key(tenant), feature, qty, period_start)
-            reraise exception, __STACKTRACE__
+        catch
+          kind, reason ->
+            Counter.release(Tenant.to_key(tenant), feature, qty, period_start, on)
+            :erlang.raise(kind, reason, __STACKTRACE__)
         end
 
       {:error, reason} ->

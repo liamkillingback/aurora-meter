@@ -57,7 +57,7 @@ defmodule AuroraMeter.Counter do
   @spec incr(String.t(), atom(), integer(), DateTime.t()) :: integer()
   def incr(tenant_key, feature, qty, period_start) do
     new = bump({tenant_key, feature, period_start}, qty)
-    bump_history(tenant_key, feature, qty)
+    bump_history(tenant_key, feature, qty, Date.utc_today())
     new
   end
 
@@ -77,16 +77,24 @@ defmodule AuroraMeter.Counter do
       bump(key, -qty)
       {:error, :limit_exceeded}
     else
-      bump_history(tenant_key, feature, qty)
+      bump_history(tenant_key, feature, qty, Date.utc_today())
       :ok
     end
   end
 
-  @doc "Releases a previously reserved `qty` (rollback on a raised function)."
-  @spec release(String.t(), atom(), integer(), DateTime.t()) :: :ok
-  def release(tenant_key, feature, qty, period_start) do
+  @doc """
+  Releases a previously reserved `qty` (rollback on a failed function).
+
+  `on` is the day the reservation was counted against. Without it the day
+  history is decremented from the clock — so work that started at 23:59:59 and
+  gave up a second later took its release out of the *next* day, leaving one
+  day permanently over-counted and the other under. The period counter was
+  taught this; the day bucket beside it was not.
+  """
+  @spec release(String.t(), atom(), integer(), DateTime.t(), Date.t() | nil) :: :ok
+  def release(tenant_key, feature, qty, period_start, on \\ nil) do
     bump({tenant_key, feature, period_start}, -qty)
-    bump_history(tenant_key, feature, -qty)
+    bump_history(tenant_key, feature, -qty, on || Date.utc_today())
     :ok
   end
 
@@ -187,14 +195,23 @@ defmodule AuroraMeter.Counter do
   Re-bases this node's view on an authoritative database total: `value`
   becomes `total + pending_flush`. Applied as a delta against a snapshot, so a
   bump that lands mid-rebase is kept exactly. Cold keys are skipped.
+
+  `source` says where the total came from, and only `:flush` — this node's own
+  write, which read the row back — clears `remote`. A total announced by
+  another node is a database total *that node* saw, and this node may have
+  applied gossiped deltas since; clearing `remote` for one of those told
+  `remote_since_rebase/1` the view had not moved when it had, which is the one
+  question the flusher asks before deciding whether a failed write landed.
   """
-  @spec rebase(key(), integer()) :: :ok | :cold
-  def rebase(key, total) do
+  @spec rebase(key(), integer(), :flush | :gossip) :: :ok | :cold
+  def rebase(key, total, source \\ :flush) do
     case :ets.lookup(table(), key) do
       [{^key, value, pending_flush, _gossip, remote}] ->
+        clear_remote = if source == :flush, do: -remote, else: 0
+
         :ets.update_counter(table(), key, [
           {@value, total + pending_flush - value},
-          {@remote, -remote}
+          {@remote, clear_remote}
         ])
 
         :ets.insert(Store.touched_table(), {key})
@@ -264,9 +281,9 @@ defmodule AuroraMeter.Counter do
     new
   end
 
-  @spec bump_history(String.t(), atom(), integer()) :: :ok
-  defp bump_history(tenant_key, feature, qty) do
-    if Config.history?(), do: bump({tenant_key, feature, {:day, Date.utc_today()}}, qty)
+  @spec bump_history(String.t(), atom(), integer(), Date.t()) :: :ok
+  defp bump_history(tenant_key, feature, qty, on) do
+    if Config.history?(), do: bump({tenant_key, feature, {:day, on}}, qty)
     :ok
   end
 
