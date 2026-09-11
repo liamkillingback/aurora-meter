@@ -370,6 +370,21 @@ See the [changelog](CHANGELOG.md) for everything else that changed.
 
 ## Documentation
 
+**Worked examples** — a whole product each, from nothing:
+
+- [Concepts](docs/examples/concepts.md) — every term defined, and the table of
+  the five feature kinds. Start here.
+- [A team SaaS](docs/examples/team-saas.md) — switches, seats and hard caps
+- [Allowance and overage](docs/examples/allowance-and-overage.md) — a monthly
+  allowance customers may exceed, billed through Stripe
+- [Prepaid credits](docs/examples/prepaid-credits.md) — pay-as-you-go on a
+  credit ledger, with holds for work of unknown cost
+- [Showing usage](docs/examples/showing-usage.md) — dashboards, live updates,
+  charts and the metrics worth alerting on
+
+Every code block in those is executed by `test/aurora_meter/examples_test.exs`,
+so a guide that stops being true stops the suite.
+
 Guides: [Getting started](docs/getting-started.md) ·
 [Configuration](docs/configuration.md) · [Metering](docs/metering.md) ·
 [Entitlements](docs/entitlements.md) · [Plans](docs/plans.md) ·

@@ -133,13 +133,17 @@ Only the host can tell such a hold from one whose work is simply still
 running, so the ledger's part is to list them:
 
 ```elixir
-Credits.pending_holds(older_than: 3600, prefix: "job:")
+Credits.pending_holds(
+  older_than: DateTime.add(DateTime.utc_now(), -3600, :second),
+  reference_prefix: "job:"
+)
 #=> [%CreditTransaction{kind: :hold, status: :pending, reference: "job:42", ...}]
 ```
 
-Oldest first, filtered by age and optionally by reference prefix. Run it on a
-schedule, decide from your own records whether the work is still alive, and
-`release/1` the ones that are not. Pick references you can find again.
+Oldest first. `:older_than` is a `DateTime` and is required; `:reference_prefix`
+narrows to one kind of work and `:limit` defaults to 200. Run it on a schedule,
+decide from your own records whether the work is still alive, and `release/1`
+the ones that are not. Pick references you can find again.
 
 ## Promotional credit and expiry
 

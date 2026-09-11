@@ -97,6 +97,11 @@ defmodule AuroraMeter.MixProject do
         "LICENSE",
         "NOTICE.md",
         "docs/getting-started.md",
+        "docs/examples/concepts.md",
+        "docs/examples/team-saas.md",
+        "docs/examples/allowance-and-overage.md",
+        "docs/examples/prepaid-credits.md",
+        "docs/examples/showing-usage.md",
         "docs/configuration.md",
         "docs/metering.md",
         "docs/entitlements.md",
@@ -112,7 +117,11 @@ defmodule AuroraMeter.MixProject do
         "docs/adr/0005-prepaid-credit-ledger.md",
         "docs/adr/0006-counter-feature-kind.md"
       ],
-      groups_for_extras: [Guides: ~r/docs\/[^\/]+$/, ADRs: ~r/docs\/adr\//],
+      groups_for_extras: [
+        Examples: ~r/docs\/examples\//,
+        Guides: ~r/docs\/[^\/]+$/,
+        ADRs: ~r/docs\/adr\//
+      ],
       source_ref: "v#{@version}",
       source_url: @source_url,
       formatters: ["html"]
