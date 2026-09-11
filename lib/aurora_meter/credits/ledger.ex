@@ -51,6 +51,28 @@ defmodule AuroraMeter.Credits.Ledger do
     )
   end
 
+  @spec pending_holds(keyword()) :: [CreditTransaction.t()]
+  def pending_holds(opts) do
+    cutoff = Keyword.fetch!(opts, :older_than)
+    limit = Keyword.get(opts, :limit, 200)
+    prefix = Keyword.get(opts, :reference_prefix)
+
+    query =
+      from(t in CreditTransaction,
+        where: t.kind == ^:hold and t.status == ^:pending and t.inserted_at < ^cutoff,
+        order_by: [asc: t.inserted_at],
+        limit: ^limit
+      )
+
+    query =
+      case prefix do
+        nil -> query
+        prefix -> where(query, [t], like(t.reference, ^(prefix <> "%")))
+      end
+
+    Config.repo().all(query)
+  end
+
   @spec grant(String.t(), pos_integer(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, Ecto.Changeset.t()}
   def grant(tenant_key, amount, opts) do

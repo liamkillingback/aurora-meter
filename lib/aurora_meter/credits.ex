@@ -335,6 +335,30 @@ defmodule AuroraMeter.Credits do
   end
 
   @doc """
+  Holds that are still open and were taken before `:older_than`, oldest first.
+
+  For a host that has to find reservations nothing will ever close. A hold is
+  taken before the row that remembers it exists — there is no way to make those
+  two one write, since they are in different databases as often as not — so a
+  process killed in between leaves money reserved against a tenant with nothing
+  left pointing at it. Only the host can tell such a hold from one whose work
+  is simply still running, so the ledger's part is to list them.
+
+  Options: `:older_than` (required, a `DateTime`), `:limit` (default 200) and
+  `:reference_prefix` to narrow to one kind of work.
+
+  ## Examples
+
+      AuroraMeter.Credits.pending_holds(
+        older_than: DateTime.add(DateTime.utc_now(), -3600, :second),
+        reference_prefix: "doc:"
+      )
+
+  """
+  @spec pending_holds(keyword()) :: [txn()]
+  def pending_holds(opts), do: Ledger.pending_holds(opts)
+
+  @doc """
   Holds `estimate`, runs `fun`, and settles or releases depending on what it
   returns.
 
