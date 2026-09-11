@@ -333,11 +333,15 @@ defmodule AuroraMeter.Credits do
         {:ok, result}
 
       {:error, reason} ->
-        {:ok, _txn} = release(reference)
+        # Do not assert on the release. A hold that was closed concurrently is
+        # a benign outcome — the same one the `catch` below already treats as
+        # such — and matching on {:ok, _} turned the caller's error into a
+        # MatchError that buried it.
+        _ = release(reference)
         {:error, reason}
 
       other ->
-        {:ok, _txn} = release(reference)
+        _ = release(reference)
 
         raise ArgumentError,
               "with_credits/4 expects {:ok, result, actual_amount} or {:error, reason}, " <>

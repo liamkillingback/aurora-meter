@@ -214,24 +214,88 @@ defmodule AuroraMeter.Credits.Ledger do
       if grant.expired_at, do: repo.rollback(:already_expired)
 
       row = locked_row(repo, grant.tenant_key)
-      # Limitation (documented in docs/credits.md): with several live promotional
-      # grants per tenant, `promotional` is their sum, so the first grant to expire
-      # can take credit that a later grant contributed.
-      amount = max(0, min(row.promotional, grant.amount))
+
+      # Never claw back credit a pending hold has already reserved. `hold/4`
+      # promises the money will be there when the work settles, and expiry ran
+      # straight through that promise: it took the balance below `held`, and
+      # the settle that followed took the balance itself negative — which the
+      # tenant then repays out of their next top-up without ever being told.
+      #
+      # What the hold has reserved stays. If that leaves part of the grant
+      # unexpired, the grant keeps its `expired_at` unset so a later pass
+      # finishes the job once the hold settles.
+      spendable = max(row.balance - row.held, 0)
+      remaining = remaining_on_grant(repo, grant, row)
+      amount = Enum.min([remaining, row.promotional, spendable]) |> max(0)
+      fully_expired? = amount >= remaining
+
+      # Entirely spoken for by a hold: leave it alone and try again next pass,
+      # rather than writing a zero-value row every half hour until the work
+      # settles.
+      if amount == 0 and not fully_expired?, do: repo.rollback(:held)
 
       outcome =
         apply_entry(repo, row, %{
           kind: :expire,
           amount: -amount,
           category: :promotional,
-          reference: "expire:" <> grant.id,
-          metadata: %{"grant_id" => grant.id, "grant_reference" => grant.reference}
+          reference: expire_reference(grant.id, fully_expired?),
+          metadata: %{
+            "grant_id" => grant.id,
+            "grant_reference" => grant.reference,
+            "grant_amount" => grant.amount,
+            "expired_amount" => amount
+          }
         })
 
-      grant |> Ecto.Changeset.change(expired_at: now) |> repo.update!()
+      if fully_expired? do
+        grant |> Ecto.Changeset.change(expired_at: now) |> repo.update!()
+      end
+
       outcome
     end)
   end
+
+  # How much of *this* grant is left, with promotional spending attributed to
+  # whichever grant expires soonest.
+  #
+  # `promotional` on the balance is the sum of every live grant, so expiring
+  # one against that total let the first grant to expire take credit a later
+  # one had contributed: grant $5 expiring in October and $10 expiring in
+  # December, spend $12, and October's expiry reclaimed the $3 that was all
+  # December's. Spending soonest-first is both the tenant-friendly order and
+  # the one that makes each grant's remainder well defined.
+  @spec remaining_on_grant(module(), CreditTransaction.t(), CreditBalance.t()) ::
+          non_neg_integer()
+  defp remaining_on_grant(repo, grant, row) do
+    live =
+      repo.all(
+        from(t in CreditTransaction,
+          where:
+            t.tenant_key == ^grant.tenant_key and t.kind == ^:grant and
+              t.category == ^:promotional and is_nil(t.expired_at),
+          order_by: [asc_nulls_last: t.expires_at, asc: t.inserted_at, asc: t.id],
+          select: %{id: t.id, amount: t.amount}
+        )
+      )
+
+    granted = live |> Enum.map(& &1.amount) |> Enum.sum()
+    consumed = max(granted - row.promotional, 0)
+    earlier = live |> Enum.take_while(&(&1.id != grant.id)) |> Enum.map(& &1.amount) |> Enum.sum()
+
+    grant.amount
+    |> Kernel.-(max(consumed - earlier, 0))
+    |> max(0)
+    |> min(grant.amount)
+  end
+
+  # A partial expiry has to stay repeatable, so it cannot reuse the reference a
+  # completed one takes (the unique index on (kind, reference) would refuse the
+  # second pass).
+  defp expire_reference(grant_id, true), do: "expire:" <> grant_id
+
+  defp expire_reference(grant_id, false),
+    do: "expire:" <> grant_id <> ":" <> Integer.to_string(System.unique_integer([:positive]))
 
   # -- transaction plumbing ---------------------------------------------------
 

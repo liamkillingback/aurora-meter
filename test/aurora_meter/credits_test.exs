@@ -313,6 +313,65 @@ defmodule AuroraMeter.CreditsTest do
       assert length(Credits.history(tenant, kinds: [:expire])) == 1
     end
 
+    test "expiry never claws back credit a hold has reserved" do
+      # hold/4 promises the money will be there when the work settles. Expiry
+      # used to walk straight through that: it took the balance below `held`,
+      # and the settle that followed took the balance itself negative — a debt
+      # the tenant silently repays out of their next top-up.
+      tenant = unique_tenant()
+      past = DateTime.add(DateTime.utc_now(), -60, :second)
+
+      grant = fund!(tenant, 500_000, category: :promotional, expires_at: past)
+      {:ok, _} = Credits.hold(tenant, 400_000, "work:#{tenant}")
+
+      assert {:ok, _} = Credits.expire_due()
+
+      # Only the unheld 100_000 could go.
+      balance = Credits.balance(tenant)
+      assert balance.held == 400_000
+      assert balance.available == 0
+      assert balance.balance == 400_000
+
+      # The grant is not finished with, so it is still due next time.
+      assert %CreditTransaction{expired_at: nil} = TestRepo.get!(CreditTransaction, grant.id)
+
+      # Settling does not drive the balance negative.
+      {:ok, _} = Credits.settle("work:#{tenant}", 400_000)
+      assert %{balance: 0, held: 0} = Credits.balance(tenant)
+
+      # With the hold gone, the rest of the grant finally expires.
+      assert {:ok, _} = Credits.expire_due()
+      assert %{balance: 0, promotional: 0} = Credits.balance(tenant)
+
+      assert %CreditTransaction{expired_at: %DateTime{}} =
+               TestRepo.get!(CreditTransaction, grant.id)
+    end
+
+    test "a grant expires only its own remainder, not credit a later grant put in" do
+      # `promotional` on the balance is the sum of every live grant, so
+      # expiring against that total let the first grant to expire reclaim
+      # money the second had contributed.
+      tenant = unique_tenant()
+      past = DateTime.add(DateTime.utc_now(), -60, :second)
+      future = DateTime.add(DateTime.utc_now(), 3_600, :second)
+
+      soon = fund!(tenant, 500_000, category: :promotional, expires_at: past)
+      _later = fund!(tenant, 1_000_000, category: :promotional, expires_at: future)
+
+      # Spend more than the expiring grant was worth: it is used up, and what
+      # is left belongs to the grant that has not expired.
+      {:ok, _} = Credits.debit(tenant, 1_200_000, "used:#{tenant}")
+      assert %{balance: 300_000, promotional: 300_000} = Credits.balance(tenant)
+
+      assert {:ok, _} = Credits.expire_due()
+
+      # The expiring grant had nothing left, so the survivor keeps its money.
+      assert %{balance: 300_000, promotional: 300_000} = Credits.balance(tenant)
+
+      assert %CreditTransaction{expired_at: %DateTime{}} =
+               TestRepo.get!(CreditTransaction, soon.id)
+    end
+
     test "a promotional grant landing on a negative balance first repays the debt" do
       tenant = unique_tenant()
       past = DateTime.add(DateTime.utc_now(), -60, :second)

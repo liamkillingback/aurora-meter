@@ -157,7 +157,12 @@ defmodule AuroraMeter.ClusterTest do
 
         {:ok, _} = Flusher.flush()
         expected = Enum.sum(local) + Enum.sum(remote)
-        assert Storage.load_counter(tenant, :ops, p) == expected
+
+        # A row that was never written reads as nil, and that is the right
+        # storage-level answer: when the deltas cancel out there is nothing to
+        # persist, and writing a zero row would be amplification for no gain.
+        # What must hold is the *total*, which is what callers see.
+        assert (Storage.load_counter(tenant, :ops, p) || 0) == expected
         assert AuroraMeter.usage(tenant, :ops) == expected
       end
     end

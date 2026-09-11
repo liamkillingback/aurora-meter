@@ -256,13 +256,20 @@ defmodule AuroraMeter.Entitlements do
           {:ok, result} | {:error, term()}
         when result: term()
   def with_quota(tenant, feature, qty, fun) when is_function(fun, 0) do
+    # Capture the period once. Recomputing it on the way out meant that work
+    # spanning a period boundary — a long-running call started at 23:59:59 on
+    # the last of the month — released the reservation from the *new* period's
+    # counter, leaving the old one permanently over-counted and the new one
+    # under.
+    period_start = period_start(tenant)
+
     case reserve(tenant, feature, qty) do
       :ok ->
         try do
           {:ok, fun.()}
         rescue
           exception ->
-            Counter.release(Tenant.to_key(tenant), feature, qty, period_start(tenant))
+            Counter.release(Tenant.to_key(tenant), feature, qty, period_start)
             reraise exception, __STACKTRACE__
         end
 

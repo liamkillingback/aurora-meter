@@ -89,30 +89,61 @@ defmodule AuroraMeter.Flusher do
         %{tenant_key: tenant_key, feature: feature, date: date, delta: delta}
       end
 
-    try do
-      totals = add(counter_rows, :counters, period) ++ add(history_rows, :history, history)
-      Enum.each(totals, fn {key, total} -> Counter.rebase(key, total) end)
-      Cluster.publish_totals(totals)
+    # Each batch succeeds or fails on its own. They were two separate
+    # statements under one rescue, so a failure in the second restored the
+    # pending deltas for *both* — including the period counters whose write
+    # had already committed, and the next flush added them to Postgres a
+    # second time. Usage a customer never had, billed.
+    #
+    # `catch` as well as `rescue`: an exit out of insert_all (a pool timeout,
+    # say) unwound past the rescue with `take_pending` having already zeroed
+    # the pending column, losing that interval's usage for good.
+    {counter_totals, counter_ok?} = flush_batch(counter_rows, :counters, period)
+    {history_totals, history_ok?} = flush_batch(history_rows, :history, history)
 
+    totals = counter_totals ++ history_totals
+    Enum.each(totals, fn {key, total} -> Counter.rebase(key, total) end)
+    Cluster.publish_totals(totals)
+
+    if counter_ok? and history_ok? do
       delta_sum = taken |> Enum.map(&elem(&1, 1)) |> Enum.sum()
       count = length(taken)
       :telemetry.execute([:aurora_meter, :flush], %{count: count, delta_sum: delta_sum}, %{})
       count
-    rescue
-      error ->
-        Enum.each(taken, fn {key, delta} -> Counter.restore_pending(key, delta) end)
-
-        Logger.error(
-          "AuroraMeter flush failed (#{length(taken)} keys kept pending): " <>
-            Exception.message(error)
-        )
-
-        :telemetry.execute([:aurora_meter, :flush, :error], %{count: length(taken)}, %{
-          error: error
-        })
-
-        0
+    else
+      0
     end
+  end
+
+  # Writes one batch, and on failure puts back only that batch's deltas so the
+  # next flush retries exactly what did not land.
+  @spec flush_batch([map()], :counters | :history, [{Counter.key(), integer()}]) ::
+          {[{Counter.key(), integer()}], boolean()}
+  defp flush_batch([], _kind, _taken), do: {[], true}
+
+  defp flush_batch(rows, kind, taken) do
+    {add(rows, kind, taken), true}
+  rescue
+    error -> {[], keep_pending(taken, kind, Exception.message(error))}
+  catch
+    kind_of_exit, reason ->
+      {[], keep_pending(taken, kind, "#{kind_of_exit}: #{inspect(reason)}")}
+  end
+
+  @spec keep_pending([{Counter.key(), integer()}], atom(), String.t()) :: false
+  defp keep_pending(taken, kind, message) do
+    Enum.each(taken, fn {key, delta} -> Counter.restore_pending(key, delta) end)
+
+    Logger.error(
+      "AuroraMeter flush failed for #{kind} (#{length(taken)} keys kept pending): #{message}"
+    )
+
+    :telemetry.execute([:aurora_meter, :flush, :error], %{count: length(taken)}, %{
+      kind: kind,
+      error: message
+    })
+
+    false
   end
 
   # Writes deltas and pairs the returned totals back with their ETS keys.
@@ -120,8 +151,6 @@ defmodule AuroraMeter.Flusher do
   # match on a normalised triple rather than on the struct.
   @spec add([map()], :counters | :history, [{Counter.key(), integer()}]) ::
           [{Counter.key(), integer()}]
-  defp add([], _kind, _taken), do: []
-
   defp add(rows, kind, taken) do
     {:ok, returned} =
       case kind do
