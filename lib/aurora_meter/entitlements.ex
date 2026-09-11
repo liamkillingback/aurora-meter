@@ -3,8 +3,9 @@ defmodule AuroraMeter.Entitlements do
   Plan resolution and the entitlement gate.
 
   Semantics (see plan.md D12): a `:hard` limit blocks at its cap; a `:metered`
-  feature is always allowed (overage is billed); a `{:feature, false}` is denied;
-  an undeclared feature is permissive. `with_quota/4` reserves atomically so hard
+  feature is always allowed (overage is billed); a `:counter` is always allowed
+  and never billed (ADR 0006); a `{:feature, false}` is denied; an undeclared
+  feature is permissive. `with_quota/4` reserves atomically so hard
   limits are correct under concurrency, releasing the reservation if the wrapped
   function raises.
 
@@ -27,14 +28,14 @@ defmodule AuroraMeter.Entitlements do
 
   @typedoc """
   A dashboard-ready view of one feature's quota. `kind` is `:hard`, `:metered`,
-  `:boolean`, `:feature` (an integer plan value, carried in `value`) or
-  `:undeclared`; `limit` is set for hard caps, `included` for metered
+  `:counter`, `:boolean`, `:feature` (an integer plan value, carried in `value`)
+  or `:undeclared`; `limit` is set for hard caps, `included` for metered
   allowances; `percent` is used relative to whichever applies (nil when neither
-  does).
+  does, which includes every `:counter` — see ADR 0006).
   """
   @type quota :: %{
           feature: atom(),
-          kind: :hard | :metered | :boolean | :feature | :undeclared,
+          kind: :hard | :metered | :counter | :boolean | :feature | :undeclared,
           enabled: boolean(),
           value: non_neg_integer() | nil,
           used: integer(),
@@ -92,6 +93,9 @@ defmodule AuroraMeter.Entitlements do
       {:metered, _included, _unit_price} ->
         :ok
 
+      {:counter} ->
+        :ok
+
       nil ->
         warn_undeclared(feature)
         :ok
@@ -128,7 +132,11 @@ defmodule AuroraMeter.Entitlements do
     end
   end
 
-  @doc "Remaining quota for a hard-limited feature, or `:unlimited`."
+  @doc """
+  Remaining quota for a hard-limited feature, or `:unlimited` — which is what a
+  metered feature, a counter, a plain feature and an undeclared feature all
+  report, because none of them has a cap to count down from.
+  """
   @spec remaining(term(), atom()) :: non_neg_integer() | :unlimited
   def remaining(tenant, feature) do
     case feature_config(tenant, feature) do
@@ -182,6 +190,13 @@ defmodule AuroraMeter.Entitlements do
             percent: percent(used, included)
         }
 
+      {:counter} ->
+        # ADR 0006: a counter has no denominator, so `limit`, `included` and
+        # `percent` stay `nil` rather than collapsing to `0`. A renderer that
+        # treats `percent: nil` as "no bar" is correct; one that treats it as
+        # `0` would draw "0% of 0", which is the bug this kind exists to avoid.
+        %{base | kind: :counter}
+
       {:feature, enabled} when is_boolean(enabled) ->
         %{base | kind: :boolean, enabled: enabled}
 
@@ -205,6 +220,11 @@ defmodule AuroraMeter.Entitlements do
 
         {:limit, n, :hard} ->
           Counter.reserve(tenant_key, feature, qty, period_start(tenant), n)
+
+        {:counter} ->
+          # Explicit rather than falling through: a counter must keep counting
+          # (no cap argument) and must never be turned into a gate later.
+          Counter.reserve(tenant_key, feature, qty, period_start(tenant), nil)
 
         _other ->
           Counter.reserve(tenant_key, feature, qty, period_start(tenant), nil)

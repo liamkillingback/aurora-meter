@@ -38,6 +38,77 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.remaining(tenant, :ai_generations) == :unlimited
   end
 
+  describe "counter features" do
+    test "are always allowed, never capped, and never report a percentage" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :payg)
+      AuroraMeter.track(tenant, :requests, 6)
+
+      assert AuroraMeter.check(tenant, :requests) == :ok
+      assert AuroraMeter.allowed?(tenant, :requests)
+      assert AuroraMeter.entitled?(tenant, :requests)
+      assert AuroraMeter.remaining(tenant, :requests) == :unlimited
+
+      quota = AuroraMeter.quota(tenant, :requests)
+
+      assert quota.feature == :requests
+      assert quota.kind == :counter
+      assert quota.used == 6
+      assert quota.overage == 0
+      assert quota.remaining == :unlimited
+      assert %{start: %DateTime{}, end: %DateTime{}, source: _} = quota.period
+
+      # The whole point of the kind: there is no denominator, so nothing here
+      # may be mistaken for "6 of 0" or "0% used".
+      assert quota.limit == nil
+      assert quota.included == nil
+      assert quota.percent == nil
+      assert quota.unit_price == nil
+      assert quota.value == nil
+      assert quota.enabled == true
+    end
+
+    test "reserve/3 always admits and still increments the counter" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :payg)
+
+      for _ <- 1..25, do: assert(AuroraMeter.reserve(tenant, :requests) == :ok)
+      assert AuroraMeter.reserve(tenant, :requests, 75) == :ok
+
+      assert AuroraMeter.usage(tenant, :requests) == 100
+      assert AuroraMeter.quota(tenant, :requests).used == 100
+      assert AuroraMeter.check(tenant, :requests) == :ok
+    end
+
+    test "with_quota/3 never blocks a counter, however much is used" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :payg)
+
+      results =
+        1..40
+        |> Task.async_stream(
+          fn _ -> AuroraMeter.with_quota(tenant, :requests, fn -> :done end) end,
+          max_concurrency: 10,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      assert Enum.all?(results, &match?({:ok, :done}, &1))
+      assert AuroraMeter.usage(tenant, :requests) == 40
+    end
+
+    test "a counter is not metered: nothing reports an overage or a unit price" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :payg)
+      AuroraMeter.track(tenant, :requests, 5_000)
+
+      quota = AuroraMeter.quota(tenant, :requests)
+
+      assert quota.overage == 0
+      assert quota.unit_price == nil
+    end
+  end
+
   test "feature access is gated by the plan" do
     free = unique_tenant()
     AuroraMeter.subscribe(free, :free)

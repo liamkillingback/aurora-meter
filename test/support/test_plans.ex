@@ -22,4 +22,13 @@ defmodule AuroraMeter.TestPlans do
     feature :api_access, true
     feature :seats, 25
   end
+
+  # Pay-as-you-go: requests are measured for the dashboard, the money lives in
+  # the credit ledger, so `:requests` is a counter and not a metered feature.
+  plan :payg do
+    price 0
+    counter :requests
+    feature :api_access, true
+    feature :seats, 25
+  end
 end

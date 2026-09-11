@@ -12,9 +12,10 @@ defmodule AuroraMeter.Install.Templates do
       Aurora Meter plans. Declared at compile time and validated by the DSL.
 
       Hard limits block at the cap (`AuroraMeter.with_quota/4`), metered features
-      count past their included allowance for billing, boolean features gate
-      access outright and integer features carry a plan value for
-      `AuroraMeter.feature_value/3`. See https://hexdocs.pm/aurora_meter/plans.html.
+      count past their included allowance for billing, counters measure without
+      ever blocking or billing, boolean features gate access outright and integer
+      features carry a plan value for `AuroraMeter.feature_value/3`.
+      See https://hexdocs.pm/aurora_meter/plans.html.
       \"\"\"
       use AuroraMeter.Plans
 

@@ -4,6 +4,58 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-11
+
+**No migration required** — the schema version stays 3.
+
+### Added
+
+- **`counter` feature kind** in the plans DSL: `counter :requests` declares a
+  feature that is measured but **never blocked and never billed**, for products
+  whose money lives in the credit ledger rather than in subscription overage.
+  `check/2` is `:ok`, `entitled?/2` is `true`, `remaining/2` is `:unlimited`,
+  and `reserve/3` admits unconditionally while still incrementing the counter.
+  `AuroraMeter.quota/2` reports `kind: :counter` with **`limit: nil`,
+  `included: nil` and `percent: nil`** — a counter has no denominator, so a
+  renderer must treat `nil` as "no bar" and can never render "0% of 0".
+  `AuroraMeter.Components.usage_meter/1` renders it as a bare count with no
+  progress bar. Replaces `metered(included: 0, unit_price: 0)`, which made
+  every unit read as overage against an allowance of zero. See ADR 0006 and
+  [docs/plans.md](docs/plans.md).
+- **Money series from the credit ledger** — `AuroraMeter.Credits.spend_history/2`
+  returns `[%{date, spent, granted, net, balance_after}]`, **zero-filled across
+  the whole range and sorted oldest first**, so a chart renders it with no gap
+  handling. Options: `:days` (default 30) or `:from`/`:to`, `:bucket`
+  (`:day` default, or `:month`) and `:kinds`. Buckets are UTC; `spent` and
+  `granted` are positive magnitudes; `balance_after` is the balance at the last
+  entry in the bucket and `nil` when the bucket has none. `:hold` and
+  `:release` are excluded everywhere (they move `held`, not `balance`) and are
+  rejected if passed in `:kinds`.
+- `AuroraMeter.Credits.spend_total/2` — `%{spent, granted, net, from, to}` over
+  the same range.
+- `AuroraMeter.Credits.summary/1` — balance, held, promotional, currency,
+  `spent_this_period` / `granted_this_period` over the configured period, and
+  `daily_burn` / `runway_days` from the trailing 30 days. Both are `nil` when
+  there is nothing honest to report (`runway_days` also when burn is zero).
+- `AuroraMeter.Credits.Money.format_compact/1` — `"$1.2k"`, `"$0.07"`,
+  `"$0.000015"` for short axis labels, never rounding a sub-cent amount away
+  to `"$0.00"`.
+- **Money components** (LiveView optional, as before):
+  `AuroraMeter.Components.spend_chart/1` (attrs `:points`, `:height`,
+  `:label`, `:show_grants`) and `AuroraMeter.Components.credit_summary/1`
+  (attr `:summary`). Inline SVG, `<title>` tooltips, no JavaScript, and
+  `currentColor` throughout so they inherit the host's design system. Amounts
+  render as dollars via `Money.format/2`; a zero-spend bucket renders a
+  baseline bar, never a gap.
+- The `AuroraMeter.Plan` `feature_config` type gains `{:counter}`, and the DSL exports
+  `counter: 1` for paren-free declarations via `import_deps: [:aurora_meter]`.
+
+### Changed
+
+- `AuroraMeter.quota/2`'s `kind` may now be `:counter`. Callers that already
+  handled `percent: nil` (boolean, integer and undeclared features) need no
+  change.
+
 ## [0.4.0] - 2026-09-10
 
 Schema version 3. Existing installs add one migration:

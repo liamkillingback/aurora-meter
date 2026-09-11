@@ -9,7 +9,7 @@ defmodule AuroraMeter.PlansTest do
 
   test "all/0 returns every defined plan" do
     plans = Plans.all()
-    assert plans |> Map.keys() |> Enum.sort() == [:free, :pro, :scale]
+    assert plans |> Map.keys() |> Enum.sort() == [:free, :payg, :pro, :scale]
     assert %Plan{id: :free, price: 0} = plans[:free]
   end
 
@@ -21,6 +21,7 @@ defmodule AuroraMeter.PlansTest do
   test "feature_config/2 returns the config tuple for each feature kind" do
     assert Plans.feature_config(:free, :ai_generations) == {:limit, 50, :hard}
     assert Plans.feature_config(:scale, :ai_generations) == {:metered, 1_000, 2}
+    assert Plans.feature_config(:payg, :requests) == {:counter}
     assert Plans.feature_config(:pro, :api_access) == {:feature, true}
     assert Plans.feature_config(:pro, :seats) == {:feature, 5}
     assert Plans.feature_config(:free, :unknown) == nil
@@ -69,6 +70,52 @@ defmodule AuroraMeter.PlansTest do
                use AuroraMeter.Plans
                plan :x do
                  feature :seats, "five"
+               end
+             end
+             """)
+           )
+  end
+
+  test "counter/1 declares a feature with no denominator at all" do
+    assert Plans.feature_config(:payg, :requests) == {:counter}
+
+    # A counter carries no value: it is measured, not declared.
+    assert Plans.feature_value(:payg, :requests) == nil
+    assert Plans.feature_value(:payg, :requests, :none) == :none
+  end
+
+  test "a counter may be declared in any plan and does not collide with other kinds" do
+    {{:module, module, _, _}, _} =
+      Code.eval_string("""
+      defmodule AuroraMeterCounterPlan#{System.unique_integer([:positive])} do
+        use AuroraMeter.Plans
+        plan :x do
+          counter :requests
+          limit :seats_used, 3, :hard
+          metered :tokens, included: 10, unit_price: 1
+          feature :api_access, true
+        end
+      end
+      """)
+
+    plan = module.__aurora_plans__()[:x]
+
+    assert plan.features == %{
+             requests: {:counter},
+             seats_used: {:limit, 3, :hard},
+             tokens: {:metered, 10, 1},
+             api_access: {:feature, true}
+           }
+  end
+
+  test "a counter declared twice still raises as a duplicate" do
+    assert catch_error(
+             Code.eval_string("""
+             defmodule AuroraMeterDupCounter do
+               use AuroraMeter.Plans
+               plan :x do
+                 counter :requests
+                 counter :requests
                end
              end
              """)

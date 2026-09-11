@@ -25,6 +25,12 @@ defmodule AuroraMeter.Plans do
           metered :ai_generations, included: 1_000, unit_price: 2
           feature :api_access, true
         end
+
+        plan :payg do
+          price 0
+          counter :requests
+          feature :api_access, true
+        end
       end
 
   Then point `config :aurora_meter, plans: MyApp.Plans`. Definitions are validated
@@ -36,7 +42,9 @@ defmodule AuroraMeter.Plans do
   @doc false
   defmacro __using__(_opts) do
     quote do
-      import AuroraMeter.Plans, only: [plan: 2, price: 1, limit: 3, metered: 2, feature: 2]
+      import AuroraMeter.Plans,
+        only: [plan: 2, price: 1, limit: 3, metered: 2, counter: 1, feature: 2]
+
       Module.register_attribute(__MODULE__, :aurora_plans, accumulate: true)
       @before_compile AuroraMeter.Plans
     end
@@ -51,7 +59,7 @@ defmodule AuroraMeter.Plans do
     end
   end
 
-  @doc "Declares a plan. Contains `price`, `limit`, `metered`, and `feature` calls."
+  @doc "Declares a plan. Contains `price`, `limit`, `metered`, `counter` and `feature` calls."
   defmacro plan(id, do: block) do
     quote do
       Module.delete_attribute(__MODULE__, :aurora_features)
@@ -91,6 +99,27 @@ defmodule AuroraMeter.Plans do
         __MODULE__,
         :aurora_features,
         {unquote(feature), {:metered, unquote(opts)[:included], unquote(opts)[:unit_price]}}
+      )
+    end
+  end
+
+  @doc """
+  Declares a counter feature: `counter :requests`.
+
+  A counter is **measured but never billed and never blocked** — the thing to
+  reach for when the money lives somewhere else (a prepaid credit ledger, a
+  usage-based invoice built outside Aurora Meter) and the plan only wants a
+  number on the dashboard. `check/2` is always `:ok`, `remaining/2` is
+  `:unlimited`, and `quota/2` reports `kind: :counter` with `limit`, `included`
+  and `percent` all `nil` — a counter has no denominator, so there is no bar to
+  draw. See ADR 0006.
+  """
+  defmacro counter(feature) do
+    quote do
+      Module.put_attribute(
+        __MODULE__,
+        :aurora_features,
+        {unquote(feature), {:counter}}
       )
     end
   end
@@ -186,28 +215,28 @@ defmodule AuroraMeter.Plans do
     :ok
   end
 
+  # One clause per valid shape, so the catch-all below is literally "anything
+  # else is a mistake". Adding a feature kind means adding a clause here, which
+  # is the point: an unvalidated kind would reach the runtime as a config no
+  # `case` in the library matches.
   @spec validate_feature!(atom(), {atom(), term()}) :: :ok
-  defp validate_feature!(id, {feature, config}) do
-    case config do
-      {:limit, n, :hard} when is_integer(n) and n >= 0 ->
-        :ok
+  defp validate_feature!(_id, {_feature, {:limit, n, :hard}}) when is_integer(n) and n >= 0,
+    do: :ok
 
-      {:metered, included, unit_price}
-      when is_integer(included) and included >= 0 and unit_price >= 0 ->
-        :ok
+  defp validate_feature!(_id, {_feature, {:metered, included, unit_price}})
+       when is_integer(included) and included >= 0 and unit_price >= 0,
+       do: :ok
 
-      {:feature, value} ->
-        if feature_value?(value),
-          do: :ok,
-          else: raise(ArgumentError, invalid_feature_message(id, feature, config))
+  defp validate_feature!(_id, {_feature, {:counter}}), do: :ok
 
-      _other ->
-        raise ArgumentError, invalid_feature_message(id, feature, config)
-    end
-  end
+  defp validate_feature!(_id, {_feature, {:feature, value}}) when is_boolean(value), do: :ok
 
-  @spec feature_value?(term()) :: boolean()
-  defp feature_value?(value), do: is_boolean(value) or (is_integer(value) and value >= 0)
+  defp validate_feature!(_id, {_feature, {:feature, value}})
+       when is_integer(value) and value >= 0,
+       do: :ok
+
+  defp validate_feature!(id, {feature, config}),
+    do: raise(ArgumentError, invalid_feature_message(id, feature, config))
 
   @spec invalid_feature_message(atom(), atom(), term()) :: String.t()
   defp invalid_feature_message(id, feature, config) do

@@ -62,7 +62,7 @@ node, so the entitlement check is also database-free per request.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.4"}]
+  [{:aurora_meter, "~> 0.5"}]
 end
 ```
 
@@ -116,6 +116,12 @@ defmodule MyApp.Plans do
     metered :ai_generations, included: 1_000, unit_price: 2
     feature :api_access, true
     feature :seats, 25
+  end
+
+  plan :payg do
+    price 0
+    counter :requests               # measured; never blocked, never billed
+    feature :api_access, true
   end
 end
 ```
@@ -184,6 +190,10 @@ AuroraMeter.with_quota(org, :ai_generations, fn -> run_generation() end)
 # Dashboard-ready snapshot
 AuroraMeter.quota(org, :ai_generations)
 # => %{kind: :hard, used: 6, limit: 1_000, remaining: 994, percent: 0, period: %{...}}
+
+# A counter is measured, never blocked, never billed — and has no denominator
+AuroraMeter.quota(org, :requests)
+# => %{kind: :counter, used: 6, limit: nil, included: nil, percent: nil, overage: 0, ...}
 ```
 
 `with_quota/4` reserves first (increment, compare, roll back on breach), runs the
@@ -222,6 +232,21 @@ fires telemetry, a PubSub message and an optional handler once per crossing.
 See the [credits guide](docs/credits.md). Stripe top-ups and auto-recharge are
 part of Pro.
 
+Chart the ledger with three reads. Every bucket in the range is present, so a
+chart never has to paper over a gap:
+
+```elixir
+Credits.spend_history(org, days: 30)
+# => [%{date: ~D[2026-08-13], spent: 0, granted: 0, net: 0, balance_after: nil},
+#     %{date: ~D[2026-08-14], spent: 420_000, granted: 0, net: -420_000, balance_after: 19_580_000}, ...]
+
+Credits.spend_total(org, days: 30)     # %{spent:, granted:, net:, from:, to:}
+Credits.summary(org)                   # balance, spend this period, daily_burn, runway_days
+```
+
+Holds and releases are excluded (they move `held`, not `balance`), buckets are
+UTC, and `bucket: :month` rolls the same series up by month.
+
 ### Live usage in LiveView
 
 Two drop-in components read the live ETS counters over PubSub. LiveView and
@@ -235,7 +260,14 @@ if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
 ```heex
 <.usage_meter tenant={@org} feature={:ai_generations} />
 <.usage_summary tenant={@org} />
+
+<.spend_chart points={AuroraMeter.Credits.spend_history(@org, days: 30)} />
+<.credit_summary summary={AuroraMeter.Credits.summary(@org)} />
 ```
+
+The money components are inline SVG with `<title>` tooltips and no JavaScript,
+and they paint with `currentColor`, so they take the colours your design system
+already set.
 
 ### Telemetry
 
@@ -283,9 +315,11 @@ a separate commercial package for when Stripe should start charging.
 |---|:-:|:-:|
 | ETS real-time counters | ✓ | ✓ |
 | Plan DSL and atomic `with_quota` gate | ✓ | ✓ |
+| Hard caps, metered overage and never-billed counters | ✓ | ✓ |
 | LiveView usage components | ✓ | ✓ |
 | Postgres persistence, daily history, telemetry | ✓ | ✓ |
 | Prepaid credit ledger (holds, settlements, promotional credit) | ✓ | ✓ |
+| Spend charts from the ledger (`spend_history`, `summary`, components) | ✓ | ✓ |
 | Stripe top-ups and auto-recharge | | ✓ |
 | Stripe Checkout and webhook sync | | ✓ |
 | Metered usage reported to Stripe Billing Meters | | ✓ |
@@ -315,7 +349,14 @@ metered-API SaaS on this core.
 
 ## Upgrading
 
-0.4 adds the credit ledger tables (schema version 3):
+**0.5 needs no migration** — the schema version stays 3. It adds the `counter`
+feature kind and the money series, both of which read tables 0.4 already
+created. If you were writing `metered(:f, included: 0, unit_price: 0)` to mean
+"count it but never bill it", switch it to `counter(:f)`: the dashboard stops
+calling every unit overage. See
+[ADR 0006](docs/adr/0006-counter-feature-kind.md).
+
+Coming from 0.3, 0.4 adds the credit ledger tables (schema version 3):
 
 ```bash
 mix aurora_meter.gen.migration -r MyApp.Repo --from 3

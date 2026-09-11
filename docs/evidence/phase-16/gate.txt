@@ -1,0 +1,40 @@
+Phase 16 — Counter features and ledger money series (0.5.0, schema version stays 3)
+Date: 2026-09-11
+
+mix check (format, compile --warnings-as-errors, credo --strict, dialyzer, test, docs):
+  credo:    441 mods/funs, found no issues
+  dialyzer: Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+  test:     Result: 182 passed (35 doctests, 4 properties, 143 tests)
+  docs:     built; one pre-existing warning (README links docs/evidence/phase-03/bench.md)
+
+No migration: both features read tables schema version 3 already created.
+
+Counter proof (test/aurora_meter/plans_test.exs, test/aurora_meter/entitlements_test.exs,
+test/aurora_meter/realtime_test.exs): counter/1 -> {:counter}; check/entitled?/remaining
+admit unconditionally; 40 concurrent with_quota/3 calls all succeed and the counter reads
+exactly 40; quota/2 reports kind: :counter with limit/included/percent all nil and
+overage 0; usage_meter/1 renders the bare count with no progressbar element and no "/ 0".
+
+Money series proof (test/aurora_meter/credits_series_test.exs): a three-day gap inside a
+range comes back as explicit zero buckets; month bucketing zero-fills August between July
+and September; a hold, a release and a settle of $1 report $1 spent (not $3, not $6); an
+:expire counts as spend; balance_after is the last entry in the bucket and nil when the
+bucket is empty; burn/runway are nil for a tenant that never spent, runway nil for zero
+burn, and runway 0 (never negative) for an overdrawn balance.
+
+Component proof (test/aurora_meter/realtime_test.exs, Floki): spend_chart/1 renders
+dollars and never raw micro; four buckets produce four bars with positive heights, three
+of them carrying aurora-spend-chart__bar--zero, so a zero-spend day is a baseline and not
+a gap; tooltips are <title> elements; no <script>, no colour literal, no style attribute.
+
+Pre-existing, unrelated: the cluster property at test/aurora_meter/cluster_test.exs:129
+fails on roughly one seed in five (seeds 1, 7 and 11 reproduce it), at HEAD as well as
+here. A net-zero sequence of deltas leaves no aurora_meter_counters row, so
+Storage.load_counter/3 returns nil where the property asserts 0. Untouched by this phase —
+it exercises the flusher and the cluster gossip, neither of which changed.
+
+Also fixed: test/mix/tasks/install_test.exs was async: true while Igniter.Test.test_project/1
+puts the generated project's config into the global application environment, so it could
+make an unrelated async database test see Demo.Repo. Now async: false.
+
+Decision record: docs/adr/0006-counter-feature-kind.md.

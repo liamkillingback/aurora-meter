@@ -59,6 +59,8 @@ defmodule AuroraMeter.Credits do
 
   alias AuroraMeter.Config
   alias AuroraMeter.Credits.Ledger
+  alias AuroraMeter.Credits.Series
+  alias AuroraMeter.Period
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Tenant
@@ -79,7 +81,51 @@ defmodule AuroraMeter.Credits do
           low_balance_threshold: integer() | nil
         }
 
+  @typedoc """
+  One bucket of a money series. `spent` and `granted` are positive magnitudes
+  (a chart never has to think about signs), `net` is `granted - spent`, and
+  `balance_after` is the ledger balance after the last entry in the bucket —
+  `nil` when the bucket has no entries at all.
+  """
+  @type money_point :: %{
+          date: Date.t(),
+          spent: non_neg_integer(),
+          granted: non_neg_integer(),
+          net: integer(),
+          balance_after: integer() | nil
+        }
+
+  @typedoc "Totals over a date range, with the range that produced them."
+  @type money_total :: %{
+          spent: non_neg_integer(),
+          granted: non_neg_integer(),
+          net: integer(),
+          from: Date.t(),
+          to: Date.t()
+        }
+
+  @typedoc """
+  Everything a credit-billed dashboard needs in one read: the balance, this
+  period's movement, and the burn/runway derived from the trailing 30 days.
+  """
+  @type summary :: %{
+          balance: integer(),
+          available: integer(),
+          held: non_neg_integer(),
+          promotional: non_neg_integer(),
+          currency: String.t(),
+          spent_this_period: non_neg_integer(),
+          granted_this_period: non_neg_integer(),
+          period: Period.t(),
+          daily_burn: non_neg_integer() | nil,
+          runway_days: non_neg_integer() | nil
+        }
+
   @default_history_kinds [:grant, :settle, :debit, :expire]
+
+  # The window `daily_burn` averages over. Long enough to survive a quiet
+  # weekend, short enough that a change in usage shows up within a month.
+  @burn_days 30
 
   @doc """
   Returns `tenant`'s balance snapshot; all zeros (and the configured currency)
@@ -346,6 +392,131 @@ defmodule AuroraMeter.Credits do
 
     Config.repo().all(query)
   end
+
+  @doc """
+  Returns `tenant`'s money movement as zero-filled buckets, oldest first.
+
+  Every bucket in the range is present — a bucket the ledger never touched is
+  `spent: 0, granted: 0, net: 0, balance_after: nil` — so a chart can render
+  the list straight through with no gap handling. Buckets are UTC.
+
+  Options:
+
+    * `:days` — how many days back from `:to`, default 30.
+    * `:from` / `:to` — explicit `Date` bounds (inclusive), overriding `:days`.
+    * `:bucket` — `:day` (default) or `:month`. A month bucket is dated its
+      first day; the first and last month of a range that does not start and
+      end on month boundaries are partial.
+    * `:kinds` — which kinds count as spend, default
+      `[:settle, :debit, :expire]`. `:hold` and `:release` move `held` rather
+      than `balance`, so they are never spend and are rejected.
+
+  ## Examples
+
+      AuroraMeter.Credits.spend_history(org, days: 3)
+      #=> [%{date: ~D[2026-09-09], spent: 0, granted: 0, net: 0, balance_after: nil},
+      #=>  %{date: ~D[2026-09-10], spent: 420_000, granted: 0, net: -420_000,
+      #=>    balance_after: 19_580_000},
+      #=>  %{date: ~D[2026-09-11], spent: 0, granted: 0, net: 0, balance_after: nil}]
+
+      AuroraMeter.Credits.spend_history(org, bucket: :month, days: 365)
+
+  """
+  @spec spend_history(term(), keyword()) :: [money_point()]
+  def spend_history(tenant, opts \\ []) do
+    {from, to} = Series.range(opts)
+
+    tenant
+    |> Tenant.to_key()
+    |> Series.history(from, to, Series.bucket(opts), Series.kinds(opts))
+  end
+
+  @doc """
+  Returns `tenant`'s totals over the same range `spend_history/2` covers, plus
+  the resolved range itself.
+
+  ## Examples
+
+      AuroraMeter.Credits.spend_total(org, days: 7)
+      #=> %{spent: 1_260_000, granted: 20_000_000, net: 18_740_000,
+      #=>   from: ~D[2026-09-05], to: ~D[2026-09-11]}
+
+  """
+  @spec spend_total(term(), keyword()) :: money_total()
+  def spend_total(tenant, opts \\ []) do
+    {from, to} = Series.range(opts)
+
+    totals =
+      tenant
+      |> Tenant.to_key()
+      |> Series.total(from, to, Series.kinds(opts))
+
+    Map.merge(totals, %{from: from, to: to})
+  end
+
+  @doc """
+  Returns everything a credit-billed dashboard needs about `tenant` in one map:
+  the balance snapshot, what moved this billing period, and the burn and runway
+  derived from the trailing #{@burn_days} days.
+
+  `daily_burn` is the mean spend per day over those #{@burn_days} days
+  (integer division, so a tenant spending a few micro-dollars a month burns
+  `0`), and is `nil` when the tenant has spent nothing at all. `runway_days` is
+  `available / daily_burn`, and is `nil` whenever `daily_burn` is `nil` or
+  zero — there is no honest number of days to show when nothing is being spent.
+  The period comes from the configured period source, the same one `quota/2`
+  reports.
+
+  ## Examples
+
+      AuroraMeter.Credits.summary(org)
+      #=> %{balance: 19_580_000, available: 19_580_000, held: 0, promotional: 0,
+      #=>   currency: "usd", spent_this_period: 420_000, granted_this_period: 20_000_000,
+      #=>   period: %{start: ~U[2026-09-01 00:00:00Z], end: ~U[2026-10-01 00:00:00Z],
+      #=>             source: :calendar},
+      #=>   daily_burn: 14_000, runway_days: 1_398}
+
+  """
+  @spec summary(term()) :: summary()
+  def summary(tenant) do
+    tenant_key = Tenant.to_key(tenant)
+    snapshot = balance(tenant)
+    period = Period.current(tenant)
+    this_period = Series.sum_between(tenant_key, period.start, period.end, Series.spend_kinds())
+    burn = daily_burn(tenant_key)
+
+    %{
+      balance: snapshot.balance,
+      available: snapshot.available,
+      held: snapshot.held,
+      promotional: snapshot.promotional,
+      currency: snapshot.currency,
+      spent_this_period: this_period.spent,
+      granted_this_period: this_period.granted,
+      period: period,
+      daily_burn: burn,
+      runway_days: runway_days(snapshot.available, burn)
+    }
+  end
+
+  @spec daily_burn(String.t()) :: non_neg_integer() | nil
+  defp daily_burn(tenant_key) do
+    to = Date.utc_today()
+    from = Date.add(to, -(@burn_days - 1))
+
+    case Series.total(tenant_key, from, to, Series.spend_kinds()) do
+      %{spent: 0} -> nil
+      %{spent: spent} -> div(spent, @burn_days)
+    end
+  end
+
+  # `nil` burn (nothing spent) and zero burn (spend too small to average to a
+  # micro-dollar a day) both mean "no honest runway"; so does an empty or
+  # overdrawn balance, which is `0` days rather than a negative number.
+  @spec runway_days(integer(), non_neg_integer() | nil) :: non_neg_integer() | nil
+  defp runway_days(_available, nil), do: nil
+  defp runway_days(_available, 0), do: nil
+  defp runway_days(available, burn), do: max(0, div(available, burn))
 
   @doc """
   Sets (or with `nil` clears) `tenant`'s own low-balance threshold in

@@ -21,10 +21,22 @@ defmodule AuroraMeter.Credits.Money do
       iex> AuroraMeter.Credits.Money.format(12_350_000)
       "$12.35"
 
+      iex> AuroraMeter.Credits.Money.format_compact(1_234_000_000)
+      "$1.2k"
+
   """
 
   @micro_per_dollar 1_000_000
   @micro_per_cent 10_000
+  @micro_per_thousand_dollars 1_000_000_000
+
+  # The magnitude at which a value *rounds up to* one of each unit, so
+  # `format_compact/1` never emits "$1000k": $999.95 is already "$1k".
+  @compact_units [
+    {999_950_000_000_000, 1_000_000_000_000_000, "B"},
+    {999_950_000_000, 1_000_000_000_000, "M"},
+    {999_950_000, @micro_per_thousand_dollars, "k"}
+  ]
 
   @typedoc "An amount in micro-dollars."
   @type micro :: integer()
@@ -127,6 +139,71 @@ defmodule AuroraMeter.Credits.Money do
 
     sign <> "$" <> Integer.to_string(div(units, whole)) <> fraction
   end
+
+  @doc """
+  Formats micro-dollars as a short label for a chart axis or a stat tile:
+  thousands, millions and billions collapse to one decimal (`"$1.2k"`, `"$3M"`),
+  ordinary amounts render as dollars and cents (`"$0.07"`), and a sub-cent
+  amount keeps just enough precision to stay non-zero (`"$0.000015"`) rather
+  than rounding away to `"$0.00"`.
+
+  Use `format/2` wherever the exact amount matters; this is for the places where
+  space matters more than the last decimal.
+
+  ## Examples
+
+      iex> AuroraMeter.Credits.Money.format_compact(1_234_000_000)
+      "$1.2k"
+
+      iex> AuroraMeter.Credits.Money.format_compact(70_000)
+      "$0.07"
+
+      iex> AuroraMeter.Credits.Money.format_compact(0)
+      "$0"
+
+      iex> AuroraMeter.Credits.Money.format_compact(2_000_000_000)
+      "$2k"
+
+      iex> AuroraMeter.Credits.Money.format_compact(-4_500_000_000_000)
+      "-$4.5M"
+
+      iex> AuroraMeter.Credits.Money.format_compact(15)
+      "$0.000015"
+
+  """
+  @spec format_compact(micro()) :: String.t()
+  def format_compact(0), do: "$0"
+
+  def format_compact(micro) when is_integer(micro) do
+    sign = if micro < 0, do: "-", else: ""
+    magnitude = abs(micro)
+
+    case Enum.find(@compact_units, fn {threshold, _scale, _suffix} -> magnitude >= threshold end) do
+      {_threshold, scale, suffix} -> sign <> scaled(magnitude, scale) <> suffix
+      nil -> sign <> sub_thousand(magnitude)
+    end
+  end
+
+  # One decimal place of `scale`, with a bare `.0` trimmed off.
+  @spec scaled(non_neg_integer(), pos_integer()) :: String.t()
+  defp scaled(magnitude, scale) do
+    tenths = round_div(magnitude, div(scale, 10))
+    whole = Integer.to_string(div(tenths, 10))
+
+    case rem(tenths, 10) do
+      0 -> "$" <> whole
+      tenth -> "$" <> whole <> "." <> Integer.to_string(tenth)
+    end
+  end
+
+  # Below a cent, two decimals would render every amount as "$0.00" — and
+  # sub-cent prices are exactly what the micro-dollar unit exists for — so fall
+  # back to full precision and trim the trailing zeros.
+  @spec sub_thousand(pos_integer()) :: String.t()
+  defp sub_thousand(magnitude) when magnitude < @micro_per_cent,
+    do: magnitude |> format(precision: 6) |> String.replace(~r/0+$/, "")
+
+  defp sub_thousand(magnitude), do: format(magnitude)
 
   # Integer division rounding half away from zero (`Kernel.round/1` semantics,
   # without going through a float).

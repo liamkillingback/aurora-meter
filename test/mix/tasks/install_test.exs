@@ -1,6 +1,10 @@
 defmodule Mix.Tasks.AuroraMeter.InstallTest do
   @moduledoc false
-  use ExUnit.Case, async: true
+  # async: false — `Igniter.Test.test_project/1` puts the generated project's
+  # config into the *global* application environment, so while this runs
+  # `AuroraMeter.Config.repo/0` briefly answers `Demo.Repo`. Racing it against
+  # an async test that touches the database fails that test, not this one.
+  use ExUnit.Case, async: false
 
   import Igniter.Test
 

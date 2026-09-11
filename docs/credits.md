@@ -25,6 +25,8 @@ Money.to_cents(12_350_000)                    # 1_235   (rounding: :round | :flo
 Money.from_decimal(Decimal.new("12.35"))      # 12_350_000
 Money.format(12_350_000)                      # "$12.35" (precision: 2 by default)
 Money.format(-1_000_000)                      # "-$1.00"
+Money.format_compact(1_234_000_000)           # "$1.2k"  (short axis labels)
+Money.format_compact(15)                      # "$0.000015" (never rounds to "$0.00")
 ```
 
 ## The balance
@@ -120,6 +122,108 @@ stamps the grant's `expired_at` so it is never processed twice.
 per grant. With several live promotional grants, the first to expire can take
 credit a later grant contributed. If you issue overlapping promotions, make the
 later one paid or an adjustment, or expire the earlier one first.
+
+
+## Money series
+
+Charting the ledger takes three reads, all of them keyed by the same tenant
+term and all of them in micro-dollars.
+
+```elixir
+Credits.spend_history(org, days: 30)
+# [%{date: ~D[2026-08-13], spent: 0, granted: 0, net: 0, balance_after: nil},
+#  %{date: ~D[2026-08-14], spent: 420_000, granted: 0, net: -420_000, balance_after: 19_580_000},
+#  ...]
+
+Credits.spend_total(org, days: 30)
+# %{spent: 1_260_000, granted: 20_000_000, net: 18_740_000,
+#   from: ~D[2026-08-13], to: ~D[2026-09-11]}
+
+Credits.summary(org)
+# %{balance: 19_580_000, available: 19_580_000, held: 0, promotional: 0, currency: "usd",
+#   spent_this_period: 420_000, granted_this_period: 20_000_000,
+#   period: %{start: ..., end: ..., source: :calendar},
+#   daily_burn: 14_000, runway_days: 1_398}
+```
+
+### What a point holds
+
+| Key | |
+|---|---|
+| `date` | the bucket, a `Date`; a month bucket is dated its **first day** |
+| `spent` | positive magnitude of the spend entries in the bucket |
+| `granted` | positive magnitude of the grants in the bucket |
+| `net` | `granted - spent`; negative on a spending day |
+| `balance_after` | the ledger balance after the **last** entry in the bucket, `nil` when the bucket has no entries |
+
+`spent` and `granted` are magnitudes, not signed deltas, so a chart never has
+to think about which way a number points.
+
+### Every bucket is present
+
+`spend_history/2` is **zero-filled across the whole range and sorted oldest
+first**. A day nothing happened on is `spent: 0, granted: 0, net: 0,
+balance_after: nil` — it is never missing. A chart can render the list straight
+through with no gap handling, and a quiet day draws a baseline rather than a
+hole. Buckets are UTC days (or UTC months); no local time zone is applied
+anywhere.
+
+### What counts as spend
+
+Spend is `[:settle, :debit, :expire]` and grants are `[:grant]`. **`:hold` and
+`:release` are excluded**: they move `held`, not `balance`, so counting a hold
+would double-count the money its settlement later charges, and a released hold
+would appear as spend that never happened. Passing either in `:kinds` raises
+rather than silently producing a wrong chart.
+
+An `:expire` *is* spend — promotional credit that left the balance is money the
+customer no longer has, and hiding it makes the balance line in the chart stop
+matching the balance in the header.
+
+### Options
+
+| Option | |
+|---|---|
+| `:days` | how far back from `:to`, default `30` |
+| `:from` / `:to` | explicit inclusive `Date` bounds, overriding `:days` |
+| `:bucket` | `:day` (default) or `:month` |
+| `:kinds` | which kinds count as spend, default `[:settle, :debit, :expire]` |
+
+`:bucket` and the range are independent: `spend_history(org, bucket: :month,
+days: 365)` gives roughly thirteen month buckets, of which the first and last
+are partial because the range does not start or end on a month boundary.
+
+### Burn and runway
+
+`summary/1` derives two figures from the **trailing 30 days**:
+
+- `daily_burn` — mean spend per day, by integer division. `nil` when the tenant
+  has spent nothing at all; `0` when the spend is real but too small to average
+  a micro-dollar a day.
+- `runway_days` — `available / daily_burn`, floored, never negative. `nil`
+  whenever `daily_burn` is `nil` **or zero**: there is no honest number of days
+  to show for a tenant who is not spending, and a dashboard must render the
+  absence rather than a large number or a `∞`.
+
+`spent_this_period` and `granted_this_period` use the configured period source
+(`AuroraMeter.Period`), the same window `AuroraMeter.quota/2` reports — a
+calendar month in the core, the Stripe subscription period under Pro.
+
+### Rendering it
+
+With the LiveView optional deps installed, two components draw this without any
+JavaScript (inline SVG, `<title>` tooltips, `currentColor` so they take your
+own text colour):
+
+```heex
+<.spend_chart points={AuroraMeter.Credits.spend_history(@org, days: 30)} />
+<.credit_summary summary={AuroraMeter.Credits.summary(@org)} />
+```
+
+`spend_chart/1` takes `:height` (default `120`), `:label` and `:show_grants`
+(default `true`, marking the buckets credit was added in). Amounts render as
+dollars through `Money.format/2`; a zero-spend bucket renders a baseline bar
+carrying the class `aurora-spend-chart__bar--zero`, never a gap.
 
 ## History
 
