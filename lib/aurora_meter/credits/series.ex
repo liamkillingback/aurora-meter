@@ -11,6 +11,13 @@ defmodule AuroraMeter.Credits.Series do
   # buckets is impossible to get subtly wrong the way an outer join on a
   # generated series is.
   #
+  # ADR: a `:reversal` — the debit a refund or chargeback writes — counts
+  # against `granted`, not as spend. It is money leaving the account that the
+  # tenant never used; reporting it as spend told a customer who had just been
+  # refunded that they had spent it, and inflated the burn rate the runway is
+  # derived from. `granted` can therefore go negative in a window whose refunds
+  # exceed its top-ups, and `net` stays the true balance delta.
+  #
   # ADR: `:hold` and `:release` are excluded from every aggregate. They move
   # `held`, never `balance` — counting a hold would double-count the money its
   # settlement later charges, and a released hold would show as spend that
@@ -32,12 +39,12 @@ defmodule AuroraMeter.Credits.Series do
   @typep point :: %{
            date: Date.t(),
            spent: non_neg_integer(),
-           granted: non_neg_integer(),
+           granted: integer(),
            net: integer(),
            balance_after: integer() | nil
          }
 
-  @typep totals :: %{spent: non_neg_integer(), granted: non_neg_integer(), net: integer()}
+  @typep totals :: %{spent: non_neg_integer(), granted: integer(), net: integer()}
 
   @doc "The kinds that move money out of the balance: the default for `:kinds`."
   @spec spend_kinds() :: [CreditTransaction.kind()]
@@ -127,16 +134,30 @@ defmodule AuroraMeter.Credits.Series do
       from(t in CreditTransaction,
         where: t.tenant_key == ^tenant_key,
         where: t.inserted_at >= ^from and t.inserted_at < ^to,
-        where: t.kind in ^(spend_kinds ++ @grant_kinds),
+        where: t.kind in ^(spend_kinds ++ @grant_kinds) or t.category == :reversal,
         select: %{
           spent:
             type(
-              sum(fragment("CASE WHEN ? THEN -? ELSE 0 END", t.kind in ^spend_kinds, t.amount)),
+              sum(
+                fragment(
+                  "CASE WHEN ? AND ? IS DISTINCT FROM 'reversal' THEN -? ELSE 0 END",
+                  t.kind in ^spend_kinds,
+                  t.category,
+                  t.amount
+                )
+              ),
               :integer
             ),
           granted:
             type(
-              sum(fragment("CASE WHEN ? THEN ? ELSE 0 END", t.kind in ^@grant_kinds, t.amount)),
+              sum(
+                fragment(
+                  "CASE WHEN ? OR ? = 'reversal' THEN ? ELSE 0 END",
+                  t.kind in ^@grant_kinds,
+                  t.category,
+                  t.amount
+                )
+              ),
               :integer
             )
         }
@@ -162,7 +183,7 @@ defmodule AuroraMeter.Credits.Series do
     from(t in CreditTransaction,
       where: t.tenant_key == ^tenant_key,
       where: t.inserted_at >= ^from_dt and t.inserted_at < ^to_dt,
-      where: t.kind in ^(spend_kinds ++ @grant_kinds),
+      where: t.kind in ^(spend_kinds ++ @grant_kinds) or t.category == :reversal,
       # `GROUP BY 1` (the first select item) rather than repeating the
       # expression: repeating it would emit a *different* parameter placeholder
       # for the unit, and Postgres matches GROUP BY expressions syntactically,
@@ -172,12 +193,26 @@ defmodule AuroraMeter.Credits.Series do
         date: type(fragment("date_trunc(?::text, ?)::date", ^unit, t.inserted_at), :date),
         spent:
           type(
-            sum(fragment("CASE WHEN ? THEN -? ELSE 0 END", t.kind in ^spend_kinds, t.amount)),
+            sum(
+              fragment(
+                "CASE WHEN ? AND ? IS DISTINCT FROM 'reversal' THEN -? ELSE 0 END",
+                t.kind in ^spend_kinds,
+                t.category,
+                t.amount
+              )
+            ),
             :integer
           ),
         granted:
           type(
-            sum(fragment("CASE WHEN ? THEN ? ELSE 0 END", t.kind in ^@grant_kinds, t.amount)),
+            sum(
+              fragment(
+                "CASE WHEN ? OR ? = 'reversal' THEN ? ELSE 0 END",
+                t.kind in ^@grant_kinds,
+                t.category,
+                t.amount
+              )
+            ),
             :integer
           ),
         # The balance after the newest entry in the bucket; `id` breaks the tie

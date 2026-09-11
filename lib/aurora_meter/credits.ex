@@ -40,7 +40,8 @@ defmodule AuroraMeter.Credits do
 
   Grants are `:paid` by default; a `:promotional` grant (a sign-up bonus, a
   goodwill top-up) is consumed before paid credit and may carry an
-  `:expires_at`. `expire_due/1` — run it from a scheduler — removes what is
+  `:expires_at`. `reverse/4` — a refund or chargeback — is exempt: it takes a
+  paid grant back and leaves the promotional figure alone. `expire_due/1` — run it from a scheduler — removes what is
   left of expired grants, never taking the balance below zero. It assumes at
   most one live promotional grant per tenant; see the credits guide.
 
@@ -317,12 +318,20 @@ defmodule AuroraMeter.Credits do
   gone whatever the ledger says, so refusing would only make the two disagree;
   the balance may go negative, which is the honest record of a debt. Still
   idempotent on `reference`.
+
+  The entry is categorised `:reversal`, which keeps it out of two places it
+  does not belong: it never consumes promotional credit (a refunded top-up
+  must not quietly spend a sign-up bonus, leaving nothing to expire), and
+  `spend_history/2` reports it against grants rather than as spend.
   """
   @spec reverse(term(), pos_integer(), String.t(), map()) ::
           {:ok, txn()} | {:error, :duplicate_reference}
   def reverse(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
-    Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata, allow_negative: true)
+    Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata,
+      allow_negative: true,
+      category: :reversal
+    )
   end
 
   @doc """

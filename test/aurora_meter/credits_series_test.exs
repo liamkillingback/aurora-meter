@@ -124,6 +124,39 @@ defmodule AuroraMeter.CreditsSeriesTest do
       assert point.balance_after == 17 * @dollar
     end
 
+    test "a reversal is taken off grants, not counted as spend" do
+      # A refund is money handed back, not money used. Counting it as spend
+      # told a refunded customer they had spent it, and inflated the burn rate
+      # the runway estimate divides by.
+      tenant = unique_tenant()
+      today = Date.utc_today()
+
+      backdate!(tenant, :grant, 20 * @dollar, today,
+        category: :paid,
+        balance_after: 20 * @dollar,
+        hour: 9
+      )
+
+      backdate!(tenant, :debit, -3 * @dollar, today, balance_after: 17 * @dollar, hour: 10)
+
+      backdate!(tenant, :debit, -8 * @dollar, today,
+        category: :reversal,
+        balance_after: 9 * @dollar,
+        hour: 11
+      )
+
+      [point] = Credits.spend_history(tenant, days: 1)
+
+      assert point.spent == 3 * @dollar
+      assert point.granted == 12 * @dollar
+      assert point.net == 9 * @dollar
+      assert point.balance_after == 9 * @dollar
+
+      assert %{spent: spent, granted: granted} = Credits.spend_total(tenant, days: 1)
+      assert spent == 3 * @dollar
+      assert granted == 12 * @dollar
+    end
+
     test "bucket: :month groups by UTC month and zero-fills the months between" do
       tenant = unique_tenant()
       to = ~D[2026-09-11]

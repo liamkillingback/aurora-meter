@@ -263,6 +263,44 @@ defmodule AuroraMeter.CreditsTest do
     end
   end
 
+  describe "reverse/4" do
+    test "takes the money back without consuming promotional credit" do
+      # A refund of a paid top-up used to eat the trial grant: `promotional`
+      # fell to zero, so `expire_due/1` had nothing left to reclaim and the
+      # grant stayed live for ever.
+      tenant = unique_tenant()
+      fund!(tenant, 500_000, category: :promotional)
+      fund!(tenant, @dollar, category: :paid)
+      assert %{balance: 1_500_000, promotional: 500_000} = Credits.balance(tenant)
+
+      assert {:ok, txn} = Credits.reverse(tenant, 400_000, "refund:#{tenant}")
+      assert txn.category == :reversal
+
+      assert %{balance: 1_100_000, promotional: 500_000} = Credits.balance(tenant)
+    end
+
+    test "still cannot push promotional above the balance" do
+      tenant = unique_tenant()
+      fund!(tenant, 500_000, category: :promotional)
+      fund!(tenant, 100_000, category: :paid)
+
+      # Only 400_000 of balance is left, so the promotional figure has to come
+      # down with it — the invariant outranks protecting the bonus.
+      assert {:ok, _} = Credits.reverse(tenant, 200_000, "refund:#{tenant}")
+      assert %{balance: 400_000, promotional: 400_000} = Credits.balance(tenant)
+    end
+
+    test "is idempotent on its reference and may go negative" do
+      tenant = unique_tenant()
+      fund!(tenant, 100_000, category: :paid)
+
+      assert {:ok, _} = Credits.reverse(tenant, 300_000, "refund:#{tenant}")
+      assert %{balance: -200_000} = Credits.balance(tenant)
+      assert {:error, :duplicate_reference} = Credits.reverse(tenant, 300_000, "refund:#{tenant}")
+      assert %{balance: -200_000} = Credits.balance(tenant)
+    end
+  end
+
   describe "promotional credit" do
     test "is consumed before paid credit" do
       tenant = unique_tenant()

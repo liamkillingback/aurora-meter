@@ -166,6 +166,7 @@ defmodule AuroraMeter.Credits.Ledger do
     # make the ledger disagree with reality; a negative balance is the honest
     # record of a debt.
     allow_negative? = Keyword.get(opts, :allow_negative, false)
+    category = Keyword.get(opts, :category)
 
     transact(fn repo ->
       row = locked_row(repo, tenant_key)
@@ -179,6 +180,7 @@ defmodule AuroraMeter.Credits.Ledger do
 
       apply_entry(repo, row, %{
         kind: :debit,
+        category: category,
         amount: -amount,
         reference: reference,
         metadata: Map.new(metadata)
@@ -416,6 +418,12 @@ defmodule AuroraMeter.Credits.Ledger do
   @spec promotional_delta(non_neg_integer(), map()) :: integer()
   defp promotional_delta(promotional, %{kind: :grant, category: :promotional, amount: amount}),
     do: promotional + amount
+
+  # A reversal takes back one specific paid grant, so it must not eat the
+  # promotional figure. Letting it meant refunding a paid top-up quietly
+  # consumed the trial grant's remaining value, leaving nothing for the
+  # expirer to reclaim and the grant live for ever.
+  defp promotional_delta(promotional, %{category: :reversal}), do: promotional
 
   defp promotional_delta(promotional, %{amount: amount}) when amount < 0,
     do: promotional + amount

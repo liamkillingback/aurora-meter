@@ -13,6 +13,11 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   refused. A `hold` carries `status` (`:pending`, `:settled`, `:released`) and,
   once settled, `settled_amount`; a promotional `grant` may carry `expires_at`
   and gets `expired_at` when `AuroraMeter.Credits.expire_due/1` consumes it.
+
+  `category` names where a grant's money came from (`:paid`, `:promotional`,
+  `:adjustment`) and, on a debit, marks `:reversal` — a refund or chargeback
+  taking a paid grant back. A reversal never consumes promotional credit and is
+  reported against grants rather than as spend.
   """
 
   use Ecto.Schema
@@ -20,12 +25,16 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   import Ecto.Changeset
 
   @type kind :: :grant | :hold | :settle | :release | :debit | :expire
-  @type category :: :paid | :promotional | :adjustment
+  @type category :: :paid | :promotional | :adjustment | :reversal
   @type status :: :pending | :settled | :released
   @type t :: %__MODULE__{}
 
   @kinds [:grant, :hold, :settle, :release, :debit, :expire]
-  @categories [:paid, :promotional, :adjustment]
+  @grant_categories [:paid, :promotional, :adjustment]
+  # `:reversal` is not a grant category: it marks the debit a refund or
+  # chargeback writes, so the ledger can tell money being handed back from
+  # money being spent.
+  @categories @grant_categories ++ [:reversal]
   @statuses [:pending, :settled, :released]
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -72,7 +81,7 @@ defmodule AuroraMeter.Schema.CreditTransaction do
 
   """
   @spec categories() :: [category()]
-  def categories, do: @categories
+  def categories, do: @grant_categories
 
   @doc "Builds a changeset for a ledger entry."
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
