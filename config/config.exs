@@ -18,7 +18,9 @@ if config_env() == :test do
   config :aurora_meter, AuroraMeter.TestRepo,
     username: "postgres",
     password: "postgres",
-    hostname: "localhost",
+    # DB_HOST as well as DB_PORT, so the suite can run inside a devcontainer
+    # where Postgres is a sibling service rather than localhost.
+    hostname: System.get_env("DB_HOST") || "localhost",
     port: String.to_integer(System.get_env("DB_PORT") || "5490"),
     database: "aurora_meter_test",
     pool: Ecto.Adapters.SQL.Sandbox,
