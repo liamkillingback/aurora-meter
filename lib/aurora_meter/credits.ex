@@ -217,6 +217,21 @@ defmodule AuroraMeter.Credits do
   end
 
   @doc """
+  Like `grant/3`, but says whether the entry was new or a reference that had
+  already been granted.
+
+  Decided under the balance row's lock, so two concurrent deliveries of the
+  same payment cannot both be told they are the new one — which is what
+  decides whether the host announces the payment.
+  """
+  @spec grant_with_status(term(), pos_integer(), keyword()) ::
+          {:ok, txn(), :new | :duplicate} | {:error, Ecto.Changeset.t()}
+  def grant_with_status(tenant, amount, opts)
+      when is_integer(amount) and amount > 0 and is_list(opts) do
+    Ledger.grant_with_status(Tenant.to_key(tenant), amount, opts)
+  end
+
+  @doc """
   Reserves `amount` micro-dollars of `tenant`'s available balance under
   `reference`, to be settled or released later.
 
@@ -292,6 +307,22 @@ defmodule AuroraMeter.Credits do
   def debit(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
     Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata)
+  end
+
+  @doc """
+  Takes `amount` back off `tenant` for money that has already left the payment
+  provider — a refund, a chargeback.
+
+  Unlike `debit/4` this is never refused for want of balance. The money is
+  gone whatever the ledger says, so refusing would only make the two disagree;
+  the balance may go negative, which is the honest record of a debt. Still
+  idempotent on `reference`.
+  """
+  @spec reverse(term(), pos_integer(), String.t(), map()) ::
+          {:ok, txn()} | {:error, :duplicate_reference}
+  def reverse(tenant, amount, reference, metadata \\ %{})
+      when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
+    Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata, allow_negative: true)
   end
 
   @doc """

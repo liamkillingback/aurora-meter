@@ -54,10 +54,20 @@ defmodule AuroraMeter.Credits.Ledger do
   @spec grant(String.t(), pos_integer(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, Ecto.Changeset.t()}
   def grant(tenant_key, amount, opts) do
+    case grant_with_status(tenant_key, amount, opts) do
+      {:ok, txn, _status} -> {:ok, txn}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc false
+  @spec grant_with_status(String.t(), pos_integer(), keyword()) ::
+          {:ok, CreditTransaction.t(), :new | :duplicate} | {:error, Ecto.Changeset.t()}
+  def grant_with_status(tenant_key, amount, opts) do
     reference = Keyword.fetch!(opts, :reference)
     category = Keyword.get(opts, :category, :paid)
 
-    transact(fn repo ->
+    transact_outcome(fn repo ->
       row = locked_row(repo, tenant_key)
 
       case find(repo, tenant_key, :grant, reference) do
@@ -75,6 +85,11 @@ defmodule AuroraMeter.Credits.Ledger do
           })
       end
     end)
+    |> case do
+      {:ok, %{txn: txn, duplicate: true}} -> {:ok, txn, :duplicate}
+      {:ok, %{txn: txn}} -> {:ok, txn, :new}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @spec hold(String.t(), pos_integer(), String.t(), keyword()) ::
@@ -143,14 +158,21 @@ defmodule AuroraMeter.Credits.Ledger do
     end)
   end
 
-  @spec debit(String.t(), pos_integer(), String.t(), map()) ::
+  @spec debit(String.t(), pos_integer(), String.t(), map(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, :insufficient_credits | :duplicate_reference}
-  def debit(tenant_key, amount, reference, metadata) do
+  def debit(tenant_key, amount, reference, metadata, opts \\ []) do
+    # `allow_negative` is for money that has already left the payment provider
+    # — a refund, a chargeback. Refusing those for want of balance would only
+    # make the ledger disagree with reality; a negative balance is the honest
+    # record of a debt.
+    allow_negative? = Keyword.get(opts, :allow_negative, false)
+
     transact(fn repo ->
       row = locked_row(repo, tenant_key)
 
       cond do
         find(repo, tenant_key, :debit, reference) -> repo.rollback(:duplicate_reference)
+        allow_negative? -> :ok
         not sufficient?(row, amount) -> repo.rollback(:insufficient_credits)
         true -> :ok
       end
@@ -301,12 +323,23 @@ defmodule AuroraMeter.Credits.Ledger do
 
   @spec transact((module() -> outcome())) :: {:ok, CreditTransaction.t()} | {:error, term()}
   defp transact(fun) do
+    case transact_outcome(fun) do
+      {:ok, outcome} -> {:ok, outcome.txn}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Same, but hands back the whole outcome — chiefly so a caller can learn
+  # whether an entry was new or a duplicate *from inside the row lock* rather
+  # than probing for it beforehand and racing a concurrent delivery.
+  @spec transact_outcome((module() -> outcome())) :: {:ok, outcome()} | {:error, term()}
+  defp transact_outcome(fun) do
     repo = Config.repo()
 
     case repo.transaction(fn -> fun.(repo) end) do
       {:ok, outcome} ->
         emit(outcome)
-        {:ok, outcome.txn}
+        {:ok, outcome}
 
       {:error, reason} ->
         {:error, reason}
