@@ -8,10 +8,13 @@ defmodule AuroraMeter.Counter do
   is pure ETS. Every mutation marks the key dirty (for the flusher) and touched
   (for the broadcaster).
 
-  Each row is `{key, value, pending_flush, pending_gossip}`:
+  Each row is `{key, value, pending_flush, pending_gossip, remote}`:
 
     * `value` is this node's view of the **cluster-wide** total
     * `pending_flush` is what this node has added since its last database flush
+    * `remote` is how much of `value` came from other nodes since the last
+      rebase, so anything reasoning about what the *database* holds can tell
+      that this node's view has moved for a reason the database has not
     * `pending_gossip` is what this node has added since its last PubSub tick
 
   The flusher writes `pending_flush` as a *delta* (`value = value + Δ`), so
@@ -48,6 +51,7 @@ defmodule AuroraMeter.Counter do
   @value 2
   @pending_flush 3
   @pending_gossip 4
+  @remote 5
 
   @doc "Increments a period counter by `qty` and returns the new value."
   @spec incr(String.t(), atom(), integer(), DateTime.t()) :: integer()
@@ -98,7 +102,7 @@ defmodule AuroraMeter.Counter do
   @spec all_for(String.t(), DateTime.t()) :: %{atom() => integer()}
   def all_for(tenant_key, period_start) do
     table()
-    |> :ets.match({{tenant_key, :"$1", period_start}, :"$2", :_, :_})
+    |> :ets.match({{tenant_key, :"$1", period_start}, :"$2", :_, :_, :_})
     |> Map.new(fn [feature, value] -> {feature, value} end)
   end
 
@@ -106,7 +110,7 @@ defmodule AuroraMeter.Counter do
   @spec warm_day_values(String.t(), atom()) :: %{Date.t() => integer()}
   def warm_day_values(tenant_key, feature) do
     table()
-    |> :ets.match({{tenant_key, feature, {:day, :"$1"}}, :"$2", :_, :_})
+    |> :ets.match({{tenant_key, feature, {:day, :"$1"}}, :"$2", :_, :_, :_})
     |> Map.new(fn [date, value] -> {date, value} end)
   end
 
@@ -152,11 +156,30 @@ defmodule AuroraMeter.Counter do
   @spec apply_remote(key(), integer()) :: :ok | :cold
   def apply_remote(key, delta) do
     if :ets.member(table(), key) do
-      :ets.update_counter(table(), key, {@value, delta})
+      # `@remote` as well as `@value`: another node's delta moves this node's
+      # view without moving the database, and it is gossiped from the hot path
+      # *before* that node flushes it. Anything reasoning about what the
+      # database holds has to know that happened — see `remote_since_rebase/1`.
+      :ets.update_counter(table(), key, [{@value, delta}, {@remote, delta}])
       :ets.insert(Store.touched_table(), {key})
       :ok
     else
       :cold
+    end
+  end
+
+  @doc """
+  How much of this key's value came from other nodes since the last rebase.
+
+  Zero means `base/1` really is what this node believes the database holds;
+  anything else means it is that plus deltas whose own nodes may not have
+  written them yet.
+  """
+  @spec remote_since_rebase(key()) :: non_neg_integer()
+  def remote_since_rebase(key) do
+    case :ets.lookup(table(), key) do
+      [{^key, _value, _pending_flush, _gossip, remote}] -> remote
+      [] -> 0
     end
   end
 
@@ -168,8 +191,12 @@ defmodule AuroraMeter.Counter do
   @spec rebase(key(), integer()) :: :ok | :cold
   def rebase(key, total) do
     case :ets.lookup(table(), key) do
-      [{^key, value, pending_flush, _gossip}] ->
-        :ets.update_counter(table(), key, {@value, total + pending_flush - value})
+      [{^key, value, pending_flush, _gossip, remote}] ->
+        :ets.update_counter(table(), key, [
+          {@value, total + pending_flush - value},
+          {@remote, -remote}
+        ])
+
         :ets.insert(Store.touched_table(), {key})
         :ok
 
@@ -182,7 +209,7 @@ defmodule AuroraMeter.Counter do
   @spec base(key()) :: integer() | nil
   def base(key) do
     case :ets.lookup(table(), key) do
-      [{^key, value, pending_flush, _}] -> value - pending_flush
+      [{^key, value, pending_flush, _gossip, _remote}] -> value - pending_flush
       [] -> nil
     end
   end
@@ -246,7 +273,7 @@ defmodule AuroraMeter.Counter do
   @spec read(key()) :: integer()
   defp read(key) do
     ensure_seeded(key)
-    [{^key, val, _, _}] = :ets.lookup(table(), key)
+    [{^key, val, _, _, _}] = :ets.lookup(table(), key)
     val
   end
 
@@ -258,7 +285,7 @@ defmodule AuroraMeter.Counter do
     if :ets.member(table(), key) do
       :ok
     else
-      :ets.insert_new(table(), {key, stored_value(key) || 0, 0, 0})
+      :ets.insert_new(table(), {key, stored_value(key) || 0, 0, 0, 0})
       :ok
     end
   end

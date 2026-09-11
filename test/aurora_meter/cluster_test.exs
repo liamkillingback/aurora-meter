@@ -240,6 +240,54 @@ defmodule AuroraMeter.ClusterTest do
       end
     end
 
+    test "a node that has heard gossip keeps its delta rather than guessing" do
+      # `Counter.base/1` is only "what the database holds" while nothing else
+      # has moved this node's view. Another node gossips its deltas from the
+      # hot path, before it flushes them, so on a cluster the base runs ahead
+      # of the database between flushes - and a check that read that as "the
+      # row moved, drop it" discarded real usage on every flush failure a
+      # clustered node ever had.
+      tenant = unique_tenant()
+      p = period(tenant)
+      AuroraMeter.track(tenant, :ops, 6)
+
+      # Another node's traffic, gossiped before it has been written anywhere.
+      Cluster.apply(:deltas, "other-node", [{{tenant, :ops, p}, 5}])
+
+      Application.put_env(:aurora_meter, :storage, TimingOutStorage)
+      on_exit(fn -> Application.delete_env(:aurora_meter, :storage) end)
+
+      log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, 0} = Flusher.flush() end)
+      assert log =~ "flush failed"
+
+      Application.delete_env(:aurora_meter, :storage)
+      {:ok, _n} = Flusher.flush()
+
+      # Six was written by the failing storage and six went back in, so the
+      # row is twelve - the old, honest over-count. What matters is that the
+      # usage is still there: nothing was thrown away because the view had
+      # moved for a reason the database had not.
+      assert Storage.load_counter(tenant, :ops, p) >= 6
+    end
+
+    test "gossip marks the key as no longer speaking for the database" do
+      # The signal the check above rests on: once another node's delta has been
+      # applied, this node's base is that node's word for something it may not
+      # have written yet, and a rebase on a real database total clears it.
+      tenant = unique_tenant()
+      p = period(tenant)
+      key = {tenant, :ops, p}
+      AuroraMeter.track(tenant, :ops, 6)
+
+      assert Counter.remote_since_rebase(key) == 0
+
+      Cluster.apply(:deltas, "other-node", [{key, 5}])
+      assert Counter.remote_since_rebase(key) == 5
+
+      Counter.rebase(key, 11)
+      assert Counter.remote_since_rebase(key) == 0
+    end
+
     test "the delta is not put back, so the next flush cannot bill it twice" do
       tenant = unique_tenant()
       p = period(tenant)

@@ -162,28 +162,41 @@ defmodule AuroraMeter.Flusher do
   # reason a flush failed at all — nothing committed and the delta goes back.
   @spec restore_unless_written(Counter.key(), integer(), atom()) :: :ok
   defp restore_unless_written(key, delta, kind) do
-    case {Counter.base(key), stored_total(key)} do
+    case {trusted_base(key), stored_total(key)} do
       {base, {:ok, total}} when is_integer(base) and total == base ->
         :ok
 
       {base, {:ok, total}} when is_integer(base) and total == base - delta ->
         Counter.restore_pending(key, delta)
 
-      {base, {:ok, total}} when is_integer(base) ->
-        # Another node wrote to this row in between, so neither answer can be
-        # proved. Losing one interval of usage is the lesser error: the other
-        # way charges for usage that may never have happened.
-        Counter.rebase(key, total)
-
-        Logger.error(
-          "AuroraMeter flush (#{kind}): dropped a delta of #{delta} for #{inspect(key)} — " <>
-            "the write failed but the row moved, so it cannot be told whether it landed"
+      {base, {:ok, _total}} when is_integer(base) ->
+        # Readable, trustworthy, and matching neither answer: another writer
+        # moved the row. Put the delta back rather than guess — usage this node
+        # really counted is not something to throw away on a maybe.
+        Logger.warning(
+          "AuroraMeter flush (#{kind}): #{inspect(key)} moved under a failed write; " <>
+            "restoring #{delta} without knowing whether it landed"
         )
 
-        :ok
-
-      _unreadable_or_cold ->
         Counter.restore_pending(key, delta)
+
+      _unreadable_untrusted_or_cold ->
+        Counter.restore_pending(key, delta)
+    end
+  end
+
+  # `Counter.base/1` is only "what the database holds" while nothing else has
+  # moved this node's view. Another node gossips its deltas from the hot path,
+  # *before* it flushes them, and `apply_remote/2` adds those to `value` — so on
+  # a cluster the base runs ahead of the database between flushes and the
+  # comparison below would read every failure as "the row moved". Read as
+  # "dropped", as it once was, that discarded real usage on every flush failure
+  # a clustered node ever had.
+  @spec trusted_base(Counter.key()) :: integer() | nil
+  defp trusted_base(key) do
+    case Counter.remote_since_rebase(key) do
+      0 -> Counter.base(key)
+      _gossiped -> nil
     end
   end
 
