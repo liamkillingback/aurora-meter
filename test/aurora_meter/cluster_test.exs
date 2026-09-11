@@ -210,6 +210,60 @@ defmodule AuroraMeter.ClusterTest do
     end
   end
 
+  describe "when the database write commits and then reports failure" do
+    defmodule TimingOutStorage do
+      @moduledoc false
+      @behaviour AuroraMeter.Storage
+
+      alias AuroraMeter.Storage.Ecto, as: EctoStorage
+
+      defdelegate upsert_counters(rows), to: EctoStorage
+      defdelegate load_counter(t, f, p), to: EctoStorage
+      defdelegate upsert_history(rows), to: EctoStorage
+      defdelegate load_history(t, f, d), to: EctoStorage
+      defdelegate load_history_range(t, f, from, to), to: EctoStorage
+      defdelegate get_subscription(t), to: EctoStorage
+      defdelegate put_subscription(attrs), to: EctoStorage
+      defdelegate insert_events(rows), to: EctoStorage
+      defdelegate stream_counters(p), to: EctoStorage
+
+      # Exactly the shape of a statement that times out client-side: the row
+      # is written, and then the caller is told the write failed.
+      def add_counters(rows) do
+        EctoStorage.add_counters(rows)
+        exit(:timeout)
+      end
+
+      def add_history(rows) do
+        EctoStorage.add_history(rows)
+        exit(:timeout)
+      end
+    end
+
+    test "the delta is not put back, so the next flush cannot bill it twice" do
+      tenant = unique_tenant()
+      p = period(tenant)
+      AuroraMeter.track(tenant, :ops, 6)
+
+      Application.put_env(:aurora_meter, :storage, TimingOutStorage)
+      on_exit(fn -> Application.delete_env(:aurora_meter, :storage) end)
+
+      log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, 0} = Flusher.flush() end)
+      assert log =~ "flush failed"
+
+      # The write really did land.
+      assert Storage.load_counter(tenant, :ops, p) == 6
+
+      Application.delete_env(:aurora_meter, :storage)
+      {:ok, _n} = Flusher.flush()
+
+      # Six, not twelve: the delta was checked against the row before being
+      # handed back, and the row already had it.
+      assert Storage.load_counter(tenant, :ops, p) == 6
+      assert AuroraMeter.usage(tenant, :ops) == 6
+    end
+  end
+
   describe "configuration" do
     test "the cluster process is supervised and subscribed by default" do
       assert is_pid(Process.whereis(Cluster))

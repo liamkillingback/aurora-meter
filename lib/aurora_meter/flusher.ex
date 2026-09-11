@@ -12,7 +12,9 @@ defmodule AuroraMeter.Flusher do
 
   Deleting the dirty mark per key (not the whole table) means a key re-marked
   mid-sweep survives to the next cycle. If the database write fails the taken
-  deltas are put back and re-marked dirty, the error is logged and reported via
+  deltas are put back — but only after reading the row back, since a statement
+  that timed out client-side may have committed anyway and re-adding its delta
+  would bill usage twice. The error is logged and reported via
   `[:aurora_meter, :flush, :error]`, and the process keeps running; a database
   outage costs latency, not usage. Period counters go to
   `aurora_meter_counters`, day buckets to `aurora_meter_history`.
@@ -132,7 +134,7 @@ defmodule AuroraMeter.Flusher do
 
   @spec keep_pending([{Counter.key(), integer()}], atom(), String.t()) :: false
   defp keep_pending(taken, kind, message) do
-    Enum.each(taken, fn {key, delta} -> Counter.restore_pending(key, delta) end)
+    Enum.each(taken, fn {key, delta} -> restore_unless_written(key, delta, kind) end)
 
     Logger.error(
       "AuroraMeter flush failed for #{kind} (#{length(taken)} keys kept pending): #{message}"
@@ -144,6 +146,62 @@ defmodule AuroraMeter.Flusher do
     })
 
     false
+  end
+
+  # A write that failed is not the same as a write that did not happen. A
+  # statement that times out client-side can have committed server-side a
+  # moment earlier, and putting its delta back then added the same usage to the
+  # database a second time — usage the customer never had, on their bill. So
+  # each key is checked against what its row actually holds before its delta
+  # goes back.
+  #
+  # `Counter.base/1` is this node's belief about the row *including* the delta
+  # just taken (taking moves the pending column, not the value), so a row that
+  # matches it is a row the write reached. A row short by exactly the delta is
+  # one it did not. If the database cannot be read either — which is the usual
+  # reason a flush failed at all — nothing committed and the delta goes back.
+  @spec restore_unless_written(Counter.key(), integer(), atom()) :: :ok
+  defp restore_unless_written(key, delta, kind) do
+    case {Counter.base(key), stored_total(key)} do
+      {base, {:ok, total}} when is_integer(base) and total == base ->
+        :ok
+
+      {base, {:ok, total}} when is_integer(base) and total == base - delta ->
+        Counter.restore_pending(key, delta)
+
+      {base, {:ok, total}} when is_integer(base) ->
+        # Another node wrote to this row in between, so neither answer can be
+        # proved. Losing one interval of usage is the lesser error: the other
+        # way charges for usage that may never have happened.
+        Counter.rebase(key, total)
+
+        Logger.error(
+          "AuroraMeter flush (#{kind}): dropped a delta of #{delta} for #{inspect(key)} — " <>
+            "the write failed but the row moved, so it cannot be told whether it landed"
+        )
+
+        :ok
+
+      _unreadable_or_cold ->
+        Counter.restore_pending(key, delta)
+    end
+  end
+
+  @spec stored_total(Counter.key()) :: {:ok, integer()} | :error
+  defp stored_total({tenant_key, feature, {:day, %Date{} = date}}) do
+    {:ok, Storage.load_history(tenant_key, feature, date) || 0}
+  rescue
+    _error -> :error
+  catch
+    _kind, _reason -> :error
+  end
+
+  defp stored_total({tenant_key, feature, %DateTime{} = period_start}) do
+    {:ok, Storage.load_counter(tenant_key, feature, period_start) || 0}
+  rescue
+    _error -> :error
+  catch
+    _kind, _reason -> :error
   end
 
   # Writes deltas and pairs the returned totals back with their ETS keys.
