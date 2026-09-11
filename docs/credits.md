@@ -345,10 +345,11 @@ the row that records its result is one atomic write.
 Every refusal — `:insufficient_credits`, `:duplicate_reference`,
 `:already_settled`, a grant a hold has spoken for — is decided **before**
 anything is written and comes back as `{:error, reason}` with your transaction
-still open and still yours to commit. Before 0.6 these refusals called
-`Repo.rollback/1`, which in a nested transaction marks the whole transaction
-whatever `:mode` you passed, so a duplicate webhook delivery took the host's
-own writes down with it.
+still open and still yours to commit. None of them calls `Repo.rollback/1`,
+deliberately: in a nested transaction a rollback marks the *whole* transaction
+whatever `:mode` you passed, so a duplicate webhook delivery would take the
+host's own writes down with it and fail its next statement on that
+connection.
 
 If you are testing this yourself, note that an `Ecto.Adapters.SQL.Sandbox`
 DataCase cannot see that class of bug: the sandbox holds a transaction of its

@@ -62,7 +62,7 @@ node, so the entitlement check is also database-free per request.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.5"}]
+  [{:aurora_meter, "~> 0.4"}]
 end
 ```
 

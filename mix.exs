@@ -1,7 +1,7 @@
 defmodule AuroraMeter.MixProject do
   use Mix.Project
 
-  @version "0.6.0"
+  @version "0.4.0"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do

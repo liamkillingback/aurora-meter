@@ -4,21 +4,140 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] - 2026-09-11
+## [0.4.0] - 2026-09-11
 
-**Schema versions 4 and 5.** Existing installs add one migration
-(`mix aurora_meter.gen.migration -r MyApp.Repo --from 4` generates it):
+The first release carrying code since 0.3.0 — 0.3.1 and 0.3.2 were
+documentation and package metadata only. It brings the prepaid credit ledger,
+the `counter` feature kind and the money series, together with a large body of
+correctness work from auditing all three against a live Stripe sandbox.
+
+**Schema versions 3, 4 and 5.** Existing installs add one migration
+(`mix aurora_meter.gen.migration -r MyApp.Repo --from 3` generates it):
 
 ```elixir
-def up, do: AuroraMeter.Migration.up(from: 4)
-def down, do: AuroraMeter.Migration.down(to: 4)
+def up, do: AuroraMeter.Migration.up(from: 3)
+def down, do: AuroraMeter.Migration.down(to: 3)
 ```
 
-Version 4 adds `promotional_after` to `aurora_meter_credit_transactions` and
-the ledger writes it on **every** entry, so this migration is required, not
-optional. Version 5 adds a partial index for the open-hold sweep.
+Version 3 is the credit ledger tables, version 4 adds `promotional_after` to
+every ledger entry, and version 5 a partial index for the open-hold sweep. All
+three are required: the ledger writes `promotional_after` on every entry.
+
+### Added
+
+- **Prepaid credit ledger** — `AuroraMeter.Credits`: `grant/3` (idempotent per
+  reference; `:paid`, `:promotional` or `:adjustment`), `hold/4`, `settle/3`,
+  `release/1`, `debit/4`, `with_credits/4` (hold, run, settle or release —
+  also on raise), `balance/1`, `available/1`, `sufficient?/2`, `history/2`,
+  `set_low_balance_threshold/2`, `expire_due/1`, `subscribe/1` and `topic/1`.
+  Amounts are integer micro-dollars; every write is a `FOR UPDATE` row lock
+  plus an append-only `aurora_meter_credit_transactions` entry, so concurrent
+  holds cannot overspend. Promotional credit is consumed first and can expire.
+  Requires the Ecto storage. See [docs/credits.md](docs/credits.md) and ADR 0005.
+- `AuroraMeter.Credits.Money` — `from_cents/1`, `to_cents/2`, `from_decimal/1`
+  and `format/2` for converting at the edges of the ledger.
+- **Integer features** in the plans DSL: `feature :seats, 5` declares a plan
+  value (always entitled, never metered) read with
+  `AuroraMeter.feature_value/3` or `AuroraMeter.Plans.feature_value/3`;
+  `quota/2` reports them as `kind: :feature` with a `value`.
+- Telemetry: `[:aurora_meter, :credits, kind]` for every ledger entry (with
+  `duplicate` and `overrun` in the metadata) and
+  `[:aurora_meter, :credits, :low_balance]` once per crossing; PubSub
+  `{:aurora_meter, :credits, ...}` and `{:aurora_meter, :low_balance, ...}` on
+  `AuroraMeter.Credits.topic/1`.
+- Config: `:credits_currency`, `:credits_overdraft_tolerance`,
+  `:credits_low_balance_threshold`, `:credits_low_balance_handler`.
+- `AuroraMeter.Test` — `fund!/3`, `drain!/1`, `credit_balance/1`.
+- `AuroraMeter.Schema.CreditBalance` and `AuroraMeter.Schema.CreditTransaction`.
+
+- **`counter` feature kind** in the plans DSL: `counter :requests` declares a
+  feature that is measured but **never blocked and never billed**, for products
+  whose money lives in the credit ledger rather than in subscription overage.
+  `check/2` is `:ok`, `entitled?/2` is `true`, `remaining/2` is `:unlimited`,
+  and `reserve/3` admits unconditionally while still incrementing the counter.
+  `AuroraMeter.quota/2` reports `kind: :counter` with **`limit: nil`,
+  `included: nil` and `percent: nil`** — a counter has no denominator, so a
+  renderer must treat `nil` as "no bar" and can never render "0% of 0".
+  `AuroraMeter.Components.usage_meter/1` renders it as a bare count with no
+  progress bar. Replaces `metered(included: 0, unit_price: 0)`, which made
+  every unit read as overage against an allowance of zero. See ADR 0006 and
+  [docs/plans.md](docs/plans.md).
+- **Money series from the credit ledger** — `AuroraMeter.Credits.spend_history/2`
+  returns `[%{date, spent, granted, net, balance_after}]`, **zero-filled across
+  the whole range and sorted oldest first**, so a chart renders it with no gap
+  handling. Options: `:days` (default 30) or `:from`/`:to`, `:bucket`
+  (`:day` default, or `:month`) and `:kinds`. Buckets are UTC; `spent` and
+  `granted` are positive magnitudes; `balance_after` is the balance at the last
+  entry in the bucket and `nil` when the bucket has none. `:hold` and
+  `:release` are excluded everywhere (they move `held`, not `balance`) and are
+  rejected if passed in `:kinds`.
+- `AuroraMeter.Credits.spend_total/2` — `%{spent, granted, net, from, to}` over
+  the same range.
+- `AuroraMeter.Credits.summary/1` — balance, held, promotional, currency,
+  `spent_this_period` / `granted_this_period` over the configured period, and
+  `daily_burn` / `runway_days` from the trailing 30 days. Both are `nil` when
+  there is nothing honest to report (`runway_days` also when burn is zero).
+- `AuroraMeter.Credits.Money.format_compact/1` — `"$1.2k"`, `"$0.07"`,
+  `"$0.000015"` for short axis labels, never rounding a sub-cent amount away
+  to `"$0.00"`.
+- **Money components** (LiveView optional, as before):
+  `AuroraMeter.Components.spend_chart/1` (attrs `:points`, `:height`,
+  `:label`, `:show_grants`) and `AuroraMeter.Components.credit_summary/1`
+  (attr `:summary`). Inline SVG, `<title>` tooltips, no JavaScript, and
+  `currentColor` throughout so they inherit the host's design system. Amounts
+  render as dollars via `Money.format/2`; a zero-spend bucket renders a
+  baseline bar, never a gap.
+- The `AuroraMeter.Plan` `feature_config` type gains `{:counter}`, and the DSL exports
+  `counter: 1` for paren-free declarations via `import_deps: [:aurora_meter]`.
+
+- `AuroraMeter.Credits.reverse/4` — takes credit back for money that has already
+  left the payment provider (a refund, a chargeback). Unlike `debit/3` it is
+  never refused for want of balance, because refusing would only make the ledger
+  disagree with reality; the balance may go negative, which is the honest record
+  of a debt. Still idempotent on the reference.
+- `AuroraMeter.Credits.grant_with_status/3` — reports new-or-duplicate from
+  inside the balance row's lock. Callers were probing for the reference
+  beforehand and racing: two concurrent deliveries of one payment both found
+  nothing, both called themselves new, and the host announced the payment twice.
+- `AuroraMeter.Credits.pending_holds/1` — open holds older than `:older_than`,
+  oldest first, optionally filtered by reference prefix. A hold is taken before
+  the row that remembers it exists, and those two cannot be one write, so a
+  process killed in between leaves money reserved against a tenant with nothing
+  pointing at it. Only the host can tell such a hold from work that is still
+  running, so the ledger's part is to list them.
+- `AuroraMeter.Counter.remote_since_rebase/1`.
+- `promotional_after` on every ledger entry (schema version 4), so the
+  promotional figure can be rebuilt from the log like `balance` and `held`
+  already could. It is consumed before paid credit and clamped to the balance
+  after every entry, so it moves for reasons no single `amount` explains; with
+  no snapshot the balance row was the only copy and nothing could tell a clamp
+  from a bug.
+
+### Changed
+
+- `AuroraMeter.quota/2` maps gain a `value` key (`nil` except for integer
+  features), and `kind` may now be `:feature` or `:counter`. Callers that
+  already handled `percent: nil` (boolean, integer and undeclared features)
+  need no change.
+
+- `AuroraMeter.Entitlements.reserve/3` gains an optional fourth argument, the
+  captured period start. `AuroraMeter.Counter.release/4` and `rebase/2` likewise
+  gain optional arguments. The existing arities still work unchanged.
+- `rebase/3` clears `remote` only for this node's own flush. A total announced by
+  another node is a database total *that* node saw, and this one may have applied
+  gossiped deltas since.
+- Test-database migrations are pinned to the version they add. Unpinned, `up()`
+  meant "everything known today", so a database created before a later version
+  existed and one created after it ran the same migration and ended with
+  different schemas — which is how the test database came to be missing the
+  version 5 index.
 
 ### Fixed
+
+The flusher, entitlement and plan-validation items affect code that shipped in
+0.3.x. The rest concern the credit ledger, the money series and the `counter`
+kind, all of which are new here — they are recorded because the behaviour is
+worth knowing, not because a published version carried the bug.
 
 - **A refusal no longer rolls back the caller's transaction.** Every refusal in
   the ledger — an already-settled hold, a duplicate reference, a balance that
@@ -75,140 +194,6 @@ optional. Version 5 adds a partial index for the open-hold sweep.
 - The `metered` plan validator guarded `unit_price` with `>= 0` alone, and every
   atom sorts above every number in Elixir — so `metered :x, included: 1000` with
   no price compiled and validated cleanly.
-
-### Added
-
-- `AuroraMeter.Credits.reverse/4` — takes credit back for money that has already
-  left the payment provider (a refund, a chargeback). Unlike `debit/3` it is
-  never refused for want of balance, because refusing would only make the ledger
-  disagree with reality; the balance may go negative, which is the honest record
-  of a debt. Still idempotent on the reference.
-- `AuroraMeter.Credits.grant_with_status/3` — reports new-or-duplicate from
-  inside the balance row's lock. Callers were probing for the reference
-  beforehand and racing: two concurrent deliveries of one payment both found
-  nothing, both called themselves new, and the host announced the payment twice.
-- `AuroraMeter.Credits.pending_holds/1` — open holds older than `:older_than`,
-  oldest first, optionally filtered by reference prefix. A hold is taken before
-  the row that remembers it exists, and those two cannot be one write, so a
-  process killed in between leaves money reserved against a tenant with nothing
-  pointing at it. Only the host can tell such a hold from work that is still
-  running, so the ledger's part is to list them.
-- `AuroraMeter.Counter.remote_since_rebase/1`.
-- `promotional_after` on every ledger entry (schema version 4), so the
-  promotional figure can be rebuilt from the log like `balance` and `held`
-  already could. It is consumed before paid credit and clamped to the balance
-  after every entry, so it moves for reasons no single `amount` explains; with
-  no snapshot the balance row was the only copy and nothing could tell a clamp
-  from a bug.
-
-### Changed
-
-- `AuroraMeter.Entitlements.reserve/3` gains an optional fourth argument, the
-  captured period start. `AuroraMeter.Counter.release/4` and `rebase/2` likewise
-  gain optional arguments. The existing arities still work unchanged.
-- `rebase/3` clears `remote` only for this node's own flush. A total announced by
-  another node is a database total *that* node saw, and this one may have applied
-  gossiped deltas since.
-- Test-database migrations are pinned to the version they add. Unpinned, `up()`
-  meant "everything known today", so a database created before a later version
-  existed and one created after it ran the same migration and ended with
-  different schemas — which is how the test database came to be missing the
-  version 5 index.
-
-## [0.5.0] - 2026-09-11
-
-**No migration required** — the schema version stays 3.
-
-### Added
-
-- **`counter` feature kind** in the plans DSL: `counter :requests` declares a
-  feature that is measured but **never blocked and never billed**, for products
-  whose money lives in the credit ledger rather than in subscription overage.
-  `check/2` is `:ok`, `entitled?/2` is `true`, `remaining/2` is `:unlimited`,
-  and `reserve/3` admits unconditionally while still incrementing the counter.
-  `AuroraMeter.quota/2` reports `kind: :counter` with **`limit: nil`,
-  `included: nil` and `percent: nil`** — a counter has no denominator, so a
-  renderer must treat `nil` as "no bar" and can never render "0% of 0".
-  `AuroraMeter.Components.usage_meter/1` renders it as a bare count with no
-  progress bar. Replaces `metered(included: 0, unit_price: 0)`, which made
-  every unit read as overage against an allowance of zero. See ADR 0006 and
-  [docs/plans.md](docs/plans.md).
-- **Money series from the credit ledger** — `AuroraMeter.Credits.spend_history/2`
-  returns `[%{date, spent, granted, net, balance_after}]`, **zero-filled across
-  the whole range and sorted oldest first**, so a chart renders it with no gap
-  handling. Options: `:days` (default 30) or `:from`/`:to`, `:bucket`
-  (`:day` default, or `:month`) and `:kinds`. Buckets are UTC; `spent` and
-  `granted` are positive magnitudes; `balance_after` is the balance at the last
-  entry in the bucket and `nil` when the bucket has none. `:hold` and
-  `:release` are excluded everywhere (they move `held`, not `balance`) and are
-  rejected if passed in `:kinds`.
-- `AuroraMeter.Credits.spend_total/2` — `%{spent, granted, net, from, to}` over
-  the same range.
-- `AuroraMeter.Credits.summary/1` — balance, held, promotional, currency,
-  `spent_this_period` / `granted_this_period` over the configured period, and
-  `daily_burn` / `runway_days` from the trailing 30 days. Both are `nil` when
-  there is nothing honest to report (`runway_days` also when burn is zero).
-- `AuroraMeter.Credits.Money.format_compact/1` — `"$1.2k"`, `"$0.07"`,
-  `"$0.000015"` for short axis labels, never rounding a sub-cent amount away
-  to `"$0.00"`.
-- **Money components** (LiveView optional, as before):
-  `AuroraMeter.Components.spend_chart/1` (attrs `:points`, `:height`,
-  `:label`, `:show_grants`) and `AuroraMeter.Components.credit_summary/1`
-  (attr `:summary`). Inline SVG, `<title>` tooltips, no JavaScript, and
-  `currentColor` throughout so they inherit the host's design system. Amounts
-  render as dollars via `Money.format/2`; a zero-spend bucket renders a
-  baseline bar, never a gap.
-- The `AuroraMeter.Plan` `feature_config` type gains `{:counter}`, and the DSL exports
-  `counter: 1` for paren-free declarations via `import_deps: [:aurora_meter]`.
-
-### Changed
-
-- `AuroraMeter.quota/2`'s `kind` may now be `:counter`. Callers that already
-  handled `percent: nil` (boolean, integer and undeclared features) need no
-  change.
-
-## [0.4.0] - 2026-09-10
-
-Schema version 3. Existing installs add one migration:
-
-```elixir
-def up, do: AuroraMeter.Migration.up(from: 3)
-def down, do: AuroraMeter.Migration.down(to: 3)
-```
-
-(`mix aurora_meter.gen.migration -r MyApp.Repo --from 3` generates it.)
-
-### Added
-
-- **Prepaid credit ledger** — `AuroraMeter.Credits`: `grant/3` (idempotent per
-  reference; `:paid`, `:promotional` or `:adjustment`), `hold/4`, `settle/3`,
-  `release/1`, `debit/4`, `with_credits/4` (hold, run, settle or release —
-  also on raise), `balance/1`, `available/1`, `sufficient?/2`, `history/2`,
-  `set_low_balance_threshold/2`, `expire_due/1`, `subscribe/1` and `topic/1`.
-  Amounts are integer micro-dollars; every write is a `FOR UPDATE` row lock
-  plus an append-only `aurora_meter_credit_transactions` entry, so concurrent
-  holds cannot overspend. Promotional credit is consumed first and can expire.
-  Requires the Ecto storage. See [docs/credits.md](docs/credits.md) and ADR 0005.
-- `AuroraMeter.Credits.Money` — `from_cents/1`, `to_cents/2`, `from_decimal/1`
-  and `format/2` for converting at the edges of the ledger.
-- **Integer features** in the plans DSL: `feature :seats, 5` declares a plan
-  value (always entitled, never metered) read with
-  `AuroraMeter.feature_value/3` or `AuroraMeter.Plans.feature_value/3`;
-  `quota/2` reports them as `kind: :feature` with a `value`.
-- Telemetry: `[:aurora_meter, :credits, kind]` for every ledger entry (with
-  `duplicate` and `overrun` in the metadata) and
-  `[:aurora_meter, :credits, :low_balance]` once per crossing; PubSub
-  `{:aurora_meter, :credits, ...}` and `{:aurora_meter, :low_balance, ...}` on
-  `AuroraMeter.Credits.topic/1`.
-- Config: `:credits_currency`, `:credits_overdraft_tolerance`,
-  `:credits_low_balance_threshold`, `:credits_low_balance_handler`.
-- `AuroraMeter.Test` — `fund!/3`, `drain!/1`, `credit_balance/1`.
-- `AuroraMeter.Schema.CreditBalance` and `AuroraMeter.Schema.CreditTransaction`.
-
-### Changed
-
-- `AuroraMeter.quota/2` maps gain a `value` key (`nil` except for
-  integer features) and `kind` may now be `:feature`.
 
 ## [0.3.2] - 2026-09-08
 
