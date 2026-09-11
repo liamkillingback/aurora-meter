@@ -27,7 +27,7 @@ defmodule AuroraMeter.Migration do
       (the prepaid ledger behind `AuroraMeter.Credits`)
   """
 
-  @latest 3
+  @latest 4
 
   @doc """
   The newest schema version this release of Aurora Meter knows about.
@@ -164,6 +164,38 @@ defmodule AuroraMeter.Migration.V2 do
   @spec down() :: :ok
   def down do
     drop_if_exists table(:aurora_meter_history)
+    :ok
+  end
+end
+
+defmodule AuroraMeter.Migration.V4 do
+  @moduledoc false
+
+  import Ecto.Migration
+
+  # `promotional_after`, so the promotional figure can be rebuilt from the log
+  # like `balance` and `held` already can.
+  #
+  # It is not a running sum of the entries: promotional credit is consumed
+  # before paid credit and is clamped to the balance after every entry, so the
+  # figure moves for reasons no single `amount` explains. With no snapshot the
+  # row on `aurora_meter_credit_balances` was the only copy, and nothing could
+  # tell a clamp from a bug.
+  @spec up() :: :ok
+  def up do
+    alter table(:aurora_meter_credit_transactions) do
+      add_if_not_exists :promotional_after, :bigint
+    end
+
+    :ok
+  end
+
+  @spec down() :: :ok
+  def down do
+    alter table(:aurora_meter_credit_transactions) do
+      remove_if_exists :promotional_after, :bigint
+    end
+
     :ok
   end
 end

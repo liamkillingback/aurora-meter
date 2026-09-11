@@ -8,6 +8,9 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   `held_after` snapshot the row after the entry, so the log alone reproduces
   every balance.
 
+  `balance_after`, `held_after` and `promotional_after` snapshot the row after
+  the entry, so the log alone reproduces every figure.
+
   `reference` is the caller's idempotency key: unique per `kind`, so a retried
   grant is returned instead of credited twice and a retried hold or debit is
   refused. A `hold` carries `status` (`:pending`, `:settled`, `:released`) and,
@@ -46,6 +49,11 @@ defmodule AuroraMeter.Schema.CreditTransaction do
     field :held_delta, :integer, default: 0
     field :balance_after, :integer
     field :held_after, :integer
+    # The promotional figure after this entry. Not derivable from `amount`:
+    # promotional credit is consumed before paid credit and clamped to the
+    # balance after every entry, so it moves for reasons an amount does not
+    # explain. Snapshotted like `balance_after` so the log stands on its own.
+    field :promotional_after, :integer
     field :reference, :string
     field :status, Ecto.Enum, values: @statuses
     field :settled_amount, :integer
@@ -56,7 +64,8 @@ defmodule AuroraMeter.Schema.CreditTransaction do
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end
 
-  @castable ~w(tenant_key kind category amount held_delta balance_after held_after reference
+  @castable ~w(tenant_key kind category amount held_delta balance_after held_after
+               promotional_after reference
                status settled_amount expires_at expired_at metadata)a
 
   @doc """

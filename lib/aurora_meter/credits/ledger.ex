@@ -394,6 +394,7 @@ defmodule AuroraMeter.Credits.Ledger do
         held_delta: held_delta,
         balance_after: balance_after,
         held_after: held_after,
+        promotional_after: promotional_after,
         inserted_at: DateTime.utc_now()
       })
 

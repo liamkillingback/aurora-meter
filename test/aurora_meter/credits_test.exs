@@ -301,6 +301,30 @@ defmodule AuroraMeter.CreditsTest do
     end
   end
 
+  describe "the ledger as a record" do
+    test "every entry says what the promotional figure became" do
+      # `balance` and `held` were always reconstructible from the log; the
+      # promotional figure was not. It is consumed before paid credit and
+      # clamped to the balance after every entry, so it moves for reasons no
+      # `amount` explains - and with no snapshot the balance row was the only
+      # copy of it, with nothing to tell a clamp from a bug.
+      tenant = unique_tenant()
+      fund!(tenant, 500_000, category: :promotional)
+      fund!(tenant, @dollar, category: :paid)
+      {:ok, _} = Credits.debit(tenant, 200_000, "spend:#{tenant}")
+      {:ok, _} = Credits.reverse(tenant, 1_200_000, "refund:#{tenant}")
+
+      assert %{promotional: promotional} = Credits.balance(tenant)
+
+      assert [%CreditTransaction{promotional_after: ^promotional} | _rest] =
+               Credits.history(tenant)
+
+      for txn <- Credits.history(tenant) do
+        assert is_integer(txn.promotional_after), "#{txn.kind} left no promotional snapshot"
+      end
+    end
+  end
+
   describe "promotional credit" do
     test "is consumed before paid credit" do
       tenant = unique_tenant()
