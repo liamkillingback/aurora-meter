@@ -379,8 +379,13 @@ defmodule AuroraMeter.Credits do
       #=> {:ok, result}
 
   """
-  @spec with_credits(term(), pos_integer(), String.t(), (-> {:ok, result, non_neg_integer()}
-                                                            | {:error, term()})) ::
+  @spec with_credits(
+          term(),
+          pos_integer(),
+          String.t(),
+          (-> {:ok, result, non_neg_integer()}
+              | {:error, term()})
+        ) ::
           {:ok, result} | {:error, :insufficient_credits | :duplicate_reference | term()}
         when result: term()
   def with_credits(tenant, estimate, reference, fun) when is_function(fun, 0) do
