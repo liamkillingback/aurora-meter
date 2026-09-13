@@ -11,7 +11,7 @@ documentation and package metadata only. It brings the prepaid credit ledger,
 the `counter` feature kind and the money series, together with a large body of
 correctness work from auditing all three against a live Stripe sandbox.
 
-**Schema versions 3, 4 and 5.** Existing installs add one migration
+**Schema versions 3 through 6.** Existing installs add one migration
 (`mix aurora_meter.gen.migration -r MyApp.Repo --from 3` generates it):
 
 ```elixir
@@ -20,8 +20,16 @@ def down, do: AuroraMeter.Migration.down(to: 3)
 ```
 
 Version 3 is the credit ledger tables, version 4 adds `promotional_after` to
-every ledger entry, and version 5 a partial index for the open-hold sweep. All
-three are required: the ledger writes `promotional_after` on every entry.
+every ledger entry, version 5 a partial index for the open-hold sweep, and
+version 6 idempotent flush receipts. All are required by this release.
+
+- Database flushes now commit immutable batches and receipts atomically.
+  Retrying an uncertain commit cannot count the same usage twice, even with
+  concurrent writers or gossip. A pending batch survives a Flusher restart;
+  later usage is flushed in a subsequent batch. `Flusher.flush/0` returns
+  `{:error, reason}` on failure. Custom storage adapters need `flush_batch/3`.
+- Promotional expiry replays consumption chronologically: spending before a
+  later grant existed cannot consume that grant or shield it from expiry.
 
 ### Added
 

@@ -8,7 +8,7 @@ defmodule AuroraMeter.Counter do
   is pure ETS. Every mutation marks the key dirty (for the flusher) and touched
   (for the broadcaster).
 
-  Each row is `{key, value, pending_flush, pending_gossip, remote}`:
+  Each row is `{key, value, pending_flush, pending_gossip, remote, reserved}`:
 
     * `value` is this node's view of the **cluster-wide** total
     * `pending_flush` is what this node has added since its last database flush
@@ -16,6 +16,8 @@ defmodule AuroraMeter.Counter do
       rebase, so anything reasoning about what the *database* holds can tell
       that this node's view has moved for a reason the database has not
     * `pending_gossip` is what this node has added since its last PubSub tick
+    * `reserved` occupies quota for unfinished `with_quota` work, but is not
+      flushed or gossiped as completed usage
 
   The flusher writes `pending_flush` as a *delta* (`value = value + Δ`), so
   nodes add up instead of overwriting one another, then re-bases `value` on
@@ -52,6 +54,7 @@ defmodule AuroraMeter.Counter do
   @pending_flush 3
   @pending_gossip 4
   @remote 5
+  @reserved 6
 
   @doc "Increments a period counter by `qty` and returns the new value."
   @spec incr(String.t(), atom(), integer(), DateTime.t()) :: integer()
@@ -67,19 +70,50 @@ defmodule AuroraMeter.Counter do
   Increments first; if the new value exceeds `limit` it rolls the increment back
   and returns `{:error, :limit_exceeded}`. A `nil` limit always succeeds.
   """
-  @spec reserve(String.t(), atom(), integer(), DateTime.t(), non_neg_integer() | nil) ::
+  @spec reserve(String.t(), atom(), integer(), DateTime.t(), non_neg_integer() | nil, boolean()) ::
           :ok | {:error, :limit_exceeded}
-  def reserve(tenant_key, feature, qty, period_start, limit) do
+  def reserve(tenant_key, feature, qty, period_start, limit, deferred \\ false) do
     key = {tenant_key, feature, period_start}
-    new = bump(key, qty)
+    new = if deferred, do: reserve_pending(key, qty), else: bump(key, qty)
 
     if is_integer(limit) and new > limit do
-      bump(key, -qty)
+      if deferred, do: release_work(tenant_key, feature, qty, period_start), else: bump(key, -qty)
       {:error, :limit_exceeded}
     else
-      bump_history(tenant_key, feature, qty, Date.utc_today())
+      unless deferred, do: bump_history(tenant_key, feature, qty, Date.utc_today())
       :ok
     end
+  end
+
+  @doc false
+  @spec commit_work(String.t(), atom(), integer(), DateTime.t(), Date.t()) :: :ok
+  def commit_work(tenant_key, feature, qty, period_start, on) do
+    key = {tenant_key, feature, period_start}
+
+    :ets.update_counter(table(), key, [
+      {@reserved, -qty},
+      {@pending_flush, qty},
+      {@pending_gossip, qty}
+    ])
+
+    mark_dirty(key)
+    bump_history(tenant_key, feature, qty, on)
+  end
+
+  @doc false
+  @spec release_work(String.t(), atom(), integer(), DateTime.t()) :: :ok
+  def release_work(tenant_key, feature, qty, period_start) do
+    key = {tenant_key, feature, period_start}
+    :ets.update_counter(table(), key, [{@value, -qty}, {@reserved, -qty}])
+    :ets.insert(Store.touched_table(), {key})
+    :ok
+  end
+
+  defp reserve_pending(key, qty) do
+    ensure_seeded(key)
+    [new, _reserved] = :ets.update_counter(table(), key, [{@value, qty}, {@reserved, qty}])
+    :ets.insert(Store.touched_table(), {key})
+    new
   end
 
   @doc """
@@ -110,7 +144,7 @@ defmodule AuroraMeter.Counter do
   @spec all_for(String.t(), DateTime.t()) :: %{atom() => integer()}
   def all_for(tenant_key, period_start) do
     table()
-    |> :ets.match({{tenant_key, :"$1", period_start}, :"$2", :_, :_, :_})
+    |> :ets.match({{tenant_key, :"$1", period_start}, :"$2", :_, :_, :_, :_})
     |> Map.new(fn [feature, value] -> {feature, value} end)
   end
 
@@ -118,7 +152,7 @@ defmodule AuroraMeter.Counter do
   @spec warm_day_values(String.t(), atom()) :: %{Date.t() => integer()}
   def warm_day_values(tenant_key, feature) do
     table()
-    |> :ets.match({{tenant_key, feature, {:day, :"$1"}}, :"$2", :_, :_, :_})
+    |> :ets.match({{tenant_key, feature, {:day, :"$1"}}, :"$2", :_, :_, :_, :_})
     |> Map.new(fn [date, value] -> {date, value} end)
   end
 
@@ -186,7 +220,7 @@ defmodule AuroraMeter.Counter do
   @spec remote_since_rebase(key()) :: non_neg_integer()
   def remote_since_rebase(key) do
     case :ets.lookup(table(), key) do
-      [{^key, _value, _pending_flush, _gossip, remote}] -> remote
+      [{^key, _value, _pending_flush, _gossip, remote, _reserved}] -> remote
       [] -> 0
     end
   end
@@ -206,11 +240,11 @@ defmodule AuroraMeter.Counter do
   @spec rebase(key(), integer(), :flush | :gossip) :: :ok | :cold
   def rebase(key, total, source \\ :flush) do
     case :ets.lookup(table(), key) do
-      [{^key, value, pending_flush, _gossip, remote}] ->
+      [{^key, value, pending_flush, _gossip, remote, reserved}] ->
         clear_remote = if source == :flush, do: -remote, else: 0
 
         :ets.update_counter(table(), key, [
-          {@value, total + pending_flush - value},
+          {@value, total + pending_flush + reserved - value},
           {@remote, clear_remote}
         ])
 
@@ -226,8 +260,11 @@ defmodule AuroraMeter.Counter do
   @spec base(key()) :: integer() | nil
   def base(key) do
     case :ets.lookup(table(), key) do
-      [{^key, value, pending_flush, _gossip, _remote}] -> value - pending_flush
-      [] -> nil
+      [{^key, value, pending_flush, _gossip, _remote, reserved}] ->
+        value - pending_flush - reserved
+
+      [] ->
+        nil
     end
   end
 
@@ -290,7 +327,7 @@ defmodule AuroraMeter.Counter do
   @spec read(key()) :: integer()
   defp read(key) do
     ensure_seeded(key)
-    [{^key, val, _, _, _}] = :ets.lookup(table(), key)
+    [{^key, val, _, _, _, _}] = :ets.lookup(table(), key)
     val
   end
 
@@ -302,7 +339,7 @@ defmodule AuroraMeter.Counter do
     if :ets.member(table(), key) do
       :ok
     else
-      :ets.insert_new(table(), {key, stored_value(key) || 0, 0, 0, 0})
+      :ets.insert_new(table(), {key, stored_value(key) || 0, 0, 0, 0, 0})
       :ok
     end
   end

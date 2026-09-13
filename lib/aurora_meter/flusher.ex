@@ -1,52 +1,49 @@
 defmodule AuroraMeter.Flusher do
   @moduledoc """
-  Periodically persists dirty ETS counters to the database, and once more on
-  shutdown so a deploy never drops the last interval of usage.
+  Persists buffered usage in idempotent database batches.
 
-  Each cycle snapshots the dirty-key set and, per key, deletes the dirty mark
-  and **takes the pending delta** (what this node added since its last flush).
-  Deltas are written with `value = value + Δ` (`AuroraMeter.Storage.add_counters/1`),
-  so several nodes flushing the same counter add up instead of overwriting one
-  another. The database returns the resulting totals; this node re-bases its
-  view on them and announces them to the cluster (`AuroraMeter.Cluster`).
+  Each immutable batch has a UUID. Storage commits its receipt and counter
+  and history deltas together. An uncertain response retries the same batch,
+  even if another node has since written those counters.
 
-  Deleting the dirty mark per key (not the whole table) means a key re-marked
-  mid-sweep survives to the next cycle. If the database write fails the taken
-  deltas are put back — but only after reading the row back, since a statement
-  that timed out client-side may have committed anyway and re-adding its delta
-  would bill usage twice. The error is logged and reported via
-  `[:aurora_meter, :flush, :error]`, and the process keeps running; a database
-  outage costs latency, not usage. Period counters go to
-  `aurora_meter_counters`, day buckets to `aurora_meter_history`.
+  Pending batches live in Store-owned ETS and survive a Flusher restart.
+  Loss of the Store or VM can lose unflushed usage, as with other buffered
+  metering; use durable tracking when that loss is unacceptable.
   """
-
   use GenServer
-
   require Logger
-
   alias AuroraMeter.Cluster
+  alias AuroraMeter.Config
   alias AuroraMeter.Counter
   alias AuroraMeter.Storage
+  alias AuroraMeter.Store
 
   @doc false
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
-  @doc "Flushes dirty counters now, returning the number of keys persisted."
-  @spec flush() :: {:ok, non_neg_integer()}
+  @doc """
+  Flushes pending usage. An error retains the batch for an idempotent retry.
+
+  ## Examples
+
+      {:ok, count} = AuroraMeter.Flusher.flush()
+      is_integer(count)
+      #=> true
+
+  """
+  @spec flush() :: {:ok, non_neg_integer()} | {:error, term()}
   def flush, do: GenServer.call(__MODULE__, :flush, 30_000)
 
-  @impl GenServer
+  @impl true
   def init(_opts) do
-    # Trap exits so `terminate/2` runs on a supervisor shutdown and the final
-    # flush happens before the VM (and the repo) go away.
     Process.flag(:trap_exit, true)
-    interval = AuroraMeter.Config.flush_interval()
+    interval = Config.flush_interval()
     schedule(interval)
     {:ok, %{interval: interval}}
   end
 
-  @impl GenServer
+  @impl true
   def handle_info(:flush, state) do
     do_flush()
     schedule(state.interval)
@@ -55,199 +52,75 @@ defmodule AuroraMeter.Flusher do
 
   def handle_info(_other, state), do: {:noreply, state}
 
-  @impl GenServer
-  def handle_call(:flush, _from, state) do
-    {:reply, {:ok, do_flush()}, state}
-  end
+  @impl true
+  def handle_call(:flush, _from, state), do: {:reply, do_flush(), state}
 
-  @impl GenServer
+  @impl true
   def terminate(_reason, _state) do
-    do_flush()
+    with {:ok, _} <- do_flush(), do: do_flush()
     :ok
   end
 
-  @spec schedule(pos_integer()) :: reference()
   defp schedule(interval), do: Process.send_after(self(), :flush, interval)
 
-  @spec do_flush() :: non_neg_integer()
   defp do_flush do
-    taken =
-      Counter.dirty_keys()
-      |> Enum.map(fn key ->
-        Counter.clear_dirty(key)
-        {key, Counter.take_pending(key, :flush)}
-      end)
-      |> Enum.reject(fn {_key, delta} -> delta == 0 end)
+    case batch() do
+      nil -> {:ok, 0}
+      batch -> persist(batch)
+    end
+  rescue
+    error -> failed(Exception.message(error))
+  catch
+    kind, reason -> failed({kind, reason})
+  end
 
-    {history, period} = Enum.split_with(taken, fn {key, _} -> Counter.history_key?(key) end)
-
-    counter_rows =
-      for {{tenant_key, feature, period_start}, delta} <- period do
-        %{tenant_key: tenant_key, feature: feature, period_start: period_start, delta: delta}
-      end
-
-    history_rows =
-      for {{tenant_key, feature, {:day, date}}, delta} <- history do
-        %{tenant_key: tenant_key, feature: feature, date: date, delta: delta}
-      end
-
-    # Each batch succeeds or fails on its own. They were two separate
-    # statements under one rescue, so a failure in the second restored the
-    # pending deltas for *both* — including the period counters whose write
-    # had already committed, and the next flush added them to Postgres a
-    # second time. Usage a customer never had, billed.
-    #
-    # `catch` as well as `rescue`: an exit out of insert_all (a pool timeout,
-    # say) unwound past the rescue with `take_pending` having already zeroed
-    # the pending column, losing that interval's usage for good.
-    {counter_totals, counter_ok?} = flush_batch(counter_rows, :counters, period)
-    {history_totals, history_ok?} = flush_batch(history_rows, :history, history)
-
-    totals = counter_totals ++ history_totals
-    Enum.each(totals, fn {key, total} -> Counter.rebase(key, total) end)
-    Cluster.publish_totals(totals)
-
-    if counter_ok? and history_ok? do
-      delta_sum = taken |> Enum.map(&elem(&1, 1)) |> Enum.sum()
-      count = length(taken)
-      :telemetry.execute([:aurora_meter, :flush], %{count: count, delta_sum: delta_sum}, %{})
-      count
-    else
-      0
+  defp batch do
+    case :ets.lookup(Store.flush_batches_table(), :pending) do
+      [{:pending, batch}] -> batch
+      [] -> Store.snapshot_flush_batch()
     end
   end
 
-  # Writes one batch, and on failure puts back only that batch's deltas so the
-  # next flush retries exactly what did not land.
-  @spec flush_batch([map()], :counters | :history, [{Counter.key(), integer()}]) ::
-          {[{Counter.key(), integer()}], boolean()}
-  defp flush_batch([], _kind, _taken), do: {[], true}
+  defp persist(batch) do
+    case Storage.flush_batch(batch.id, batch.counters, batch.history) do
+      {:ok, %{counters: counters, history: history}} ->
+        originals = Map.new(batch.taken, fn {key, _} -> {triple(key), key} end)
+        totals = Enum.map(counters ++ history, &{Map.fetch!(originals, triple(&1)), &1.value})
+        Enum.each(totals, fn {key, total} -> Counter.rebase(key, total) end)
+        :ets.delete(Store.flush_batches_table(), :pending)
+        Cluster.publish_totals(totals)
+        count = length(batch.taken)
+        delta_sum = Enum.sum(Enum.map(batch.taken, &elem(&1, 1)))
+        :telemetry.execute([:aurora_meter, :flush], %{count: count, delta_sum: delta_sum}, %{})
+        {:ok, count}
 
-  defp flush_batch(rows, kind, taken) do
-    {add(rows, kind, taken), true}
-  rescue
-    error -> {[], keep_pending(taken, kind, Exception.message(error))}
-  catch
-    kind_of_exit, reason ->
-      {[], keep_pending(taken, kind, "#{kind_of_exit}: #{inspect(reason)}")}
-  end
-
-  @spec keep_pending([{Counter.key(), integer()}], atom(), String.t()) :: false
-  defp keep_pending(taken, kind, message) do
-    Enum.each(taken, fn {key, delta} -> restore_unless_written(key, delta, kind) end)
-
-    Logger.error(
-      "AuroraMeter flush failed for #{kind} (#{length(taken)} keys kept pending): #{message}"
-    )
-
-    :telemetry.execute([:aurora_meter, :flush, :error], %{count: length(taken)}, %{
-      kind: kind,
-      error: message
-    })
-
-    false
-  end
-
-  # A write that failed is not the same as a write that did not happen. A
-  # statement that times out client-side can have committed server-side a
-  # moment earlier, and putting its delta back then added the same usage to the
-  # database a second time — usage the customer never had, on their bill. So
-  # each key is checked against what its row actually holds before its delta
-  # goes back.
-  #
-  # `Counter.base/1` is this node's belief about the row *including* the delta
-  # just taken (taking moves the pending column, not the value), so a row that
-  # matches it is a row the write reached. A row short by exactly the delta is
-  # one it did not. If the database cannot be read either — which is the usual
-  # reason a flush failed at all — nothing committed and the delta goes back.
-  @spec restore_unless_written(Counter.key(), integer(), atom()) :: :ok
-  defp restore_unless_written(key, delta, kind) do
-    case {trusted_base(key), stored_total(key)} do
-      {base, {:ok, total}} when is_integer(base) and total == base ->
-        :ok
-
-      {base, {:ok, total}} when is_integer(base) and total == base - delta ->
-        Counter.restore_pending(key, delta)
-
-      {base, {:ok, _total}} when is_integer(base) ->
-        # Readable, trustworthy, and matching neither answer: another writer
-        # moved the row. Put the delta back rather than guess — usage this node
-        # really counted is not something to throw away on a maybe.
-        Logger.warning(
-          "AuroraMeter flush (#{kind}): #{inspect(key)} moved under a failed write; " <>
-            "restoring #{delta} without knowing whether it landed"
-        )
-
-        Counter.restore_pending(key, delta)
-
-      _unreadable_untrusted_or_cold ->
-        Counter.restore_pending(key, delta)
+      {:error, reason} ->
+        failed(reason)
     end
   end
 
-  # `Counter.base/1` is only "what the database holds" while nothing else has
-  # moved this node's view. Another node gossips its deltas from the hot path,
-  # *before* it flushes them, and `apply_remote/2` adds those to `value` — so on
-  # a cluster the base runs ahead of the database between flushes and the
-  # comparison below would read every failure as "the row moved". Read as
-  # "dropped", as it once was, that discarded real usage on every flush failure
-  # a clustered node ever had.
-  @spec trusted_base(Counter.key()) :: integer() | nil
-  defp trusted_base(key) do
-    case Counter.remote_since_rebase(key) do
-      0 -> Counter.base(key)
-      _gossiped -> nil
-    end
-  end
+  defp failed(reason) do
+    Logger.error("AuroraMeter flush failed; the same batch will be retried: #{inspect(reason)}")
 
-  @spec stored_total(Counter.key()) :: {:ok, integer()} | :error
-  defp stored_total({tenant_key, feature, {:day, %Date{} = date}}) do
-    {:ok, Storage.load_history(tenant_key, feature, date) || 0}
-  rescue
-    _error -> :error
-  catch
-    _kind, _reason -> :error
-  end
-
-  defp stored_total({tenant_key, feature, %DateTime{} = period_start}) do
-    {:ok, Storage.load_counter(tenant_key, feature, period_start) || 0}
-  rescue
-    _error -> :error
-  catch
-    _kind, _reason -> :error
-  end
-
-  # Writes deltas and pairs the returned totals back with their ETS keys.
-  # Returned features are strings and period starts are second-precision, so
-  # match on a normalised triple rather than on the struct.
-  @spec add([map()], :counters | :history, [{Counter.key(), integer()}]) ::
-          [{Counter.key(), integer()}]
-  defp add(rows, kind, taken) do
-    {:ok, returned} =
-      case kind do
-        :counters -> Storage.add_counters(rows)
-        :history -> Storage.add_history(rows)
+    count =
+      case :ets.lookup(Store.flush_batches_table(), :pending) do
+        [{:pending, batch}] -> length(batch.taken)
+        [] -> 0
       end
 
-    by_triple = Map.new(taken, fn {key, _delta} -> {triple(key), key} end)
-
-    Enum.flat_map(returned, fn row ->
-      case Map.fetch(by_triple, triple(row)) do
-        {:ok, key} -> [{key, row.value}]
-        :error -> []
-      end
-    end)
+    :telemetry.execute([:aurora_meter, :flush, :error], %{count: count}, %{error: reason})
+    {:error, reason}
   end
 
-  defp triple({tenant_key, feature, {:day, %Date{} = date}}),
-    do: {tenant_key, to_string(feature), Date.to_iso8601(date)}
+  defp triple({tenant, feature, {:day, date}}),
+    do: {tenant, to_string(feature), Date.to_iso8601(date)}
 
-  defp triple({tenant_key, feature, %DateTime{} = period_start}),
-    do: {tenant_key, to_string(feature), DateTime.to_unix(period_start)}
+  defp triple({tenant, feature, %DateTime{} = period}),
+    do: {tenant, to_string(feature), DateTime.to_unix(period)}
 
-  defp triple(%{tenant_key: t, feature: f, date: %Date{} = d}),
-    do: {t, to_string(f), Date.to_iso8601(d)}
+  defp triple(%{tenant_key: tenant, feature: feature, date: date}),
+    do: {tenant, to_string(feature), Date.to_iso8601(date)}
 
-  defp triple(%{tenant_key: t, feature: f, period_start: %DateTime{} = p}),
-    do: {t, to_string(f), DateTime.to_unix(p)}
+  defp triple(%{tenant_key: tenant, feature: feature, period_start: period}),
+    do: {tenant, to_string(feature), DateTime.to_unix(period)}
 end

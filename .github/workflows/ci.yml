@@ -58,8 +58,8 @@ jobs:
             deps
             _build
             priv/plts
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-${{ matrix.elixir }}-
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-otp-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.elixir }}-otp-${{ matrix.otp }}-
 
       - run: mix deps.get
       - name: Check formatting
@@ -74,10 +74,8 @@ jobs:
         run: mix deps.audit
       - name: Hex retirement/audit
         run: mix hex.audit
-      # test.setup (ecto.create + migrate) is a no-op until Phase 2 adds the test
-      # repo + migrations; the `-` guard keeps it green in the meantime.
       - name: Set up test database
-        run: mix test.setup || echo "::notice::no test repo yet (pre-Phase-2)"
+        run: mix test.setup
       - name: Tests
         run: mix test
       - name: Docs build

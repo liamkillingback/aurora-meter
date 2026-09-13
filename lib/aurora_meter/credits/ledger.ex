@@ -23,6 +23,7 @@ defmodule AuroraMeter.Credits.Ledger do
   import Ecto.Query
 
   alias AuroraMeter.Config
+  alias AuroraMeter.Credits.Promotions
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
   alias Phoenix.PubSub
@@ -336,26 +337,15 @@ defmodule AuroraMeter.Credits.Ledger do
   # the one that makes each grant's remainder well defined.
   @spec remaining_on_grant(module(), CreditTransaction.t(), CreditBalance.t()) ::
           non_neg_integer()
-  defp remaining_on_grant(repo, grant, row) do
-    live =
-      repo.all(
-        from(t in CreditTransaction,
-          where:
-            t.tenant_key == ^grant.tenant_key and t.kind == ^:grant and
-              t.category == ^:promotional and is_nil(t.expired_at),
-          order_by: [asc_nulls_last: t.expires_at, asc: t.inserted_at, asc: t.id],
-          select: %{id: t.id, amount: t.amount}
-        )
-      )
-
-    granted = live |> Enum.map(& &1.amount) |> Enum.sum()
-    consumed = max(granted - row.promotional, 0)
-    earlier = live |> Enum.take_while(&(&1.id != grant.id)) |> Enum.map(& &1.amount) |> Enum.sum()
-
-    grant.amount
-    |> Kernel.-(max(consumed - earlier, 0))
-    |> max(0)
-    |> min(grant.amount)
+  defp remaining_on_grant(repo, grant, _row) do
+    from(t in CreditTransaction,
+      where:
+        t.tenant_key == ^grant.tenant_key and
+          (t.amount < 0 or (t.kind == ^:grant and t.category == ^:promotional)),
+      order_by: [asc: t.inserted_at, asc: t.id]
+    )
+    |> repo.stream()
+    |> Promotions.remaining(grant.id)
   end
 
   # A partial expiry has to stay repeatable, so it cannot reuse the reference a

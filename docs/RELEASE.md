@@ -26,7 +26,7 @@ mix hex.publish           # publishes the package and the docs to hexdocs.pm
 ## Tag
 
 ```bash
-git tag v0.1.0
+git tag v0.4.0
 git push origin main --tags
 ```
 

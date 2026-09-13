@@ -37,8 +37,9 @@ next flush re-bases it unconditionally.
 ## Guarantees
 
 - **Correct totals in the database.** After every node has flushed, the row
-  equals the sum of every increment on every node. A hard crash loses at most
-  one `:flush_interval` of one node's increments, as before.
+  equals the sum of every increment on every node. Losing a Store or VM can
+  lose that node's usage since its last successful flush; an outage can make
+  this longer than one interval.
 - **Convergent reads.** `AuroraMeter.usage/2` on any node is the true total
   minus, at most, what the other nodes added in the last `:broadcast_interval`
   (one `:flush_interval` if PubSub dropped a message).
@@ -50,9 +51,13 @@ next flush re-bases it unconditionally.
 - **Idempotent flushes.** A flush with nothing pending writes nothing. Re-basing
   never double counts: it is an absolute correction against a snapshot, so a
   bump that lands mid-rebase is preserved exactly.
-- **Failure safe.** If Postgres is unreachable the flusher puts the taken deltas
-  back, re-marks the keys dirty, logs, emits `[:aurora_meter, :flush, :error]`
-  and tries again next interval. Nothing is lost while the node stays up.
+- **Retryable batches.** Counter and history deltas commit with a unique
+  receipt. If the response is uncertain, the Flusher retains and retries the
+  identical batch. A committed receipt prevents a second addition. The pending
+  batch belongs to Store, so a Flusher restart does not lose it. Errors emit
+  `[:aurora_meter, :flush, :error]` and surface from `Flusher.flush/0`.
+  Receipts are retained indefinitely; do not remove them while a node could
+  still retry. See [ADR 0007](adr/0007-idempotent-flush-batches.md).
 
 ## Requirements
 

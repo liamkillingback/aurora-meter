@@ -115,7 +115,9 @@ defmodule AuroraMeter.MixProject do
         "docs/adr/0003-buffered-vs-durable-and-period-seam.md",
         "docs/adr/0004-cluster-wide-counters.md",
         "docs/adr/0005-prepaid-credit-ledger.md",
-        "docs/adr/0006-counter-feature-kind.md"
+        "docs/adr/0006-counter-feature-kind.md",
+        "docs/adr/0007-idempotent-flush-batches.md",
+        "docs/adr/0008-pending-quota-work.md"
       ],
       groups_for_extras: [
         Examples: ~r/docs\/examples\//,

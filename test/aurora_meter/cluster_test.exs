@@ -184,6 +184,7 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate stream_counters(p), to: AuroraMeter.Storage.Ecto
       def add_counters(_rows), do: raise("database down")
       def add_history(_rows), do: raise("database down")
+      def flush_batch(_id, _rows, _history), do: raise("database down")
     end
 
     test "the deltas are kept pending and flushed on the next attempt" do
@@ -196,7 +197,7 @@ defmodule AuroraMeter.ClusterTest do
 
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          assert {:ok, 0} = Flusher.flush()
+          assert {:error, _} = Flusher.flush()
         end)
 
       assert log =~ "flush failed"
@@ -216,6 +217,11 @@ defmodule AuroraMeter.ClusterTest do
       @behaviour AuroraMeter.Storage
 
       alias AuroraMeter.Storage.Ecto, as: EctoStorage
+
+      def flush_batch(id, rows, history) do
+        EctoStorage.flush_batch(id, rows, history)
+        exit(:timeout)
+      end
 
       defdelegate upsert_counters(rows), to: EctoStorage
       defdelegate load_counter(t, f, p), to: EctoStorage
@@ -240,13 +246,7 @@ defmodule AuroraMeter.ClusterTest do
       end
     end
 
-    test "a node that has heard gossip keeps its delta rather than guessing" do
-      # `Counter.base/1` is only "what the database holds" while nothing else
-      # has moved this node's view. Another node gossips its deltas from the
-      # hot path, before it flushes them, so on a cluster the base runs ahead
-      # of the database between flushes - and a check that read that as "the
-      # row moved, drop it" discarded real usage on every flush failure a
-      # clustered node ever had.
+    test "a node that has heard gossip retries its batch without duplicating usage" do
       tenant = unique_tenant()
       p = period(tenant)
       AuroraMeter.track(tenant, :ops, 6)
@@ -257,17 +257,15 @@ defmodule AuroraMeter.ClusterTest do
       Application.put_env(:aurora_meter, :storage, TimingOutStorage)
       on_exit(fn -> Application.delete_env(:aurora_meter, :storage) end)
 
-      log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, 0} = Flusher.flush() end)
+      log = ExUnit.CaptureLog.capture_log(fn -> assert {:error, _} = Flusher.flush() end)
       assert log =~ "flush failed"
 
       Application.delete_env(:aurora_meter, :storage)
       {:ok, _n} = Flusher.flush()
 
-      # Twelve: six the failing storage wrote and six put back, the old and
-      # honest over-count on an indeterminate write. `>= 6` would have been
-      # satisfied by the dropped-delta behaviour too - that writes exactly six
-      # and throws the delta away - so the number has to be the number.
-      assert Storage.load_counter(tenant, :ops, p) == 12
+      # Gossip is not evidence of a database commit. The receipt proves our
+      # six landed, so retrying the same batch leaves exactly six persisted.
+      assert Storage.load_counter(tenant, :ops, p) == 6
     end
 
     test "gossip marks the key as no longer speaking for the database" do
@@ -296,7 +294,7 @@ defmodule AuroraMeter.ClusterTest do
       Application.put_env(:aurora_meter, :storage, TimingOutStorage)
       on_exit(fn -> Application.delete_env(:aurora_meter, :storage) end)
 
-      log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, 0} = Flusher.flush() end)
+      log = ExUnit.CaptureLog.capture_log(fn -> assert {:error, _} = Flusher.flush() end)
       assert log =~ "flush failed"
 
       # The write really did land.
@@ -305,8 +303,7 @@ defmodule AuroraMeter.ClusterTest do
       Application.delete_env(:aurora_meter, :storage)
       {:ok, _n} = Flusher.flush()
 
-      # Six, not twelve: the delta was checked against the row before being
-      # handed back, and the row already had it.
+      # The receipt makes this retry a read of the current totals.
       assert Storage.load_counter(tenant, :ops, p) == 6
       assert AuroraMeter.usage(tenant, :ops) == 6
     end

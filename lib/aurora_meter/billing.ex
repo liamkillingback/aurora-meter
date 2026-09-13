@@ -19,6 +19,18 @@ defmodule AuroraMeter.Billing do
     provider().billing_portal_url(tenant, opts)
   end
 
+  @doc """
+  Synchronizes a subscription using the configured provider.
+
+  ## Examples
+
+      AuroraMeter.Billing.sync_subscription(%{"id" => "sub_example"})
+      #=> {:ok, subscription} | {:error, reason}
+
+  """
+  @spec sync_subscription(map()) :: {:ok, term()} | {:error, term()}
+  def sync_subscription(payload), do: provider().sync_subscription(payload)
+
   @spec provider() :: module()
   defp provider, do: AuroraMeter.Config.provider()
 end

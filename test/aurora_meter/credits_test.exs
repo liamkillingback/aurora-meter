@@ -434,6 +434,20 @@ defmodule AuroraMeter.CreditsTest do
                TestRepo.get!(CreditTransaction, soon.id)
     end
 
+    test "a new expiring grant cannot absorb spending that happened before it existed" do
+      tenant = unique_tenant()
+      fund!(tenant, 500_000, category: :promotional)
+      {:ok, _} = Credits.debit(tenant, 500_000, "spent-before-new-grant:#{tenant}")
+
+      fund!(tenant, 500_000,
+        category: :promotional,
+        expires_at: DateTime.add(DateTime.utc_now(), -1, :day)
+      )
+
+      assert {:ok, _} = Credits.expire_due()
+      assert %{balance: 0, promotional: 0} = Credits.balance(tenant)
+    end
+
     test "a promotional grant landing on a negative balance first repays the debt" do
       tenant = unique_tenant()
       past = DateTime.add(DateTime.utc_now(), -60, :second)

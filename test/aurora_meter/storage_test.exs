@@ -7,6 +7,26 @@ defmodule AuroraMeter.StorageTest do
 
   @period ~U[2026-07-01 00:00:00Z]
 
+  test "a batch receipt deduplicates counters and history after unrelated writes" do
+    tenant = unique_tenant()
+    id = Ecto.UUID.generate()
+    date = ~D[2026-07-03]
+    counters = [%{tenant_key: tenant, feature: :ai, period_start: @period, delta: 5}]
+    history = [%{tenant_key: tenant, feature: :ai, date: date, delta: 5}]
+
+    assert {:ok, %{counters: [%{value: 5}], history: [%{value: 5}]}} =
+             Storage.flush_batch(id, counters, history)
+
+    assert {:ok, _} = Storage.add_counters([%{hd(counters) | delta: 3}])
+    assert {:ok, _} = Storage.add_history([%{hd(history) | delta: 3}])
+
+    assert {:ok, %{counters: [%{value: 8}], history: [%{value: 8}]}} =
+             Storage.flush_batch(id, counters, history)
+
+    assert Storage.load_counter(tenant, :ai, @period) == 8
+    assert Storage.load_history(tenant, :ai, date) == 8
+  end
+
   test "upsert_counters inserts, then replaces on conflict (no duplicate row)" do
     tenant = unique_tenant()
 

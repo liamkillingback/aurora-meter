@@ -29,9 +29,11 @@ defmodule AuroraMeter.Migration do
       promotional figure can be rebuilt from the log like `balance` and `held`
     * **5** — a partial index on open holds, so the sweep for reservations
       nothing will ever close does not scan the whole ledger
+    * **6** — `aurora_meter_flush_receipts`, committed atomically with counter
+      and history deltas to deduplicate retries after uncertain writes
   """
 
-  @latest 5
+  @latest 6
 
   @doc """
   The newest schema version this release of Aurora Meter knows about.
@@ -39,7 +41,7 @@ defmodule AuroraMeter.Migration do
   ## Examples
 
       iex> AuroraMeter.Migration.latest_version()
-      5
+      6
 
   """
   @spec latest_version() :: pos_integer()

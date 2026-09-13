@@ -22,11 +22,13 @@ defmodule AuroraMeter.Store do
   use GenServer
 
   alias AuroraMeter.Config
+  alias AuroraMeter.Counter
 
   @counters :aurora_meter_counters
   @dirty :aurora_meter_dirty
   @touched :aurora_meter_touched
   @subscriptions :aurora_meter_subscription_cache
+  @flush_batches :aurora_meter_flush_batches
   @invalidation_topic "aurora_meter:subscriptions"
 
   @doc false
@@ -49,6 +51,14 @@ defmodule AuroraMeter.Store do
   @spec subscription_cache_table() :: atom()
   def subscription_cache_table, do: @subscriptions
 
+  @doc false
+  @spec flush_batches_table() :: atom()
+  def flush_batches_table, do: @flush_batches
+
+  @doc false
+  @spec snapshot_flush_batch() :: map() | nil
+  def snapshot_flush_batch, do: GenServer.call(__MODULE__, :snapshot_flush_batch)
+
   @doc "The PubSub topic on which subscription changes are announced."
   @spec invalidation_topic() :: String.t()
   def invalidation_topic, do: @invalidation_topic
@@ -66,10 +76,50 @@ defmodule AuroraMeter.Store do
     :ets.new(@dirty, [:set, :public, :named_table, write_concurrency: true])
     :ets.new(@touched, [:set, :public, :named_table, write_concurrency: true])
     :ets.new(@subscriptions, [:set, :public, :named_table, read_concurrency: true])
+    :ets.new(@flush_batches, [:set, :public, :named_table])
 
     :ok = Phoenix.PubSub.subscribe(Config.pubsub(), @invalidation_topic)
 
     {:ok, %{}}
+  end
+
+  @impl GenServer
+  def handle_call(:snapshot_flush_batch, _from, state) do
+    # Taking deltas and publishing their batch belong to the ETS owner. Killing
+    # only the Flusher must not strand deltas between these two operations.
+    batch =
+      case :ets.lookup(@flush_batches, :pending) do
+        [{:pending, batch}] -> batch
+        [] -> snapshot()
+      end
+
+    {:reply, batch, state}
+  end
+
+  defp snapshot do
+    taken =
+      Counter.dirty_keys()
+      |> Enum.map(fn key ->
+        Counter.clear_dirty(key)
+        {key, Counter.take_pending(key, :flush)}
+      end)
+      |> Enum.reject(fn {_key, delta} -> delta == 0 end)
+
+    if taken != [] do
+      counters =
+        for {{tenant, feature, %DateTime{} = period}, delta} <- taken do
+          %{tenant_key: tenant, feature: feature, period_start: period, delta: delta}
+        end
+
+      history =
+        for {{tenant, feature, {:day, date}}, delta} <- taken do
+          %{tenant_key: tenant, feature: feature, date: date, delta: delta}
+        end
+
+      batch = %{id: Ecto.UUID.generate(), counters: counters, history: history, taken: taken}
+      :ets.insert(@flush_batches, {:pending, batch})
+      batch
+    end
   end
 
   @impl GenServer

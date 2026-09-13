@@ -219,6 +219,10 @@ defmodule AuroraMeter.Entitlements do
   @spec reserve(term(), atom(), pos_integer(), DateTime.t() | nil) ::
           :ok | {:error, :limit_exceeded | :not_entitled}
   def reserve(tenant, feature, qty \\ 1, period_start \\ nil) do
+    do_reserve(tenant, feature, qty, period_start, false)
+  end
+
+  defp do_reserve(tenant, feature, qty, period_start, deferred) do
     tenant_key = Tenant.to_key(tenant)
     period = period_start || period_start(tenant)
 
@@ -228,15 +232,15 @@ defmodule AuroraMeter.Entitlements do
           {:error, :not_entitled}
 
         {:limit, n, :hard} ->
-          Counter.reserve(tenant_key, feature, qty, period, n)
+          Counter.reserve(tenant_key, feature, qty, period, n, deferred)
 
         {:counter} ->
           # Explicit rather than falling through: a counter must keep counting
           # (no cap argument) and must never be turned into a gate later.
-          Counter.reserve(tenant_key, feature, qty, period, nil)
+          Counter.reserve(tenant_key, feature, qty, period, nil, deferred)
 
         _other ->
-          Counter.reserve(tenant_key, feature, qty, period, nil)
+          Counter.reserve(tenant_key, feature, qty, period, nil, deferred)
       end
 
     :telemetry.execute([:aurora_meter, :reserve], %{qty: qty}, %{
@@ -275,7 +279,7 @@ defmodule AuroraMeter.Entitlements do
     period_start = period_start(tenant)
     on = Date.utc_today()
 
-    case reserve(tenant, feature, qty, period_start) do
+    case do_reserve(tenant, feature, qty, period_start, true) do
       :ok ->
         # `catch`, not just `rescue`: an exit is the common failure in gated
         # work — a `GenServer.call`, a `Task.await`, a database checkout all
@@ -283,13 +287,17 @@ defmodule AuroraMeter.Entitlements do
         # past a `rescue`, leaving the reservation counted for good. The two
         # siblings in this codebase were both taught this already
         # (`Credits.run_held/2`, `Flusher.flush_batch/3`).
-        try do
-          {:ok, fun.()}
-        catch
-          kind, reason ->
-            Counter.release(Tenant.to_key(tenant), feature, qty, period_start, on)
-            :erlang.raise(kind, reason, __STACKTRACE__)
-        end
+        result =
+          try do
+            fun.()
+          catch
+            kind, reason ->
+              Counter.release_work(Tenant.to_key(tenant), feature, qty, period_start)
+              :erlang.raise(kind, reason, __STACKTRACE__)
+          end
+
+        Counter.commit_work(Tenant.to_key(tenant), feature, qty, period_start, on)
+        {:ok, result}
 
       {:error, reason} ->
         {:error, reason}

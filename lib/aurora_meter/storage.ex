@@ -73,6 +73,8 @@ defmodule AuroraMeter.Storage do
 
   @callback upsert_counters([counter_row()]) :: :ok
   @callback add_counters([counter_delta()]) :: {:ok, [counter_total()]}
+  @callback flush_batch(Ecto.UUID.t(), [counter_delta()], [history_delta()]) ::
+              {:ok, %{counters: [counter_total()], history: [history_total()]}} | {:error, term()}
   @callback load_counter(String.t(), atom() | String.t(), DateTime.t()) :: integer() | nil
   @callback upsert_history([history_row()]) :: :ok
   @callback add_history([history_delta()]) :: {:ok, [history_total()]}
@@ -105,6 +107,21 @@ defmodule AuroraMeter.Storage do
   @spec add_history([history_delta()]) :: {:ok, [history_total()]}
   def add_history([]), do: {:ok, []}
   def add_history(rows), do: impl().add_history(rows)
+
+  @doc """
+  Atomically applies counter and history deltas once for `batch_id`.
+
+  Adapters must persist the receipt and both sets of deltas in one transaction.
+  A retry returns the current totals without applying either delta again.
+
+  ## Examples
+
+      {:ok, %{counters: [], history: []}} = AuroraMeter.Storage.flush_batch(Ecto.UUID.generate(), [], [])
+
+  """
+  @spec flush_batch(Ecto.UUID.t(), [counter_delta()], [history_delta()]) ::
+          {:ok, %{counters: [counter_total()], history: [history_total()]}} | {:error, term()}
+  def flush_batch(id, counters, history), do: impl().flush_batch(id, counters, history)
 
   @doc "Loads a single flushed counter value, or `nil` if absent."
   @spec load_counter(String.t(), atom() | String.t(), DateTime.t()) :: integer() | nil

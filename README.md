@@ -39,7 +39,7 @@ core is MIT with no email gate, no trial and no expiry.
 
 Increments hit a shared ETS table with `:ets.update_counter/4`: atomic,
 lock-free, and never serialised through a process mailbox. There is no GenServer
-per tenant. A single flusher persists absolute-value snapshots to Postgres on an
+per tenant. A single flusher persists idempotent delta batches to Postgres on an
 interval and once more on shutdown, and a broadcaster fans live values out over
 `Phoenix.PubSub`. The database is touched by the flusher and by a one-time seed
 when a counter is first read, never on the write path.
@@ -282,8 +282,9 @@ Read this before you rely on it. The design choices are recorded as
 [ADRs](docs/adr/0001-resolved-decisions.md).
 
 - **Buffered by default.** Counters live in ETS and flush to Postgres every
-  `:flush_interval` ms and on clean shutdown. A hard crash can lose at most one
-  interval of increments. That is fine for dashboards and soft quotas.
+  `:flush_interval` ms and on clean shutdown. Losing the Store or VM can lose
+  usage since the last successful flush, including any backlog during a
+  database outage. A Flusher restart retains its pending batch.
 - **Durable when it has to be.** Mark a feature durable
   (`config :aurora_meter, durable_features: [:ai_generations]` or
   `track(..., durable: true)`) and every increment also writes a raw event row
@@ -349,22 +350,28 @@ metered-API SaaS on this core.
 
 ## Upgrading
 
-**0.5 needs no migration** — the schema version stays 3. It adds the `counter`
-feature kind and the money series, both of which read tables 0.4 already
-created. If you were writing `metered(:f, included: 0, unit_price: 0)` to mean
-"count it but never bill it", switch it to `counter(:f)`: the dashboard stops
-calling every unit overage. See
-[ADR 0006](docs/adr/0006-counter-feature-kind.md).
-
-Coming from 0.3, 0.4 adds the credit ledger tables (schema version 3):
+**0.4.0 requires schema version 6.** Coming from 0.3.x, add a migration for
+versions 3 through 6 (credit ledger, promotional snapshots, open-hold index,
+and idempotent flush receipts):
 
 ```bash
 mix aurora_meter.gen.migration -r MyApp.Repo --from 3
 mix ecto.migrate
 ```
 
-An 0.1 install also needs the history table from 0.2: use `--from 2`, which
-runs versions 2 and 3.
+An 0.1 install also needs the history table from 0.2: use `--from 2`. An
+unreleased checkout already on schema 5 needs `--from 6`. Apply migrations
+before starting the updated application.
+
+Custom storage adapters must implement `flush_batch/3`: commit the batch ID,
+counter deltas and history deltas atomically, and return current totals on
+repeat delivery without applying the deltas again. Keep flush receipts while
+any node could retry them; this release does not automatically prune receipts.
+See [ADR 0007](docs/adr/0007-idempotent-flush-batches.md).
+
+For features that should be measured without billing, use `counter(:f)` instead
+of `metered(:f, included: 0, unit_price: 0)`; see
+[ADR 0006](docs/adr/0006-counter-feature-kind.md).
 
 See the [changelog](CHANGELOG.md) for everything else that changed.
 

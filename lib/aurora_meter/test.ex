@@ -61,7 +61,8 @@ defmodule AuroraMeter.Test do
           Store.counters_table(),
           Store.dirty_table(),
           Store.touched_table(),
-          Store.subscription_cache_table()
+          Store.subscription_cache_table(),
+          Store.flush_batches_table()
         ] do
       :ets.delete_all_objects(table)
     end

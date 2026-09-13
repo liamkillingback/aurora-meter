@@ -2,7 +2,8 @@ defmodule AuroraMeter.Storage.Ecto do
   @moduledoc """
   Default `AuroraMeter.Storage` adapter, backed by the host's Ecto repo
   (`AuroraMeter.Config.repo/0`). Counter and event writes use `insert_all` for
-  throughput; counter upserts replace absolute values so flushes are idempotent.
+  throughput. Flushes add deltas in a transaction with a unique batch receipt,
+  so retrying an uncertain commit cannot duplicate usage.
   """
 
   @behaviour AuroraMeter.Storage
@@ -11,8 +12,47 @@ defmodule AuroraMeter.Storage.Ecto do
 
   alias AuroraMeter.Schema.Counter
   alias AuroraMeter.Schema.Event
+  alias AuroraMeter.Schema.FlushReceipt
   alias AuroraMeter.Schema.History
   alias AuroraMeter.Schema.Subscription
+
+  @impl AuroraMeter.Storage
+  def flush_batch(id, counters, history) do
+    repo().transaction(fn ->
+      {inserted, _} =
+        repo().insert_all(FlushReceipt, [%{id: id, inserted_at: DateTime.utc_now()}],
+          on_conflict: :nothing,
+          conflict_target: [:id]
+        )
+
+      if inserted == 1 do
+        {:ok, counter_totals} = add_counters(counters)
+        {:ok, history_totals} = add_history(history)
+        %{counters: counter_totals, history: history_totals}
+      else
+        %{
+          counters:
+            Enum.map(counters, fn row ->
+              %{
+                tenant_key: row.tenant_key,
+                feature: to_string(row.feature),
+                period_start: row.period_start,
+                value: load_counter(row.tenant_key, row.feature, row.period_start) || 0
+              }
+            end),
+          history:
+            Enum.map(history, fn row ->
+              %{
+                tenant_key: row.tenant_key,
+                feature: to_string(row.feature),
+                date: row.date,
+                value: load_history(row.tenant_key, row.feature, row.date) || 0
+              }
+            end)
+        }
+      end
+    end)
+  end
 
   @impl AuroraMeter.Storage
   def upsert_counters(rows) do
