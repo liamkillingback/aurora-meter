@@ -146,6 +146,11 @@ defmodule AuroraMeter.Test.FaultRepo do
   def all(queryable), do: guard(:all, :read, queryable, fn -> target().all(queryable) end)
 
   @doc false
+  @spec all(term(), keyword()) :: [term()]
+  def all(queryable, opts),
+    do: guard(:all, :read, queryable, fn -> target().all(queryable, opts) end)
+
+  @doc false
   @spec one(term()) :: term() | nil
   def one(queryable), do: guard(:one, :read, queryable, fn -> target().one(queryable) end)
 

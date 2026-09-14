@@ -1,0 +1,164 @@
+03b: every command that produced a number in this unit's evidence.
+
+TOOLCHAIN (identical for every run below)
+  Elixir 1.20.1 (compiled with Erlang/OTP 29)
+  Erlang/OTP 29 [erts-17.0.1] [64-bit] [smp:24:24] [jit:ns]
+  ecto 3.14.1, ecto_sql 3.14.0, postgrex 0.22.4, db_connection 2.10.2,
+  telemetry 1.4.2, nimble_options 1.1.x, jason 1.4.5
+  PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1), port 5490,
+    default_transaction_isolation: read committed
+  core HEAD at start: 286f3d6   (03a, "durable event schema (core V7 and V8)")
+  pro  HEAD at start: 6879a3e
+  Every Mix command went through tmp/v1/mixlane.sh, which holds a per-repo
+  flock so two Mix workloads never share one _build (finding X18).
+
+---------------------------------------------------------------- BASELINE ----
+
+2026-09-14T17:38:13Z  bash tmp/v1/mixlane.sh core mix test
+  exit 0 | 866 passed (42 doctests, 10 properties, 814 tests), 3 excluded
+  log: tmp/v1/03b/logs/core-test-before.txt
+
+------------------------------------------------------------ MEASUREMENTS ----
+
+2026-09-14T17:47:19Z  mix run tmp/v1/03b/probe_in_transaction.exs
+  exit 0 | repo.in_transaction?/0 in seven positions
+  log: tmp/v1/03b/logs/in-transaction.txt  ->  03b-in-transaction.md
+
+2026-09-14T17:47:37Z  mix run tmp/v1/03b/probe_conflict_wait.exs
+  exit 0 | ON CONFLICT DO NOTHING waits, both directions, 1505 ms each
+  log: tmp/v1/03b/logs/conflict-wait.txt  ->  03b-conflict-wait.md
+
+2026-09-14T17:47:57Z  mix run tmp/v1/03b/probe_unresolved.exs
+  exit 1 (expected) | REPEATABLE READ raises 40001 serialization_failure
+  log: tmp/v1/03b/logs/unresolved.txt  ->  03b-conflict-wait.md
+
+2026-09-14T17:48:37Z  mix run tmp/v1/03b/probe_unresolved2.exs
+  exit 0 | READ COMMITTED + concurrent delete: {:ok, {0, 0, []}}, the
+           conflict_unresolved precondition IS producible
+  log: tmp/v1/03b/logs/unresolved.txt  ->  03b-conflict-wait.md
+
+----------------------------------------------- FIRST VERIFICATION TARGET ----
+
+2026-09-14T17:50:09Z  mix test test/aurora_meter/record_test.exs --seed 0
+  exit 0 | 31 passed
+  log: tmp/v1/03b/logs/record-test-first-green.txt
+  The build document's gate: validation and duplicate cases green before any
+  concurrency work.
+
+------------------------------------------------------------- THE SUITES ----
+
+2026-09-14T18:22:00Z  mix test record_test record_batch_test \
+                        record_projection_test events_gate_test \
+                        storage_case_test --seed 0
+  exit 0 | 91 passed (2 properties, 89 tests)
+  log: tmp/v1/03b/logs/03b-suites-seed0.txt
+
+2026-09-14T18:22:02Z  mix test test/aurora_meter/record_concurrency_test.exs \
+                        --seed 0 --trace
+  exit 0 | 9 passed
+  log: tmp/v1/03b/logs/03b-concurrency-seed0.txt
+  AURORA_CONCURRENCY_REPORT wrote 03b-concurrency.json (seed 0).
+
+2026-09-14T18:22:06Z  mix v1.faults          (mix test --only fault --seed 0)
+  exit 0 | 76 passed, 894 excluded
+  log: tmp/v1/03b/logs/03b-faults-seed0.txt
+
+2026-09-14T18:22:13Z  AURORA_PROPERTY_RUNS=500 mix test record_test --seed 0
+  exit 0 | 33 passed (2 properties, 31 tests)
+  log: tmp/v1/03b/logs/03b-property-500.txt
+
+----------------------------------------------------------------- GATE -------
+
+2026-09-14T18:43:46Z  bash tmp/v1/mixlane.sh core mix check   (the final run,
+                        after every documentation edit)
+  exit 0 | format, compile --warnings-as-errors --force, credo --strict
+           (1776 mods/funs, no issues), dialyzer (0 errors),
+           test 967 passed (42 doctests, 12 properties, 913 tests), 3 excluded,
+           docs --warnings-as-errors
+  log: tmp/v1/03b/logs/check.txt
+
+2026-09-14T18:11:58Z  bash tmp/v1/mixlane.sh core mix test  (full, before the
+                        last three cosmetic fixes)
+  exit 0 | 965 passed
+  log: tmp/v1/03b/logs/full.txt
+
+--------------------------------------------------------------- HEADLESS -----
+
+2026-09-14T18:47:24Z  bash tmp/v1/03b/headless_cold.sh   (re-run against the
+                        final tree, so the evidence log is not three doc edits behind)
+  AURORA_HEADLESS=1, a COLD copy of the tree with its own MIX_DEPS_PATH and
+  MIX_BUILD_PATH, so the real mix.lock is never resolved against a different
+  dependency set (finding X57).
+    mix deps.get                       -> no phoenix_live_view, phoenix_html,
+                                          igniter or oban in deps/
+    mix deps.unlock --check-unused     -> exit 0
+    mix test --include headless --seed 0 -> exit 0, 957 passed
+                                          (42 doctests, 12 properties, 903 tests)
+  the real tree's mix.lock sha256 before and after:
+    70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3
+    70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3  unchanged
+  log: 03b-headless.txt (copied from tmp/v1/03b/logs/03b-headless-cold.txt)
+
+  The FIRST headless run, 2026-09-14T18:22Z, failed one test and the control
+  run at HEAD did not, so it was chased rather than retried:
+    tmp/v1/03b/logs/03b-headless.txt          1 failed (optional_deps_test)
+    tmp/v1/03b/logs/03b-headless-control.txt  HEAD, whole suite, 856 passed
+    tmp/v1/03b/logs/03b-headless-2.txt        same tree, second run, 957 passed
+  Diagnosis and fix in the 03b report, finding F4.
+
+------------------------------------------------------- NEGATIVE CONTROLS ----
+
+2026-09-14T18:41Z  python3 tmp/v1/03b/controls.py
+  exit 0 | five controls, each breaking one guarantee, each making its named
+           test fail, each restored and the restore verified by sha256
+  logs: tmp/v1/03b/logs/control-{1..5}.txt
+  result: 03b-controls.json
+
+-------------------------------------------------------------------- PRO -----
+
+2026-09-14T18:37:24Z  bash tmp/v1/mixlane.sh pro mix test
+  exit 1 | compile failed: seven Storage callbacks not implemented in
+           AuroraMeter.Pro.Test.FaultStorage. This is the expected consequence
+           of making the callbacks mandatory; recorded because the build
+           document said Pro needed no file changes.
+
+2026-09-14T18:38:05Z  bash tmp/v1/mixlane.sh pro mix test   (after the harness
+                        was extended)
+  exit 0 | 420 passed (28 doctests, 392 tests)
+  log: tmp/v1/03b/logs/pro-test.txt
+
+2026-09-14T18:38:16Z  bash tmp/v1/mixlane.sh pro mix check
+  exit 2 | dialyzer: seven call_to_missing against AuroraMeter.Storage.Ecto
+           functions that DO exist. Pro's PLT was stale: a path dependency's
+           beams changing does not invalidate the consumer's PLT hash.
+           Finding F5.
+
+2026-09-14T18:38:29Z  rm -f priv/plts/*.plt priv/plts/*.plt.hash  (gitignored)
+                      bash tmp/v1/mixlane.sh pro mix check
+  exit 0 | credo, dialyzer, 420 passed, docs
+
+2026-09-14T18:47:00Z  bash tmp/v1/mixlane.sh pro mix check   (the final run)
+  exit 0 | 420 passed (28 doctests, 392 tests)
+  log: tmp/v1/03b/logs/pro-check.txt
+
+--------------------------------------------------------------- HYGIENE ------
+
+2026-09-14T18:40:55Z  mix run tmp/v1/03b/strays.exs
+  exit 0 | stray aurora_v1_* databases: none   (finding X109)
+
+  Formatting: tmp/v1/03b/format.sh, which formats ONLY the files git reports as
+  changed. No project-wide `mix format` was run in either repository.
+
+---------------------------------------------------------------- CLOSING -----
+
+2026-09-14T18:47:20Z  mix run tmp/v1/03b/strays.exs
+  stray aurora_v1_* databases: none
+
+2026-09-14T18:47:21Z  git status --porcelain, all three repositories
+  core:       20 modified, 27 new (13 of them this unit's evidence)
+  pro:         4 modified, all under test/, none in lib/
+  storefront:  1 modified: docs/v1/build-plans/open-findings.md (X110 to X117)
+  No commit, no tag, no push, no deploy was made in any repository.
+
+2026-09-14T18:47Z     bash tmp/v1/03b/dashes.sh
+  no em dash or en dash on any line this unit added, in any repository

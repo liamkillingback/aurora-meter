@@ -38,7 +38,19 @@ defmodule AuroraMeter do
   ETS counters, the persisted counter rows and the PubSub topics. Subscribe a
   plan (`subscribe/2`) with the same term you meter with.
 
-  The public API: `track/4`, `usage/2`, `usage_all/1`, `history/3` (metering);
+  ## Counting and recording are two different things
+
+  `track/4` counts. It is the hot path: an ETS increment, no database, and a
+  total flushed on an interval. Lose a node and you lose whatever it had not
+  flushed, which is the trade that makes it fast.
+
+  `record/4` **records**. It takes an identity you supply and writes one row in
+  one transaction with its projected total, so a retry after a timeout is a
+  duplicate rather than a second charge. Use it for anything you will invoice.
+  `AuroraMeter.Events` is the read side.
+
+  The public API: `track/4`, `record/4`, `record_batch/2`, `usage/2`,
+  `usage_all/1`, `history/3` (metering);
   `check/2`, `allowed?/2`, `entitled?/2`, `remaining/2`, `quota/2`,
   `feature_value/3`, `reserve/3`, `with_quota/4` (entitlements);
   `subscribe/2`, `plan/1`, `period/1` (plans).
@@ -53,6 +65,7 @@ defmodule AuroraMeter do
   alias AuroraMeter.Config.Schema, as: ConfigSchema
   alias AuroraMeter.Counter
   alias AuroraMeter.Entitlements
+  alias AuroraMeter.Events
   alias AuroraMeter.Period
   alias AuroraMeter.Plans
   alias AuroraMeter.Storage
@@ -107,6 +120,117 @@ defmodule AuroraMeter do
     })
 
     :ok
+  end
+
+  @doc """
+  Records one durable usage fact for `tenant`, identified by `id`.
+
+  This is the billing-grade path, and it is not `track/4`. `track/4` counts in
+  memory and flushes a total; `record/4` writes a row with an identity of your
+  choosing, in one transaction with its projected total and the configured
+  export intent. Because the identity is yours, a retry after an uncertain
+  write is a **duplicate** rather than a second charge:
+
+      AuroraMeter.record(org, :api_calls, 1,
+        id: request_id,
+        occurred_at: request.started_at,
+        dimensions: %{"model" => "sonnet"}
+      )
+      #=> {:ok, %AuroraMeter.Event{}, :inserted}
+
+      # the same call again, after a timeout you never saw the answer to
+      #=> {:ok, %AuroraMeter.Event{}, :duplicate}
+
+  **An unknown outcome is retryable with the same `id`, never with a fresh
+  one.** Every `{:error, {:unavailable, _}}` means "this may or may not have
+  committed"; repeating the call with the same identity is the only safe answer,
+  and it is always safe.
+
+  ## Options
+
+    * `:id` (**required**) the caller's identity for this fact: 1 to 128 bytes
+      of UTF-8, unique per tenant across every feature. `legacy:`, `track:` and
+      `recurring:` are reserved prefixes.
+    * `:occurred_at` (**required**) a `DateTime` in `Etc/UTC` saying when the
+      usage happened, which is not necessarily now. Old instants are accepted
+      and attributed to the period that held them; one more than
+      `:events_future_tolerance` seconds ahead is refused.
+    * `:dimensions` a map with string keys for breaking the usage down: at most
+      32 keys, keys at most 64 bytes, scalar values at most 256 bytes.
+    * `:metadata` a map with string keys, at most 16 KiB of JSON.
+    * `:future_tolerance` seconds, overriding `:events_future_tolerance`.
+    * `:timeout` milliseconds, overriding `:record_timeout`.
+
+  ## Return values
+
+    * `{:ok, event, :inserted}` the fact is committed, with its total and its
+      export intent.
+    * `{:ok, event, :duplicate}` this identity was already recorded with this
+      payload. Nothing was written a second time; `event` is what is stored.
+    * `{:error, {:invalid, errors}}` the request never reached the database.
+    * `{:error, {:conflict, existing}}` this identity is already recorded with
+      a **different** payload. Nothing was written. Use a different id, or send
+      the payload that is already there.
+    * `{:error, {:unavailable, reason}}` the write may or may not have
+      happened. Retry with the same id.
+    * `{:error, {:unsupported, :durable_events}}` the configured storage
+      adapter does not do durable events.
+
+  There is deliberately no fallback to `track/4`. A refused durable write must
+  not become a successful buffered one: the caller would believe a fact was
+  recorded that has no identity, no hash and no way to be deduplicated.
+
+  ## Inside your own transaction
+
+  When you call this inside a transaction of your own, the durable work runs on
+  a savepoint, the event comes back with `durability: :conditional`, and
+  nothing is hydrated or published until you call
+  `AuroraMeter.Events.after_commit/1` after your commit. Your rollback removes
+  the event, its total and its export intent together.
+  """
+  @spec record(term(), atom(), pos_integer(), keyword()) ::
+          {:ok, AuroraMeter.Event.t(), :inserted | :duplicate}
+          | {:error, {:invalid, [{atom(), atom()}]}}
+          | {:error, {:conflict, AuroraMeter.Event.t()}}
+          | {:error, {:unavailable, term()}}
+          | {:error, {:unsupported, :durable_events}}
+  def record(tenant, feature, quantity \\ 1, opts \\ []) do
+    Events.record(tenant, Events.feature!(feature), quantity, opts)
+  end
+
+  @doc """
+  Records many durable facts in one transaction.
+
+  Every element is validated first, then all of them are written together:
+  either every new row commits or none does. Results come back in input order.
+
+      AuroraMeter.record_batch([
+        %{tenant: org, feature: :api_calls, quantity: 1, id: "a", occurred_at: at},
+        %{tenant: org, feature: :api_calls, quantity: 4, id: "b", occurred_at: at}
+      ])
+      #=> {:ok, [{%AuroraMeter.Event{}, :inserted}, {%AuroraMeter.Event{}, :inserted}]}
+
+  Each element takes the same keys as `record/4`'s options, plus `:tenant`,
+  `:feature` and `:quantity`. Limits: 500 elements and 1 MiB of encoded
+  dimensions and metadata in total, both refused before any database call.
+
+  Repeated ids inside one batch collapse when their payloads are identical, and
+  each position still gets its own result. Repeated ids with **different**
+  payloads are `{:error, {:invalid, [{index, :id, :duplicate_id_in_batch}]}}`,
+  again before any database call.
+
+  One conflicting element rolls the whole batch back with
+  `{:error, {:conflict, index, existing}}`: no new row, no totals delta and no
+  export intent survives it.
+  """
+  @spec record_batch([map()], keyword()) ::
+          {:ok, [{AuroraMeter.Event.t(), :inserted | :duplicate}]}
+          | {:error, {:invalid, [{non_neg_integer(), atom(), atom()}]}}
+          | {:error, {:conflict, non_neg_integer(), AuroraMeter.Event.t()}}
+          | {:error, {:unavailable, term()}}
+          | {:error, {:unsupported, :durable_events}}
+  def record_batch(events, opts \\ []) when is_list(events) do
+    Events.record_batch(events, opts)
   end
 
   @doc "Returns `tenant`'s usage of `feature` in the current period."

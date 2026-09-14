@@ -34,6 +34,13 @@ defmodule AuroraMeter.Test.FaultStorage do
 
   @source __ENV__.file
 
+  # Callbacks that carry no failure boundary, with the reason each is here.
+  # Keep this list as short as the argument for it: a callback that writes, or
+  # that a caller could observe half-done, does not belong in it.
+  @uninstrumentable [
+    {{:capabilities, 0}, "a declaration, not an operation: no transaction, no commit boundary"}
+  ]
+
   @impl AuroraMeter.Storage
   def flush_batch(id, counters, history) do
     Faults.check(:before_commit, %{
@@ -138,6 +145,78 @@ defmodule AuroraMeter.Test.FaultStorage do
     result
   end
 
+  # Deliberately NOT instrumented, and named in `@uninstrumentable` below so
+  # the parity guard still passes. It is a declaration, not an operation: it
+  # opens no transaction and has no commit boundary. Worse, every durable
+  # dispatcher asks it first, so a `:before_commit` fault armed for
+  # `record_events` would fire on the capability check that precedes it and the
+  # test would prove nothing about the transaction it named.
+  @impl AuroraMeter.Storage
+  def capabilities, do: Backend.capabilities()
+
+  # `:before_commit` here is the boundary the durable path cares about: the
+  # transaction has not been opened, so a fault leaves no row, no totals delta,
+  # no outbox item and no in-memory delta. `:after_commit_before_ack` is the
+  # other half, "committed and the caller never learned of it", which is the
+  # case a retry with the same id has to answer `:duplicate` to.
+  @impl AuroraMeter.Storage
+  def record_events(entries, opts) do
+    Faults.check(:before_commit, %{callback: :record_events, entries: length(entries)})
+    result = Backend.record_events(entries, opts)
+    Faults.check(:after_commit_before_ack, %{callback: :record_events, result: result})
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  def load_event(tenant_key, event_id) do
+    Faults.check(:before_commit, %{callback: :load_event, tenant_key: tenant_key})
+    result = Backend.load_event(tenant_key, event_id)
+    Faults.check(:after_commit_before_ack, %{callback: :load_event, result: result})
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  def load_event_total(tenant_key, feature, period_start) do
+    Faults.check(:before_commit, %{callback: :load_event_total, tenant_key: tenant_key})
+    result = Backend.load_event_total(tenant_key, feature, period_start)
+    Faults.check(:after_commit_before_ack, %{callback: :load_event_total, result: result})
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  def stream_events(cursor, opts) do
+    Faults.check(:before_commit, %{callback: :stream_events, cursor: cursor})
+    result = Backend.stream_events(cursor, opts)
+    Faults.check(:after_commit_before_ack, %{callback: :stream_events, result: result})
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  def write_projection_totals(generation, rows) do
+    Faults.check(:before_commit, %{
+      callback: :write_projection_totals,
+      generation: generation,
+      rows: length(rows)
+    })
+
+    result = Backend.write_projection_totals(generation, rows)
+
+    Faults.check(:after_commit_before_ack, %{
+      callback: :write_projection_totals,
+      result: result
+    })
+
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  def activate_projection(generation) do
+    Faults.check(:before_commit, %{callback: :activate_projection, generation: generation})
+    result = Backend.activate_projection(generation)
+    Faults.check(:after_commit_before_ack, %{callback: :activate_projection, result: result})
+    result
+  end
+
   @doc """
   The callbacks of `behaviour` this shim implements *and* instruments with
   `AuroraMeter.Test.Faults.check/2`, read from this module's source.
@@ -160,12 +239,21 @@ defmodule AuroraMeter.Test.FaultStorage do
   """
   @spec uncovered_callbacks(module()) :: [{atom(), non_neg_integer()}]
   def uncovered_callbacks(behaviour \\ AuroraMeter.Storage) do
-    instrumented = MapSet.new(instrumented_callbacks())
+    covered = MapSet.new(instrumented_callbacks() ++ Enum.map(@uninstrumentable, &elem(&1, 0)))
 
     behaviour.behaviour_info(:callbacks)
-    |> Enum.reject(&MapSet.member?(instrumented, &1))
+    |> Enum.reject(&MapSet.member?(covered, &1))
     |> Enum.sort()
   end
+
+  @doc """
+  Callbacks this shim implements without a fault check, each with its reason.
+
+  The harness self-test asserts every entry is a real callback of the
+  behaviour, so the list cannot outlive what it excuses.
+  """
+  @spec uninstrumentable() :: [{{atom(), non_neg_integer()}, String.t()}]
+  def uninstrumentable, do: @uninstrumentable
 
   defp collect_instrumented(ast) do
     {_ast, found} =

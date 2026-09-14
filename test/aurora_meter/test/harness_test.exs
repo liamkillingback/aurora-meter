@@ -375,10 +375,24 @@ defmodule AuroraMeter.Test.HarnessTest do
   test "FaultStorage implements every AuroraMeter.Storage callback" do
     assert FaultStorage.uncovered_callbacks(Storage) == []
 
+    excused = MapSet.new(FaultStorage.uninstrumentable(), &elem(&1, 0))
+
     assert MapSet.subset?(
-             MapSet.new(Storage.behaviour_info(:callbacks)),
+             MapSet.difference(MapSet.new(Storage.behaviour_info(:callbacks)), excused),
              MapSet.new(FaultStorage.instrumented_callbacks())
            )
+  end
+
+  test "every uninstrumented FaultStorage callback is a real callback with a reason" do
+    declared = MapSet.new(Storage.behaviour_info(:callbacks))
+
+    for {entry, reason} <- FaultStorage.uninstrumentable() do
+      assert MapSet.member?(declared, entry),
+             "#{inspect(entry)} is excused from instrumentation but is not a Storage callback"
+
+      assert is_binary(reason) and String.trim(reason) != "",
+             "#{inspect(entry)} is excused from instrumentation with no reason"
+    end
   end
 
   test "FaultStorage delegates flush_batch unchanged when nothing is armed" do

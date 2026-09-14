@@ -180,7 +180,7 @@ midnight; 02c introduces the seam and owns the full `with_quota` crossing test.
 - `AuroraMeter.EntitlementsTest` / `test I03 a reservation is never in a flush batch`
 - `AuroraMeter.EntitlementsTest` / `test I03 a reservation committed against a captured day lands in that day's bucket (partial until 02c)`
 - `AuroraMeter.KillTest` / `test I03 a with_quota caller killed with :kill is never billed and leaves a documented reservation`
-- `AuroraMeter.KillTest` / `test I03 Counter.commit_work after a Store restart raises (C6, fixed in 03b)`
+- `AuroraMeter.KillTest` / `test I03 Counter.commit_work after a Store restart seeds rather than raising (C6, fixed in 03b)`
 - `AuroraMeter.ExamplesTest` / `test team-saas.md with_quota/3 gives the reservation back when the work raises`
 
 The three catchable-failure cases that give the capacity back (a raise, a throw
@@ -324,9 +324,17 @@ the current behaviour for the phase 03 guarantee.
 - `AuroraMeter.StorageTest` / `test insert_events/1 appends rows`
 - `AuroraMeter.MigrationV8Test` / `test one identity, one fact I06 two inserts of the same (tenant_key, event_id) leave exactly one row`
 - `AuroraMeter.MigrationV8Test` / `test one identity, one fact I06 the same event_id under two tenants is two facts`
-- PLANNED (03b): `AuroraMeter.EventsTest` / `test I06 a kill before commit leaves nothing behind`
-- PLANNED (03b): `AuroraMeter.EventsTest` / `test I06 a kill after commit before reply then a same id retry reports a duplicate`
-- PLANNED (03b): `AuroraMeter.EventsTest` / `test I06 restart and replay reproduce the same totals`
+- `AuroraMeter.RecordTest` / `test identity I06 a retry with the same id and payload is a duplicate with no second effect`
+- `AuroraMeter.RecordTest` / `test identity I06 the same id in two tenants creates two events`
+- `AuroraMeter.RecordBatchTest` / `test I06 a storage failure mid-batch rolls back every new row`
+- `AuroraMeter.RecordConcurrencyTest` / `test one identity, twelve connections I06 12 independent connections submitting one identity create one fact, one totals delta and one outbox item`
+- `AuroraMeter.RecordConcurrencyTest` / `test one identity, twelve connections I06 concurrent distinct ids in one tenant and period produce one totals row with the exact sum`
+- `AuroraMeter.RecordConcurrencyTest` / `test process death I06 killing the caller before commit leaves no row, no delta, no outbox item and no ETS delta`
+- `AuroraMeter.RecordConcurrencyTest` / `test process death I06 killing the caller after commit before the reply leaves exactly one row, and the same-id retry returns duplicate without a second delta or outbox item`
+- `AuroraMeter.RecordConcurrencyTest` / `test generations I06 a record transaction in flight blocks generation activation and completes against the generation it read`
+- `AuroraMeter.RecordProjectionTest` / `test a host's own transaction I06 an outer host transaction rollback leaves no event, no totals delta, no outbox item and no ETS delta`
+- `AuroraMeter.RecordProjectionTest` / `test a host's own transaction I06 an outer host transaction commit plus after_commit/1 hydrates ETS and publishes one message`
+- PLANNED (03d): `AuroraMeter.EventsReplayTest` / `test I06 restart and replay reproduce the same totals`
 
 **Evidence.** `docs/evidence/v1/phase-03/i06.md`
 
@@ -360,9 +368,17 @@ exist.
 - `AuroraMeter.MigrationV8Test` / `test it refuses rather than guess I07 it refuses while any event_id is null, and names the count`
 - `AuroraMeter.MigrationV8Test` / `test it refuses rather than guess I07 it runs once the backfill has filled them`
 - `AuroraMeter.MigrationV8Test` / `test it refuses rather than guess I07 it promotes event_id, payload_hash and occurred_at to NOT NULL`
-- PLANNED (03b): `AuroraMeter.EventsTest` / `test I07 a changed quantity, time, feature, dimension set or metadata each conflict`
-- PLANNED (03b): `AuroraMeter.EventsTest` / `test I07 twelve independent connections racing one identity admit one`
-- PLANNED (03b): `AuroraMeter.EventsTest` / `test I07 one conflict rolls the whole batch back`
+- `AuroraMeter.RecordTest` / `test validation, before any database call I07 record rejects a missing id, an oversized id and a reserved prefix`
+- `AuroraMeter.RecordTest` / `test validation, before any database call I07 record rejects a non-UTF-8 id`
+- `AuroraMeter.RecordTest` / `test the canonical payload I07 canonical json sorts keys recursively`
+- `AuroraMeter.RecordTest` / `test the canonical payload I07 map key ordering does not change the payload hash`
+- `AuroraMeter.RecordTest` / `test identity I07 a changed quantity, occurred_at, feature, dimension or metadata value each conflict`
+- `AuroraMeter.RecordTest` / `test identity I07 the same id for two features in one tenant conflicts`
+- `AuroraMeter.RecordBatchTest` / `test I07 repeated ids with identical payloads collapse to one insert and two ordered results`
+- `AuroraMeter.RecordBatchTest` / `test I07 repeated ids with different payloads are rejected before any I/O`
+- `AuroraMeter.RecordBatchTest` / `test I07 a conflicting element rolls back every new row in the batch`
+- `AuroraMeter.RecordConcurrencyTest` / `test one identity, twelve connections I07 12 independent connections submitting one identity with two different payloads never produce two rows`
+- `AuroraMeter.RecordTest` / `property the canonical encoder, as a property I07 two different payloads never share an encoding, and key order never changes one`
 
 **Evidence.** `docs/evidence/v1/phase-03/i07.md`
 
@@ -391,6 +407,8 @@ watermark, belong to phase 03 and phase 04.
 **Tests.**
 
 - `AuroraMeter.MeteringTest` / `test a durable feature writes an event row on track`
+- `AuroraMeter.RecordProjectionTest` / `test I08 the projection never reaches the flush path I08 a projected event never appears in a flush batch`
+- `AuroraMeter.RecordProjectionTest` / `test I08 the projection never reaches the flush path I08 apply_projection writes value and gossip but never pending_flush or dirty`
 - PLANNED (03c): `AuroraMeter.SourcesTest` / `test I08 a feature sourced from events never appears in a flush batch`
 - PLANNED (03c): `AuroraMeter.SourcesTest` / `test I08 calling track on an events sourced feature raises`
 - PLANNED (03c): `AuroraMeter.SourcesTest` / `test I08 a cutover at the watermark drains the buffer and takes events after it`

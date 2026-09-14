@@ -1,0 +1,67 @@
+[
+  {
+    "control": "C1 the projection is kept out of the flush path",
+    "why": "I08. If apply_projection/2 marked the key dirty, a recorded event would also be flushed into aurora_meter_counters, which is the table Pro bills from.",
+    "file": "lib/aurora_meter/counter.ex",
+    "test_command": "mix test test/aurora_meter/record_projection_test.exs --seed 0",
+    "exit_code": 2,
+    "failed_as_expected": true,
+    "named_test_reported": true,
+    "log": "tmp/v1/03b/logs/control-1.txt",
+    "sha256_before": "1840fb747da62e7d13d5a35735d5ec4468a53baaf206ccbf9b7ff4486ef09992",
+    "sha256_after_restore": "1840fb747da62e7d13d5a35735d5ec4468a53baaf206ccbf9b7ff4486ef09992",
+    "restore_verified": true
+  },
+  {
+    "control": "C2 a conflicting payload is not accepted as a duplicate",
+    "why": "I07, and the single largest residual risk this unit names: an implementer 'simplifying' the hash comparison away turns a conflicting reuse of an identity into a silent duplicate, which is how a retry bills twice.",
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "test_command": "mix test test/aurora_meter/record_test.exs --seed 0",
+    "exit_code": 2,
+    "failed_as_expected": true,
+    "named_test_reported": true,
+    "log": "tmp/v1/03b/logs/control-2.txt",
+    "sha256_before": "19dc47b2d26a93d58dc0556ee5477e9475251337a72ca94038a24e23e6b6001c",
+    "sha256_after_restore": "19dc47b2d26a93d58dc0556ee5477e9475251337a72ca94038a24e23e6b6001c",
+    "restore_verified": true
+  },
+  {
+    "control": "C3 a duplicate adds no second totals delta",
+    "why": "I06. Applying the totals delta to every returned row rather than to the inserted ones makes a retry after an uncertain write count twice.",
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "test_command": "mix test test/aurora_meter/record_test.exs --seed 0",
+    "exit_code": 2,
+    "failed_as_expected": true,
+    "named_test_reported": true,
+    "log": "tmp/v1/03b/logs/control-3.txt",
+    "sha256_before": "19dc47b2d26a93d58dc0556ee5477e9475251337a72ca94038a24e23e6b6001c",
+    "sha256_after_restore": "19dc47b2d26a93d58dc0556ee5477e9475251337a72ca94038a24e23e6b6001c",
+    "restore_verified": true
+  },
+  {
+    "control": "C4 a refused durable write never becomes a buffered one",
+    "why": "L-03b-4. A fallback to track/4 on overload would leave the caller believing a fact was recorded that has no identity and no way to be deduplicated.",
+    "file": "lib/aurora_meter/events.ex",
+    "test_command": "mix test test/aurora_meter/events_gate_test.exs --seed 0",
+    "exit_code": 2,
+    "failed_as_expected": true,
+    "named_test_reported": true,
+    "log": "tmp/v1/03b/logs/control-4.txt",
+    "sha256_before": "fe481d960b1f669c57a9a30db7f5113267109488fce96a7b9145029a5d75739f",
+    "sha256_after_restore": "fe481d960b1f669c57a9a30db7f5113267109488fce96a7b9145029a5d75739f",
+    "restore_verified": true
+  },
+  {
+    "control": "C5 the request-size bound measures what the caller sent",
+    "why": "X104. Measuring anything other than the bytes on the wire lets a compressible payload of any size through, which is what pg_column_size() did.",
+    "file": "lib/aurora_meter/events/canonical.ex",
+    "test_command": "mix test test/aurora_meter/record_batch_test.exs --seed 0",
+    "exit_code": 2,
+    "failed_as_expected": true,
+    "named_test_reported": true,
+    "log": "tmp/v1/03b/logs/control-5.txt",
+    "sha256_before": "5ecd15eccd82f8bdc7b7b6c27e3581fa4bfb5b27957d3906df6094fba77e71ba",
+    "sha256_after_restore": "5ecd15eccd82f8bdc7b7b6c27e3581fa4bfb5b27957d3906df6094fba77e71ba",
+    "restore_verified": true
+  }
+]

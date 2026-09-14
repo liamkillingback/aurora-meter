@@ -1,0 +1,450 @@
+defmodule AuroraMeter.StorageCase do
+  @moduledoc """
+  The conformance suite every `AuroraMeter.Storage` adapter should pass.
+
+  Aurora Meter ships one adapter, `AuroraMeter.Storage.Ecto`. Writing another
+  one is supported, and this is how you find out whether yours is correct
+  before it is asked to hold money. `use` it inside an ExUnit case that already
+  knows how to reach your storage:
+
+      defmodule MyApp.RiakStorageTest do
+        use ExUnit.Case, async: false
+        use AuroraMeter.StorageCase, adapter: MyApp.RiakStorage
+      end
+
+  It installs your adapter as `config :aurora_meter, :storage` for the
+  duration of each test and restores whatever was there before, then drives it
+  through `AuroraMeter.Storage`'s own dispatchers rather than calling your
+  module directly: what a host observes is what is asserted.
+
+  ## Options
+
+    * `:adapter` (**required**) the module under test.
+    * `:checkout` `{module, function}` called with no arguments in `setup`,
+      for an adapter that needs a connection checked out first. The Ecto
+      adapter under the SQL sandbox does; an in-memory one will not.
+    * `:tenant_prefix` a string the generated tenant keys start with, so your
+      own cleanup can find them. Default `"storage_case"`.
+
+  ## What it asserts
+
+  An adapter that declares `:durable_events` must record, deduplicate by
+  identity, refuse a changed payload under an identity it already holds, keep
+  its totals arithmetic exact, and not project a duplicate a second time. An
+  adapter that declares nothing must answer `{:error, {:unsupported, _}}` from
+  every durable dispatcher. **Both pass this suite**: declining the work is a
+  supported answer, and the difference between declining it and faking it is
+  the difference between a caller that can handle the situation and one that
+  cannot.
+
+  Each assertion lives in a public function of this module and the generated
+  `test` blocks are one line each, so a failure names the function you can read
+  rather than a line inside a macro expansion.
+
+  It does not assert anything about counters, history or subscriptions: those
+  callbacks predate this suite and the existing adapter tests cover them.
+  """
+
+  import ExUnit.Assertions
+
+  alias AuroraMeter.Events.Canonical
+  alias AuroraMeter.Storage
+
+  @capabilities [:durable_events, :corrections, :projection_generations, :event_streaming]
+
+  @doc false
+  defmacro __using__(opts) do
+    quote bind_quoted: [opts: opts] do
+      @storage_case_adapter Keyword.get(opts, :adapter) ||
+                              raise(ArgumentError, "use AuroraMeter.StorageCase, adapter: Mod")
+      @storage_case_checkout Keyword.get(opts, :checkout)
+      @storage_case_prefix Keyword.get(opts, :tenant_prefix, "storage_case")
+
+      setup do
+        AuroraMeter.StorageCase.install!(
+          @storage_case_adapter,
+          @storage_case_checkout,
+          @storage_case_prefix
+        )
+      end
+
+      describe "AuroraMeter.StorageCase: capabilities" do
+        test "capabilities/0 returns a list drawn from the known vocabulary" do
+          AuroraMeter.StorageCase.assert_capability_vocabulary!()
+        end
+
+        test "supports?/1 agrees with capabilities/0" do
+          AuroraMeter.StorageCase.assert_supports_agrees!()
+        end
+
+        test "an undeclared capability is refused by the dispatcher, not by the adapter", ctx do
+          AuroraMeter.StorageCase.assert_undeclared_refused!(ctx)
+        end
+      end
+
+      describe "AuroraMeter.StorageCase: durable events" do
+        @describetag :storage_case
+
+        test "an identity is recorded once and a retry of it is a duplicate", ctx do
+          AuroraMeter.StorageCase.assert_identity!(ctx)
+        end
+
+        test "a changed payload under an identity already held is a conflict, and writes nothing",
+             ctx do
+          AuroraMeter.StorageCase.assert_conflict!(ctx)
+        end
+
+        test "totals add the inserted rows and never a duplicate", ctx do
+          AuroraMeter.StorageCase.assert_totals!(ctx)
+        end
+
+        test "results come back in the caller's input order", ctx do
+          AuroraMeter.StorageCase.assert_input_order!(ctx)
+        end
+
+        test "load_event/2 round trips and is not found for an unknown id", ctx do
+          AuroraMeter.StorageCase.assert_load_event!(ctx)
+        end
+
+        test "load_event_total/3 is zero for a period nothing was recorded in", ctx do
+          AuroraMeter.StorageCase.assert_empty_total!(ctx)
+        end
+
+        test "an identity is per tenant, not global", ctx do
+          AuroraMeter.StorageCase.assert_identity_is_per_tenant!(ctx)
+        end
+      end
+
+      describe "AuroraMeter.StorageCase: streaming" do
+        @describetag :storage_case
+
+        test "stream_events/2 is ordered by seq and bounded by limit", ctx do
+          AuroraMeter.StorageCase.assert_streaming!(ctx)
+        end
+      end
+
+      describe "AuroraMeter.StorageCase: projection generations" do
+        @describetag :storage_case
+
+        test "write_projection_totals/2 then activate_projection/1 changes what reads see", ctx do
+          AuroraMeter.StorageCase.assert_generations!(ctx)
+        end
+      end
+    end
+  end
+
+  @doc """
+  Installs the adapter for one test and returns the context the assertions take.
+
+  Restores the previous `:storage` configuration in `on_exit`, including
+  deleting the key when it was absent.
+  """
+  @spec install!(module(), {module(), atom()} | nil, String.t()) :: map()
+  def install!(adapter, checkout, prefix) do
+    case checkout do
+      {module, function} -> apply(module, function, [])
+      nil -> :ok
+    end
+
+    previous = Application.fetch_env(:aurora_meter, :storage)
+    Application.put_env(:aurora_meter, :storage, adapter)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:aurora_meter, :storage, value)
+        :error -> Application.delete_env(:aurora_meter, :storage)
+      end
+    end)
+
+    # Fixed instants, not `Clock.now/0` and certainly not `DateTime.utc_now/0`:
+    # a conformance suite that moves with the wall clock cannot be compared
+    # between two runs, and every clock read in this package goes through
+    # `AuroraMeter.Clock` (`architecture-map.md` section 3).
+    %{
+      storage_tenant: "#{prefix}_#{System.unique_integer([:positive])}",
+      storage_at: ~U[2026-01-15 12:00:00.000000Z],
+      storage_period: ~U[2026-01-01 00:00:00Z]
+    }
+  end
+
+  @doc "The capability vocabulary an adapter may draw from."
+  @spec capabilities() :: [AuroraMeter.Storage.capability()]
+  def capabilities, do: @capabilities
+
+  @doc false
+  @spec assert_capability_vocabulary!() :: true
+  def assert_capability_vocabulary! do
+    declared = Storage.capabilities()
+
+    assert is_list(declared)
+    assert declared -- @capabilities == [], "unknown capabilities: #{inspect(declared)}"
+    assert declared == Enum.uniq(declared)
+  end
+
+  @doc false
+  @spec assert_supports_agrees!() :: :ok
+  def assert_supports_agrees! do
+    Enum.each(@capabilities, fn capability ->
+      assert Storage.supports?(capability) == capability in Storage.capabilities()
+    end)
+  end
+
+  @doc false
+  @spec assert_undeclared_refused!(map()) :: :ok
+  def assert_undeclared_refused!(ctx) do
+    unless Storage.supports?(:durable_events) do
+      assert Storage.record_events([], []) == {:error, {:unsupported, :durable_events}}
+
+      assert Storage.load_event(ctx.storage_tenant, "x") ==
+               {:error, {:unsupported, :durable_events}}
+
+      assert Storage.load_event_total(ctx.storage_tenant, :f, ctx.storage_period) ==
+               {:error, {:unsupported, :durable_events}}
+    end
+
+    unless Storage.supports?(:event_streaming) do
+      assert Storage.stream_events(0, []) == {:error, {:unsupported, :event_streaming}}
+    end
+
+    unless Storage.supports?(:projection_generations) do
+      assert Storage.write_projection_totals(0, []) ==
+               {:error, {:unsupported, :projection_generations}}
+
+      assert Storage.activate_projection(0) == {:error, {:unsupported, :projection_generations}}
+    end
+
+    :ok
+  end
+
+  @doc false
+  @spec assert_identity!(map()) :: :ok
+  def assert_identity!(ctx) do
+    durable(fn ->
+      entry = entry(ctx, "identity", 3)
+
+      assert {:ok, [{first, :inserted}]} = Storage.record_events([entry], [])
+      assert first.event_id == "identity"
+      assert first.quantity == 3
+
+      assert {:ok, [{second, :duplicate}]} = Storage.record_events([entry], [])
+      assert second.id == first.id
+    end)
+  end
+
+  @doc false
+  @spec assert_conflict!(map()) :: :ok
+  def assert_conflict!(ctx) do
+    durable(fn ->
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "conflict", 1)], [])
+
+      assert {:error, {:conflict, 0, existing}} =
+               Storage.record_events([entry(ctx, "conflict", 2)], [])
+
+      assert existing.quantity == 1
+      assert total(ctx) == %{quantity: 1, events: 1}
+    end)
+  end
+
+  @doc false
+  @spec assert_totals!(map()) :: :ok
+  def assert_totals!(ctx) do
+    durable(fn ->
+      entries = for n <- 1..4, do: entry(ctx, "total-#{n}", n)
+
+      assert {:ok, results} = Storage.record_events(entries, [])
+      assert length(results) == 4
+      assert total(ctx) == %{quantity: 10, events: 4}
+
+      # A duplicate contributes nothing a second time, which is the whole of
+      # "no second projection effect".
+      assert {:ok, _again} = Storage.record_events(entries, [])
+      assert total(ctx) == %{quantity: 10, events: 4}
+    end)
+  end
+
+  @doc false
+  @spec assert_input_order!(map()) :: :ok
+  def assert_input_order!(ctx) do
+    durable(fn ->
+      ids = ["z", "a", "m"]
+      entries = Enum.map(ids, &entry(ctx, &1, 1))
+
+      assert {:ok, results} = Storage.record_events(entries, [])
+      assert Enum.map(results, fn {event, _outcome} -> event.event_id end) == ids
+    end)
+  end
+
+  @doc false
+  @spec assert_load_event!(map()) :: :ok
+  def assert_load_event!(ctx) do
+    durable(fn ->
+      assert {:ok, [{written, :inserted}]} =
+               Storage.record_events([entry(ctx, "readback", 7)], [])
+
+      assert {:ok, read} = Storage.load_event(ctx.storage_tenant, "readback")
+      assert read.id == written.id
+      assert read.quantity == 7
+      assert read.occurred_at == written.occurred_at
+      assert read.period_start == written.period_start
+      assert read.seq == written.seq
+
+      assert Storage.load_event(ctx.storage_tenant, "nope") == {:error, :not_found}
+    end)
+  end
+
+  @doc false
+  @spec assert_empty_total!(map()) :: :ok
+  def assert_empty_total!(ctx) do
+    durable(fn ->
+      assert {:ok, %{quantity: 0, events: 0}} =
+               Storage.load_event_total(
+                 ctx.storage_tenant,
+                 :storage_case,
+                 ~U[2019-01-01 00:00:00Z]
+               )
+    end)
+  end
+
+  @doc false
+  @spec assert_identity_is_per_tenant!(map()) :: :ok
+  def assert_identity_is_per_tenant!(ctx) do
+    durable(fn ->
+      other = %{ctx | storage_tenant: ctx.storage_tenant <> "_other"}
+
+      assert {:ok, [{_a, :inserted}]} = Storage.record_events([entry(ctx, "shared", 1)], [])
+      assert {:ok, [{_b, :inserted}]} = Storage.record_events([entry(other, "shared", 1)], [])
+    end)
+  end
+
+  @doc false
+  @spec assert_streaming!(map()) :: :ok
+  def assert_streaming!(ctx) do
+    durable(:event_streaming, fn ->
+      entries = for n <- 1..5, do: entry(ctx, "stream-#{n}", 1)
+      assert {:ok, _results} = Storage.record_events(entries, [])
+
+      assert {:ok, page} = Storage.stream_events(0, tenant: ctx.storage_tenant, limit: 2)
+      assert length(page) == 2
+
+      seqs = Enum.map(page, & &1.seq)
+      assert seqs == Enum.sort(seqs)
+
+      assert {:ok, next} =
+               Storage.stream_events(List.last(seqs), tenant: ctx.storage_tenant, limit: 10)
+
+      assert length(next) == 3
+      assert Enum.all?(next, &(&1.seq > List.last(seqs)))
+    end)
+  end
+
+  @doc false
+  @spec assert_generations!(map()) :: :ok
+  def assert_generations!(ctx) do
+    durable(:projection_generations, fn ->
+      assert {:ok, [{_event, :inserted}]} =
+               Storage.record_events([entry(ctx, "generation", 5)], [])
+
+      assert :ok =
+               Storage.write_projection_totals(1, [
+                 %{
+                   tenant_key: ctx.storage_tenant,
+                   feature: "storage_case",
+                   period_start: ctx.storage_period,
+                   quantity: 99,
+                   events: 1
+                 }
+               ])
+
+      # Still reading the active generation, which is not the one just written:
+      # a reader never sees a half-built generation.
+      assert total(ctx).quantity == 5
+
+      active = active_generation()
+
+      try do
+        assert :ok = Storage.activate_projection(1)
+        assert total(ctx).quantity == 99
+      after
+        Storage.activate_projection(active)
+      end
+
+      # The restore is asserted, not assumed (open-findings.md X97).
+      assert active_generation() == active
+    end)
+  end
+
+  @doc """
+  One `t:AuroraMeter.Storage.event_entry/0` for the suite, already canonical.
+
+  The `payload_hash` is computed with `AuroraMeter.Events.Canonical`, which is
+  what the facade does, so an adapter cannot pass by inventing its own
+  definition of "the same payload".
+  """
+  @spec entry(map(), String.t(), pos_integer()) :: AuroraMeter.Storage.event_entry()
+  def entry(context, event_id, quantity) do
+    attrs = %{
+      feature: :storage_case,
+      quantity: quantity,
+      occurred_at: context.storage_at,
+      kind: :usage,
+      original_event_id: nil,
+      dimensions: %{},
+      metadata: %{}
+    }
+
+    %{
+      tenant_key: context.storage_tenant,
+      event_id: event_id,
+      feature: "storage_case",
+      quantity: quantity,
+      kind: "usage",
+      original_event_id: nil,
+      occurred_at: context.storage_at,
+      period_start: context.storage_period,
+      period_source: "AuroraMeter.StorageCase",
+      attribution: "resolved",
+      dimensions: %{},
+      metadata: %{},
+      plan_id: nil,
+      plan_version: nil,
+      payload_hash: Canonical.payload_hash(attrs)
+    }
+  end
+
+  @doc """
+  The projection generation reads currently resolve to.
+
+  The suite restores it after the generation test, because it is one row for
+  the whole installation.
+  """
+  @spec active_generation() :: non_neg_integer()
+  def active_generation do
+    # `_absent` rather than `nil`: the checkpoint row is missing on a database
+    # below core schema version 7, and `AuroraMeter.Checkpoints.get/2` answers
+    # that with `nil`, but its success typing is a map and Dialyzer proves a
+    # literal `nil` clause unreachable. The `cursor` column is
+    # `NOT NULL DEFAULT '{}'::jsonb`, so it needs no `|| %{}` either.
+    case AuroraMeter.Checkpoints.get("events_projection") do
+      %{cursor: cursor} -> Map.get(cursor, "active_generation", 0)
+      _absent -> 0
+    end
+  end
+
+  # Every durable assertion is skipped, not failed, for an adapter that does not
+  # declare the capability. The refusal itself is asserted by
+  # `assert_undeclared_refused!/1`, so declining is proven rather than ignored.
+  defp durable(extra \\ nil, fun) do
+    if Storage.supports?(:durable_events) and (is_nil(extra) or Storage.supports?(extra)) do
+      fun.()
+    end
+
+    :ok
+  end
+
+  defp total(ctx) do
+    {:ok, total} =
+      Storage.load_event_total(ctx.storage_tenant, :storage_case, ctx.storage_period)
+
+    total
+  end
+end

@@ -94,6 +94,12 @@ defmodule AuroraMeter.Counter do
   def commit_work(tenant_key, feature, qty, period_start, on) do
     key = {tenant_key, feature, period_start}
 
+    # The Store can restart between `reserve_pending/2` and this call, and an
+    # `:ets.update_counter/3` on a key that is no longer there raises
+    # `ArgumentError` out of a callback that has already run (open finding C6).
+    # Seeding first turns that into a correct, if cold, row.
+    ensure_seeded(key)
+
     :ets.update_counter(table(), key, [
       {@reserved, -qty},
       {@pending_flush, qty},
@@ -108,6 +114,9 @@ defmodule AuroraMeter.Counter do
   @spec release_work(String.t(), atom(), integer(), DateTime.t()) :: :ok
   def release_work(tenant_key, feature, qty, period_start) do
     key = {tenant_key, feature, period_start}
+    # As `commit_work/5`: a Store restart mid-callback must not turn a released
+    # reservation into an `ArgumentError` (open finding C6).
+    ensure_seeded(key)
     :ets.update_counter(table(), key, [{@value, -qty}, {@reserved, -qty}])
     :ets.insert(Store.touched_table(), {key})
     :ok
@@ -179,22 +188,40 @@ defmodule AuroraMeter.Counter do
     end
   end
 
-  # Puts a taken flush delta back (the database write failed) and re-marks the
-  # key dirty so the next flush retries it.
-  #
-  # Dead code, and nothing in `lib/` calls it. Since 0.4.0 a failed flush keeps
-  # the immutable batch in ETS and retries the same batch, so there is no delta
-  # to put back. It is hidden here rather than deleted, because deleting it
-  # belongs to the build unit that owns this file.
-  @doc false
-  @spec restore_pending(key(), integer()) :: :ok
-  def restore_pending(key, delta) do
-    if :ets.member(table(), key) do
-      :ets.update_counter(table(), key, {@pending_flush, delta})
-      :ets.insert(Store.dirty_table(), {key})
-    end
+  # `restore_pending/2` lived here until build unit 03b removed it (open
+  # finding C8). It put a taken flush delta back so the next flush would retry
+  # it, and nothing in `lib/` had called it since 0.4.0, when a failed flush
+  # started keeping the immutable batch in ETS and retrying that instead. There
+  # is no delta to put back any more.
 
-    :ok
+  # Applies a durable event's quantity to this node's in-memory view.
+  #
+  # It deliberately mirrors `apply_remote/2` and not `bump/2`. `value` and
+  # `pending_gossip` move, so `AuroraMeter.usage/2` and other nodes see the
+  # number; `pending_flush` does not, and the key is NOT marked dirty. That is
+  # what keeps a projected quantity out of `Store.snapshot_flush_batch/0`, out
+  # of `Storage.flush_batch/3` and therefore out of `aurora_meter_counters`
+  # (I08). A durable event is already committed to `aurora_meter_events`;
+  # flushing it again would be the same usage counted twice, once as a fact and
+  # once as a buffered count.
+  #
+  # Cold keys are skipped: a cold key seeds from durable state on its first
+  # read, which already includes this event. `@remote` is not written, because
+  # this node's own database read (`Storage.load_event_total/3`) already covers
+  # it.
+  #
+  # Internal, and deliberately not public: hosts never touch ETS rows
+  # (`api-change-map.md` section 5).
+  @doc false
+  @spec apply_projection(key(), pos_integer()) :: :ok | :cold
+  def apply_projection(key, qty) do
+    if :ets.member(table(), key) do
+      :ets.update_counter(table(), key, [{@value, qty}, {@pending_gossip, qty}])
+      :ets.insert(Store.touched_table(), {key})
+      :ok
+    else
+      :cold
+    end
   end
 
   @doc """
@@ -352,12 +379,29 @@ defmodule AuroraMeter.Counter do
     end
   end
 
+  # Where a cold key gets its first value. A day bucket comes from the history
+  # table; a period counter comes from whichever source the feature reports
+  # from. The indirection through `Config.feature_source/1` is the one place
+  # that decision is taken, so build unit 03c can change what feeds it without
+  # touching the hot path.
   @spec stored_value(key()) :: integer() | nil
   defp stored_value({tenant_key, feature, {:day, date}}),
     do: Storage.load_history(tenant_key, feature, date)
 
-  defp stored_value({tenant_key, feature, period_start}),
-    do: Storage.load_counter(tenant_key, feature, period_start)
+  defp stored_value({tenant_key, feature, period_start}) do
+    case Config.feature_source(feature) do
+      :events -> event_total(tenant_key, feature, period_start)
+      _buffered -> Storage.load_counter(tenant_key, feature, period_start)
+    end
+  end
+
+  @spec event_total(String.t(), atom(), DateTime.t()) :: integer() | nil
+  defp event_total(tenant_key, feature, period_start) do
+    case Storage.load_event_total(tenant_key, feature, period_start) do
+      {:ok, %{quantity: quantity}} -> quantity
+      {:error, _unsupported} -> nil
+    end
+  end
 
   defp pos(:flush), do: @pending_flush
   defp pos(:gossip), do: @pending_gossip

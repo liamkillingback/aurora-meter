@@ -342,6 +342,20 @@ defmodule AuroraMeter.Entitlements do
     end
   end
 
+  @doc false
+  # The one seam every non-entitlement caller applies the policy through.
+  # `AuroraMeter.record/4` needs the same decision the entitlement functions
+  # take, including the `:raise` branch and the once-per-node warning, and a
+  # second copy of that logic is how two paths end up disagreeing about what
+  # "undeclared" means.
+  @spec feature_policy(term(), atom(), atom()) :: :allow | :deny
+  def feature_policy(tenant, feature, entry_point) do
+    case resolve(tenant, feature) do
+      {:ok, _config} -> :allow
+      :undeclared -> undeclared(tenant, feature, entry_point)
+    end
+  end
+
   @spec resolve(term(), atom()) :: resolution()
   defp resolve(tenant, feature) do
     with %AuroraMeter.Plan{} = plan <- plan(tenant),

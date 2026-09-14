@@ -4,10 +4,23 @@ defmodule AuroraMeter.Storage do
   the configured adapter (`AuroraMeter.Config.storage/0`, default
   `AuroraMeter.Storage.Ecto`).
 
-  Only a Postgres/Ecto adapter ships in v1; this behaviour keeps the door open for
-  others without building through it now.
+  Only a Postgres/Ecto adapter ships in v1. Writing another one is supported,
+  and [Storage adapters](storage-adapters.md) is the guide: it gives a
+  copyable minimal adapter, and `AuroraMeter.StorageCase` is the conformance
+  suite that proves one correct.
+
+  ## Capabilities
+
+  Every callback here is required, including the durable-event ones. An adapter
+  that cannot do durable work does not omit them: it declares what it supports
+  from `c:capabilities/0` and the dispatcher answers
+  `{:error, {:unsupported, operation}}` without calling the adapter at all. The
+  difference matters because "this adapter cannot record durable events" is an
+  answer a caller can handle, and a `FunctionClauseError` from a missing
+  callback is not.
   """
 
+  alias AuroraMeter.Event
   alias AuroraMeter.Schema.Counter
   alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Subscriptions
@@ -71,6 +84,53 @@ defmodule AuroraMeter.Storage do
           value: integer()
         }
 
+  @typedoc """
+  A durable operation an adapter may support.
+
+  `:durable_events` covers `c:record_events/2`, `c:load_event/2` and
+  `c:load_event_total/3`; `:corrections` covers `record_correction/2` (build
+  unit 03e); `:projection_generations` covers `c:write_projection_totals/2` and
+  `c:activate_projection/1`; `:event_streaming` covers `c:stream_events/2`.
+  """
+  @type capability :: :durable_events | :corrections | :projection_generations | :event_streaming
+
+  @typedoc """
+  One event to record, already validated and canonicalised by
+  `AuroraMeter.Events.Canonical`.
+
+  `feature` and `kind` are strings because that is how the columns hold them,
+  and an adapter must not have to know which atoms exist.
+  """
+  @type event_entry :: %{
+          required(:tenant_key) => String.t(),
+          required(:event_id) => String.t(),
+          required(:feature) => String.t(),
+          required(:quantity) => pos_integer(),
+          required(:kind) => String.t(),
+          required(:original_event_id) => String.t() | nil,
+          required(:occurred_at) => DateTime.t(),
+          required(:period_start) => DateTime.t(),
+          required(:period_source) => String.t(),
+          required(:attribution) => String.t(),
+          required(:dimensions) => map(),
+          required(:metadata) => map(),
+          required(:payload_hash) => binary(),
+          optional(:plan_id) => String.t() | nil,
+          optional(:plan_version) => String.t() | nil
+        }
+
+  @typedoc "What one recorded event produced: the persisted fact and whether it was new."
+  @type record_outcome :: {Event.t(), :inserted | :duplicate}
+
+  @typedoc "A projection total, as `c:write_projection_totals/2` takes them."
+  @type projection_total :: %{
+          required(:tenant_key) => String.t(),
+          required(:feature) => String.t(),
+          required(:period_start) => DateTime.t(),
+          required(:quantity) => non_neg_integer(),
+          required(:events) => non_neg_integer()
+        }
+
   @callback upsert_counters([counter_row()]) :: :ok
   @callback add_counters([counter_delta()]) :: {:ok, [counter_total()]}
   @callback flush_batch(Ecto.UUID.t(), [counter_delta()], [history_delta()]) ::
@@ -85,6 +145,61 @@ defmodule AuroraMeter.Storage do
   @callback put_subscription(map()) :: {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
   @callback insert_events([event_row()]) :: :ok
   @callback stream_counters(DateTime.t()) :: [Counter.t()]
+
+  @doc """
+  The durable operations this adapter supports.
+
+  An adapter that returns `[]` still defines every callback below; the
+  dispatchers refuse the call on its behalf.
+  """
+  @callback capabilities() :: [capability()]
+
+  @doc """
+  Records a batch of events in **one** transaction, with their projection
+  deltas and the configured outbox's intent.
+
+  The three are one commit or none of them (L-03b-1). Results are returned in
+  the caller's input order. An entry whose `(tenant_key, event_id)` already
+  exists with an equal `payload_hash` is `:duplicate` and contributes no totals
+  delta and no outbox item; one with a different hash rolls the whole batch
+  back with `{:error, {:conflict, index, existing}}`.
+
+  Options: `:timeout` (milliseconds for the transaction and every statement in
+  it) and `:outbox` (the `AuroraMeter.Events.Outbox` module to invoke).
+  """
+  @callback record_events([event_entry()], keyword()) ::
+              {:ok, [record_outcome()]}
+              | {:error, {:conflict, non_neg_integer(), Event.t()}}
+              | {:error, term()}
+
+  @doc "Reads one recorded event by its caller identity."
+  @callback load_event(String.t(), String.t()) ::
+              {:ok, Event.t()} | {:error, :not_found | {:unsupported, capability()}}
+
+  @doc "Reads the projected total for one feature and period, in the active generation."
+  @callback load_event_total(String.t(), atom() | String.t(), DateTime.t()) ::
+              {:ok, %{quantity: non_neg_integer(), events: non_neg_integer()}}
+              | {:error, {:unsupported, capability()}}
+
+  @doc """
+  Reads one bounded page of events after `cursor`, ordered by `seq`.
+
+  `seq` and not `id`: event ids are random v4 UUIDs, so a keyset scan ordered
+  by `id` can silently miss a row committed by a transaction that started
+  earlier (`open-findings.md` L20).
+
+  Options: `:limit`, `:tenant`, `:feature`, `:from` and `:to` (on
+  `occurred_at`, half-open).
+  """
+  @callback stream_events(non_neg_integer(), keyword()) ::
+              {:ok, [Event.t()]} | {:error, {:unsupported, capability()}}
+
+  @doc "Writes absolute projection totals for `generation`. Used by replay (03d)."
+  @callback write_projection_totals(non_neg_integer(), [projection_total()]) ::
+              :ok | {:error, term()}
+
+  @doc "Makes `generation` the one `c:load_event_total/3` reads."
+  @callback activate_projection(non_neg_integer()) :: :ok | {:error, term()}
 
   @doc """
   Sets counter snapshots to absolute values by `{tenant_key, feature,
@@ -168,6 +283,88 @@ defmodule AuroraMeter.Storage do
   @doc "Returns all counter snapshots for a period (used by Pro rollups)."
   @spec stream_counters(DateTime.t()) :: [Counter.t()]
   def stream_counters(period_start), do: impl().stream_counters(period_start)
+
+  @doc """
+  The durable operations the configured adapter supports.
+
+  ## Examples
+
+      iex> :durable_events in AuroraMeter.Storage.capabilities()
+      true
+
+  """
+  @spec capabilities() :: [capability()]
+  def capabilities, do: impl().capabilities()
+
+  @doc """
+  Whether the configured adapter supports `capability`.
+
+  ## Examples
+
+      iex> AuroraMeter.Storage.supports?(:corrections)
+      true
+
+  """
+  @spec supports?(capability()) :: boolean()
+  def supports?(capability), do: capability in capabilities()
+
+  @doc "Records a batch of events in one transaction. See `c:record_events/2`."
+  @spec record_events([event_entry()], keyword()) ::
+          {:ok, [record_outcome()]}
+          | {:error, {:conflict, non_neg_integer(), Event.t()}}
+          | {:error, term()}
+  def record_events(entries, opts \\ []) do
+    with :ok <- require!(:durable_events), do: impl().record_events(entries, opts)
+  end
+
+  @doc "Reads one recorded event by its caller identity. See `c:load_event/2`."
+  @spec load_event(String.t(), String.t()) ::
+          {:ok, Event.t()} | {:error, :not_found | {:unsupported, capability()}}
+  def load_event(tenant_key, event_id) do
+    with :ok <- require!(:durable_events), do: impl().load_event(tenant_key, event_id)
+  end
+
+  @doc "Reads the active generation's projected total. See `c:load_event_total/3`."
+  @spec load_event_total(String.t(), atom() | String.t(), DateTime.t()) ::
+          {:ok, %{quantity: non_neg_integer(), events: non_neg_integer()}}
+          | {:error, {:unsupported, capability()}}
+  def load_event_total(tenant_key, feature, period_start) do
+    with :ok <- require!(:durable_events),
+         do: impl().load_event_total(tenant_key, feature, period_start)
+  end
+
+  @doc "Reads one bounded page of events after `cursor`. See `c:stream_events/2`."
+  @spec stream_events(non_neg_integer(), keyword()) ::
+          {:ok, [Event.t()]} | {:error, {:unsupported, capability()}}
+  def stream_events(cursor, opts \\ []) do
+    with :ok <- require!(:event_streaming), do: impl().stream_events(cursor, opts)
+  end
+
+  @doc "Writes absolute projection totals for a generation. See `c:write_projection_totals/2`."
+  @spec write_projection_totals(non_neg_integer(), [projection_total()]) ::
+          :ok | {:error, term()}
+  def write_projection_totals(generation, rows) do
+    with :ok <- require!(:projection_generations),
+         do: impl().write_projection_totals(generation, rows)
+  end
+
+  @doc "Makes a generation the one reads see. See `c:activate_projection/1`."
+  @spec activate_projection(non_neg_integer()) :: :ok | {:error, term()}
+  def activate_projection(generation) do
+    with :ok <- require!(:projection_generations), do: impl().activate_projection(generation)
+  end
+
+  # The adapter is asked what it supports before it is asked to do the work, so
+  # an adapter that cannot do durable writes never has to fake one. The answer
+  # is the same shape as every other error in this API.
+  @spec require!(capability()) :: :ok | {:error, {:unsupported, capability()}}
+  defp require!(capability) do
+    if capability in impl().capabilities() do
+      :ok
+    else
+      {:error, {:unsupported, capability}}
+    end
+  end
 
   @spec impl() :: module()
   defp impl, do: AuroraMeter.Config.storage()

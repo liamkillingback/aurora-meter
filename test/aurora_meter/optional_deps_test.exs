@@ -77,6 +77,14 @@ defmodule AuroraMeter.HeadlessTest do
     # task is not run here, because running it would write a migration into the
     # working tree; what is asserted is that the documented fallback exists and
     # that the printed steps are real.
+    # `Code.ensure_loaded?/1` first, and it is not decoration:
+    # `function_exported?/3` answers `false` for a module that is merely
+    # compiled, and nothing in `lib/` references a Mix task, so whether it
+    # happens to be loaded when this test runs depends on the order of the run
+    # and on whether the build was cold. Measured during build unit 03b: the
+    # first `mix test` on a fresh headless build failed here and the second,
+    # identical, passed.
+    assert Code.ensure_loaded?(Mix.Tasks.AuroraMeter.Install)
     assert function_exported?(Mix.Tasks.AuroraMeter.Install, :run, 1)
     refute function_exported?(Mix.Tasks.AuroraMeter.Install, :igniter, 1)
 

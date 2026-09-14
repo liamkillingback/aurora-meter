@@ -11,6 +11,10 @@ defmodule AuroraMeter.Supervisor do
     children = [
       {Registry, keys: :unique, name: AuroraMeter.Registry},
       AuroraMeter.Store,
+      # Immediately after the Store: a durable write is admitted before it
+      # touches a connection, and a caller that is refused must be refused
+      # rather than queued behind a pool checkout.
+      AuroraMeter.Events.Gate,
       AuroraMeter.Cluster,
       AuroraMeter.Flusher,
       AuroraMeter.Broadcaster,

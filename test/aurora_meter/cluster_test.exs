@@ -182,6 +182,13 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate put_subscription(attrs), to: AuroraMeter.Storage.Ecto
       defdelegate insert_events(rows), to: AuroraMeter.Storage.Ecto
       defdelegate stream_counters(p), to: AuroraMeter.Storage.Ecto
+      defdelegate capabilities(), to: AuroraMeter.Storage.Ecto
+      defdelegate record_events(entries, opts), to: AuroraMeter.Storage.Ecto
+      defdelegate load_event(t, e), to: AuroraMeter.Storage.Ecto
+      defdelegate load_event_total(t, f, p), to: AuroraMeter.Storage.Ecto
+      defdelegate stream_events(cursor, opts), to: AuroraMeter.Storage.Ecto
+      defdelegate write_projection_totals(g, rows), to: AuroraMeter.Storage.Ecto
+      defdelegate activate_projection(g), to: AuroraMeter.Storage.Ecto
       def add_counters(_rows), do: raise("database down")
       def add_history(_rows), do: raise("database down")
       def flush_batch(_id, _rows, _history), do: raise("database down")
@@ -232,6 +239,13 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate put_subscription(attrs), to: EctoStorage
       defdelegate insert_events(rows), to: EctoStorage
       defdelegate stream_counters(p), to: EctoStorage
+      defdelegate capabilities(), to: EctoStorage
+      defdelegate record_events(entries, opts), to: EctoStorage
+      defdelegate load_event(t, e), to: EctoStorage
+      defdelegate load_event_total(t, f, p), to: EctoStorage
+      defdelegate stream_events(cursor, opts), to: EctoStorage
+      defdelegate write_projection_totals(g, rows), to: EctoStorage
+      defdelegate activate_projection(g), to: EctoStorage
 
       # Exactly the shape of a statement that times out client-side: the row
       # is written, and then the caller is told the write failed.

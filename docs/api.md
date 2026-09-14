@@ -40,6 +40,8 @@ every helper name.
 | `AuroraMeter.version/0` | `() :: String.t()` | stable | 0.1.0 | The compiled package version. |
 | `AuroraMeter.start_link/1` | `(keyword()) :: Supervisor.on_start()` | stable | 0.1.0 | Validates configuration, then starts the runtime. Add `AuroraMeter` to the host supervision tree instead of calling it directly. Raises `NimbleOptions.ValidationError` on bad configuration. |
 | `AuroraMeter.track/4` | `(tenant, atom(), integer(), keyword()) :: :ok` | stable | 0.1.0 | Arities 2 and 3 exist through defaults (`qty` 1, `opts` `[]`). Options `:durable`, `:metadata`. Counts an undeclared feature under every policy. |
+| `AuroraMeter.record/4` | `(tenant, atom(), pos_integer(), keyword()) :: {:ok, AuroraMeter.Event.t(), :inserted \| :duplicate} \| {:error, {:invalid, errors} \| {:conflict, AuroraMeter.Event.t()} \| {:unavailable, term()} \| {:unsupported, :durable_events}}` | stable | 1.0.0 | The durable path. Required options `:id` and `:occurred_at`; optional `:dimensions`, `:metadata`, `:future_tolerance`, `:timeout`. A retry with the same `:id` is a duplicate, never a second charge. No fallback to `track/4`. |
+| `AuroraMeter.record_batch/2` | `([map()], keyword()) :: {:ok, [{AuroraMeter.Event.t(), :inserted \| :duplicate}]} \| {:error, {:invalid, errors} \| {:conflict, index, AuroraMeter.Event.t()} \| {:unavailable, term()} \| {:unsupported, :durable_events}}` | stable | 1.0.0 | One transaction for the whole batch; results in input order. Limits 500 elements and 1 MiB of encoded payload. |
 | `AuroraMeter.usage/2` | `(tenant, atom()) :: integer()` | stable | 0.1.0 | Current period, warm ETS value. |
 | `AuroraMeter.usage_all/1` | `(tenant) :: %{atom() => integer()}` | stable | 0.1.0 | Warm counters only. |
 | `AuroraMeter.history/3` | `(tenant, atom(), keyword()) :: [AuroraMeter.Storage.history_point()]` | stable | 0.2.0 | Options `:days` (30), `:from`, `:to`. Zero-filled, oldest first. Needs `history: true` and schema version 2. |
@@ -57,7 +59,22 @@ every helper name.
 | `AuroraMeter.with_quota/3` | `(tenant, atom(), (-> result)) :: {:ok, result} \| {:error, term()}` | stable | 0.1.0 | Releases the reservation on a raise, throw or exit. |
 | `AuroraMeter.with_quota/4` | `(tenant, atom(), pos_integer(), (-> result)) :: {:ok, result} \| {:error, term()}` | stable | 0.1.0 | Reserve and release use the same captured period. |
 
-### 1.2 `AuroraMeter.Entitlements`
+### 1.2 `AuroraMeter.Events`
+
+The read side of `AuroraMeter.record/4`, plus the one function a host needs when
+it wraps a record in a transaction of its own. See [Metering](metering.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Events.get/2` | `(tenant, String.t()) :: {:ok, AuroraMeter.Event.t()} \| {:error, :not_found}` | stable | 1.0.0 | By the caller's own `event_id`. |
+| `AuroraMeter.Events.total/3` | `(tenant, atom(), DateTime.t()) :: non_neg_integer()` | stable | 1.0.0 | The durable total for a period, from the active projection generation. Authoritative; `usage/2` is a view. |
+| `AuroraMeter.Events.count/3` | `(tenant, atom(), DateTime.t()) :: %{quantity: non_neg_integer(), events: non_neg_integer()}` | stable | 1.0.0 | The total and the number of events behind it. |
+| `AuroraMeter.Events.stream/1` | `(keyword()) :: Enumerable.t()` | stable | 1.0.0 | Keyset by `seq`, one bounded query per chunk. Options `:after_seq`, `:limit`, `:tenant`, `:feature`, `:from`, `:to`. |
+| `AuroraMeter.Events.after_commit/1` | `([AuroraMeter.Event.t()] \| AuroraMeter.Event.t()) :: :ok` | stable | 1.0.0 | Applies the in-memory projection and publishes, for events recorded inside a host transaction. Call once, after your commit. |
+
+### 1.3 `AuroraMeter.Entitlements`
 
 The facade delegates to this module and is the recommended entry point. The
 functions are listed because they are public, documented and called directly by
@@ -79,7 +96,7 @@ existing hosts.
 | `AuroraMeter.Entitlements.subscribe/2` | `(tenant, atom() \| String.t()) :: {:ok, Subscription.t()} \| {:error, Ecto.Changeset.t()}` | stable | 0.1.0 | |
 | `AuroraMeter.Entitlements.plan/1` | `(tenant) :: AuroraMeter.Plan.t() \| nil` | stable | 0.1.0 | |
 
-### 1.3 `AuroraMeter.Credits`
+### 1.4 `AuroraMeter.Credits`
 
 Micro-dollar integers throughout. See [Credits](credits.md).
 
@@ -109,7 +126,7 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Credits.topic/1` | `(String.t()) :: String.t()` | stable | 0.4.0 | `"aurora_meter:credits:" <> tenant_key`. Takes a resolved key, not a tenant term. |
 | `AuroraMeter.Credits.assert_currency!/0` | `() :: :ok` | stable | 0.5.0 | Raises `AuroraMeter.Credits.CurrencyMismatchError` when a stored balance row carries a currency other than `:credits_currency`. Skipped with one `:info` line when the repo or the tables are absent. |
 
-### 1.4 `AuroraMeter.Credits.Money`
+### 1.5 `AuroraMeter.Credits.Money`
 
 <!-- inventory:functions -->
 
@@ -121,7 +138,7 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Credits.Money.format/2` | `(micro(), keyword()) :: String.t()` | stable | 0.4.0 | Option `:precision` (0 to 6). Arity 1 exists through defaults. |
 | `AuroraMeter.Credits.Money.format_compact/1` | `(micro()) :: String.t()` | stable | 0.4.0 | Never rounds a sub-cent amount away to `"$0.00"`. |
 
-### 1.5 Plans
+### 1.6 Plans
 
 <!-- inventory:functions -->
 
@@ -139,7 +156,7 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Plans.feature/2` | DSL macro | stable | 0.1.0 | Boolean or non-negative integer value. |
 | `AuroraMeter.Plans.counter/1` | DSL macro | stable | 0.4.0 | Measured, never blocked, never billed. `quota/2` reports `limit`, `included` and `percent` as `nil`. |
 
-### 1.6 Periods and the clock
+### 1.7 Periods and the clock
 
 <!-- inventory:functions -->
 
@@ -157,7 +174,7 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Clock.System.monotonic_ms/0` | `() :: integer()` | stable | 0.5.0 | |
 | `AuroraMeter.Clock.System.db_now/0` | `() :: DateTime.t()` | stable | 0.5.0 | |
 
-### 1.7 Storage dispatchers
+### 1.8 Storage dispatchers
 
 Each function dispatches to the configured `:storage` module. The callbacks are
 in section 2.
@@ -178,8 +195,16 @@ in section 2.
 | `AuroraMeter.Storage.put_subscription/1` | `(map()) :: {:ok, Subscription.t()} \| {:error, Ecto.Changeset.t()}` | stable | 0.1.0 | Evicts the subscription cache locally and across nodes. |
 | `AuroraMeter.Storage.insert_events/1` | `([event_row()]) :: :ok` | stable | 0.1.0 | The legacy `durable: true` path. |
 | `AuroraMeter.Storage.stream_counters/1` | `(DateTime.t()) :: [AuroraMeter.Schema.Counter.t()]` | stable | 0.1.0 | One exact `period_start`. A keyset variant over a period range arrives with the rollup rewrite. |
+| `AuroraMeter.Storage.capabilities/0` | `() :: [AuroraMeter.Storage.capability()]` | stable | 1.0.0 | The durable operations the configured adapter supports. |
+| `AuroraMeter.Storage.supports?/1` | `(capability()) :: boolean()` | stable | 1.0.0 | |
+| `AuroraMeter.Storage.record_events/2` | `([event_entry()], keyword()) :: {:ok, [{AuroraMeter.Event.t(), :inserted \| :duplicate}]} \| {:error, term()}` | stable | 1.0.0 | One transaction for the events, their totals and the outbox intent. |
+| `AuroraMeter.Storage.load_event/2` | `(String.t(), String.t()) :: {:ok, AuroraMeter.Event.t()} \| {:error, :not_found \| {:unsupported, capability()}}` | stable | 1.0.0 | |
+| `AuroraMeter.Storage.load_event_total/3` | `(String.t(), atom() \| String.t(), DateTime.t()) :: {:ok, %{quantity: non_neg_integer(), events: non_neg_integer()}} \| {:error, {:unsupported, capability()}}` | stable | 1.0.0 | Reads the active projection generation. |
+| `AuroraMeter.Storage.stream_events/2` | `(non_neg_integer(), keyword()) :: {:ok, [AuroraMeter.Event.t()]} \| {:error, {:unsupported, capability()}}` | stable | 1.0.0 | Keyset by `seq`. |
+| `AuroraMeter.Storage.write_projection_totals/2` | `(non_neg_integer(), [projection_total()]) :: :ok \| {:error, term()}` | stable | 1.0.0 | Absolute totals for a generation. Replay (03d) writes them. |
+| `AuroraMeter.Storage.activate_projection/1` | `(non_neg_integer()) :: :ok \| {:error, term()}` | stable | 1.0.0 | Makes a generation the one reads see. |
 
-### 1.8 Subscriptions, flusher, live updates
+### 1.9 Subscriptions, flusher, live updates
 
 <!-- inventory:functions -->
 
@@ -191,7 +216,7 @@ in section 2.
 | `AuroraMeter.Broadcaster.topic/1` | `(String.t()) :: String.t()` | stable | 0.1.0 | `"aurora_meter:tenant:" <> tenant_key`. The only entry of `AuroraMeter.Broadcaster` that is supported; the module itself is internal. Read the contract on `AuroraMeter.LiveView`. |
 | `AuroraMeter.LiveView.subscribe/1` | `(tenant) :: :ok \| {:error, term()}` | stable | 0.1.0 | Subscribes the calling process to the tenant's usage topic. |
 
-### 1.9 Configuration accessors
+### 1.10 Configuration accessors
 
 <!-- inventory:functions -->
 
@@ -220,7 +245,7 @@ in section 2.
 | `AuroraMeter.Config.credits_low_balance_threshold/0` | `() :: integer() \| nil` | stable | 0.4.0 | |
 | `AuroraMeter.Config.credits_low_balance_handler/0` | `() :: (map() -> term()) \| nil` | stable | 0.4.0 | |
 
-### 1.10 Billing seam
+### 1.11 Billing seam
 
 <!-- inventory:functions -->
 
@@ -230,7 +255,7 @@ in section 2.
 | `AuroraMeter.Billing.portal_url/2` | `(tenant, keyword()) :: {:ok, String.t()} \| {:error, term()}` | stable | 0.1.0 | Arity 1 exists through defaults. |
 | `AuroraMeter.Billing.sync_subscription/1` | `(map()) :: {:ok, term()} \| {:error, term()}` | stable | 0.1.0 | |
 
-### 1.11 Schema helpers
+### 1.12 Schema helpers
 
 <!-- inventory:functions -->
 
@@ -244,7 +269,7 @@ in section 2.
 | `AuroraMeter.Schema.CreditTransaction.kinds/0` | `() :: [kind()]` | stable | 0.4.0 | |
 | `AuroraMeter.Schema.CreditTransaction.categories/0` | `() :: [category()]` | stable | 0.4.0 | |
 
-### 1.12 HEEx components (optional dependency)
+### 1.13 HEEx components (optional dependency)
 
 Compiled only when `Phoenix.Component` is loaded. Without `phoenix_live_view`
 and `phoenix_html` the module does not exist at all, which is not an error:
@@ -271,7 +296,8 @@ them is a breaking change for implementers and does not happen during 1.x.
 | `AuroraMeter.Tenant` | `to_key/1` | stable | 0.1.0 | Must return a non-empty binary, and **a binary must pass through unchanged**: Pro hands stored `tenant_key` values back to facade functions. |
 | `AuroraMeter.Period` | `current/2` required, `containing/2` optional | stable | 0.1.0 | `containing/2` is optional from 0.5.0. |
 | `AuroraMeter.Clock` | `now/0`, `today/0`, `monotonic_ms/0`, `db_now/0` | stable | 0.5.0 | Four readings, all required. |
-| `AuroraMeter.Storage` | `upsert_counters/1`, `add_counters/1`, `upsert_history/1`, `add_history/1`, `flush_batch/3`, `load_counter/3`, `load_history/3`, `load_history_range/4`, `get_subscription/1`, `put_subscription/1`, `insert_events/1`, `stream_counters/1` | stable | 0.1.0 | 12 callbacks, none optional. |
+| `AuroraMeter.Storage` | `upsert_counters/1`, `add_counters/1`, `upsert_history/1`, `add_history/1`, `flush_batch/3`, `load_counter/3`, `load_history/3`, `load_history_range/4`, `get_subscription/1`, `put_subscription/1`, `insert_events/1`, `stream_counters/1`, `capabilities/0`, `record_events/2`, `load_event/2`, `load_event_total/3`, `stream_events/2`, `write_projection_totals/2`, `activate_projection/1` | stable | 0.1.0 | 19 callbacks, none optional. The seven durable ones arrived in 1.0.0; an adapter that cannot do them declares nothing from `capabilities/0` and the dispatcher refuses the call on its behalf. See [Storage adapters](storage-adapters.md). |
+| `AuroraMeter.Events.Outbox` | `enqueue/2` | stable | 1.0.0 | Called inside the transaction that records an event, so an export intent commits with the fact. Core ships no delivery; Aurora Meter Pro implements it. |
 | `AuroraMeter.Billing.Provider` | `create_checkout_session/2`, `billing_portal_url/2`, `sync_subscription/1`, `report_usage/1` | stable | 0.1.0 | Aurora Meter Pro implements it for Stripe. |
 
 The implementations the core ships:
@@ -285,6 +311,7 @@ The implementations the core ships:
 | `AuroraMeter.Clock.System` | `AuroraMeter.Clock` | stable | 0.5.0 | The only implementation supported in production. |
 | `AuroraMeter.Storage.Ecto` | `AuroraMeter.Storage` | internal | 0.1.0 | Configure it by name (it is the default); do not call it directly. |
 | `AuroraMeter.Billing.Noop` | `AuroraMeter.Billing.Provider` | stable | 0.1.0 | The default provider. Every call returns `{:error, :not_configured}`. |
+| `AuroraMeter.Events.Outbox.Noop` | `AuroraMeter.Events.Outbox` | stable | 1.0.0 | The default. Stages nothing, successfully. |
 
 `AuroraMeter.Config.validate!/0` checks at boot that every module-typed key
 names a module that exists and exports every callback its behaviour declares and
@@ -386,6 +413,11 @@ never treated as Aurora Meter keys.
 | `:clock` | atom, `AuroraMeter.Clock.System` | stable | 0.5.0 | Must implement `AuroraMeter.Clock`. `AuroraMeter.Clock.System` is the only value supported in production. |
 | `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise`, `:warn` in 0.5.x and `:deny` from 1.0 | stable | 0.5.0 | `:allow` restores the 0.4.x behaviour exactly. `track/4` is outside the policy. |
 | `:durable_features` | list of atoms, `[]` | deprecated | 0.1.0 | The legacy durable-track list. Kept and warned through 1.x, removed in 2.0. |
+| `:feature_sources` | map of atom to `:buffered \| :events`, `%{}` | additive | 1.0.0 | Where each feature's commercial quantity comes from. Anything not listed is `:buffered`. |
+| `:events_outbox` | atom or `nil`, `nil` | additive | 1.0.0 | Must implement `AuroraMeter.Events.Outbox`. Called inside the record transaction so an export intent commits with the fact. |
+| `:events_future_tolerance` | non-negative integer, `300` | additive | 1.0.0 | Seconds an `occurred_at` may run ahead of the node clock before `AuroraMeter.record/4` refuses it. |
+| `:record_timeout` | positive integer, `15_000` | additive | 1.0.0 | Milliseconds for one durable write, applied to the transaction and every statement in it. |
+| `:record_max_concurrency` | positive integer, `64` | additive | 1.0.0 | Callers that may hold an open record transaction at once. Beyond it, `{:error, {:unavailable, :overloaded}}`; never a fallback to buffered tracking. |
 | `:flush_interval` | positive integer, `5_000` | stable | 0.1.0 | Milliseconds. |
 | `:broadcast_interval` | positive integer, `1_000` | stable | 0.1.0 | Milliseconds. |
 | `:history` | boolean, `true` | stable | 0.2.0 | UTC day buckets for `AuroraMeter.history/3`. |
@@ -415,9 +447,21 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
+| `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 
 `declared` was added to the `track` and `reserve` metadata in 0.5.0, which is an
 additive change: a handler matching on the old keys is unaffected.
+
+`record` is a **span**, not a flat event: an OpenTelemetry bridge has to be able
+to open it before the database work starts, so Ecto's own spans nest inside it,
+and a span reconstructed after the fact cannot parent a child that was already
+emitted. `:telemetry.span/3` emits `:start`, `:stop` and `:exception` under the
+`[:aurora_meter, :record]` prefix; metrics presets read `:stop`, where `duration`
+and `count` are the measurements. `result` is `:inserted`, `:duplicate` or the
+error tag (`:invalid`, `:conflict`, `:unavailable`, `:unsupported`), and
+`projection` is `:ok`, `:cold` or `:projection_failed`, which is how a committed
+event whose in-memory view could not be updated stays visible without becoming
+an error.
 
 The backfill batch event is emitted once per committed batch of
 `mix aurora_meter.events.backfill`. It is the only observable a long backfill
@@ -443,6 +487,7 @@ on the keys you need rather than on the whole map.
 | `{:aurora_meter, :totals, node(), [{key, total}]}` | `"aurora_meter:cluster"` | internal | 0.3.0 | `{:aurora_meter, :totals, node(), totals}` |
 | `{:aurora_meter, :subscription_changed, tenant_key}` | `"aurora_meter:subscriptions"` | internal | 0.2.0 | `{:aurora_meter, :subscription_changed, key}` |
 | `{:aurora_meter, :credits, %{tenant_key, balance, held, available}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :credits,` |
+| `{:aurora_meter, :event, %{tenant_key, feature, event_id, quantity, period_start, kind}}` | `AuroraMeter.Broadcaster.topic/1` | stable | 1.0.0 | `{:aurora_meter, :event,` |
 | `{:aurora_meter, :low_balance, %{tenant_key, available, threshold}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :low_balance, event}` |
 
 The two cluster messages and the subscription invalidation are `internal`: they
@@ -527,6 +572,12 @@ than by SemVer on every name, and nothing in production should call them.
 | `AuroraMeter.Clock.Fixed.advance/2` | `(integer(), unit()) :: :ok` | stable | 0.5.0 | |
 | `AuroraMeter.Clock.Fixed.stop/0` | `() :: :ok` | stable | 0.5.0 | Safe when the agent is not running. |
 | `AuroraMeter.Clock.Fixed.running?/0` | `() :: boolean()` | stable | 0.5.0 | |
+| `AuroraMeter.StorageCase.entry/3` | `(map(), String.t(), pos_integer()) :: AuroraMeter.Storage.event_entry()` | stable | 1.0.0 | One canonical entry for the adapter conformance suite. |
+| `AuroraMeter.StorageCase.active_generation/0` | `() :: non_neg_integer()` | stable | 1.0.0 | The projection generation reads currently resolve to. |
+
+`use AuroraMeter.StorageCase, adapter: MyApp.Storage` runs the adapter conformance
+suite against a custom `AuroraMeter.Storage` implementation; see
+[Storage adapters](storage-adapters.md).
 
 `use AuroraMeter.Test` in an `ExUnit.CaseTemplate` installs the checkout and
 reset callbacks; see [Testing](testing.md).
@@ -555,7 +606,8 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Credits.Promotions` | Promotional-remainder arithmetic for expiry. |
 | `AuroraMeter.Credits.Series` | The money series queries behind `spend_history/2` and `spend_total/2`. |
 | `AuroraMeter.Events.Backfill` | The implementation behind `mix aurora_meter.events.backfill`. Run the task. |
-| `AuroraMeter.Events.Canonical` | The canonical payload encoding behind `payload_hash` (ADR 0009). |
+| `AuroraMeter.Events.Canonical` | The canonical payload encoding behind `payload_hash` (ADR 0009), and the validation `AuroraMeter.record/4` runs before any I/O. |
+| `AuroraMeter.Events.Gate` | The admission counter that bounds concurrent durable writes. Configure `:record_max_concurrency`; there is nothing to call. |
 | `AuroraMeter.Install.Templates` | The strings the installer writes. |
 | `AuroraMeter.Migration.V1` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V2` | One schema version. Call `AuroraMeter.Migration.up/1`. |

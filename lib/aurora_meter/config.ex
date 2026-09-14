@@ -47,6 +47,45 @@ defmodule AuroraMeter.Config do
                   "counts an undeclared feature under every policy."
             ],
             durable_features: [type: {:list, :atom}, default: []],
+            feature_sources: [
+              type: {:map, :atom, {:in, [:buffered, :events]}},
+              default: %{},
+              doc:
+                "Where each feature's commercial quantity comes from: `:buffered` (the ETS " <>
+                  "counter and its flushed rows) or `:events` (durable events recorded with " <>
+                  "`AuroraMeter.record/4`). Anything not listed is `:buffered`."
+            ],
+            events_outbox: [
+              type: :atom,
+              default: nil,
+              doc:
+                "A module implementing `AuroraMeter.Events.Outbox`, called inside the " <>
+                  "transaction that records an event so an export intent commits with the " <>
+                  "fact. `nil` means no export intent is staged."
+            ],
+            events_future_tolerance: [
+              type: :non_neg_integer,
+              default: 300,
+              doc:
+                "Seconds an `occurred_at` may run ahead of the node clock before " <>
+                  "`AuroraMeter.record/4` refuses it."
+            ],
+            record_timeout: [
+              type: :pos_integer,
+              default: 15_000,
+              doc:
+                "Milliseconds one durable write may take, applied to the transaction and to " <>
+                  "every statement in it. A database that stops answering produces " <>
+                  "`{:error, {:unavailable, :timeout}}` rather than an exit."
+            ],
+            record_max_concurrency: [
+              type: :pos_integer,
+              default: 64,
+              doc:
+                "How many callers may hold an open record transaction at once. Beyond it " <>
+                  "`AuroraMeter.record/4` returns `{:error, {:unavailable, :overloaded}}`; it " <>
+                  "never falls back to buffered tracking."
+            ],
             flush_interval: [type: :pos_integer, default: 5_000],
             broadcast_interval: [type: :pos_integer, default: 1_000],
             history: [
@@ -140,6 +179,7 @@ defmodule AuroraMeter.Config do
     :aurora_meter
     |> Schema.validate!(env, @schema, mode)
     |> check_modules!()
+    |> check_outbox!()
     |> check_plans!(mode)
     |> check_deprecations!()
   end
@@ -205,6 +245,43 @@ defmodule AuroraMeter.Config do
   @spec durable_features() :: [atom()]
   def durable_features, do: get(:durable_features)
 
+  @doc "Where each declared feature's commercial quantity comes from."
+  @spec feature_sources() :: %{atom() => :buffered | :events}
+  def feature_sources, do: get(:feature_sources)
+
+  @doc """
+  Where `feature`'s commercial quantity comes from: `:buffered` or `:events`.
+
+  Anything the map does not name is `:buffered`, which is every feature in
+  0.4.x and the default in 1.0. This is the one seam that answers the question:
+  cold seeding, the record path's export eligibility and (from build unit 03c)
+  the `track/4` guard all read it here rather than each consulting the map.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.feature_source(:ai_generations)
+      :buffered
+
+  """
+  @spec feature_source(atom()) :: :buffered | :events
+  def feature_source(feature), do: Map.get(feature_sources(), feature, :buffered)
+
+  @doc "The configured `AuroraMeter.Events.Outbox` implementation, or `nil` for none."
+  @spec events_outbox() :: module() | nil
+  def events_outbox, do: get(:events_outbox)
+
+  @doc "Seconds an `occurred_at` may run ahead of the node clock before it is refused."
+  @spec events_future_tolerance() :: non_neg_integer()
+  def events_future_tolerance, do: get(:events_future_tolerance)
+
+  @doc "Milliseconds one durable write may take before it is `{:unavailable, :timeout}`."
+  @spec record_timeout() :: pos_integer()
+  def record_timeout, do: get(:record_timeout)
+
+  @doc "How many callers may hold an open record transaction at once."
+  @spec record_max_concurrency() :: pos_integer()
+  def record_max_concurrency, do: get(:record_max_concurrency)
+
   @doc "Milliseconds between durable flushes of dirty counters to the database."
   @spec flush_interval() :: pos_integer()
   def flush_interval, do: get(:flush_interval)
@@ -263,6 +340,28 @@ defmodule AuroraMeter.Config do
     end)
 
     opts
+  end
+
+  # `events_outbox` is module-typed but optional, and `nil` is the supported
+  # value for "no export intent", so it cannot join @module_contracts: that list
+  # checks every entry unconditionally and would refuse to boot a host that has
+  # simply not configured one.
+  @spec check_outbox!(keyword()) :: keyword()
+  defp check_outbox!(opts) do
+    case opts[:events_outbox] do
+      nil ->
+        opts
+
+      module ->
+        Schema.ensure_exports!(
+          :aurora_meter,
+          :events_outbox,
+          module,
+          {:behaviour, AuroraMeter.Events.Outbox}
+        )
+
+        opts
+    end
   end
 
   # Warnings only, in both modes, for the two things a plans module can get

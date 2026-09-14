@@ -204,7 +204,8 @@ defmodule AuroraMeter.KillTest do
     report!(context, :kill, "I01 Store killed before the flush")
   end
 
-  test "I03 Counter.commit_work after a Store restart raises (C6, fixed in 03b)", context do
+  test "I03 Counter.commit_work after a Store restart seeds rather than raising (C6, fixed in 03b)",
+       context do
     %{tenant: tenant, period: period} = context
     on = Date.utc_today()
 
@@ -215,31 +216,37 @@ defmodule AuroraMeter.KillTest do
     pid = kill!(Store)
     _restarted = Kill.await_restart!(Store, from: pid)
 
-    # C6: neither commit_work/5 nor release_work/4 calls ensure_seeded/1, so
-    # both raise from :ets.update_counter/3 on a key the restart took away.
-    # `with_quota` would raise here *after* the callback had already succeeded,
-    # and the message names neither the tenant nor the feature, so an operator
-    # reading it cannot tell whose work was lost. 03b seeds the row first and
-    # flips these two assertions.
-    commit =
-      assert_raise ArgumentError, fn ->
-        Counter.commit_work(tenant, :ai_generations, 2, period, on)
-      end
+    # C6, and this is the assertion 03b flipped. Neither `commit_work/5` nor
+    # `release_work/4` called `ensure_seeded/1`, so both raised `ArgumentError`
+    # from `:ets.update_counter/3` on a key the restart had taken away: a raise
+    # *after* the caller's callback had already succeeded, carrying a message
+    # that named neither the tenant nor the feature. Both now seed first.
+    assert Counter.commit_work(tenant, :ai_generations, 2, period, on) == :ok
 
-    release =
-      assert_raise ArgumentError, fn ->
-        Counter.release_work(tenant, :ai_generations, 2, period)
-      end
+    # The reservation itself went with the table, which is the documented
+    # buffered-loss boundary (architecture-map section 12). What must not be
+    # lost is the work that *completed*: it is pending for the next flush.
+    track_receipt!(Store.snapshot_flush_batch().id)
+    assert {:ok, n} = Flusher.flush()
+    assert n >= 1
+    assert fresh(fn -> Storage.load_counter(tenant, :ai_generations, period) end) == 2
 
-    for message <- [Exception.message(commit), Exception.message(release)] do
-      refute message =~ tenant
-      refute message =~ "ai_generations"
-    end
+    # `release_work/4` on a key that was never warm takes the same path, and a
+    # cold key needs no second kill to produce.
+    assert Counter.release_work(tenant, :never_reserved, 2, period) == :ok
+    assert Counter.value(tenant, :never_reserved, period) == -2
 
-    # The asymmetry is the defect: a deferred reserve on the same cold key does
-    # not raise, because reserve_pending/2 seeds before it counts.
+    # And the deferred reserve that always seeded still does. The view reads 2
+    # and not 4, and that number is the price of the fix rather than a defect
+    # in it: `commit_work/5` took `reserved` to -2 on a row whose reservation
+    # the restart had already destroyed, and `Counter.rebase/3` adds `reserved`
+    # into the value it rebases to, so this node's view sits one lost
+    # reservation below the database until the next cold seed. The arithmetic
+    # of `commit_work/5` is deliberately unchanged (03b's brief); what changed
+    # is that it no longer raises out of a callback that has already succeeded.
     assert :ok = Counter.reserve(tenant, :ai_generations, 2, period, nil, true)
     assert AuroraMeter.usage(tenant, :ai_generations) == 2
+    assert fresh(fn -> Storage.load_counter(tenant, :ai_generations, period) end) == 2
 
     report!(context, :kill, "I03 C6 commit_work after a Store restart")
   end

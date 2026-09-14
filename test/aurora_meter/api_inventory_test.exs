@@ -41,6 +41,7 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Credits.Series,
     AuroraMeter.Events.Backfill,
     AuroraMeter.Events.Canonical,
+    AuroraMeter.Events.Gate,
     AuroraMeter.Install.Templates,
     AuroraMeter.Migration.V1,
     AuroraMeter.Migration.V2,
@@ -450,9 +451,15 @@ defmodule AuroraMeter.ApiInventoryTest do
     end)
   end
 
+  # `execute` and `span` both. A span is one emit site that produces three
+  # events, and docs/api.md documents it as one row under its prefix, so the
+  # counts line up. Reading only `execute` would have made the `record` span
+  # invisible to this guard on the very run that introduced it.
   defp telemetry_sites do
     lib_code()
-    |> Enum.flat_map(&Regex.scan(~r/:telemetry\.execute\(\s*(\[:aurora_meter[^\]]*\])/, &1))
+    |> Enum.flat_map(
+      &Regex.scan(~r/:telemetry\.(?:execute|span)\(\s*(\[:aurora_meter[^\]]*\])/, &1)
+    )
     |> Enum.map(&Enum.at(&1, 1))
   end
 

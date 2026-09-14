@@ -1,0 +1,92 @@
+[
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "defp bump(key, qty) do",
+    "status": "identical",
+    "bytes": 264
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "def reserve(tenant_key, feature, qty, period_start, limit, deferred \\\\ false) do",
+    "status": "identical",
+    "bytes": 493
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "def incr(tenant_key, feature, qty, period_start) do",
+    "status": "identical",
+    "bytes": 182
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "defp reserve_pending(key, qty) do",
+    "status": "identical",
+    "bytes": 210
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "def apply_remote(key, delta) do",
+    "status": "identical",
+    "bytes": 549
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "def rebase(key, total, source \\\\ :flush) do",
+    "status": "identical",
+    "bytes": 471
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "def take_pending(key, kind) do",
+    "status": "identical",
+    "bytes": 245
+  },
+  {
+    "file": "lib/aurora_meter/counter.ex",
+    "symbol": "def mark_dirty(key) do",
+    "status": "identical",
+    "bytes": 128
+  },
+  {
+    "file": "lib/aurora_meter/store.ex",
+    "symbol": "def handle_call(:snapshot_flush_batch, _from, state) do",
+    "status": "identical",
+    "bytes": 383
+  },
+  {
+    "file": "lib/aurora_meter/flusher.ex",
+    "symbol": "defp persist(batch) do",
+    "status": "identical",
+    "bytes": 786
+  },
+  {
+    "file": "lib/aurora_meter/broadcaster.ex",
+    "symbol": "defp do_broadcast do",
+    "status": "identical",
+    "bytes": 554
+  },
+  {
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "symbol": "def flush_batch(id, counters, history) do",
+    "status": "identical",
+    "bytes": 1157
+  },
+  {
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "symbol": "def add_counters(rows) do",
+    "status": "identical",
+    "bytes": 1005
+  },
+  {
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "symbol": "def load_counter(tenant_key, feature, period_start) do",
+    "status": "identical",
+    "bytes": 303
+  },
+  {
+    "file": "lib/aurora_meter.ex",
+    "symbol": "def track(tenant, feature, qty \\\\ 1, opts \\\\ []) do",
+    "status": "identical",
+    "bytes": 866
+  }
+]

@@ -210,6 +210,7 @@ defmodule AuroraMeter.MixProject do
         "docs/examples/showing-usage.md",
         "docs/configuration.md",
         "docs/metering.md",
+        "docs/storage-adapters.md",
         "docs/periods.md",
         "docs/entitlements.md",
         "docs/plans.md",
@@ -252,12 +253,6 @@ defmodule AuroraMeter.MixProject do
       # out. Keep it equal to the `@moduledoc false` members of the Internal
       # group below.
       skip_code_autolink_to: [
-        # Named by the 0.5.0 deprecation notice and by docs/upgrading-to-1.0.md
-        # as the 1.0 replacement for `durable_features`. It does not exist yet,
-        # which is the point of saying so; ExDoc would otherwise fail the docs
-        # build under --warnings-as-errors. Remove this line in the release that
-        # adds the function (03b).
-        "AuroraMeter.record/4",
         "AuroraMeter.BootChecks",
         "AuroraMeter.Config.Schema",
         "AuroraMeter.Credits.Ledger",
@@ -299,6 +294,8 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Plans,
         AuroraMeter.Plan,
         AuroraMeter.Subscriptions,
+        AuroraMeter.Events,
+        AuroraMeter.Event,
         AuroraMeter.Flusher,
         AuroraMeter.Migration,
         AuroraMeter.LiveView,
@@ -306,12 +303,14 @@ defmodule AuroraMeter.MixProject do
       ],
       Behaviours: [
         AuroraMeter.Storage,
+        AuroraMeter.Events.Outbox,
         AuroraMeter.Billing.Provider,
         AuroraMeter.Tenant,
         AuroraMeter.Period,
         AuroraMeter.Clock
       ],
       Implementations: [
+        AuroraMeter.Events.Outbox.Noop,
         AuroraMeter.Tenant.Default,
         AuroraMeter.Period.Calendar,
         AuroraMeter.Clock.System,
@@ -321,6 +320,7 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Schema.Counter,
         AuroraMeter.Schema.History,
         AuroraMeter.Schema.Event,
+        AuroraMeter.Schema.EventTotal,
         AuroraMeter.Schema.Subscription,
         AuroraMeter.Schema.CreditBalance,
         AuroraMeter.Schema.CreditTransaction
@@ -332,6 +332,7 @@ defmodule AuroraMeter.MixProject do
       ],
       "Test helpers": [
         AuroraMeter.Test,
+        AuroraMeter.StorageCase,
         AuroraMeter.Clock.Fixed
       ],
       "Mix tasks": [
@@ -351,6 +352,7 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Credits.Series,
         AuroraMeter.Events.Backfill,
         AuroraMeter.Events.Canonical,
+        AuroraMeter.Events.Gate,
         AuroraMeter.Install.Templates,
         AuroraMeter.Migration.V1,
         AuroraMeter.Migration.V2,

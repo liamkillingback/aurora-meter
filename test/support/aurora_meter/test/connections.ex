@@ -33,11 +33,12 @@ defmodule AuroraMeter.Test.Connections do
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Schema.Event
+  alias AuroraMeter.Schema.EventTotal
   alias AuroraMeter.Schema.History
   alias AuroraMeter.Schema.Subscription
   alias Ecto.Adapters.SQL.Sandbox
 
-  @tables [Counter, CreditBalance, CreditTransaction, Event, History, Subscription]
+  @tables [Counter, CreditBalance, CreditTransaction, Event, EventTotal, History, Subscription]
 
   @tenantless [AuroraMeter.Schema.FlushReceipt]
 
