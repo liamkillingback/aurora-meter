@@ -5,6 +5,31 @@
 >
 > This document is the **single source of truth** for building Aurora Meter to completion. It is written so that autonomous agents can execute it phase by phase with **no decisions left open**. If something here is ambiguous, that is a bug in this plan — fix the plan first (add an ADR), then build.
 
+## Current programme (read this first)
+
+This plan is history. Phases 0 to 14 are complete (74 ticked checkboxes, "Project
+complete" at the Phase 14 gate) and describe how Aurora Meter 0.1.0 through 0.4.0
+were built. It remains the reference for the original decisions D1 to D22 and for
+the conventions in `AGENTS.md`.
+
+The current programme is Aurora Meter V1. Its plan is `v1-release.md` in the
+storefront repository that sits beside this one on the build machine
+(`PhxTemplates/v1-release.md`), and its implementation-ready build documents are in
+`PhxTemplates/docs/v1/build-plans/`. Start with that directory's `README.md`, then
+read the build document for your unit. V1's decisions D01 to D14 and invariants I01
+to I22 supersede this file wherever the two disagree; every V1 extension of a
+decision recorded here has an ADR under `docs/adr/` numbered 0009 or higher.
+
+Do not extend this file, do not tick further boxes in it, and do not reuse its phase
+numbers for new evidence: V1 evidence lives in `docs/evidence/v1/phase-NN/`.
+
+Two corrections to the text below, recorded here so nobody follows a stale
+instruction: the test database is configured in `config/config.exs` under
+`if config_env() == :test do`, not in `config/test.exs` (section 4); and the port
+5490 container of record for V1 runs is `aurora-meter-pro-testdb`, not the
+`aurora-meter-testdb` shown in section 4 (both claim the port; see
+`docs/evidence/v1/phase-00/inventory.md`).
+
 ---
 
 ## 0. How to use this plan (agent execution protocol)

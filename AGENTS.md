@@ -10,6 +10,10 @@ bills via Stripe — living inside the host app, which owns its data. The moat i
 ETS-backed real-time metering. Follow `plan.md` phase by phase; never skip a
 Verification Gate.
 
+`plan.md` is complete and historical; the current programme is Aurora Meter V1
+(`PhxTemplates/v1-release.md` and `PhxTemplates/docs/v1/build-plans/`, starting at
+its `README.md`).
+
 ## Commands
 
     mix deps.get
