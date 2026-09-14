@@ -206,6 +206,7 @@ defmodule AuroraMeter.MixProject do
         "docs/examples/showing-usage.md",
         "docs/configuration.md",
         "docs/metering.md",
+        "docs/periods.md",
         "docs/entitlements.md",
         "docs/plans.md",
         "docs/credits.md",

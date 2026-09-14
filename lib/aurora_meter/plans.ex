@@ -51,11 +51,25 @@ defmodule AuroraMeter.Plans do
   end
 
   @doc false
-  defmacro __before_compile__(_env) do
+  defmacro __before_compile__(env) do
+    # Every feature name any plan declares, folded once at compile time and
+    # embedded as a literal. `AuroraMeter.track/4` asks this on its hot path, so
+    # it must not rebuild a set per call.
+    features =
+      env.module
+      |> Module.get_attribute(:aurora_plans, [])
+      |> Enum.flat_map(fn {_id, plan} -> Map.keys(plan.features) end)
+      |> MapSet.new()
+      |> Macro.escape()
+
     quote do
       @doc false
       @spec __aurora_plans__() :: %{optional(atom()) => AuroraMeter.Plan.t()}
       def __aurora_plans__, do: @aurora_plans |> Enum.reverse() |> Map.new()
+
+      @doc false
+      @spec __aurora_features__() :: MapSet.t()
+      def __aurora_features__, do: unquote(features)
     end
   end
 
@@ -161,6 +175,28 @@ defmodule AuroraMeter.Plans do
   @doc "Returns a single plan by id, or `nil`."
   @spec get(atom()) :: Plan.t() | nil
   def get(id), do: Map.get(all(), id)
+
+  @doc """
+  Whether **any** plan declares `feature`.
+
+  Internal: it answers "is this a name the plans module knows at all", which is
+  what separates `reason: :not_in_plan` from `reason: :unknown_feature` in
+  `AuroraMeter.UndeclaredFeatureError` and what `AuroraMeter.track/4` reports as
+  `declared:`. Whether a *tenant* is entitled to it is `AuroraMeter.entitled?/2`.
+
+  A plans module compiled against an older Aurora Meter has no
+  `__aurora_features__/0`; this folds over `all/0` for it instead.
+  """
+  @spec declared_anywhere?(atom()) :: boolean()
+  def declared_anywhere?(feature) do
+    module = plans_module()
+
+    if Code.ensure_loaded?(module) and function_exported?(module, :__aurora_features__, 0) do
+      MapSet.member?(module.__aurora_features__(), feature)
+    else
+      Enum.any?(all(), fn {_id, plan} -> Map.has_key?(plan.features, feature) end)
+    end
+  end
 
   @doc "Returns the feature config for `feature` in `plan_id`, or `nil`."
   @spec feature_config(atom(), atom()) :: Plan.feature_config() | nil

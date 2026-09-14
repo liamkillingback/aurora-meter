@@ -25,7 +25,7 @@ AuroraMeter.check(tenant, :ai_generations)
 | `feature f, true` | `:ok` |
 | `feature f, false` | `{:error, :not_entitled}` |
 | `feature f, n` (integer) | `:ok` — a plan value, read with `feature_value/3` |
-| undeclared | `:ok` (permissive; logs a warning in `:dev`) |
+| not declared on the plan | follows `:undeclared_feature_policy` (see below) |
 
 Helpers:
 
@@ -35,6 +35,31 @@ AuroraMeter.entitled?(tenant, feature)    # plan grants access at all?
 AuroraMeter.remaining(tenant, feature)    # non_neg_integer | :unlimited
 AuroraMeter.feature_value(tenant, :seats, 1)  # the plan's value (boolean or integer), else 1
 ```
+
+## Features the plan does not declare
+
+Until 0.5.0 an undeclared feature was permitted, silently, with a warning that
+only existed in a build compiled in `:dev`. That meant a misspelled feature name
+granted access for the life of the install. `:undeclared_feature_policy`
+(`:allow | :warn | :deny | :raise`) now decides:
+
+```elixir
+# Keep the 0.4.x behaviour exactly:
+config :aurora_meter, undeclared_feature_policy: :allow
+```
+
+The default is `:warn` in the 0.5.x transition release and `:deny` from 1.0. The
+full table, the upgrade sequence and the scanner that lists what would change are
+in [Configuration](configuration.md#undeclared_feature_policy).
+
+Two things worth knowing here. "Undeclared" means *not on this tenant's plan*, so
+a `:free` tenant asking about a `:pro` only feature is undeclared, which is the
+case the policy exists for. And `AuroraMeter.track/4` keeps counting either way:
+metering is not entitlement.
+
+Under `:deny`, `remaining/2` returns `0` rather than `:unlimited`. The documented
+return type is `non_neg_integer() | :unlimited`, and `0` is the honest number
+when nothing is entitled, so a renderer that draws "0 left" is correct.
 
 ## Subscription status
 

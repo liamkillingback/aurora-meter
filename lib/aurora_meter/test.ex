@@ -27,9 +27,15 @@ defmodule AuroraMeter.Test do
 
   For the credit ledger, `fund!/3` and `drain!/1` put a tenant at a known
   balance without inventing references, and `credit_balance/1` reads it back.
+
+  To make a time-dependent behaviour deterministic, freeze the clock with
+  `with_clock/2` and move it with `travel/1` and `travel/2`. The fixed clock is
+  a single named agent, so it is global to the node and every test that uses it
+  must be `async: false`.
   """
 
   alias AuroraMeter.Broadcaster
+  alias AuroraMeter.Clock.Fixed
   alias AuroraMeter.Cluster
   alias AuroraMeter.Config
   alias AuroraMeter.Credits
@@ -170,10 +176,105 @@ defmodule AuroraMeter.Test do
   @spec credit_balance(term()) :: Credits.balance()
   def credit_balance(tenant), do: Credits.balance(tenant)
 
+  @doc """
+  Runs `fun` with the library's clock frozen at `instant`.
+
+  Installs `AuroraMeter.Clock.Fixed` under the `clock:` key, starts it at
+  `instant`, runs `fun`, then stops the agent and restores the previous
+  configuration. Restoration and the stop both run on a raise as well as on a
+  normal return, so one failing test cannot leave the next one frozen.
+
+  Inside the block, move the clock with `travel/1` and `travel/2`.
+
+      with_clock(~U[2026-01-31 23:59:59.999999Z], fn ->
+        assert AuroraMeter.period(org).start == ~U[2026-01-01 00:00:00Z]
+        travel(1, :microsecond)
+        assert AuroraMeter.period(org).start == ~U[2026-02-01 00:00:00Z]
+      end)
+
+  The fixed clock is global to the node: use it only in `async: false` tests.
+  Because a frozen clock stamps every row with the same `inserted_at`, a test
+  that writes several credit ledger rows and then pages `AuroraMeter.Credits.history/2`
+  must `travel/2` between the writes; see `docs/testing.md`.
+  """
+  @spec with_clock(DateTime.t(), (-> result)) :: result when result: var
+  def with_clock(%DateTime{} = instant, fun) when is_function(fun, 0) do
+    serialise(fn ->
+      # A previous run that was killed rather than unwound could have left the
+      # agent behind. Stopping first makes the helper idempotent instead of
+      # failing with :already_started on an unrelated test's mess.
+      Fixed.stop()
+      {:ok, _pid} = Fixed.start_link(instant: instant)
+
+      try do
+        fun.()
+      after
+        Fixed.stop()
+      end
+    end)
+  end
+
+  @doc "Moves the frozen clock to `instant`. Raises outside a `with_clock/2` block."
+  @spec travel(DateTime.t()) :: :ok
+  def travel(%DateTime{} = instant) do
+    ensure_frozen!()
+    Fixed.set(instant)
+  end
+
+  @doc """
+  Moves the frozen clock by `amount` of `unit` (any unit `DateTime.add/3`
+  accepts). Raises outside a `with_clock/2` block, so it cannot silently no-op.
+  """
+  @spec travel(integer(), Fixed.unit()) :: :ok
+  def travel(amount, unit) when is_integer(amount) do
+    ensure_frozen!()
+    Fixed.advance(amount, unit)
+  end
+
+  # Serialises on the same token AuroraMeter.Test.Config uses, so a frozen clock
+  # never overlaps another test's configuration region. That module is this
+  # repository's own harness and ships in no archive, so a host calling
+  # with_clock/2 from its own suite gets the same save and restore without it.
+  defp serialise(fun) do
+    # Module.concat/1 rather than the literal alias: this file is in lib/ and
+    # the harness is in test/support, so a compile-time remote call to it would
+    # warn (and warnings are errors) in every build that does not compile
+    # test/support.
+    lock = Module.concat([:AuroraMeter, :Test, :Config])
+
+    if Code.ensure_loaded?(lock) and is_pid(Process.whereis(lock)) and lock.holder() != self() do
+      lock.with_config([{:aurora_meter, :clock, Fixed}], fun)
+    else
+      # Either there is no harness (a host suite), or this process already holds
+      # the configuration token. Acquiring it again would queue behind itself
+      # and deadlock (open-findings.md X51), and it is unnecessary: the token is
+      # exclusive, so the region this call sits inside is already serialised.
+      previous = Application.fetch_env(:aurora_meter, :clock)
+      Application.put_env(:aurora_meter, :clock, Fixed)
+
+      try do
+        fun.()
+      after
+        restore_clock(previous)
+      end
+    end
+  end
+
+  defp restore_clock({:ok, value}), do: Application.put_env(:aurora_meter, :clock, value)
+  defp restore_clock(:error), do: Application.delete_env(:aurora_meter, :clock)
+
+  defp ensure_frozen! do
+    if Config.clock() != Fixed or not Fixed.running?() do
+      raise RuntimeError,
+            "AuroraMeter.Test.travel/1,2 needs a frozen clock. Wrap the work in " <>
+              "AuroraMeter.Test.with_clock/2."
+    end
+  end
+
   defp keyed(entries, period_start) do
     Enum.map(entries, fn {tenant, feature, amount} ->
       key = Tenant.to_key(tenant)
-      {{key, feature, period_start || Period.current(tenant).start}, amount}
+      {{key, feature, period_start || Period.current!(tenant).start}, amount}
     end)
   end
 end

@@ -48,6 +48,51 @@ AuroraMeter.Test.reset!()
 
 `reset!/0` discards unflushed usage and never touches the database.
 
+## Freezing the clock
+
+Everything in `lib/` reads time through `AuroraMeter.Clock`, so a test can pin
+it instead of waiting:
+
+```elixir
+import AuroraMeter.Test, only: [with_clock: 2, travel: 1, travel: 2]
+
+with_clock(~U[2026-01-31 23:59:59Z], fn ->
+  AuroraMeter.track(tenant, :api_calls, 2)   # counted in January
+  travel(~U[2026-02-01 00:00:01Z])
+  AuroraMeter.track(tenant, :api_calls, 5)   # counted in February
+end)
+```
+
+`with_clock/2` installs `AuroraMeter.Clock.Fixed` under the `clock:` key, runs
+the block, then stops the agent and restores the previous configuration, on a
+raise and on an exit as well as on a normal return. `travel/1` and `travel/2`
+raise outside the block, so they cannot silently do nothing. All four readings
+(`now/0`, `today/0`, `monotonic_ms/0`, `db_now/0`) come from the one frozen
+instant. See [periods](periods.md) for what each reading is for.
+
+Four things to know:
+
+- **The fixed clock is a single named agent, so it is global to the node.** Every
+  module that freezes it is `async: false`. Same rule as any shared fake.
+- **A frozen clock stamps many rows with the same `inserted_at`.** Anything that
+  pages by `inserted_at` alone can then skip rows, so a test that writes several
+  credit ledger rows and then reads `AuroraMeter.Credits.history/2` back must
+  `travel/2` between the writes.
+- **`monotonic_ms/0` shares a number line with the real monotonic clock.** It is
+  an offset from a real reading taken when the agent starts, not the frozen
+  instant's epoch milliseconds. If it were the latter, a TTL computed inside a
+  frozen block (the subscription cache is one) would come back with an expiry
+  decades in the future and outlive the test.
+- **A frozen `db_now/0` stops exercising the query it stands for.** Keep at least
+  one test that calls `AuroraMeter.Clock.System.db_now/0` directly.
+
+A note on the clock control in `test/aurora_meter/clock_test.exs`: it samples the
+host clock under load for `AURORA_CLOCK_SOAK_SECONDS` (default 150) and records
+how far it went backwards. It asserts nothing about the product, and it is slow
+on purpose. The host clock's backwards steps arrive on a 32 to 60 second cadence,
+so a shorter run seeing none proves nothing at all: that is exactly how a 45
+second probe once produced a confident wrong answer.
+
 ## Sandbox
 
 The flusher and broadcaster are background processes, so tests that flush must
@@ -105,7 +150,7 @@ Everything above is for hosts. This section is for maintainers of this
 repository, and describes `test/support/aurora_meter/test/`, which ships in no
 Hex archive and is no part of the public surface.
 
-Seven modules:
+Six modules:
 
 | Module | What it is for |
 |---|---|
@@ -115,7 +160,6 @@ Seven modules:
 | `AuroraMeter.Test.Connections` | N independent non-sandbox connections, and prefix-bounded cleanup |
 | `AuroraMeter.Test.Kill` | kills a worker at a chosen point and observes the death |
 | `AuroraMeter.Test.Config` | `with_config/2` and `put_config/1`, the only way to change configuration in a test |
-| `AuroraMeter.Test.Clock` | a settable clock. Temporary: build unit 02c deletes it |
 
 ### The seven points
 
@@ -258,10 +302,11 @@ letting a proof go quiet:
   call. A new callback, or a shim callback that loses its checks, fails the
   harness test.
 
-### The test clock is temporary
+### The test clock is no longer temporary
 
-`AuroraMeter.Test.Clock` exists only until build unit 02c lands the real clock
-seam (`AuroraMeter.Clock`, configuration key `clock:`), which deletes it. Until
-then, a test that needs the library to see a different instant passes one
-explicitly to the function that already takes one (`Credits.expire_due/1`,
-`Period.current/2`) and says so in a comment.
+`AuroraMeter.Test.Clock` was 01b's placeholder and build unit 02c deleted it.
+The real seam is `AuroraMeter.Clock` behind the `clock:` key, with
+`AuroraMeter.Clock.Fixed` shipping in `lib/` and `AuroraMeter.Test.with_clock/2`
+to install it. See "Freezing the clock" above: it is a host-facing facility, not
+a maintainer-only one, so it lives with the rest of `AuroraMeter.Test` rather
+than in this section.

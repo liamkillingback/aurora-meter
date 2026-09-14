@@ -13,7 +13,10 @@ defmodule AuroraMeter.Supervisor do
       AuroraMeter.Store,
       AuroraMeter.Cluster,
       AuroraMeter.Flusher,
-      AuroraMeter.Broadcaster
+      AuroraMeter.Broadcaster,
+      # Last, and deliberately: the post-start checks need the rest of the tree
+      # up, and they return `:ignore` so nothing is left running.
+      AuroraMeter.BootChecks
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

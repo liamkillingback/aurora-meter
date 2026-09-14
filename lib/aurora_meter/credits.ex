@@ -58,7 +58,11 @@ defmodule AuroraMeter.Credits do
   `{:aurora_meter, :low_balance, ...}` and calls `:credits_low_balance_handler`.
   """
 
+  require Logger
+
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
+  alias AuroraMeter.Credits.CurrencyMismatchError
   alias AuroraMeter.Credits.Ledger
   alias AuroraMeter.Credits.Series
   alias AuroraMeter.Period
@@ -350,7 +354,7 @@ defmodule AuroraMeter.Credits do
   ## Examples
 
       AuroraMeter.Credits.pending_holds(
-        older_than: DateTime.add(DateTime.utc_now(), -3600, :second),
+        older_than: DateTime.add(AuroraMeter.Clock.now(), -3600, :second),
         reference_prefix: "doc:"
       )
 
@@ -554,7 +558,7 @@ defmodule AuroraMeter.Credits do
   def summary(tenant) do
     tenant_key = Tenant.to_key(tenant)
     snapshot = balance(tenant)
-    period = Period.current(tenant)
+    period = Period.current!(tenant)
     this_period = Series.sum_between(tenant_key, period.start, period.end, Series.spend_kinds())
     burn = daily_burn(tenant_key)
 
@@ -574,7 +578,7 @@ defmodule AuroraMeter.Credits do
 
   @spec daily_burn(String.t()) :: non_neg_integer() | nil
   defp daily_burn(tenant_key) do
-    to = Date.utc_today()
+    to = Clock.today()
     from = Date.add(to, -(@burn_days - 1))
 
     case Series.total(tenant_key, from, to, Series.spend_kinds()) do
@@ -628,7 +632,12 @@ defmodule AuroraMeter.Credits do
 
   """
   @spec expire_due(DateTime.t()) :: {:ok, non_neg_integer()}
-  def expire_due(now \\ DateTime.utc_now()), do: Ledger.expire_due(now)
+  # `db_now/0`, not `now/0`: this compares against `expires_at`, a persisted
+  # timestamp, and decides whether a tenant's money is still theirs. Every node
+  # running expiry must agree on "now", and the database is the one clock they
+  # share (`AuroraMeter.Clock`). It is already a database operation, so the
+  # round trip costs nothing worth counting.
+  def expire_due(now \\ Clock.db_now()), do: Ledger.expire_due(now)
 
   @doc """
   Subscribes the calling process to `tenant`'s credit updates:
@@ -657,4 +666,59 @@ defmodule AuroraMeter.Credits do
   """
   @spec topic(String.t()) :: String.t()
   def topic(tenant_key) when is_binary(tenant_key), do: Ledger.topic(tenant_key)
+
+  @doc """
+  Raises unless every stored credit balance carries `:credits_currency`.
+
+  The currency is stamped once, when a balance row is created, and nothing
+  re-reads it. Changing `:credits_currency` on a wallet set that already has
+  rows therefore leaves two currencies side by side and every total across them
+  is meaningless. Aurora Meter's own boot checks call this once per node when the
+  supervision tree starts; a host may also call it from its own health check.
+
+  The check is **skipped**, with one `:info` line, when the repo is not
+  started, the credit tables are absent, or the query fails for any other
+  reason: a host that has not run the credit migration, or that starts Aurora
+  Meter before its repo, must still boot.
+  """
+  @spec assert_currency!() :: :ok
+  def assert_currency! do
+    configured = Config.credits_currency()
+
+    case stored_currencies() do
+      {:ok, rows} -> compare_currencies!(configured, rows)
+      {:skipped, reason} -> skip_currency_check(reason)
+    end
+  end
+
+  @spec compare_currencies!(String.t(), [{String.t(), non_neg_integer()}]) :: :ok
+  defp compare_currencies!(configured, rows) do
+    case Enum.reject(rows, fn {currency, _count} -> currency == configured end) do
+      [] -> :ok
+      mismatched -> raise CurrencyMismatchError, configured: configured, stored: mismatched
+    end
+  end
+
+  @spec skip_currency_check(String.t()) :: :ok
+  defp skip_currency_check(reason) do
+    Logger.info("AuroraMeter: credit currency check skipped: #{reason}")
+  end
+
+  # `limit: 5` because the message only has to show the operator that there is a
+  # problem and roughly how big it is, not enumerate a corrupted wallet set.
+  @spec stored_currencies() :: {:ok, [{String.t(), non_neg_integer()}]} | {:skipped, String.t()}
+  defp stored_currencies do
+    query =
+      from(b in CreditBalance,
+        group_by: b.currency,
+        select: {b.currency, count(b.id)},
+        limit: 5
+      )
+
+    {:ok, Config.repo().all(query)}
+  rescue
+    error -> {:skipped, Exception.message(error)}
+  catch
+    :exit, reason -> {:skipped, "the repo is not available (#{inspect(reason)})"}
+  end
 end

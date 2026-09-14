@@ -3,6 +3,8 @@ defmodule AuroraMeter.MeteringTest do
   use AuroraMeter.DataCase, async: false
   use ExUnitProperties
 
+  import AuroraMeter.Test, only: [travel: 1, travel: 2, with_clock: 2]
+
   alias AuroraMeter.Counter
   alias AuroraMeter.Flusher
   alias AuroraMeter.Period
@@ -94,5 +96,40 @@ defmodule AuroraMeter.MeteringTest do
 
     AuroraMeter.track(unique_tenant(), :ops, 2)
     assert_receive {:track_event, %{count: 2}, %{feature: :ops}}
+  end
+
+  # Build unit 02c. Both cases need the clock frozen, which is node-wide, and
+  # this module is already async: false.
+  describe "the period boundary" do
+    test "P01 track/4 at the exact period boundary counts into the new period" do
+      tenant = unique_tenant()
+      january = ~U[2026-01-01 00:00:00Z]
+      february = ~U[2026-02-01 00:00:00Z]
+
+      with_clock(~U[2026-01-31 23:59:59.999999Z], fn ->
+        AuroraMeter.track(tenant, :ops, 2)
+
+        # The boundary instant itself belongs to the next period: [start, end).
+        travel(february)
+        AuroraMeter.track(tenant, :ops, 5)
+      end)
+
+      assert Counter.value(tenant, :ops, january) == 2
+      assert Counter.value(tenant, :ops, february) == 5
+    end
+
+    test "P03 incr/4's day bucket is the date of the same clock read as the period" do
+      tenant = unique_tenant()
+
+      with_clock(~U[2026-01-31 23:59:59.999999Z], fn ->
+        AuroraMeter.track(tenant, :ops, 2)
+        travel(1, :microsecond)
+        AuroraMeter.track(tenant, :ops, 5)
+      end)
+
+      # The period moved and the day bucket moved with it, from one clock read.
+      assert Counter.day_value(tenant, :ops, ~D[2026-01-31]) == 2
+      assert Counter.day_value(tenant, :ops, ~D[2026-02-01]) == 5
+    end
   end
 end

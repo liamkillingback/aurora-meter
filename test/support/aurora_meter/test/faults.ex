@@ -82,6 +82,14 @@ defmodule AuroraMeter.Test.Faults do
   @typedoc "What firing does to the checking process."
   @type action :: :raise | :exit_kill_self | {:block_until, reference()} | {:delay, pos_integer()}
 
+  # These two keep their names. The library's own exceptions all end in `Error`,
+  # and from build unit 02b they outnumber these, so Credo's consistency check
+  # now reads `Error` as the house style and reports the harness as the outlier.
+  # Renaming them would rename two test descriptions that build unit 01b's
+  # evidence tables quote verbatim, which is a worse trade than two comments:
+  # these are fault fixtures raised inside a test, not part of the library's
+  # error model.
+  # credo:disable-for-next-line Credo.Check.Consistency.ExceptionNames
   defmodule Injected do
     @moduledoc "Raised by the `:raise` action. Carries the point, context and label."
     defexception [:point, :context, :label]
@@ -92,6 +100,7 @@ defmodule AuroraMeter.Test.Faults do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Consistency.ExceptionNames
   defmodule Timeout do
     @moduledoc "Raised when a `{:block_until, ref}` release never arrives."
     defexception [:point, :ref, :owner, :blocked, :timeout]

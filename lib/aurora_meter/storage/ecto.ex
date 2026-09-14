@@ -10,6 +10,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   import Ecto.Query
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Schema.Counter
   alias AuroraMeter.Schema.Event
   alias AuroraMeter.Schema.FlushReceipt
@@ -20,7 +21,7 @@ defmodule AuroraMeter.Storage.Ecto do
   def flush_batch(id, counters, history) do
     repo().transaction(fn ->
       {inserted, _} =
-        repo().insert_all(FlushReceipt, [%{id: id, inserted_at: DateTime.utc_now()}],
+        repo().insert_all(FlushReceipt, [%{id: id, inserted_at: Clock.now()}],
           on_conflict: :nothing,
           conflict_target: [:id]
         )
@@ -56,7 +57,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   @impl AuroraMeter.Storage
   def upsert_counters(rows) do
-    now = DateTime.utc_now()
+    now = Clock.now()
 
     entries =
       Enum.map(rows, fn row ->
@@ -80,7 +81,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   @impl AuroraMeter.Storage
   def add_counters(rows) do
-    now = DateTime.utc_now()
+    now = Clock.now()
 
     entries =
       Enum.map(rows, fn row ->
@@ -122,7 +123,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   @impl AuroraMeter.Storage
   def add_history(rows) do
-    now = DateTime.utc_now()
+    now = Clock.now()
 
     entries =
       Enum.map(rows, fn row ->
@@ -174,7 +175,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   @impl AuroraMeter.Storage
   def upsert_history(rows) do
-    now = DateTime.utc_now()
+    now = Clock.now()
 
     entries =
       Enum.map(rows, fn row ->
@@ -242,7 +243,7 @@ defmodule AuroraMeter.Storage.Ecto do
 
   @impl AuroraMeter.Storage
   def insert_events(rows) do
-    now = DateTime.utc_now()
+    now = Clock.now()
 
     entries =
       Enum.map(rows, fn row ->

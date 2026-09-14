@@ -227,6 +227,13 @@ estimated: see I03's known limits and
 - `AuroraMeter.KillTest` / `test I04 a killed caller's reservation continues to occupy the limit on that node`
 - `AuroraMeter.ExamplesTest` / `test team-saas.md with_quota/3 admits exactly the cap under concurrency`
 - `AuroraMeter.EntitlementsTest` / `test check/2 blocks a hard cap at the limit`
+- `AuroraMeter.FeaturePolicyTest` / `test I04 denial under :deny never reserves`
+- `AuroraMeter.FeaturePolicyTest` / `test I04 declared-feature reservation is policy-invariant`
+
+The last two are build unit 02b's contribution: `:undeclared_feature_policy` adds
+a branch in front of the reservation, so the guarantee above now also has to say
+that a denied call takes no capacity and that a declared feature's reservation
+behaves the same under all four policy values.
 
 **Evidence.** `docs/evidence/v1/phase-01/i04.md`
 

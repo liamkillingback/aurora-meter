@@ -48,9 +48,13 @@ defmodule AuroraMeter do
   ledger in micro-dollars, next to (not instead of) the plan counters above.
   """
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
+  alias AuroraMeter.Config.Schema, as: ConfigSchema
   alias AuroraMeter.Counter
+  alias AuroraMeter.Entitlements
   alias AuroraMeter.Period
+  alias AuroraMeter.Plans
   alias AuroraMeter.Storage
   alias AuroraMeter.Tenant
 
@@ -77,17 +81,29 @@ defmodule AuroraMeter do
   Runs on the ETS hot path (no database round-trip) unless the feature is durable
   (`opts[:durable]` or configured in `:durable_features`), in which case a raw
   event row is also written. Options: `:durable` (boolean), `:metadata` (map).
+
+  `track/4` never refuses a feature no plan declares: metering is not
+  entitlement, and metering a name before it reaches a plan is a reasonable
+  thing to do. It reports the condition instead, as `declared:` in
+  `[:aurora_meter, :track]` telemetry metadata.
   """
   @spec track(term(), atom(), integer(), keyword()) :: :ok
   def track(tenant, feature, qty \\ 1, opts \\ []) do
+    feature = feature!(feature)
     tenant_key = Tenant.to_key(tenant)
-    period_start = Period.current(tenant).start
+    period_start = Period.current!(tenant).start
     Counter.incr(tenant_key, feature, qty, period_start)
     maybe_write_event(tenant_key, feature, qty, opts)
 
+    # `declared:` here is "does any plan declare this name", not "is this tenant
+    # entitled to it". Answering the second would mean resolving the tenant's
+    # subscription on `track/4`, and with `subscription_cache_ttl: 0` that is a
+    # database read on the hot path, which `architecture-map.md` section 3
+    # forbids. `AuroraMeter.entitled?/2` answers the entitlement question.
     :telemetry.execute([:aurora_meter, :track], %{count: qty}, %{
       tenant_key: tenant_key,
-      feature: feature
+      feature: feature,
+      declared: Plans.declared_anywhere?(feature)
     })
 
     :ok
@@ -96,13 +112,13 @@ defmodule AuroraMeter do
   @doc "Returns `tenant`'s usage of `feature` in the current period."
   @spec usage(term(), atom()) :: integer()
   def usage(tenant, feature) do
-    Counter.value(Tenant.to_key(tenant), feature, Period.current(tenant).start)
+    Counter.value(Tenant.to_key(tenant), feature!(feature), Period.current!(tenant).start)
   end
 
   @doc "Returns a map of `feature => value` for `tenant`'s warm counters this period."
   @spec usage_all(term()) :: %{atom() => integer()}
   def usage_all(tenant) do
-    Counter.all_for(Tenant.to_key(tenant), Period.current(tenant).start)
+    Counter.all_for(Tenant.to_key(tenant), Period.current!(tenant).start)
   end
 
   @doc """
@@ -118,8 +134,9 @@ defmodule AuroraMeter do
   """
   @spec history(term(), atom(), keyword()) :: [Storage.history_point()]
   def history(tenant, feature, opts \\ []) do
+    feature = feature!(feature)
     tenant_key = Tenant.to_key(tenant)
-    to = Keyword.get(opts, :to, Date.utc_today())
+    to = Keyword.get(opts, :to, Clock.today())
     days = Keyword.get(opts, :days, 30)
     from = Keyword.get(opts, :from, Date.add(to, -(days - 1)))
 
@@ -137,7 +154,7 @@ defmodule AuroraMeter do
 
   @doc "Returns the current billing period for `tenant` (`%{start:, end:, source:}`)."
   @spec period(term()) :: Period.t()
-  def period(tenant), do: Period.current(tenant)
+  def period(tenant), do: Period.current!(tenant)
 
   @doc "Assigns `plan_id` to `tenant` locally. See `AuroraMeter.Entitlements.subscribe/2`."
   @spec subscribe(term(), atom() | String.t()) ::
@@ -156,19 +173,19 @@ defmodule AuroraMeter do
   `reserve/3` or `with_quota/4`.
   """
   @spec check(term(), atom()) :: :ok | {:error, :limit_exceeded | :not_entitled}
-  defdelegate check(tenant, feature), to: AuroraMeter.Entitlements
+  def check(tenant, feature), do: Entitlements.check(tenant, feature!(feature))
 
   @doc "Whether `check/2` currently returns `:ok`."
   @spec allowed?(term(), atom()) :: boolean()
-  defdelegate allowed?(tenant, feature), to: AuroraMeter.Entitlements
+  def allowed?(tenant, feature), do: Entitlements.allowed?(tenant, feature!(feature))
 
   @doc "Whether the plan grants access to `feature` (ignores quota)."
   @spec entitled?(term(), atom()) :: boolean()
-  defdelegate entitled?(tenant, feature), to: AuroraMeter.Entitlements
+  def entitled?(tenant, feature), do: Entitlements.entitled?(tenant, feature!(feature))
 
   @doc "Remaining quota for a hard-limited feature, or `:unlimited`."
   @spec remaining(term(), atom()) :: non_neg_integer() | :unlimited
-  defdelegate remaining(tenant, feature), to: AuroraMeter.Entitlements
+  def remaining(tenant, feature), do: Entitlements.remaining(tenant, feature!(feature))
 
   @doc """
   The value of a `feature :name, value` declaration on `tenant`'s plan
@@ -179,30 +196,88 @@ defmodule AuroraMeter do
   """
   @spec feature_value(term(), atom(), default) :: boolean() | non_neg_integer() | default
         when default: term()
-  defdelegate feature_value(tenant, feature, default \\ nil), to: AuroraMeter.Entitlements
+  def feature_value(tenant, feature, default \\ nil),
+    do: Entitlements.feature_value(tenant, feature!(feature), default)
 
   @doc "A dashboard-ready quota snapshot. See `AuroraMeter.Entitlements.quota/2`."
-  @spec quota(term(), atom()) :: AuroraMeter.Entitlements.quota()
-  defdelegate quota(tenant, feature), to: AuroraMeter.Entitlements
+  @spec quota(term(), atom()) :: Entitlements.quota()
+  def quota(tenant, feature), do: Entitlements.quota(tenant, feature!(feature))
 
   @doc "Atomically reserves usage against the plan. See `AuroraMeter.Entitlements.reserve/3`."
   @spec reserve(term(), atom()) :: :ok | {:error, :limit_exceeded | :not_entitled}
-  defdelegate reserve(tenant, feature), to: AuroraMeter.Entitlements
+  def reserve(tenant, feature), do: Entitlements.reserve(tenant, feature!(feature))
 
   @doc "Atomically reserves `qty` usage against the plan."
   @spec reserve(term(), atom(), pos_integer()) :: :ok | {:error, :limit_exceeded | :not_entitled}
-  defdelegate reserve(tenant, feature, qty), to: AuroraMeter.Entitlements
+  def reserve(tenant, feature, qty), do: Entitlements.reserve(tenant, feature!(feature), qty)
 
   @doc "Gates, runs, and meters in one step. See `AuroraMeter.Entitlements.with_quota/4`."
   @spec with_quota(term(), atom(), (-> result)) :: {:ok, result} | {:error, term()}
         when result: term()
-  defdelegate with_quota(tenant, feature, fun), to: AuroraMeter.Entitlements
+  def with_quota(tenant, feature, fun) when is_function(fun, 0),
+    do: Entitlements.with_quota(tenant, feature!(feature), fun)
 
   @doc "Gates, runs, and meters `qty` in one step."
   @spec with_quota(term(), atom(), pos_integer(), (-> result)) ::
           {:ok, result} | {:error, term()}
         when result: term()
-  defdelegate with_quota(tenant, feature, qty, fun), to: AuroraMeter.Entitlements
+  def with_quota(tenant, feature, qty, fun) when is_function(fun, 0),
+    do: Entitlements.with_quota(tenant, feature!(feature), qty, fun)
+
+  # The one place a feature name is checked. Features are keyed as atoms in ETS
+  # and stored as strings in the database, so tracking `"api"` and `:api` keeps
+  # two in-memory counters that seed from and flush into one database row (open
+  # finding C4). The rejection is a facade rule: `AuroraMeter.Storage`
+  # callbacks keep taking `atom() | String.t()`, because stored rows carry
+  # strings and Pro reads them back.
+  #
+  # The return type is deliberately `term()`: in the transition release a binary
+  # is warned about and passed through unchanged, so a 0.5.x upgrade breaks
+  # nobody.
+  #
+  # `mode` is a parameter, and the arity-2 form is public but undocumented, so
+  # the suite can exercise both halves of the transition without depending on
+  # the package's own version.
+  @doc false
+  @spec feature!(term(), ConfigSchema.mode()) :: term()
+  def feature!(feature, mode \\ ConfigSchema.mode())
+
+  def feature!(feature, _mode) when is_atom(feature), do: feature
+
+  def feature!(feature, :strict) when is_binary(feature) do
+    raise ArgumentError, binary_feature_message(feature, :strict)
+  end
+
+  def feature!(feature, :transition) when is_binary(feature) do
+    ConfigSchema.warn_once(:binary_feature, feature, fn ->
+      binary_feature_message(feature, :transition)
+    end)
+
+    feature
+  end
+
+  def feature!(feature, _mode) do
+    raise ArgumentError,
+          "feature names are atoms; got #{inspect(feature, limit: 3, printable_limit: 64)}."
+  end
+
+  @spec binary_feature_message(String.t(), :strict | :transition) :: String.t()
+  defp binary_feature_message(feature, mode) do
+    atom = ":" <> feature
+
+    "feature names are atoms; got #{inspect(feature)}. Use #{atom}. (Aurora Meter stores " <>
+      "features as strings but keys them as atoms, so passing a string creates a second " <>
+      "in-memory counter for the same database row.) " <> binary_feature_tail(mode)
+  end
+
+  @spec binary_feature_tail(:strict | :transition) :: String.t()
+  defp binary_feature_tail(:strict), do: ""
+
+  defp binary_feature_tail(:transition) do
+    "This version keeps the old behaviour and warns once per name; Aurora Meter 1.0 raises. " <>
+      "The stored row is already keyed by the string form, so switching to the atom keeps " <>
+      "the history."
+  end
 
   @spec maybe_write_event(String.t(), atom(), integer(), keyword()) :: :ok
   defp maybe_write_event(tenant_key, feature, qty, opts) do

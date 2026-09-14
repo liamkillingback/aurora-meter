@@ -62,6 +62,48 @@ defmodule Parsely.Plans do
   end
 end
 
+defmodule MyApp.DailyPeriod do
+  @moduledoc "Usage buckets to the UTC day."
+
+  @behaviour AuroraMeter.Period
+
+  @impl AuroraMeter.Period
+  def current(_tenant, now), do: day(DateTime.to_date(now))
+
+  @impl AuroraMeter.Period
+  def containing(_tenant, instant), do: day(DateTime.to_date(instant))
+
+  defp day(date) do
+    %{
+      start: DateTime.new!(date, ~T[00:00:00], "Etc/UTC"),
+      end: DateTime.new!(Date.add(date, 1), ~T[00:00:00], "Etc/UTC"),
+      source: :daily
+    }
+  end
+end
+
+defmodule MyApp.WeeklyPeriod do
+  @moduledoc "Usage buckets to the ISO week: Monday 00:00:00 UTC to Monday 00:00:00 UTC."
+
+  @behaviour AuroraMeter.Period
+
+  @impl AuroraMeter.Period
+  def current(_tenant, now), do: week(DateTime.to_date(now))
+
+  @impl AuroraMeter.Period
+  def containing(_tenant, instant), do: week(DateTime.to_date(instant))
+
+  defp week(date) do
+    monday = Date.beginning_of_week(date, :monday)
+
+    %{
+      start: DateTime.new!(monday, ~T[00:00:00], "Etc/UTC"),
+      end: DateTime.new!(Date.add(monday, 7), ~T[00:00:00], "Etc/UTC"),
+      source: :weekly
+    }
+  end
+end
+
 defmodule AuroraMeter.ExamplesTest do
   @moduledoc """
   The example guides, executed.
@@ -76,8 +118,12 @@ defmodule AuroraMeter.ExamplesTest do
   """
   use AuroraMeter.DataCase, async: false
 
+  import AuroraMeter.Test, only: [with_clock: 2]
+
   alias AuroraMeter.Credits
   alias AuroraMeter.Credits.Money
+  alias AuroraMeter.Period
+  alias AuroraMeter.Test.Config, as: TestConfig
 
   describe "concepts.md" do
     test "micro-dollars are what the table says they are" do
@@ -441,5 +487,53 @@ defmodule AuroraMeter.ExamplesTest do
       assert Money.format_compact(1_500) == "$0.0015"
       assert Money.format_compact(0) == "$0"
     end
+  end
+
+  describe "periods.md" do
+    # The two modules above this test module are the guide's recipes, copied
+    # verbatim. Compiling them is already a test; these run them against the
+    # real contract so a recipe that stops satisfying it fails the suite.
+    test "the documented daily period source satisfies the Period contract" do
+      with_source(MyApp.DailyPeriod, ~U[2026-02-10 09:30:00Z], fn ->
+        period = Period.current!(unique_tenant())
+
+        assert period.start == ~U[2026-02-10 00:00:00Z]
+        assert period.end == ~U[2026-02-11 00:00:00Z]
+        assert period.source == :daily
+      end)
+    end
+
+    test "the documented weekly period source satisfies the Period contract" do
+      # 2026-02-10 is a Tuesday; its ISO week starts Monday 2026-02-09.
+      with_source(MyApp.WeeklyPeriod, ~U[2026-02-10 09:30:00Z], fn ->
+        period = Period.current!(unique_tenant())
+
+        assert period.start == ~U[2026-02-09 00:00:00Z]
+        assert period.end == ~U[2026-02-16 00:00:00Z]
+        assert period.source == :weekly
+      end)
+    end
+
+    test "the documented sources answer containing/2 for an instant one period in the past" do
+      tenant = unique_tenant()
+
+      with_source(MyApp.DailyPeriod, ~U[2026-02-10 09:30:00Z], fn ->
+        assert Period.containing(tenant, ~U[2026-02-09 23:59:59Z]).start ==
+                 ~U[2026-02-09 00:00:00Z]
+      end)
+
+      with_source(MyApp.WeeklyPeriod, ~U[2026-02-10 09:30:00Z], fn ->
+        assert Period.containing(tenant, ~U[2026-02-08 23:59:59Z]).start ==
+                 ~U[2026-02-02 00:00:00Z]
+      end)
+    end
+  end
+
+  # The clock helper notices that this process already holds the configuration
+  # token and does not queue behind itself (open-findings.md X51).
+  defp with_source(source, instant, fun) do
+    TestConfig.with_config([{:aurora_meter, :period_source, source}], fn ->
+      with_clock(instant, fun)
+    end)
   end
 end

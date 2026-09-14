@@ -1,0 +1,130 @@
+02c commands, core (aurora_meter).
+
+Machine: DESKTOP-8R659B3, WSL2 Ubuntu-24.04, Linux 6.6.87.2-microsoft-standard-WSL2,
+         24 logical processors.
+Toolchain: Elixir 1.20.1, OTP 29 (erts 17.0.1), Postgres on DB_PORT=5490.
+           time_correction=true, time_warp_mode=:multi_time_warp (the OTP 29
+           default; nothing in this repository sets it, and a bare `erl` reports
+           the same with ELIXIR_ERL_OPTIONS and ERL_FLAGS unset).
+Repo state: aurora_meter at 6ea3a6e plus this unit's uncommitted working tree.
+Lane: every Mix command through tmp/v1/mixlane.sh core (flock on tmp/v1/locks/core.lock).
+      One Mix workload at a time throughout (execution-waves.md rule 7).
+mix.lock: unchanged. `mix deps.get` reported "All dependencies have been fetched"
+          with no additions or moves.
+Nothing was committed, tagged, pushed, published or deployed.
+
+--------------------------------------------------------------------------------
+STEP 0: the measurement, run before anything was built on it
+--------------------------------------------------------------------------------
+
+The unit STOPPED here on its first pass and reported: the measurement refuted the
+plan's hypothesis. The owner then decided (the database clock for money) and the
+unit resumed. Step 0 was NOT re-run. Full write-up: 02c-clock-choice.md.
+
+1. PROBE_SECONDS=420 elixir tmp/v1/02c/step0-clock.exs
+   started 2026-09-14T11:43:16Z  finished 2026-09-14T11:50:00Z  exit 0
+   log: tmp/v1/02c/logs/step0-clock.log
+   337,900,054 samples of each reading, 24 loaders:
+     DateTime.utc_now/0       backwards 13, largest 1.330921 s
+     System.os_time/1         backwards 13, largest 1.330923 s
+     System.system_time/1     backwards  6, largest 2.647191 s   <-- REFUTED THE PLAN
+     System.monotonic_time/1  backwards  0
+
+2. PROBE_SECONDS=200 elixir tmp/v1/02c/step0-candidates.exs
+   started 2026-09-14T11:50:49Z  finished 2026-09-14T11:54:03Z  exit 0
+   log: tmp/v1/02c/logs/step0-candidates.log
+   Confirms (1) and measures all six candidate bases and their per-call cost.
+
+3. ERL_FLAGS="+C no_time_warp" PROBE_SECONDS=200 elixir tmp/v1/02c/step0-clock.exs
+   started 2026-09-14T11:54:03Z  finished 2026-09-14T11:57:18Z  exit 0
+   log: tmp/v1/02c/logs/step0-no-time-warp.log
+   System.system_time/1 backwards 0; System.os_time/1 backwards 6.
+
+4. ERL_FLAGS="+C single_time_warp" PROBE_SECONDS=200 elixir tmp/v1/02c/step0-clock.exs
+   started 2026-09-14T11:57:18Z  finished 2026-09-14T12:00:33Z  exit 0
+   log: tmp/v1/02c/logs/step0-single-time-warp.log
+   System.system_time/1 backwards 0; System.os_time/1 backwards 6.
+   (3) and (4) isolate the mechanism. They are a diagnosis, not a remedy: the
+   host owns +C, and this is a library.
+
+5. bash tmp/v1/02c/warpsrc.sh   (2026-09-14T11:50Z, exit 0)
+   erl -noshell -eval 'io:format("~p", [erlang:system_info(time_warp_mode)])'
+   reports multi_time_warp with ELIXIR_ERL_OPTIONS and ERL_FLAGS both unset.
+
+6. The refutation through the library's own seam, before the decision:
+   mix test test/aurora_meter/clock_test.exs --seed 0 \
+     --only describe:"P06: the clock does not go backwards"
+   started 2026-09-14T12:06:07Z  finished 2026-09-14T12:08:34Z  exit 2 (FAILED)
+   log: tmp/v1/02c/logs/p06-150s.txt
+     [P06] 150s, 24 loaders, 82903129 samples:
+       Clock.now/0 backwards=2 worst=2.065293s
+       control DateTime.utc_now/0 backwards=4 worst=1.293658s
+   That test now exists as a negative control that asserts nothing about now/0.
+
+--------------------------------------------------------------------------------
+VERIFICATION, after the decision
+--------------------------------------------------------------------------------
+
+7. mixlane core: mix format <only the files this unit changed>
+   2026-09-14T12:42:37Z, exit 0.  script: tmp/v1/02c/format-changed.sh
+   No project-wide `mix format` was run at any point.
+
+8. mixlane core: tmp/v1/02c/core-scoped.sh
+   2026-09-14T12:42:41Z to 12:43:09Z.  log: tmp/v1/02c/logs/core-scoped.txt
+     mix deps.get                               exit 0 (lock unchanged)
+     mix test.setup                             exit 0
+     mix compile --warnings-as-errors --force   exit 0
+     mix format --check-formatted               exit 0
+     mix test clock_test period_test --seed 0   1 failure, P08 audit: config.ex
+       matched the bare word "db_now" in its boot-check list. Audit narrowed to
+       "db_now()" (a call, not a declaration); re-run exit 0, 26 passed.
+     mix test entitlements metering examples --seed 0   exit 0, 68 passed
+
+9. mixlane core: tmp/v1/02c/cost.sh
+   mix run <throwaway script, deleted afterwards>
+   2026-09-14T12:52:52Z to 12:52:57Z, exit 0.
+   log: tmp/v1/02c/logs/validation-cost.txt
+     median Period.current/2   100k:  69,667 us  (696.67 ns per call)
+     median Period.current!/2  100k: 115,292 us  (1152.92 ns per call)
+     median Clock.now/0        100k:  23,762 us  (237.62 ns per call)
+     median Clock.System.db_now/0 1k: 371,683 us (371.68 us per call)
+     validation cost per call: 456.25 ns (+65% on the period read)
+   Recorded in 02c-validation-cost.md and 02c-db-clock.md. No budget asserted
+   here; 08c owns budgets.
+
+10. mixlane core: tmp/v1/02c/check-both.sh core   (mix check, HONEST DEFAULTS)
+    2026-09-14T12:54:01Z to 12:56:49Z, exit 0.  log: tmp/v1/02c/logs/core-check.txt
+      format --check-formatted                exit 0
+      compile --warnings-as-errors --force    exit 0
+      credo --strict                          1067 mods/funs, found no issues
+      dialyzer                                Total errors: 0
+      test                                    419 passed (42 doctests,
+                                              10 properties, 367 tests), 3 excluded
+      docs                                    built (one pre-existing warning
+                                              about the hidden AuroraMeter.Supervisor)
+    163 s, of which 150 s is the clock control. No AURORA_CLOCK_SOAK_SECONDS
+    override: the suite is green at its own defaults.
+
+11. mixlane core: tmp/v1/02c/seed7.sh core
+    2026-09-14T12:57:16Z to 12:57:52Z.  log: tmp/v1/02c/logs/core-seed7.txt
+      mix format --check-formatted                    exit 0
+      AURORA_CLOCK_SOAK_SECONDS=20 mix test --seed 7  exit 0, 419 passed
+    A second seed, because one seed proves less than two.
+
+12. bash tmp/v1/02c/audit.sh   (2026-09-14T12:48Z and re-run after the Pro half)
+    core lib: "clean". Both packages together: clean but for the one documented
+    exception, the @doc example at aurora_meter_pro/lib/aurora_meter/pro/audit_log.ex:181.
+
+--------------------------------------------------------------------------------
+TEST COUNTS
+--------------------------------------------------------------------------------
+
+Baseline (docs/evidence/v1/phase-01/i10.md):
+  363 passed (35 doctests, 10 properties, 318 tests), 3 excluded
+After this unit:
+  419 passed (42 doctests, 10 properties, 367 tests), 3 excluded
+  +56: 7 doctests and 49 tests.
+
+Two test-support modules were removed, not added: `AuroraMeter.Test.Clock` and
+its two self-tests, replaced by `test/aurora_meter/clock_test.exs`, which covers
+considerably more.

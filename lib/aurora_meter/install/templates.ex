@@ -52,6 +52,7 @@ defmodule AuroraMeter.Install.Templates do
     Aurora Meter is installed.
 
       config :aurora_meter, repo: #{inspect(repo)}, pubsub: #{inspect(pubsub)}, plans: #{inspect(plans)}
+      undeclared_feature_policy: :deny (a feature no plan declares is refused, not allowed)
       AuroraMeter added to your supervision tree
       #{inspect(plans)} created with :free and :pro plans
       migration generated (run `mix ecto.migrate`)
@@ -80,7 +81,8 @@ defmodule AuroraMeter.Install.Templates do
          config :aurora_meter,
            repo: MyApp.Repo,
            pubsub: MyApp.PubSub,
-           plans: MyApp.Plans
+           plans: MyApp.Plans,
+           undeclared_feature_policy: :deny
 
       3. Add it to your supervision tree, after the Repo and PubSub:
 

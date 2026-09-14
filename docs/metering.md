@@ -34,6 +34,13 @@ Usage is bucketed by billing period. The free core uses the calendar month (UTC)
 a new period starts a fresh counter automatically (no reset job). With the Pro
 package, periods align to the tenant's subscription.
 
+A period is a **half-open UTC interval** `[start, end)`: `start` belongs to the
+period, `end` does not, and the `end` of one period is the `start` of the next.
+So an increment at exactly midnight on the first of the month is counted once,
+in the new period, and no instant belongs to two periods or to none. Custom
+period sources, the validation their return value is put through, and the
+`:clock` seam that makes all of this testable are in [periods](periods.md).
+
 ## History
 
 Alongside the period counter, `track/4`, `reserve/3` and `with_quota/4` also

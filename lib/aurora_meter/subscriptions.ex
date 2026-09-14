@@ -11,6 +11,7 @@ defmodule AuroraMeter.Subscriptions do
   The cache is transparent: it only ever holds what storage returned.
   """
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Storage
@@ -36,7 +37,7 @@ defmodule AuroraMeter.Subscriptions do
     if ttl == 0 or :ets.whereis(table) == :undefined do
       Storage.get_subscription(key)
     else
-      now = System.monotonic_time(:millisecond)
+      now = Clock.monotonic_ms()
 
       case :ets.lookup(table, key) do
         [{^key, subscription, expires_at}] when expires_at > now ->

@@ -29,6 +29,7 @@ defmodule AuroraMeter.Credits.Series do
 
   import Ecto.Query
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Schema.CreditTransaction
 
@@ -53,7 +54,7 @@ defmodule AuroraMeter.Credits.Series do
   @doc "Resolves `:days` / `:from` / `:to` into an inclusive `{from, to}` UTC date range."
   @spec range(keyword()) :: {Date.t(), Date.t()}
   def range(opts) do
-    to = Keyword.get(opts, :to, Date.utc_today())
+    to = Keyword.get(opts, :to, Clock.today())
     days = Keyword.get(opts, :days, 30)
     from = Keyword.get(opts, :from, Date.add(to, -(days - 1)))
 

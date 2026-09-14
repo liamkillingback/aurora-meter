@@ -35,6 +35,11 @@ if Code.ensure_loaded?(Igniter.Test) do
       assert config =~ "pubsub: Demo.PubSub"
       assert config =~ "plans: Demo.Plans"
 
+      # Build unit 02b: a new install denies a feature no plan declares from its
+      # first boot. An existing install upgrades the other way round, which is
+      # why this line is only ever generated and never migrated in.
+      assert config =~ "undeclared_feature_policy: :deny"
+
       # Likewise the application module is created in a bare test project.
       assert_creates(igniter, "lib/demo/application.ex")
 
@@ -63,6 +68,19 @@ if Code.ensure_loaded?(Igniter.Test) do
 
       body = igniter.rewrite |> Rewrite.source!(migration) |> Rewrite.Source.get(:content)
       assert body =~ "AuroraMeter.Migration.up()"
+    end
+
+    test "a second run does not duplicate the policy line" do
+      igniter =
+        test_project(app_name: :demo)
+        |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
+        |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
+
+      config =
+        igniter.rewrite |> Rewrite.source!("config/config.exs") |> Rewrite.Source.get(:content)
+
+      assert length(String.split(config, "undeclared_feature_policy")) - 1 == 1
+      assert length(String.split(config, "plans: Demo.Plans")) - 1 == 1
     end
 
     test "does not overwrite an existing plans module" do

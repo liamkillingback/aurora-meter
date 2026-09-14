@@ -34,6 +34,7 @@ defmodule AuroraMeter.Counter do
       `AuroraMeter.history/3`
   """
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Storage
   alias AuroraMeter.Store
@@ -60,7 +61,7 @@ defmodule AuroraMeter.Counter do
   @spec incr(String.t(), atom(), integer(), DateTime.t()) :: integer()
   def incr(tenant_key, feature, qty, period_start) do
     new = bump({tenant_key, feature, period_start}, qty)
-    bump_history(tenant_key, feature, qty, Date.utc_today())
+    bump_history(tenant_key, feature, qty, Clock.today())
     new
   end
 
@@ -80,7 +81,7 @@ defmodule AuroraMeter.Counter do
       if deferred, do: release_work(tenant_key, feature, qty, period_start), else: bump(key, -qty)
       {:error, :limit_exceeded}
     else
-      unless deferred, do: bump_history(tenant_key, feature, qty, Date.utc_today())
+      unless deferred, do: bump_history(tenant_key, feature, qty, Clock.today())
       :ok
     end
   end
@@ -128,7 +129,7 @@ defmodule AuroraMeter.Counter do
   @spec release(String.t(), atom(), integer(), DateTime.t(), Date.t() | nil) :: :ok
   def release(tenant_key, feature, qty, period_start, on \\ nil) do
     bump({tenant_key, feature, period_start}, -qty)
-    bump_history(tenant_key, feature, -qty, on || Date.utc_today())
+    bump_history(tenant_key, feature, -qty, on || Clock.today())
     :ok
   end
 

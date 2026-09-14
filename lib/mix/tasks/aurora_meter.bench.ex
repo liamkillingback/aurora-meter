@@ -15,6 +15,7 @@ defmodule Mix.Tasks.AuroraMeter.Bench do
 
   use Mix.Task
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Counter
   alias AuroraMeter.Store
 
@@ -39,11 +40,16 @@ defmodule Mix.Tasks.AuroraMeter.Bench do
     for i <- 1..procs,
         do: :ets.insert(Store.counters_table(), {{tenant(i), @feature, @period}, 0, 0, 0})
 
-    {micros, :ok} = :timer.tc(fn -> hammer(procs, per) end)
+    # An in-memory elapsed span, so it is measured with the monotonic reading
+    # rather than a wall clock (`AuroraMeter.Clock`, build unit 02c). Build unit
+    # 08c owns this task's numbers; this change is the clock seam only.
+    started_ms = Clock.monotonic_ms()
+    :ok = hammer(procs, per)
+    millis = max(Clock.monotonic_ms() - started_ms, 1)
 
     total = procs * per
     final = Enum.sum(for i <- 1..procs, do: Counter.value(tenant(i), @feature, @period))
-    rate = round(total / (micros / 1_000_000))
+    rate = round(total / (millis / 1_000))
 
     Mix.shell().info("""
     Aurora Meter bench (distinct key per worker)
@@ -51,7 +57,7 @@ defmodule Mix.Tasks.AuroraMeter.Bench do
       per proc:     #{per}
       total incrs:  #{total}
       sum of keys:  #{final}  (correct: #{final == total})
-      elapsed:      #{Float.round(micros / 1000, 1)} ms
+      elapsed:      #{millis} ms
       throughput:   #{rate} incr/s
     """)
   end

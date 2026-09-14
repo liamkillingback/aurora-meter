@@ -54,6 +54,16 @@ if Code.ensure_loaded?(Igniter) do
       |> IgniterConfig.configure("config.exs", :aurora_meter, [:repo], repo)
       |> IgniterConfig.configure("config.exs", :aurora_meter, [:pubsub], pubsub)
       |> IgniterConfig.configure("config.exs", :aurora_meter, [:plans], plans)
+      # A new install denies a feature no plan declares from its first boot.
+      # The upgrade path for an existing install is the opposite (warn, then
+      # scan with `mix aurora_meter.features`, then deny), which is why this is
+      # written unconditionally here and documented separately.
+      |> IgniterConfig.configure(
+        "config.exs",
+        :aurora_meter,
+        [:undeclared_feature_policy],
+        :deny
+      )
       |> IgniterApp.add_new_child(AuroraMeter, after: fn mod -> mod in [repo, Phoenix.PubSub] end)
       |> create_plans(plans)
       |> IgniterEcto.gen_migration(repo, "add_aurora_meter",

@@ -11,7 +11,6 @@ Application.put_env(:aurora_meter_test, :repo, AuroraMeter.TestRepo)
     [
       AuroraMeter.Test.Faults,
       AuroraMeter.Test.Config,
-      AuroraMeter.Test.Clock,
       AuroraMeter.TestRepo,
       {Phoenix.PubSub, name: AuroraMeter.TestPubSub},
       AuroraMeter

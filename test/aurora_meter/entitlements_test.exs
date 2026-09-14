@@ -2,12 +2,19 @@ defmodule AuroraMeter.EntitlementsTest do
   @moduledoc false
   use AuroraMeter.DataCase, async: false
 
+  import AuroraMeter.Test, only: [travel: 1, with_clock: 2]
+  import AuroraMeter.Test.Config, only: [with_config: 2]
+  import ExUnit.CaptureLog
+
   alias AuroraMeter.Billing
   alias AuroraMeter.Billing.Noop
   alias AuroraMeter.Billing.Provider
+  alias AuroraMeter.Config.Schema
   alias AuroraMeter.Counter
+  alias AuroraMeter.Entitlements
   alias AuroraMeter.Flusher
   alias AuroraMeter.Period
+  alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Storage
   alias AuroraMeter.Store
 
@@ -151,11 +158,64 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.feature_value(unique_tenant(), :seats) == 1
   end
 
-  test "an undeclared feature is permissive" do
+  test "an undeclared feature follows the configured policy" do
+    # The full matrix is AuroraMeter.FeaturePolicyTest (build unit 02b); this is
+    # the one line that used to assert unconditional permissiveness.
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :free)
-    assert AuroraMeter.check(tenant, :undeclared_thing) == :ok
-    assert AuroraMeter.remaining(tenant, :undeclared_thing) == :unlimited
+
+    with_config([{:aurora_meter, :undeclared_feature_policy, :allow}], fn ->
+      assert AuroraMeter.check(tenant, :undeclared_thing) == :ok
+      assert AuroraMeter.remaining(tenant, :undeclared_thing) == :unlimited
+    end)
+
+    with_config([{:aurora_meter, :undeclared_feature_policy, :deny}], fn ->
+      assert AuroraMeter.check(tenant, :undeclared_thing) == {:error, :not_entitled}
+      assert AuroraMeter.remaining(tenant, :undeclared_thing) == 0
+    end)
+  end
+
+  test "plan/1 and Subscription.entitled?/1 agree for every status" do
+    statuses =
+      ~w(active trialing past_due canceled unpaid incomplete incomplete_expired paused)
+
+    for status <- statuses do
+      tenant = unique_tenant()
+
+      {:ok, subscription} =
+        Storage.put_subscription(%{tenant_key: tenant, plan_id: "pro", status: status})
+
+      expected = if Subscription.entitled?(subscription), do: :pro, else: :free
+      assert AuroraMeter.plan(tenant).id == expected, "status #{status}"
+    end
+
+    assert Subscription.entitled_statuses() == ~w(active trialing past_due)
+  end
+
+  test "subscribe/2 rejects an unknown plan in strict mode with plan_id: is not a known plan" do
+    tenant = unique_tenant()
+
+    assert {:error, changeset} = Entitlements.subscribe(tenant, :nope, :strict)
+    assert plan_id_errors(changeset) == ["is not a known plan"]
+    assert changeset.action == :insert
+    assert Storage.get_subscription(tenant) == nil
+  end
+
+  test "subscribe/2 warns and writes in transition mode" do
+    tenant = unique_tenant()
+    Schema.reset_warnings!()
+    on_exit(&Schema.reset_warnings!/0)
+
+    log =
+      capture_log(fn -> assert {:ok, _} = Entitlements.subscribe(tenant, :nope, :transition) end)
+
+    assert log =~ ":nope is not declared by"
+    assert log =~ "1.0 returns {:error, changeset}"
+    assert Storage.get_subscription(tenant).plan_id == "nope"
+
+    # The tenant silently resolves to the default plan, which is the defect the
+    # 1.0 behaviour removes.
+    assert AuroraMeter.plan(tenant).id == :free
   end
 
   test "I04 sixty concurrent with_quota calls against a limit of fifty admit exactly fifty on one node" do
@@ -275,6 +335,71 @@ defmodule AuroraMeter.EntitlementsTest do
     assert Counter.value(tenant, :ai_generations, chosen_period) == 5
   end
 
+  # Build unit 02c: the same crossing, now with the library's own clock frozen
+  # rather than with the period and the day passed in by hand. P04: work
+  # admitted in period P is committed to period P and to the UTC day of
+  # admission, however long it takes to finish.
+  describe "P04 work that crosses a period boundary" do
+    @january ~U[2026-01-01 00:00:00Z]
+    @february ~U[2026-02-01 00:00:00Z]
+    @admission ~U[2026-01-31 23:59:59Z]
+    @completion ~U[2026-02-01 00:00:01Z]
+
+    test "P04 with_quota/4 admitted at 23:59:59 and finishing after midnight commits to the admission period" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :pro)
+
+      with_clock(@admission, fn ->
+        assert {:ok, :done} =
+                 AuroraMeter.with_quota(tenant, :ai_generations, 3, fn ->
+                   travel(@completion)
+                   assert Period.current!(tenant).start == @february
+                   :done
+                 end)
+      end)
+
+      assert Counter.value(tenant, :ai_generations, @january) == 3
+      assert Counter.value(tenant, :ai_generations, @february) == 0
+    end
+
+    test "P04 with_quota/4 crossing midnight commits to the admission UTC day bucket" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :pro)
+
+      with_clock(@admission, fn ->
+        assert {:ok, :done} =
+                 AuroraMeter.with_quota(tenant, :ai_generations, 3, fn ->
+                   travel(@completion)
+                   :done
+                 end)
+      end)
+
+      assert Counter.day_value(tenant, :ai_generations, ~D[2026-01-31]) == 3
+      assert Counter.day_value(tenant, :ai_generations, ~D[2026-02-01]) == 0
+    end
+
+    test "P04 a released reservation after a period crossing releases from the admission period" do
+      tenant = unique_tenant()
+      AuroraMeter.subscribe(tenant, :pro)
+
+      with_clock(@admission, fn ->
+        assert_raise RuntimeError, "boom", fn ->
+          AuroraMeter.with_quota(tenant, :ai_generations, 3, fn ->
+            travel(@completion)
+            raise "boom"
+          end)
+        end
+      end)
+
+      # Nothing is left counted in either period: the release took its three
+      # back out of January, not out of February.
+      assert Counter.value(tenant, :ai_generations, @january) == 0
+      assert Counter.value(tenant, :ai_generations, @february) == 0
+      assert Counter.day_value(tenant, :ai_generations, ~D[2026-01-31]) == 0
+      assert Counter.day_value(tenant, :ai_generations, ~D[2026-02-01]) == 0
+    end
+  end
+
   test "I20 every Noop billing provider callback returns :not_configured" do
     assert Billing.checkout(unique_tenant(), :pro) == {:error, :not_configured}
     assert Billing.portal_url(unique_tenant()) == {:error, :not_configured}
@@ -289,6 +414,12 @@ defmodule AuroraMeter.EntitlementsTest do
              report_usage: 1,
              sync_subscription: 1
            ]
+  end
+
+  defp plan_id_errors(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {message, _opts} -> message end)
+    |> Map.get(:plan_id)
   end
 
   # I03's central claim: work that did real, durable metering before it failed

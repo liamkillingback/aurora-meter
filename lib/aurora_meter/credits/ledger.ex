@@ -22,6 +22,7 @@ defmodule AuroraMeter.Credits.Ledger do
 
   import Ecto.Query
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Credits.Promotions
   alias AuroraMeter.Schema.CreditBalance
@@ -408,7 +409,7 @@ defmodule AuroraMeter.Credits.Ledger do
   # "exactly ten $0.10 holds against $1.00" true under concurrency.
   @spec locked_row(module(), String.t()) :: CreditBalance.t()
   defp locked_row(repo, tenant_key) do
-    now = DateTime.utc_now()
+    now = Clock.now()
 
     repo.insert_all(
       CreditBalance,
@@ -449,7 +450,7 @@ defmodule AuroraMeter.Credits.Ledger do
         balance_after: balance_after,
         held_after: held_after,
         promotional_after: promotional_after,
-        inserted_at: DateTime.utc_now()
+        inserted_at: Clock.now()
       })
 
     txn =

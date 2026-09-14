@@ -4,6 +4,116 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`AuroraMeter.Clock`, the clock seam.** Every instant and every date inside
+  the library now comes from the module configured under `clock:` (default
+  `AuroraMeter.Clock.System`), so a host can freeze time in its own tests with
+  `AuroraMeter.Test.with_clock/2`, `travel/1` and `travel/2`. The behaviour has
+  four readings because time gets asked four different questions: `now/0` (what
+  period is this, what do I display, what goes in `inserted_at`), `today/0`,
+  `monotonic_ms/0` (an in-memory elapsed span) and `db_now/0` (has enough time
+  passed since something persisted). `now/0` is documented as making **no
+  monotonicity promise**: no wall clock on any host does, so anything comparing
+  against a persisted timestamp takes `db_now/0`, which reads
+  `clock_timestamp()` from your repo. See the new [periods](docs/periods.md)
+  guide.
+- **`AuroraMeter.Period.current!/2`**, the validated period read, used by every
+  call site inside the library. It checks that the configured `period_source`
+  returned a half-open UTC interval `[start, end)` containing the instant it was
+  resolved for, and raises `AuroraMeter.Period.InvalidPeriodError` naming the
+  source module when it did not. `AuroraMeter.Period.current/2` is unchanged and
+  still unvalidated, for hosts that call it directly.
+- **`AuroraMeter.Period.containing/2`** and an optional `containing/2` callback
+  on the `AuroraMeter.Period` behaviour: which period held this past instant.
+  Sources that are a pure function of the instant (the calendar month is) need
+  not implement it.
+- **`:undeclared_feature_policy`** (`:allow | :warn | :deny | :raise`), the
+  compatibility switch for a feature the tenant's plan does not declare. It
+  applies to `check/2`, `allowed?/2`, `entitled?/2`, `feature_value/3`,
+  `quota/2`, `remaining/2`, `reserve/2,3` and `with_quota/3,4`, and every one of
+  them keeps its documented return shape under every policy. The default is
+  `:warn` in this transition release and `:deny` from 1.0;
+  `config :aurora_meter, undeclared_feature_policy: :allow` restores the 0.4.x
+  behaviour exactly. `AuroraMeter.track/4` is outside the policy and keeps
+  counting: metering is not entitlement. See
+  [Configuration](docs/configuration.md) for the table and the upgrade sequence.
+- `AuroraMeter.UndeclaredFeatureError`, raised under `:raise`, carrying the
+  feature, the tenant key, the resolved plan, the entry point, and whether any
+  other plan declares the feature.
+- `AuroraMeter.Config.policy_for/1`, the seam every entry point consults.
+- **`mix aurora_meter.features`**, the scanner to run before changing the
+  policy. It lists declared features per plan, what your configuration
+  references (`:durable_features`, and Pro's `:stripe_meters` when that
+  application environment is present), anything referenced that no plan
+  declares, and every feature declared on some plans and not others with the
+  plans that would deny it. `--strict` exits 1 when either of the last two is
+  not empty.
+- `[:aurora_meter, :track]` and `[:aurora_meter, :reserve]` telemetry metadata
+  gains `declared: boolean()`.
+- `AuroraMeter.Credits.assert_currency!/0` and
+  `AuroraMeter.Credits.CurrencyMismatchError`: every stored credit balance row
+  must carry the configured `:credits_currency`. The check runs once per node at
+  boot, from a new internal child at the end of the supervision tree, and is
+  skipped with one `:info` line when the credit tables are absent or the repo is
+  not running yet.
+- `AuroraMeter.Config.validate!/0` now checks at boot that `tenant`, `storage`,
+  `provider`, `period_source`, `clock` and `plans` name modules that exist and
+  export every callback their behaviour declares and does not mark optional,
+  raising an `ArgumentError` that names the key, the module and the missing
+  callback. It also warns when `:default_plan` names no plan (an error from 1.0)
+  and when a `metered` feature declares a float `unit_price` (integer minor
+  units are the supported form).
+- `docs/periods.md`: the half-open interval and why, the boundary rule, the four
+  clock readings and what each is for, the `Period` behaviour with its exact
+  validation rules, and complete daily and weekly period source recipes that are
+  compiled and exercised by the test suite.
+
+### Changed
+
+- `AuroraMeter.Credits.expire_due/0` defaults its `now` to `db_now/0` rather
+  than the node clock. It decides whether a tenant's credit is still theirs by
+  comparing against a persisted `expires_at`, and every node running expiry
+  should agree on "now". Passing an explicit instant is unchanged.
+- `mix aurora_meter.bench` reports elapsed time in whole milliseconds; it now
+  measures its own span with the monotonic reading rather than a wall clock.
+- **`AuroraMeter.Config.validate!/0` reads the whole `:aurora_meter`
+  environment.** It used to drop every key that was not in the schema before
+  validating, so a typo such as `flush_intervall:` was ignored for the life of
+  the install. An unknown key is now reported with the nearest known key named:
+  a warning in this release, a refusal to boot in 1.0. `:ecto_repos`,
+  `:included_applications` and repo configuration written under the same
+  application (`config :aurora_meter, MyApp.Repo, ...`) are reserved and are
+  never treated as Aurora Meter keys.
+- **Feature names are atoms at the facade.** `AuroraMeter.track(org, "api")`
+  kept a second in-memory counter that seeded from and flushed into the same
+  database row as `:api`. A binary now warns once per name in this release and
+  raises `ArgumentError` in 1.0; anything that is neither an atom nor a binary
+  raises in both. `AuroraMeter.Storage` callbacks still accept
+  `atom() | String.t()`, because stored rows carry strings.
+- **A tenant resolver must return a non-empty binary.** `""` (which is also what
+  the default resolver makes of `nil`) used to be a valid tenant key, so every
+  tenant a resolver could not answer shared one set of counters. It warns once
+  per node in this release and raises in 1.0; a non-binary raises in both. The
+  error names the configured module and what it returned, never the term it was
+  given.
+- **`AuroraMeter.subscribe/2` validates the plan.** A plan id no plans module
+  declares used to be written and then silently resolved to the default plan.
+  It now warns and writes in this release, and returns `{:error, changeset}`
+  with `plan_id: ["is not a known plan"]` in 1.0.
+- The undeclared-feature warning is no longer compiled behind
+  `Mix.env() == :dev`. That was the environment in which the **host** compiled
+  the dependency, so a release build warned about nothing at all and a
+  production install had no signal. It is a runtime policy now, logged once per
+  feature per node in every build.
+- `AuroraMeter.Entitlements.plan/1` asks
+  `AuroraMeter.Schema.Subscription.entitled?/1` instead of repeating the
+  entitled-status list. No behaviour change; there was one rule in two places.
+- `mix aurora_meter.install` writes `undeclared_feature_policy: :deny`, so a new
+  install denies from its first boot.
+
 ## [0.4.0] - 2026-09-11
 
 The first release carrying code since 0.3.0 — 0.3.1 and 0.3.2 were

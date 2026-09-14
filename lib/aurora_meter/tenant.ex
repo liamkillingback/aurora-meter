@@ -33,7 +33,26 @@ defmodule AuroraMeter.Tenant do
 
       # config/config.exs
       config :aurora_meter, tenant: MyApp.Tenant
+
+  ## What an implementation must return
+
+  A non-empty binary, always. Two rules follow from that and both are part of
+  the contract:
+
+    * **A binary is passed through unchanged.** Aurora Meter Pro hands stored
+      `tenant_key` values straight back to facade functions, which accept any
+      term, so an implementation that rewrote an already-resolved key would
+      meter Pro's work against a different tenant. `AuroraMeter.Tenant.Default`
+      satisfies this; a custom one must too, which is the `to_key(key) when
+      is_binary(key), do: key` clause in the example above.
+    * **`""` is not a key.** An empty key used to be accepted, and every tenant
+      whose resolver could not answer then shared one set of counters. In this
+      release it warns once per node; in Aurora Meter 1.0 it raises. Anything
+      that is not a binary raises in both.
   """
+
+  alias AuroraMeter.Config
+  alias AuroraMeter.Config.Schema, as: ConfigSchema
 
   @doc "Converts a tenant term into its stable string key."
   @callback to_key(tenant :: term()) :: String.t()
@@ -48,7 +67,45 @@ defmodule AuroraMeter.Tenant do
 
   """
   @spec to_key(term()) :: String.t()
-  def to_key(tenant), do: AuroraMeter.Config.tenant().to_key(tenant)
+  def to_key(tenant) do
+    module = Config.tenant()
+    validate_key!(module, module.to_key(tenant), ConfigSchema.mode())
+  end
+
+  # The message names the configured module and what it returned, never the
+  # term it was given: a host that meters a struct holding personal data must
+  # not have it copied into a log line. The returned key is bounded too, for the
+  # same reason.
+  #
+  # `mode` is a parameter, and this is public but undocumented, so the suite can
+  # exercise both halves of the transition without depending on the package's
+  # own version.
+  @doc false
+  @spec validate_key!(module(), term(), ConfigSchema.mode()) :: String.t()
+  def validate_key!(_module, key, _mode) when is_binary(key) and key != "", do: key
+
+  def validate_key!(module, "", :strict), do: raise(ArgumentError, empty_key_message(module))
+
+  def validate_key!(module, "", :transition) do
+    ConfigSchema.warn_once(:tenant_key, module, fn -> empty_key_message(module) end)
+    ""
+  end
+
+  def validate_key!(module, key, _mode) do
+    raise ArgumentError,
+          "#{inspect(module)}.to_key/1 returned " <>
+            "#{inspect(key, limit: 3, printable_limit: 64)}, which is not a binary. " <>
+            "An AuroraMeter.Tenant implementation returns a non-empty String.t(); it is " <>
+            "the key for every counter row, every ETS entry and every PubSub topic."
+  end
+
+  @spec empty_key_message(module()) :: String.t()
+  defp empty_key_message(module) do
+    "#{inspect(module)}.to_key/1 returned an empty tenant key. Every tenant it cannot " <>
+      "resolve then shares one set of counters. Return a non-empty String.t(), or refuse " <>
+      "the term. This version keeps the old behaviour and warns once per node; Aurora " <>
+      "Meter 1.0 raises. See the AuroraMeter.Tenant documentation."
+  end
 end
 
 defmodule AuroraMeter.Tenant.Default do

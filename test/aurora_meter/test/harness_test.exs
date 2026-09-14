@@ -20,7 +20,6 @@ defmodule AuroraMeter.Test.HarnessTest do
   alias AuroraMeter.Schema.FlushReceipt
   alias AuroraMeter.Schema.History
   alias AuroraMeter.Storage
-  alias AuroraMeter.Test.Clock
   alias AuroraMeter.Test.Config
   alias AuroraMeter.Test.Connections
   alias AuroraMeter.Test.FaultRepo
@@ -672,25 +671,14 @@ defmodule AuroraMeter.Test.HarnessTest do
   end
 
   # -- Clock ------------------------------------------------------------------
-
-  test "the test clock returns the set instant and advances by whole seconds" do
-    on_exit(&Clock.unset/0)
-    :ok = Clock.set(~U[2026-03-01 12:00:00Z])
-    assert Clock.now() == ~U[2026-03-01 12:00:00Z]
-    assert Clock.today() == ~D[2026-03-01]
-
-    :ok = Clock.advance(90)
-    assert Clock.now() == ~U[2026-03-01 12:01:30Z]
-
-    :ok = Clock.freeze(~U[2026-03-01 12:00:00.123456Z])
-    assert Clock.now() == ~U[2026-03-01 12:00:00Z]
-  end
-
-  test "unset returns to the system clock" do
-    :ok = Clock.set(~U[2020-01-01 00:00:00Z])
-    :ok = Clock.unset()
-    assert DateTime.diff(DateTime.utc_now(), Clock.now(), :second) < 5
-  end
+  #
+  # `AuroraMeter.Test.Clock` was 01b's temporary settable clock and said so in
+  # its own moduledoc. Build unit 02c deleted it and replaced it with the real
+  # seam: `AuroraMeter.Clock` behind the `clock:` key, `AuroraMeter.Clock.Fixed`
+  # in `lib/`, and `AuroraMeter.Test.with_clock/2` to install it. Its tests moved
+  # to `test/aurora_meter/clock_test.exs`, which covers rather more than these
+  # two did: configuration restored on a raise and on an exit, visibility from an
+  # unrelated process, and all four readings answered from one frozen instant.
 
   # -- helpers ----------------------------------------------------------------
 
