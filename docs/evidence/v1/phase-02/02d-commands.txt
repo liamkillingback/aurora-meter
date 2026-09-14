@@ -1,0 +1,189 @@
+02d commands, core (aurora_meter).
+
+Machine: DESKTOP-8R659B3, WSL2 Ubuntu-24.04, Linux 6.6.87.2-microsoft-standard-WSL2,
+         24 logical processors.
+Toolchain: Elixir 1.20.1, OTP 29 (erts 17.0.1), Postgres 16.13 on DB_PORT=5490.
+Repo state: aurora_meter, branch aurorameter-v1 at d8f306a before the unit,
+            477a7a6 after it; branch release/0.5.0 cut at 477a7a6.
+Lane: every Mix command through tmp/v1/mixlane.sh core (flock on tmp/v1/locks/core.lock).
+      One Mix workload at a time throughout (execution-waves.md rule 7).
+mix.lock: 70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3
+          before and after every run below. Unchanged.
+Nothing was published, tagged, pushed or deployed. `mix hex.publish` was never
+run. No git tag was created or moved. No remote was contacted except by
+`mix hex.audit` and `mix deps.audit`, both read-only.
+Logs live in the storefront's tmp/v1/02d/ (git-ignored); paths below are
+relative to /home/liamk/src/PhxTemplates.
+
+--------------------------------------------------------------------------------
+STEP 0: baselines, taken before a single file was changed
+--------------------------------------------------------------------------------
+
+1. bash tmp/v1/02d-baseline.sh
+   started 2026-09-14T15:02:00Z  finished 2026-09-14T15:04:40Z  exit 0
+   log: tmp/v1/02d/baseline-core.txt
+   core:  781 passed (42 doctests, 10 properties, 729 tests), 3 excluded
+   pro:   380 passed (28 doctests, 352 tests)
+
+--------------------------------------------------------------------------------
+STEP 1: the stale-claim sweep, run with an EMPTY allow-list
+--------------------------------------------------------------------------------
+
+The implementation began here, as the build document's handoff requires: the
+check is written and run before a single documentation fix, so its output is
+both the work list and the evidence that the work list was complete.
+
+2. bash tmp/v1/02d-sweep.sh
+   (mix test test/aurora_meter/docs_claims_test.exs --seed 0)
+   started 2026-09-14T15:05:11Z  finished 2026-09-14T15:05:12Z  exit 2
+   log: tmp/v1/02d/core-sweep-prefix.txt
+   Result: 2/5 passed, 3 failed. TWELVE occurrences in FIVE files.
+   Full list, with before and after text: docs/evidence/v1/phase-02/02d-claims-sweep.md
+
+--------------------------------------------------------------------------------
+STEP 2: the focused loop while the work was done
+--------------------------------------------------------------------------------
+
+3. bash tmp/v1/02d-core-focus.sh          (six files, --seed 0)
+   2026-09-14T15:10:33Z  exit 2   116/118 passed
+   Two real defects in the new tests, both fixed:
+     - `~> 0.5` DOES admit 0.6.0. A two-segment `~>` on a 0.x version raises the
+       first segment for its upper bound. The assertion was wrong, not the code.
+     - The invariant column of the guarantee table is legitimately three
+       characters ("I04"), so the "every column is filled" check needed a
+       per-column floor rather than one.
+
+4. bash tmp/v1/02d-core-focus.sh
+   2026-09-14T15:10:46Z  exit 0   118 passed
+
+--------------------------------------------------------------------------------
+STEP 3: Schema.mode/0 after the version bump (the check this release turns on)
+--------------------------------------------------------------------------------
+
+5. bash tmp/v1/02d-mode.sh                (mix run, MIX_ENV=dev)
+   2026-09-14T15:17:02Z  exit 0
+   log: tmp/v1/02d/schema-mode.txt
+   mix.exs version 0.5.0, Schema.version/0 0.5.0, Schema.mode/0 :transition.
+   mode/1: 0.4.0 :transition, 0.5.0 :transition, 0.5.99 :transition,
+           1.0.0-rc.0 :strict, 1.0.0 :strict.
+   default_undeclared_feature_policy/0 :warn, Config.defaults()[:...] :warn.
+   The transition release warns and does not deny, which is the whole of D04.
+
+--------------------------------------------------------------------------------
+STEP 4: negative controls, nineteen of them, ten in this package
+--------------------------------------------------------------------------------
+
+6. python3 tmp/v1/02d-nc.py
+   2026-09-14T15:20Z (final clean run)  exit 0
+   log: tmp/v1/02d/negative-controls.txt
+   Every check added by this unit was broken once, on purpose, and the run that
+   was supposed to fail was recorded. Core's ten:
+     core G01 forbidden phrase            failed as expected
+     core G01 allow-list rot              failed as expected
+     core G01 scan coverage               failed as expected
+     core G05 renamed test                failed as expected
+     core G05 X84 doc-string control      failed as expected
+     core G02 changelog                   failed as expected
+     core G02 release doc tag             failed as expected
+     core G02 unshipped ADR published     failed as expected
+     core G04 schema moved                failed as expected
+     core deprecation notice              failed as expected
+
+   The script itself had a defect worth recording, because it is the shape of
+   bug the script exists to catch: two edits to one file overwrote the pristine
+   backup with the half-edited body, so the "restore" made the first edit
+   permanent. The next two controls then could not find the text they meant to
+   break and reported "control could not be applied", which is why the summary
+   line distinguishes that from "did not fail". kill_test.exs was restored from
+   git, the script records the original once per path, and the suite was re-run
+   clean.
+
+--------------------------------------------------------------------------------
+STEP 5: formatting, only the files this unit changed
+--------------------------------------------------------------------------------
+
+7. bash tmp/v1/02d-format.sh
+   2026-09-14T15:20:03Z  exit 0
+   mix format on seven core files and six Pro files, named individually.
+   Never a project-wide `mix format`.
+
+--------------------------------------------------------------------------------
+STEP 6: the full suites and mix check
+--------------------------------------------------------------------------------
+
+8. bash tmp/v1/02d-check.sh
+   2026-09-14T15:26:16Z  core mix test  exit 0   810 passed, 3 excluded
+   2026-09-14T15:28:56Z  core mix check exit 1   docs --warnings-as-errors
+   Four ExDoc warnings, every one of them caused by this unit publishing or
+   writing new documentation, and every one a real broken reference:
+     - `AuroraMeter.record/4` in CHANGELOG.md and docs/upgrading-to-1.0.md.
+       The function does not exist until 03b; naming it is the point of a
+       deprecation notice. Added to skip_code_autolink_to with a comment saying
+       to remove the line when 03b lands.
+     - `Config.validate!/0` unqualified in docs/upgrading-to-1.0.md and in
+       ADR 0010, which this unit publishes for the first time. Both now say
+       `AuroraMeter.Config.validate!/0`. The ADR change is a cross-unit touch.
+     - `AuroraMeter.Storage.Ecto.flush_batch/3` in the note appended to ADR 0003.
+       The module is @moduledoc false, so the reference cannot resolve; the note
+       names the function without the module path instead.
+
+   This is X82 working as intended: before the orchestrator added
+   --warnings-as-errors, `mix docs` exited 0 on every one of these.
+
+9. bash tmp/v1/02d-check.sh (after the four fixes)
+   2026-09-14T15:26:16Z to 15:31:42Z
+   core mix test  exit 0   810 passed (42 doctests, 10 properties, 758 tests), 3 excluded
+   core mix check exit 0   format, compile --warnings-as-errors, credo --strict,
+                           dialyzer, test, docs --warnings-as-errors
+   logs: tmp/v1/02d/core-test.txt, tmp/v1/02d/core-check.txt
+
+--------------------------------------------------------------------------------
+STEP 7: the release branch
+--------------------------------------------------------------------------------
+
+10. git checkout -B release/0.5.0 aurorameter-v1
+    branch at 477a7a6e6fb03bfbf67153243687cb316bf676b3, tree clean.
+    NO TAG WAS CREATED. NOTHING WAS PUSHED.
+
+11. bash tmp/v1/02d-core-release.sh
+    2026-09-14T15:33:33Z to 15:36:22Z
+    mix deps.unlock --check-unused   exit 0
+    mix deps.audit                   exit 0  "No vulnerabilities found."
+    mix hex.audit                    exit 0  "No retired or security advisory packages found"
+    mix check                        exit 0  810 passed
+    mix hex.build --output tmp/v1/02d/core-tar/aurora_meter-0.5.0.tar   exit 0
+
+    tarball sha256 b63d928d68ea45440e3918ad669fe12ed9b7d269eff6148a589271d93ffad7d7
+    bytes          115200
+    Hex CHECKSUM   097CB498517DCFAC7114871C88E426DF087D30F87A48A189C7205AA3FCBFCEA6
+    inner contents.tar sha256
+                   6661e22c1e3ce980eebee03710eca017226ce91870b20176513f3617e329da5d
+    files inside   51
+
+    Per blocker B19, compare the inner content digest, not the tarball hash: a
+    Hex archive is not byte reproducible across toolchains.
+
+    diff against v0.4.0, package contents only:
+      29 files changed, 2767 insertions(+), 250 deletions(-)
+    whole tree: 191 files changed, 27717 insertions(+), 667 deletions(-)
+
+    mix.lock unchanged, working tree clean after the run.
+
+--------------------------------------------------------------------------------
+Left for the owner, verbatim, never run here
+--------------------------------------------------------------------------------
+
+    cd product-workspaces/aurora_meter
+    git checkout release/0.5.0
+    mix check                 # expect exit 0
+    mix hex.publish           # publishes the package AND the docs
+    git tag v0.5.0
+    git push origin aurorameter-v1 --tags
+
+Publish core 0.5.0 BEFORE Pro 0.3.1: Pro's README and docs/usage-reporting.md
+link to https://hexdocs.pm/aurora_meter/guarantees.html, which exists only after
+core's docs are up.
+
+The storefront's vendored priv/docs/aurora-meter*/ copies stay at 0.4.0 and
+0.3.0 and were NOT touched. They track published versions; 10c refreshes them
+after the owner publishes.
