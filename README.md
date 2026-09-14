@@ -62,7 +62,7 @@ node, so the entitlement check is also database-free per request.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.4"}]
+  [{:aurora_meter, "~> 0.5"}]
 end
 ```
 
@@ -278,31 +278,40 @@ ready for `Telemetry.Metrics` and LiveDashboard. See the
 
 ## Guarantees and limits
 
-Read this before you rely on it. The design choices are recorded as
-[ADRs](docs/adr/0001-resolved-decisions.md).
+**[The guarantee page](docs/guarantees.md) is the contract.** Fifteen rows, each
+with the condition that makes it true, the thing that takes it away, the
+invariant it rests on and the test that proves it. Read it before you rely on
+any of this. The design choices behind it are recorded as
+[ADRs](docs/adr/0001-resolved-decisions.md), and every invariant with its tests
+is in [the correctness index](docs/correctness.md).
 
-- **Buffered by default.** Counters live in ETS and flush to Postgres every
-  `:flush_interval` ms and on clean shutdown. Losing the Store or VM can lose
-  usage since the last successful flush, including any backlog during a
-  database outage. A Flusher restart retains its pending batch.
+The short version:
+
+- **Buffered by default.** Counters live in ETS and flush to Postgres on the
+  `:flush_interval` and on clean shutdown. Losing the Store or the VM loses
+  everything not yet in an acknowledged flush batch, which is more than one
+  interval whenever the database has been away. A Flusher restart retains its
+  pending batch; a Store restart does not.
 - **Durable when it has to be.** Mark a feature durable
   (`config :aurora_meter, durable_features: [:ai_generations]` or
   `track(..., durable: true)`) and every increment also writes a raw event row
-  synchronously. Use this for anything you invoice.
+  synchronously. That row is an audit record; usage reporting still reads the
+  persisted counters.
+- **Quotas are strict on one node and convergent across nodes.** `check/2` is
+  advisory and holds nothing; `reserve/2,3` and `with_quota/3,4` hold capacity
+  atomically. On a cluster a hard cap is enforced against the local view, so a
+  burst across N nodes can exceed it by what the other nodes admitted in one
+  `:broadcast_interval`. See the [clustering guide](docs/clustering.md).
 - **Cluster-wide counters.** Every node meters into its own ETS table and
   flushes *deltas* (`value = value + Δ`), so nodes add up instead of
-  overwriting each other: the Postgres row is the cluster total. Nodes exchange
-  deltas over PubSub every `:broadcast_interval` (1 s) and re-base on the
-  persisted total every `:flush_interval` (5 s), so a value read on any node is
-  the true total minus at most the other nodes' last second of increments.
-  Hard limits are enforced against that local view, so a burst across N nodes
-  can overshoot a cap by what the other N−1 nodes admitted in one
-  `:broadcast_interval`. Needs a distributed `Phoenix.PubSub` (the one you
-  already run for LiveView); on one node nothing changes. See the
-  [clustering guide](docs/clustering.md).
-- **Periods are UTC calendar months** in the free core. A new period starts a
-  fresh counter with no reset job. Pro aligns periods to the Stripe
-  subscription.
+  overwriting each other: the Postgres row is the cluster total. Needs a
+  distributed `Phoenix.PubSub` (the one you already run for LiveView); on one
+  node nothing changes.
+- **Periods are half-open UTC intervals** `[start, end)`, calendar months in the
+  free core. A new period starts a fresh counter with no reset job. Pro aligns
+  periods to the Stripe subscription.
+- **Usage export and scheduled work are at-least-once** with idempotent effects,
+  never anything stronger.
 - **Postgres only** through Ecto. See the supported versions below.
 - **Restart-safe reads.** A cold counter is seeded once from the last flushed
   value, so `usage/2` is correct after a deploy.

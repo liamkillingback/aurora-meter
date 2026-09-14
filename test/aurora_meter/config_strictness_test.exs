@@ -214,6 +214,56 @@ defmodule AuroraMeter.ConfigStrictnessTest do
     end
   end
 
+  # Build unit 02d. The transition release's one deprecation notice.
+  describe "deprecated keys" do
+    test "a non-empty durable_features emits one deprecation warning per node at boot" do
+      forget_warnings()
+
+      with_config([{:aurora_meter, :durable_features, [:ai_generations]}], fn ->
+        log = capture_log(fn -> Config.validate!(:transition) end)
+
+        assert log =~ "durable_features"
+        assert log =~ "deprecated"
+        assert log =~ "feature_sources"
+        assert log =~ "docs/upgrading-to-1.0.md"
+        assert occurrences(log, "durable_features: [:ai_generations] is deprecated") == 1
+
+        # Once per node, not once per validation: a host that revalidates its
+        # configuration (or runs a boot check twice) gets one line, not a stream.
+        again = capture_log(fn -> Config.validate!(:transition) end)
+        refute again =~ "is deprecated"
+      end)
+    end
+
+    test "a non-empty durable_features warns in strict mode too and never raises" do
+      forget_warnings()
+
+      with_config([{:aurora_meter, :durable_features, [:ai_generations]}], fn ->
+        log = capture_log(fn -> assert is_list(Config.validate!(:strict)) end)
+        assert log =~ "is deprecated"
+      end)
+    end
+
+    test "an empty durable_features list emits no warning" do
+      forget_warnings()
+
+      with_config([{:aurora_meter, :durable_features, []}], fn ->
+        log = capture_log(fn -> Config.validate!(:transition) end)
+        refute log =~ "durable_features"
+      end)
+    end
+
+    test "durable_features unset emits no warning, because the default is the empty list" do
+      forget_warnings()
+
+      with_config([{:aurora_meter, :durable_features, :__placeholder__}], fn ->
+        Application.delete_env(:aurora_meter, :durable_features)
+        log = capture_log(fn -> Config.validate!(:transition) end)
+        refute log =~ "durable_features"
+      end)
+    end
+  end
+
   describe "release strictness" do
     test "Config.Schema.mode/0 matches the version in mix.exs" do
       version = Mix.Project.config()[:version]
@@ -225,6 +275,11 @@ defmodule AuroraMeter.ConfigStrictnessTest do
 
     test "the strictness threshold is 1.0.0-rc.0 and the policy default follows it" do
       assert Schema.mode("0.4.0") == :transition
+      # 0.5.0 is the transition release itself (build unit 02d). It has to warn,
+      # not deny: a release that silently starts denying undeclared features is
+      # the outcome D04 exists to prevent, and the version bump is exactly the
+      # kind of change that could flip a version-derived constant by accident.
+      assert Schema.mode("0.5.0") == :transition
       assert Schema.mode("0.5.3") == :transition
       assert Schema.mode("1.0.0-rc.0") == :strict
       assert Schema.mode("1.0.0-rc.1") == :strict
@@ -249,4 +304,11 @@ defmodule AuroraMeter.ConfigStrictnessTest do
   defp accessor(:history), do: :history?
   defp accessor(:cluster_sync), do: :cluster_sync?
   defp accessor(key), do: key
+
+  defp forget_warnings do
+    Schema.reset_warnings!()
+    on_exit(&Schema.reset_warnings!/0)
+  end
+
+  defp occurrences(haystack, needle), do: length(String.split(haystack, needle)) - 1
 end

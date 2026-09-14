@@ -141,6 +141,7 @@ defmodule AuroraMeter.Config do
     |> Schema.validate!(env, @schema, mode)
     |> check_modules!()
     |> check_plans!(mode)
+    |> check_deprecations!()
   end
 
   @doc """
@@ -284,6 +285,37 @@ defmodule AuroraMeter.Config do
     end
 
     check_default_plan!(opts[:plans], plans, opts[:default_plan], mode)
+
+    opts
+  end
+
+  # Deprecation notices, which warn in both modes and never raise: the key keeps
+  # working until 2.0 (`api-change-map.md` section 5), so refusing to boot on one
+  # would be a breaking change dressed up as a warning. `warn_once/3` makes it
+  # one line per node however many times a host revalidates its configuration.
+  #
+  # `durable_features` is the only entry today. Build unit 03c adds
+  # `feature_sources`, which is the replacement named here, and must not add a
+  # second warning for the same key.
+  @spec check_deprecations!(keyword()) :: keyword()
+  defp check_deprecations!(opts) do
+    case opts[:durable_features] do
+      [] ->
+        :ok
+
+      nil ->
+        :ok
+
+      features ->
+        Schema.warn_once(:deprecated_key, :durable_features, fn ->
+          "config :aurora_meter, durable_features: #{inspect(features)} is deprecated. " <>
+            "It still works, and will keep working until 2.0. Aurora Meter 1.0 replaces " <>
+            "it with `feature_sources`, which says where each feature's commercial " <>
+            "quantity comes from instead of bolting an event row onto a buffered count, " <>
+            "and with `AuroraMeter.record/4` for usage that must not be lost. Nothing to " <>
+            "do today: see docs/upgrading-to-1.0.md before you upgrade to 1.0."
+        end)
+    end
 
     opts
   end

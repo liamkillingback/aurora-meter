@@ -146,10 +146,15 @@ AuroraMeter.usage_all(org)                # => %{api_calls: 37, ai_generations: 
 ```
 
 `track/3` writes to an in-memory ETS counter and returns immediately. A
-background flusher writes the totals to Postgres every five seconds. That is
-why it is fast enough to call on every request, and also why a hard crash can
-lose up to five seconds of counts. If a particular feature must never lose a
-count, list it in `:durable_features` and it is written straight through.
+background flusher writes the totals to Postgres on the `:flush_interval`
+(five seconds by default) and once more on a clean shutdown. That is why it is
+fast enough to call on every request, and also why losing the Store or the VM
+loses whatever is not yet in an acknowledged flush batch: usually the last
+interval, plus anything that piled up behind it while the database was
+unreachable. If a count matters more than that, list the feature in
+`:durable_features` and every increment also writes a raw event row
+synchronously. That row is a record, not the billing source: usage reporting
+reads the persisted counters either way.
 
 ### "Are they allowed?"
 

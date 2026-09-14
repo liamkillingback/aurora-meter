@@ -4,10 +4,53 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-09-15
+
+The transition release. It warns about everything 1.0 will refuse and refuses
+nothing itself, so an application can be upgraded, watched for a while and fixed
+before the defaults change under it. **No schema change**
+(`AuroraMeter.Migration.latest_version()` is 6, as in 0.4.0), nothing new is
+written to your database, and rolling back to 0.4.x is as safe as rolling
+forward. Read [docs/upgrading-to-1.0.md](docs/upgrading-to-1.0.md) first: it
+lists every warning next to what 1.0 does instead.
+
+One item is a behaviour change rather than a warning, and it leads the list on
+purpose: a custom `:period_source` that returns an interval which cannot be
+correct now raises at first use, naming the source module. The default calendar
+source and Pro's subscription-aligned source both satisfy the contract.
 
 ### Added
 
+- **`docs/guarantees.md`, the contract in one table.** Fifteen guarantees, each
+  with the exact conditions that make it true, what voids it, the invariant it
+  rests on and the test that proves it. Rows that 1.0 will deliver say "not yet
+  proven" and name the phase, rather than describing the future in the present
+  tense. The page states, and `test/aurora_meter/docs_claims_test.exs` enforces
+  over the whole documentation tree, that no Aurora Meter document puts a fixed
+  number on buffered loss or claims a delivery stronger than at-least-once.
+  Buffered loss is everything not in an acknowledged flush batch, which is
+  unbounded while the database is unreachable; usage export and scheduled work
+  are at-least-once with idempotent effects. Some documentation said otherwise
+  before this release, and the corrections are listed under Fixed below.
+- **`docs/upgrading-to-1.0.md`**: every 0.5.x warning against what 1.0 does
+  instead, the staged sequence for `undeclared_feature_policy` with the
+  `mix aurora_meter.features --strict` step, the `:allow` escape for a host that
+  wants to keep today's behaviour deliberately, and the statement that 0.5.0
+  needs no migration.
+- **`docs/api.md`**, the published API inventory: every public module and
+  function with its stability class, the release it arrived in and what it
+  returns, plus the list of internal modules nothing here covers.
+- **`docs/support-policy.md`**: what SemVer covers and what it does not, the
+  schema contract, and the supported Elixir, Erlang/OTP and PostgreSQL versions.
+- **`docs/correctness.md`**: every invariant I01 to I22 with its prerequisites,
+  its known limits and the tests that hold it, checked against the suite so an
+  entry cannot name a test that does not exist.
+- Decision records 0009 to 0015. Two of them describe behaviour that ships in
+  this release and are published with it: 0010 (undeclared features and
+  configuration strictness) and 0015 (the period contract and the clock seam).
+- `AuroraMeter.LiveView` documents the broadcast contract: the topic, the
+  message shape, the fact that a broadcast value includes units reserved but not
+  yet committed, and that day buckets are never broadcast.
 - **`AuroraMeter.Clock`, the clock seam.** Every instant and every date inside
   the library now comes from the module configured under `clock:` (default
   `AuroraMeter.Clock.System`), so a host can freeze time in its own tests with
@@ -113,6 +156,43 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   entitled-status list. No behaviour change; there was one rule in two places.
 - `mix aurora_meter.install` writes `undeclared_feature_policy: :deny`, so a new
   install denies from its first boot.
+
+### Deprecated
+
+- **`config :aurora_meter, durable_features: [...]`.** A non-empty list now logs
+  one deprecation line per node at boot. The key still works and is kept until
+  2.0; nothing changes in 0.5.x or 1.0. 1.0 introduces `feature_sources`, which
+  says where a feature's commercial quantity comes from rather than bolting an
+  event row onto a buffered count, and `AuroraMeter.record/4` for usage that
+  must not be lost. An empty list, which is the default, warns about nothing.
+
+### Fixed
+
+Documentation that claimed more than the code delivers. None of these is a code
+change; each is a promise being corrected, which matters more than a typo would.
+
+- `docs/metering.md`, `docs/examples/concepts.md` and
+  `docs/examples/allowance-and-overage.md` each bounded buffered loss at one
+  flush interval ("at most one interval's worth", "up to five seconds"). Loss is
+  everything not in an acknowledged flush batch, and during a database outage the
+  pending set grows until the database returns or the VM stops. The README
+  already said so; the guides did not.
+- `docs/examples/allowance-and-overage.md` described metered usage reaching
+  Stripe "exactly once". Export is at-least-once with provider-side
+  idempotency: the identifier is what stops a retry billing the same window
+  twice.
+- `docs/examples/concepts.md` implied that a durable event row is what gets
+  billed. It is not: usage reporting reads the persisted counters, and the event
+  row is the audit record beside them.
+- `docs/clustering.md` described a four-element counter row (it has six, and the
+  two that were missing are the ones that explain reservations and gossip),
+  named a schema version that has moved twice since, and documented a rolling
+  upgrade from 0.2 instead of the upgrades anyone is actually facing.
+- ADR 0003 said absolute-value upserts make the flusher idempotent. The flusher
+  has applied deltas since ADR 0004, and idempotence comes from the flush
+  receipt inside the transaction (ADR 0007). The ADR's original text is
+  unchanged, with a dated note appended: a decision record says what was decided
+  and when, and is not rewritten to match the present.
 
 ## [0.4.0] - 2026-09-11
 

@@ -1,7 +1,7 @@
 defmodule AuroraMeter.MixProject do
   use Mix.Project
 
-  @version "0.4.0"
+  @version "0.5.0"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do
@@ -199,8 +199,10 @@ defmodule AuroraMeter.MixProject do
         "NOTICE.md",
         "docs/getting-started.md",
         "docs/api.md",
+        "docs/guarantees.md",
         "docs/support-policy.md",
         "docs/correctness.md",
+        "docs/upgrading-to-1.0.md",
         "docs/examples/concepts.md",
         "docs/examples/team-saas.md",
         "docs/examples/allowance-and-overage.md",
@@ -222,7 +224,14 @@ defmodule AuroraMeter.MixProject do
         "docs/adr/0005-prepaid-credit-ledger.md",
         "docs/adr/0006-counter-feature-kind.md",
         "docs/adr/0007-idempotent-flush-batches.md",
-        "docs/adr/0008-pending-quota-work.md"
+        "docs/adr/0008-pending-quota-work.md",
+        # 0009 and 0011 to 0014 describe V1 design that has not shipped and are
+        # deliberately absent: hexdocs would present a plan as a feature
+        # (open-findings.md X85). Each is added by the release that ships it,
+        # and test/aurora_meter/release_metadata_test.exs fails if one appears
+        # here without being moved off its list.
+        "docs/adr/0010-undeclared-features-and-config-strictness.md",
+        "docs/adr/0015-period-contract-and-clock-seam.md"
       ],
       groups_for_extras: [
         # Reference is matched before Guides on purpose: ExDoc takes the first
@@ -243,6 +252,12 @@ defmodule AuroraMeter.MixProject do
       # out. Keep it equal to the `@moduledoc false` members of the Internal
       # group below.
       skip_code_autolink_to: [
+        # Named by the 0.5.0 deprecation notice and by docs/upgrading-to-1.0.md
+        # as the 1.0 replacement for `durable_features`. It does not exist yet,
+        # which is the point of saying so; ExDoc would otherwise fail the docs
+        # build under --warnings-as-errors. Remove this line in the release that
+        # adds the function (03b).
+        "AuroraMeter.record/4",
         "AuroraMeter.BootChecks",
         "AuroraMeter.Config.Schema",
         "AuroraMeter.Credits.Ledger",

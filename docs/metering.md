@@ -59,10 +59,14 @@ if you truly never chart usage.
 ## Durability
 
 By default metering is **buffered**: counters live in ETS and are flushed to
-Postgres every `:flush_interval` ms and once more on a clean shutdown, so only a
-hard crash can lose increments (at most one interval's worth) — fine for
-dashboards and soft quotas. For billing-grade exactness,
-mark a feature **durable** and `track/4` also writes a raw event row synchronously:
+Postgres every `:flush_interval` ms and once more on a clean shutdown. What
+losing the Store or the VM costs you is everything that is not yet in an
+acknowledged flush batch, which is usually the last interval and is not bounded
+by it: while the database is unreachable the pending set keeps growing until the
+database comes back or the VM dies. That is the right trade for dashboards and
+soft quotas, and the wrong one for anything you invoice. For billing-grade
+exactness, mark a feature **durable** and `track/4` also writes a raw event row
+synchronously:
 
 ```elixir
 config :aurora_meter, durable_features: [:ai_generations]

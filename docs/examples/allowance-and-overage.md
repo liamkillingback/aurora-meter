@@ -57,21 +57,27 @@ AuroraMeter.track(org, :generations)
 That is the whole hot path. It is an ETS counter increment — no database call —
 so you can put it anywhere, including in a loop.
 
-A background flusher writes totals to Postgres every five seconds. That trade
-is the reason it is fast, and it has a consequence you should decide about
-consciously: **if the node dies, up to five seconds of counts die with it.**
+A background flusher writes totals to Postgres on the `:flush_interval` (five
+seconds by default). That trade is the reason it is fast, and it has a
+consequence you should decide about consciously: **if the node dies, every count
+that is not yet in an acknowledged flush batch dies with it.** That is usually
+the last interval. It is more than that whenever the database has been
+unreachable, because the pending set keeps growing until the database comes back
+or the VM stops.
 
-For a 2¢ generation, losing a few is cheaper than the machinery to never lose
-one. If that is not true for you — say each unit is a dollar — make the feature
-durable:
+For a 2¢ generation, losing a few is cheaper than the machinery that would keep
+every one. If that is not true for you (say each unit is a dollar) make the
+feature durable:
 
 ```elixir
 config :aurora_meter, durable_features: [:generations]
 ```
 
-Durable features are written straight through to the database on every call.
-Correct, slower, and a database write on every request. Choose per feature, not
-globally.
+A durable feature still increments the ETS counter, and also writes a raw event
+row synchronously on every call. Slower, and a database write on every request,
+in exchange for a record of each increment that survives the node. The counter
+remains what usage reporting reads; the event rows are the audit trail beside
+it. Choose per feature, not globally.
 
 ### Counting more than one
 
@@ -249,7 +255,8 @@ AuroraMeter.with_quota(org, :generations, fn -> Inkwell.AI.generate(p) end)
 AuroraMeter.quota(org, :generations)
 # %{used: 1_240, included: 1_000, overage: 240, unit_price: 2, percent: 124, ...}
 
-# Once an hour, Pro tells Stripe about the delta, exactly once
+# Once an hour, Pro reports the delta to Stripe under an identifier Stripe
+# deduplicates on, so a retried send does not bill the units twice
 ```
 
 Next: [Prepaid credits](prepaid-credits.md) for the other money shape, or

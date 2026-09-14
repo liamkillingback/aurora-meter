@@ -44,6 +44,37 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.remaining(tenant, :ai_generations) == 0
   end
 
+  # G1 of docs/guarantees.md. `check/2` decides against the counter as it is and
+  # holds nothing, so the same last unit is offered to every caller that asks
+  # for it. The counter and the remaining count are read afterwards to show that
+  # asking changed neither: a check that quietly reserved would be a different,
+  # and much more surprising, function.
+  test "check/2 is advisory: two callers are both allowed the last unit and nothing is reserved" do
+    tenant = unique_tenant()
+    AuroraMeter.subscribe(tenant, :free)
+    AuroraMeter.track(tenant, :ai_generations, 49)
+    period = Period.current(tenant).start
+    key = {tenant, :ai_generations, period}
+
+    assert AuroraMeter.remaining(tenant, :ai_generations) == 1
+
+    # One unit left and two callers asking for it. Both are told yes, because
+    # `check/2` answers from the counter as it stands and holds nothing.
+    task = Task.async(fn -> AuroraMeter.check(tenant, :ai_generations) end)
+    assert AuroraMeter.check(tenant, :ai_generations) == :ok
+    assert Task.await(task) == :ok
+
+    # The row is untouched by either question: `value` is still the 49 that were
+    # tracked and `reserved` (the last position) is still zero. A `check/2` that
+    # quietly reserved would show a 1 there, and would be a different function
+    # from the one this page documents.
+    assert [{^key, 49, _pending_flush, _pending_gossip, 0, 0}] =
+             :ets.lookup(Store.counters_table(), key)
+
+    assert AuroraMeter.usage(tenant, :ai_generations) == 49
+    assert AuroraMeter.remaining(tenant, :ai_generations) == 1
+  end
+
   test "a metered feature is always allowed and reports :unlimited" do
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :scale)

@@ -25,3 +25,24 @@ Pro (subscription-aligned).
 - Absolute-value upserts make the flusher idempotent and reset-free: a new
   `period_start` in the counter key starts a fresh window automatically; old rows
   are retained as history.
+
+## Note, 2026-09-15
+
+The original text above is the decision as it was taken and is left as written.
+Two of its statements no longer describe the code, and are corrected here rather
+than in place, because an ADR records what was decided and when.
+
+- The flusher does not write absolute values. It applies deltas
+  (`value = value + EXCLUDED.value`, in the Ecto storage adapter's
+  `flush_batch/3`),
+  which is what lets several nodes add up into one row instead of overwriting one
+  another. That change was made for cluster-wide counters, ADR 0004.
+- Idempotence therefore does not come from the upsert being absolute. It comes
+  from the flush receipt: its primary key is inserted inside the same transaction
+  as the counter and history deltas, so a batch redelivered after a lost response
+  applies once. See ADR 0007.
+
+What survives unchanged is the reset-free part: a new `period_start` in the
+counter key starts a fresh window with no reset job, and old rows stay as
+history. The current contract is in
+[the guarantee page](../guarantees.md).

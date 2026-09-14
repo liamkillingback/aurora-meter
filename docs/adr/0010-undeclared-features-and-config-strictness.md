@@ -21,7 +21,7 @@ the host compiled the dependency under. A production host therefore receives no
 signal at all when it checks a feature that no plan declares, and the check
 returns the permissive default.
 
-`Config.validate!/0` calls `Keyword.take(config, Keyword.keys(@schema.schema))`
+`AuroraMeter.Config.validate!/0` calls `Keyword.take(config, Keyword.keys(@schema.schema))`
 before validating (`config.ex:84`), so an unknown or misspelled configuration key
 is discarded rather than rejected. A host that writes `defalut_plan:` gets the
 library's default plan and no error.

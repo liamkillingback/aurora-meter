@@ -5,11 +5,17 @@ number. This guide explains how, what it guarantees, and what to configure.
 
 ## How it works
 
-Every counter row on a node is `{key, value, pending_flush, pending_gossip}`:
+Every counter row on a node is
+`{key, value, pending_flush, pending_gossip, remote, reserved}`:
 
 - `value` is this node's view of the **cluster-wide** total
 - `pending_flush` is what this node has added since its last database flush
 - `pending_gossip` is what this node has added since its last PubSub tick
+- `remote` is how much of `value` arrived from other nodes since the last
+  rebase, so anything reasoning about what the *database* holds can tell that
+  this node's view moved for a reason the database has not seen
+- `reserved` occupies quota for unfinished `with_quota` work and is neither
+  flushed nor gossiped, because it is not completed usage
 
 Two loops keep the nodes in agreement.
 
@@ -66,7 +72,11 @@ next flush re-bases it unconditionally.
   already configure for LiveView; nothing extra is needed. On a single node, or
   with a non-distributed PubSub, every message is local and dropped, and
   behaviour is exactly what it was.
-- Schema version 2. 0.3 adds **no migration**.
+- The schema version this release requires, which is
+  `AuroraMeter.Migration.latest_version()`. Clustering itself adds no columns:
+  the gossip and the announcements are PubSub messages and the flush is the
+  ordinary counter write. Run `mix aurora_meter.gen.migration` after any upgrade
+  and it is a no-op when there is nothing to apply.
 
 ## Configuration
 
@@ -83,12 +93,26 @@ LiveViews from its own converged view, so a browser never receives two slightly
 different numbers from two nodes. With `cluster_sync: false` they fan out
 cluster-wide as in 0.2.
 
-## Rolling upgrades from 0.2
+## Rolling upgrades
 
-0.2 nodes write absolute values and can overwrite a 0.3 node's deltas while both
-versions run. Prefer a full restart; if you must roll, expect per-node behaviour
-until the last 0.2 node is gone, after which the next announcements re-base
-everything.
+**0.4.x to 0.5.0.** No schema change, and no change to the gossip or
+announcement messages, so a cluster part way through the deploy is a cluster of
+nodes that agree. 0.5.0 adds warnings, not behaviour: see
+[Upgrading to 1.0](upgrading-to-1.0.md) for what each one is telling you.
+
+**0.5.x to 1.0.0.** Read the upgrade note first. 1.0 turns the 0.5.x warnings
+into failures, which is a boot-time decision on each node rather than anything
+the cluster negotiates, so a node that starts is a node that agrees with the
+others. Any schema version 1.0 needs is applied before the deploy, as always.
+
+**Before 0.3.** Those releases wrote absolute counter values rather than deltas,
+so a node on one of them can overwrite a newer node's work while both are
+running. They are outside the
+[support policy](support-policy.md); upgrade to a supported version with a full
+restart rather than a rolling one.
+
+The counter row tuple above is described so the guide can explain itself. It is
+not part of the compatibility promise, and the support policy says so.
 
 ## Testing it
 
