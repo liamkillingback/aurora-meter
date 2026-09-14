@@ -1,0 +1,29 @@
+Catalogue comparison, produced by tmp/v1/03a/catalogue.exs on
+2026-09-14T17:18:59.178666Z.
+
+A: up(from: 1, version: 8, concurrently: false)           -- a fresh install
+B: up(from: 1, version: 6); seed 25 legacy rows;
+   up(from: 7, version: 7); mix aurora_meter.events.backfill;
+   up(from: 8, version: 8) in a file with @disable_ddl_transaction true and
+   @disable_migration_lock true                           -- the real upgrade
+
+Catalogue lines compared: every column (type, nullability, identity, default),
+every index (full indexdef) and every constraint (type, convalidated,
+definition) of every table whose name begins aurora_meter.
+
+A has 125 lines. B has 125 lines.
+
+Only in A (expected: none)
+  (none)
+
+Only in B (expected: none)
+  (none)
+
+Every published schema history, taken to 8 with rows in the table
+  core 1: marker before 7 = nil, after 7 = 7, after 8 = 8, rows preserved = 10, backfilled = 10
+  core 2: marker before 7 = nil, after 7 = 7, after 8 = 8, rows preserved = 10, backfilled = 10
+  core 6: marker before 7 = nil, after 7 = 7, after 8 = 8, rows preserved = 10, backfilled = 10
+
+Published states, per schema-migration-map.md section 1: core 1 is core 0.1.0,
+core 2 is core 0.2.0 to 0.3.2, core 6 is core 0.4.0. The test suite runs the
+same ladder from 3, 4 and 5 as well, which no customer is at.

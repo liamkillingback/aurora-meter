@@ -1,0 +1,67 @@
+{
+  "checkpoint_after_interruption": 3000,
+  "database": "aurora_v1_1_2284530",
+  "dry_run": {
+    "already_filled": 0,
+    "batches": 13,
+    "cursor": 12002,
+    "finished_at": null,
+    "nonpositive_quantity": 1,
+    "oversized_metadata": 1,
+    "resolved": 12002,
+    "scanned": 12002,
+    "started_at": null,
+    "unresolved": 0,
+    "unresolved_reasons": {},
+    "updated": 12002
+  },
+  "event_totals_rows_after_backfill": 0,
+  "interrupted_run": {
+    "already_filled": 0,
+    "batches": 3,
+    "cursor": 3000,
+    "finished_at": "2026-09-14T17:17:18.047032Z",
+    "nonpositive_quantity": 0,
+    "oversized_metadata": 0,
+    "resolved": 3000,
+    "scanned": 3000,
+    "started_at": "2026-09-14T17:17:17.965126Z",
+    "unresolved": 0,
+    "unresolved_reasons": {},
+    "updated": 3000
+  },
+  "legacy_prefixed_rows": 12002,
+  "remaining_after_resume": 0,
+  "resumed_run": {
+    "already_filled": 0,
+    "batches": 10,
+    "cursor": 12002,
+    "finished_at": "2026-09-14T17:17:18.246226Z",
+    "nonpositive_quantity": 1,
+    "oversized_metadata": 1,
+    "resolved": 9002,
+    "scanned": 9002,
+    "started_at": "2026-09-14T17:17:18.051488Z",
+    "unresolved": 0,
+    "unresolved_reasons": {},
+    "updated": 9002
+  },
+  "rows_seeded": 12002,
+  "schema_marker": {
+    "counts": {
+      "unvalidated_constraints": [
+        "aurora_meter_events_kind_check",
+        "aurora_meter_events_correction_pairing_check",
+        "aurora_meter_events_event_id_length_check",
+        "aurora_meter_events_dimensions_object_check",
+        "aurora_meter_events_quantity_check",
+        "aurora_meter_events_metadata_size_check"
+      ]
+    },
+    "cursor": {
+      "version": 8
+    },
+    "state": "applied"
+  },
+  "v8_refusal_first_line": "ERROR 23514 (check_violation) check constraint \"aurora_meter_events_quantity_check\" of relation \"aurora_meter_events\" is violated by some row"
+}

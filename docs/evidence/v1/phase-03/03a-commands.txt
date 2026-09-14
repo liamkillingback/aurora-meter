@@ -1,0 +1,218 @@
+03a: event schema (core V7 and V8) and legacy backfill
+=====================================================
+
+Every command this unit ran that produced a number in 03a-report.md, in order.
+Exit codes and timestamps are as reported by the runs themselves. Timestamps are
+the host's UTC clock as `date -u` reported it during the run.
+
+Toolchain, recorded once and unchanged throughout
+-------------------------------------------------
+  Elixir 1.20.1 (compiled with Erlang/OTP 29)
+  Erlang/OTP 29 [erts-17.0.1] [64-bit] [smp:24:24] [jit:ns]
+  PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu
+  Ubuntu 24.04 under WSL2
+  core   fe28f84e39dacdb0691afd1d3a7393800eec12c8 (branch aurorameter-v1, tree dirty)
+  pro    7a083e389598cc1e5c4ea6f62e23836c79030b42 (tree dirty)
+  sha256 core/mix.lock  70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3
+  sha256 pro/mix.lock   bd66012e64e0ce2cb97e5a9fdbee15c248277484a18f7176731e10649c6df424
+  (both identical to HEAD: this unit adds no dependency)
+
+Every Mix command went through tmp/v1/mixlane.sh, which serialises against one
+package _build and sets DB_PORT=5490 (wave rule 1, open-findings.md X18). Every
+disposable database is named aurora_v1_* and is dropped by the run that created
+it. No Docker container was created, started or removed.
+
+Databases used
+--------------
+  aurora_meter_test        rebuilt with mix ecto.drop + mix test.setup
+  aurora_meter_pro_test    rebuilt with mix ecto.drop + mix test.setup
+  aurora_v1_*              created and dropped per test and per rehearsal run
+  NOT TOUCHED: phx_templates_db, phx_templates_test
+
+Probes, before any code was written
+-----------------------------------
+[2026-09-14T16:44:41Z] bash tmp/v1/03a/s06-probe.sh
+  Ecto 3.14.1, ecto_sql 3.14.0, postgrex 0.22.4.
+  Ecto.Migration.Runner.execute/1 QUEUES; flush/0 runs the queue. Any catalogue
+  read interleaved with `execute/1` must call flush/0 first, or it observes the
+  database before the DDL. Every catalogue read in V7 and V8 does.
+  exit 1 (the last psql in the script; the probes themselves all reported)
+
+[2026-09-14T16:44:xxZ] bash tmp/v1/03a/s07-probe.sh
+  CHECK constraints accepted by PG 16 on aurora_meter_events-shaped columns:
+    pg_column_size(m) <= 16384            accepted, validated
+    jsonb_typeof(m) = 'object'            accepted
+    octet_length(m::text) <= 16384        accepted, validated
+    octet_length(e) <= 128                accepted
+  ALTER TABLE t ALTER COLUMN q TYPE bigint, ADD COLUMN IF NOT EXISTS seq bigint
+    GENERATED ALWAYS AS IDENTITY          one statement, identity is NOT NULL,
+                                          existing rows numbered in place
+  exit 0
+
+First verification target: the dispatcher at @latest 7, before V8 existed
+------------------------------------------------------------------------
+[2026-09-14T16:44:41Z] mix compile --warnings-as-errors (MIX_ENV=test)   exit 0
+[2026-09-14T16:44:47Z] mix ecto.migrate --log-migrations-sql             exit 0
+  Applied core 7 to aurora_meter_test. Marker written: {"version": 7}.
+[2026-09-14T16:44:55Z] mix test test/aurora_meter/migration_test.exs --seed 0
+  Result: 3 passed                                                      exit 0
+  ^ the target named in the build document's fresh-agent handoff: green at
+    @latest 7, before AuroraMeter.Migration.V8 existed.
+
+[2026-09-14T16:45:00Z] mix test --seed 0 (core, full, still at @latest 7)
+  Result: 808/810 passed, 2 failed                                      exit 2
+  Both failures were other units' whole-codebase guards tipping, as expected:
+    AuroraMeter.ReleaseMetadataTest G04 (@schema_version 6)
+    AuroraMeter.ApiInventoryTest A03 (V7 not in @internal_modules)
+  Both resolved as cross-unit touches; see 03a-report.md section 5.
+
+Two behaviours measured rather than assumed
+-------------------------------------------
+[2026-09-14T16:58:23Z] MIX_ENV=test mix run --no-start tmp/v1/03a/probe.exs
+  exit 0. Two questions, two answers:
+
+  Q1  Is pg_column_size(metadata) the same measure to an INSERT and to a SELECT?
+      NO, and the difference is three orders of magnitude for one value.
+        pg_column_size(stored jsonb)      259
+        octet_length(metadata::text)      20012
+        pg_column_size(metadata::text)    20016
+        INSERT of that value with CHECK (pg_column_size(metadata) <= 16384):
+          {:rejected, "probe_size"}
+        VALIDATE CONSTRAINT over the identical stored row:
+          :validated
+      A constraint that refuses a value on the way in and proves it on the way
+      out is not a constraint. The implementation uses
+      octet_length(metadata::text) <= 16384. Map amendment 1 in 03a-report.md.
+
+  Q2  Does a session advisory lock survive the death of the BEAM process that
+      checked the connection out of the repo pool?
+        advisory locks held before the kill: 1
+        runner died: :killed
+        after 0ms:   try_lock=false
+        (DBConnection logged: disconnected, client exited)
+        after 50ms:  try_lock=true
+      The lock is released when the pool closes the dead client's connection,
+      which took under 50 ms here. Recorded in the Backfill moduledoc and waited
+      for, not slept through, in the resume test.
+
+Verification after V8, the backfill, the generator and the tests
+----------------------------------------------------------------
+[2026-09-14T16:51:42Z] mix compile --warnings-as-errors                 exit 0
+[2026-09-14T16:51:43Z] mix ecto.migrate --log-migrations-sql            exit 0
+[2026-09-14T16:58:56Z] mix test --seed 0 (the five files of this unit)
+  Result: 59 passed                                                     exit 0
+[2026-09-14T17:03:55Z] mix ecto.drop; mix test.setup (core)             exit 0
+[2026-09-14T17:07:08Z] mix test --seed 0 (core, full)
+  Result: 866 passed (42 doctests, 10 properties, 814 tests), 3 excluded exit 0
+[2026-09-14T17:23:03Z] mix check (core)
+  format --check-formatted, compile --warnings-as-errors --force,
+  credo --strict, dialyzer, test, docs --warnings-as-errors
+  Result: 866 passed                                                    exit 0
+  log: 03a-core-check.log
+
+[2026-09-14T17:15:01Z] mix ecto.drop; mix test.setup (Pro)              exit 0
+[2026-09-14T17:22:48Z] mix check (Pro)
+  Result: 420 passed (28 doctests, 392 tests)                           exit 0
+  log: 03a-pro-check.log
+
+Note on the two intermediate red runs, recorded rather than tidied away:
+  17:19:07Z  core mix check   exit 2, 1 failed
+  17:22:14Z  pro  mix check   exit 2, 1 failed
+  Both were AuroraMeter.Test.FaultRepo missing checkout/2 and query!/3, which
+  the backfill introduced when it bounded its statements with an explicit
+  timeout. Both harnesses assert that they export every repo function lib/
+  calls. Fixed in both repositories; the runs above are after the fix.
+
+The upgrade rehearsal and the two measurements
+----------------------------------------------
+[2026-09-14T17:17:16Z] MIX_ENV=test mix run --no-start tmp/v1/03a/rehearse.exs
+  exit 0. Disposable database, 12,002 rows in the 0.4.0 shape including one with
+  a non-positive quantity and one with 20 KB of metadata. Path:
+    up(from: 1, version: 6)
+    seed
+    up(from: 7, version: 7)                                 0.13 s
+    backfill --dry-run --batch-size 1000                    scanned 12002, updated 12002 predicted, nothing written
+    backfill --batch-size 1000 --max-batches 3              updated 3000, cursor 3000
+    backfill --batch-size 1000                              scanned 9002, updated 9002, remaining 0
+    up(from: 8, version: 8) in a no-transaction file         REFUSED:
+      ERROR 23514 check constraint "aurora_meter_events_quantity_check" ... violated by some row
+    up(from: 8, version: 8, validate_checks: false)          applied
+    aurora_meter_event_totals                                0 rows
+    marker                                                   {"version": 8}, six unvalidated constraints recorded
+  artifacts: 03a-backfill-counts.json, 03a-schema-diff.md
+
+  Synthetic million-row table, same script:
+    rows                 1000000
+    table_bytes_before   190668800
+    table_bytes_after    195387392
+    alter_seconds        6.350246
+    backfill_seconds     60.359412   (batches of 10000)
+    v8_seconds           4.113903
+    lock_waits           0
+  artifact: 03a-rewrite-timing.json
+  A LOCAL measurement on the recorded machine with an idle database. Not a
+  customer-scale claim. 11.05 repeats it on the fixtures.
+
+  An earlier attempt at the million-row leg, at 17:16:03Z, died:
+    ** (DBConnection.ConnectionError) ... queued and checked out the connection
+       for longer than 15000ms
+  That is DBConnection's default timeout applied to bulk work. The backfill now
+  bounds its statements and its batch transaction explicitly (60 s by default,
+  --timeout to change it), and the run above is after that fix. Recorded because
+  an operator running --batch-size 50000 on a real table would have hit it.
+
+The catalogue comparison and the ladder
+---------------------------------------
+[2026-09-14T17:18:55Z] MIX_ENV=test mix run --no-start tmp/v1/03a/catalogue.exs
+  exit 0
+    fresh lines: 125, upgraded lines: 125
+    only in fresh: []
+    only in upgraded: []
+    core 1: marker before 7 = nil, after 7 = 7, after 8 = 8, rows preserved = 10, backfilled = 10
+    core 2: marker before 7 = nil, after 7 = 7, after 8 = 8, rows preserved = 10, backfilled = 10
+    core 6: marker before 7 = nil, after 7 = 7, after 8 = 8, rows preserved = 10, backfilled = 10
+  artifact: 03a-fresh-vs-upgrade.txt
+
+The logged SQL of version 7
+---------------------------
+[2026-09-14T17:18:43Z] mix ecto.drop; mix ecto.create;
+                       mix ecto.migrate --log-migrations-sql              exit 0
+  artifact: 03a-v7-sql.log
+  The rewrite, as the migration runner logged it, in one statement:
+    ALTER TABLE aurora_meter_events
+      ALTER COLUMN quantity TYPE bigint,
+      ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY
+  QUERY OK db=15.6ms
+
+Artifact checksums
+------------------
+  2c4577e6535f622b88579dc90929a59b1d3eea206087702d94b235ee5a106124  03a-core-check.log
+  3b6909db214ffd834db8dae78af3775b5a727d537a32d5b7172a4ae0a4787282  03a-pro-check.log
+  044edc19650b92a87d6bfaafd8d0d0d2014c6fde2cd7e98cd0611d63c92e7921  03a-v7-sql.log
+  e463b1a83697bb71dbd2a62a1bfe5731ae4349f805d10c34b5d9d60a0465eb09  03a-fresh-vs-upgrade.txt
+  12c4a7f1eafe298cca7d1f10c75e819137fe0f388c4d9a3cd6adcdd2e4847a9b  03a-backfill-counts.json
+  3cd4a7d9cd59ec9d3e4c6477dd25a28eec7092c21e3f7919e26970321634d1ef  03a-rewrite-timing.json
+  e25172f7e7abc00c6ee1d9cf933587467366117907b550c2bf09c06c4ea710dc  03a-schema-diff.md
+  (taken at 2026-09-14T17:22:27Z, before the FaultRepo fix)
+
+  The two check logs beside this file are the final, green runs:
+  5bd5b0cf3d93b8a28d834794b2bcfad3b44fcf62cd5e10b29ac91ca5d61ff4e9  03a-core-check.log
+  f0d9de99b3734bcc109e5fc73f2a2e0b7329f8c750210a4dac88406a78c5616b  03a-pro-check.log
+
+Scripts
+-------
+Every script above lives in the storefront under tmp/v1/03a/ (the package
+repositories do not ignore tmp/). They are working files, not deliverables:
+  s0*.sh          source survey and Postgres probes
+  probe.exs       the two measured behaviours
+  r0*.sh, r1*.sh  the numbered verification runs
+  rehearse.exs    the upgrade rehearsal and the timing
+  catalogue.exs   the fresh-versus-upgrade comparison and the ladder
+
+Not run, and why
+----------------
+  No PostgreSQL 13 leg. The documented floor is 13 and the tested version is 16;
+  claiming a tested 13 would need a leg and this unit adds none (S5, D12).
+  No publish, no tag, no deploy, no commit (D13).
+  No Docker container created, started or removed.
+  config/secrets.exs was never opened, printed or referenced.

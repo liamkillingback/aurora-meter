@@ -28,11 +28,20 @@ defmodule AuroraMeter.ReleaseMetadataTest do
   @getting_started "docs/getting-started.md"
   @release_doc "docs/RELEASE.md"
 
-  # G04. The transition release is schema-neutral, which is why it can be
-  # rolled back as safely as it is rolled forward. Change this number only in
-  # the release that actually adds a migration version, and say so in the
-  # changelog when you do.
-  @schema_version 6
+  # G04. The schema version this tree carries.
+  #
+  # 0.5.0, the transition release, shipped 6 and was schema-neutral by design,
+  # which is why it can be rolled back as safely as it is rolled forward. Build
+  # unit 03a moved this to 8 when core schema versions 7 and 8 landed on the V1 branch,
+  # as the previous comment here instructed: "change this number only in the
+  # release that actually adds a migration version".
+  #
+  # The half of that instruction 03a could not carry out is the changelog. A
+  # non-empty `[Unreleased]` section is refused two tests above, and the 0.5.0
+  # section's statement that `latest_version()` is 6 was true of that release
+  # and must not be rewritten. The release that ships schema 7 and 8 (10a / 11e)
+  # owes the changelog the new number. Recorded as a finding in 03a's evidence.
+  @schema_version 8
 
   # X85. ADRs describing behaviour that has shipped, and therefore belong on
   # hexdocs with the release that shipped it.
@@ -159,12 +168,13 @@ defmodule AuroraMeter.ReleaseMetadataTest do
   end
 
   describe "G04 schema neutrality" do
-    test "G04 the transition release changes no schema version" do
+    test "G04 the schema version moves only in the change that adds a migration version" do
       assert AuroraMeter.Migration.latest_version() == @schema_version,
-             "the schema version moved to #{AuroraMeter.Migration.latest_version()}. A " <>
-               "transition release carries no migration, because its whole purpose is " <>
-               "that it can be rolled back as safely as it was rolled forward. Move the " <>
-               "migration off the release branch, or stop calling this a transition release"
+             "the schema version moved to #{AuroraMeter.Migration.latest_version()} and " <>
+               "@schema_version here still says #{@schema_version}. A migration version is " <>
+               "the one change a release can never roll back, so it is never added as a " <>
+               "side effect: move this number in the same change that moves `@latest`, and " <>
+               "state the new number in the CHANGELOG section of the release that ships it"
     end
 
     test "G04 the changelog says the release is schema-neutral" do

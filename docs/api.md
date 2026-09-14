@@ -300,13 +300,17 @@ copied.
 | `AuroraMeter.Plan` | `%Plan{id, price, features}` | stable | 0.1.0 | Built by the DSL. `feature_config/0` is the per-feature union. |
 | `AuroraMeter.Schema.Counter` | `aurora_meter_counters` row | stable | 0.1.0 | |
 | `AuroraMeter.Schema.History` | `aurora_meter_history` row | stable | 0.2.0 | |
-| `AuroraMeter.Schema.Event` | `aurora_meter_events` row | stable | 0.1.0 | The legacy durable-track row. |
+| `AuroraMeter.Schema.Event` | `aurora_meter_events` row | stable | 0.1.0 | The Ecto schema. Its `inserted_at` field is exposed as `recorded_at` on `AuroraMeter.Event`. |
+| `AuroraMeter.Event` | read struct | stable | 1.0.0 | What the durable event API hands back. Hosts match on it; nothing outside the library builds one. |
 | `AuroraMeter.Schema.Subscription` | `aurora_meter_subscriptions` row | stable | 0.1.0 | |
 | `AuroraMeter.Schema.CreditBalance` | `aurora_meter_credit_balances` row | stable | 0.4.0 | |
 | `AuroraMeter.Schema.CreditTransaction` | `aurora_meter_credit_transactions` row | stable | 0.4.0 | |
 | `AuroraMeter.UndeclaredFeatureError` | exception | stable | 0.5.0 | Raised under `undeclared_feature_policy: :raise`. Fields `feature`, `tenant_key`, `plan_id`, `entry`, `reason`. |
 | `AuroraMeter.Period.InvalidPeriodError` | exception | stable | 0.5.0 | Fields `source`, `tenant_key`, `period`, `instant`, `reason`. |
 | `AuroraMeter.Credits.CurrencyMismatchError` | exception | stable | 0.5.0 | Fields `configured`, `stored`. |
+| `AuroraMeter.Migration.ConcurrentVersionError` | exception | stable | 1.0.0 | A version that must run outside a DDL transaction was given company. Fields `versions`, `concurrent`. |
+| `AuroraMeter.Migration.DataLossError` | exception | stable | 1.0.0 | A `down` that destroys a commercial fact, without `confirm_data_loss: true`. Fields `versions`, `destructive`. |
+| `AuroraMeter.Migration.BackfillIncompleteError` | exception | stable | 1.0.0 | Core schema version 8 refusing while an `event_id` is still null. Field `remaining`. |
 
 Named types a host will meet in a spec: `t:AuroraMeter.Period.t/0`,
 `t:AuroraMeter.Entitlements.quota/0` and `t:AuroraMeter.Entitlements.check_result/0`,
@@ -410,9 +414,14 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :cluster, :apply]` | `count` | `kind`, `origin` | stable | 0.3.0 | `[:aurora_meter, :cluster, :apply]` |
 | `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
+| `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 
 `declared` was added to the `track` and `reserve` metadata in 0.5.0, which is an
 additive change: a handler matching on the old keys is unaffected.
+
+The backfill batch event is emitted once per committed batch of
+`mix aurora_meter.events.backfill`. It is the only observable a long backfill
+has, and `cursor` is the `seq` an interrupted run resumes from.
 
 `kind` in the credits event is one of `:grant`, `:hold`, `:settle`, `:release`,
 `:debit` or `:expire`. `duplicate: true` marks an idempotent grant replay (with
@@ -456,6 +465,7 @@ sees node A's slightly different number.
 | `Mix.Tasks.AuroraMeter.Gen.Migration` | `mix aurora_meter.gen.migration` | stable | 0.1.0 | Options `-r`, `--from`, `--version`, `--to`. |
 | `Mix.Tasks.AuroraMeter.Features` | `mix aurora_meter.features` | stable | 0.5.0 | The scanner to run before changing `undeclared_feature_policy`. `--strict` exits 1 when anything referenced is undeclared or declared on only some plans. |
 | `Mix.Tasks.AuroraMeter.Bench` | `mix aurora_meter.bench` | stable | 0.1.0 | Development only. Benchmark numbers are not covered by SemVer. |
+| `Mix.Tasks.AuroraMeter.Events.Backfill` | `mix aurora_meter.events.backfill` | stable | 1.0.0 | Run between core schema versions 7 and 8. Options `-r`, `--batch-size`, `--max-batches`, `--dry-run`, `--force-resume`, `--stale-after`. |
 
 ## 9. Migration entry points
 
@@ -463,13 +473,31 @@ sees node A's slightly different number.
 
 | Entry | Signature and return | Class | Since | Notes |
 |---|---|---|---|---|
-| `AuroraMeter.Migration.latest_version/0` | `() :: pos_integer()` | stable | 0.2.0 | `6` in this release. |
-| `AuroraMeter.Migration.up/1` | `(keyword()) :: :ok` | stable | 0.2.0 | Options `:version`, `:from`, `:to`. Arity 0 exists through defaults. Every version is idempotent. |
-| `AuroraMeter.Migration.down/1` | `(keyword()) :: :ok` | stable | 0.2.0 | Options `:version`, `:from`, `:to`. Arity 0 exists through defaults. |
+| `AuroraMeter.Migration.latest_version/0` | `() :: pos_integer()` | stable | 0.2.0 | `8` in this release. |
+| `AuroraMeter.Migration.concurrent_versions/0` | `() :: [pos_integer()]` | stable | 1.0.0 | Versions needing a host migration of their own, with `@disable_ddl_transaction true` and `@disable_migration_lock true`. |
+| `AuroraMeter.Migration.data_loss_versions/0` | `() :: [pos_integer()]` | stable | 1.0.0 | Versions whose `down` needs `confirm_data_loss: true`. |
+| `AuroraMeter.Migration.up/1` | `(keyword()) :: :ok` | stable | 0.2.0 | Options `:version`, `:from`, `:concurrently`, `:validate_checks`, `:lock_timeout`. Arity 0 exists through defaults. Every version is idempotent. |
+| `AuroraMeter.Migration.down/1` | `(keyword()) :: :ok` | stable | 0.2.0 | Options `:version`, `:to`, `:confirm_data_loss`. Arity 0 exists through defaults. |
+| `AuroraMeter.Checkpoints.get/1` | `(String.t()) :: map() \| nil` | stable | 1.0.0 | Where a bounded task got to. `nil` below core schema version 7, which is how a pre-V7 database is detected. |
+| `AuroraMeter.Checkpoints.all/0` | `() :: [map()]` | stable | 1.0.0 | Every checkpoint, name order. |
+| `AuroraMeter.Checkpoints.put/4` | `(String.t(), map(), map(), String.t()) :: :ok` | stable | 1.0.0 | |
+| `AuroraMeter.Checkpoints.update/2` | `(String.t(), keyword()) :: :ok \| {:error, :not_found}` | stable | 1.0.0 | Merges `:cursor`, `:counts` or `:state`. |
+| `AuroraMeter.Checkpoints.delete/1` | `(String.t()) :: :ok` | stable | 1.0.0 | |
+| `AuroraMeter.Checkpoints.pause/1` | `(String.t()) :: :ok` | stable | 1.0.0 | The task stops at its next batch boundary. |
+| `AuroraMeter.Checkpoints.resume/1` | `(String.t()) :: :ok` | stable | 1.0.0 | |
+| `AuroraMeter.Checkpoints.paused?/1` | `(String.t()) :: boolean()` | stable | 1.0.0 | |
 
 The schema-version contract: a host calls these from its own Ecto migration.
-Versions are additive during 1.x. `AuroraMeter.Migration.V1` to `V6` are
+Versions are additive during 1.x. `AuroraMeter.Migration.V1` to `V8` are
 implementation modules and are internal (section 11).
+
+Core schema version 8 is the one version that cannot share a host migration
+file with any other: it creates a unique index `CONCURRENTLY`, which Postgres
+refuses inside a transaction block. `mix aurora_meter.gen.migration` emits it
+as its own file, and `up/1` raises `AuroraMeter.Migration.ConcurrentVersionError`
+rather than let it run halfway. A fresh install passes `concurrently: false`
+and builds the index inside the transaction, which is right for a table with
+no rows in it.
 
 ## 10. Test helpers
 
@@ -526,6 +554,8 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Credits.Ledger` | The ledger implementation behind `AuroraMeter.Credits`. |
 | `AuroraMeter.Credits.Promotions` | Promotional-remainder arithmetic for expiry. |
 | `AuroraMeter.Credits.Series` | The money series queries behind `spend_history/2` and `spend_total/2`. |
+| `AuroraMeter.Events.Backfill` | The implementation behind `mix aurora_meter.events.backfill`. Run the task. |
+| `AuroraMeter.Events.Canonical` | The canonical payload encoding behind `payload_hash` (ADR 0009). |
 | `AuroraMeter.Install.Templates` | The strings the installer writes. |
 | `AuroraMeter.Migration.V1` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V2` | One schema version. Call `AuroraMeter.Migration.up/1`. |
@@ -533,6 +563,8 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Migration.V4` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V5` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V6` | One schema version. Call `AuroraMeter.Migration.up/1`. |
+| `AuroraMeter.Migration.V7` | One schema version. Call `AuroraMeter.Migration.up/1`. |
+| `AuroraMeter.Migration.V8` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Schema.FlushReceipt` | The idempotent flush receipt row. Bookkeeping for the flusher. |
 | `AuroraMeter.Storage.Ecto` | The bundled adapter. Configure it by name; the callbacks are section 2. |
 | `AuroraMeter.Store` | Owns the ETS tables and the pending flush batch. |

@@ -1,0 +1,82 @@
+[mixlane] core: DB_PORT=5490 mix check
+Compiling 67 files (.ex)
+Generated aurora_meter app
+Checking 127 source files (this might take a while) ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.5 seconds (0.03s to load, 0.5s running 69 checks on 127 files)
+1526 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:asn1, :aurora_meter, :compiler, :crypto, :db_connection, :decimal, :ecto, :ecto_sql, :eex, :elixir, :ex_ast, :ex_unit, :finch, :floki, :glob_ex, :hpax, :igniter, :inets, :jason, :kernel, :logger, :mime, :mint, :mix, :nimble_options, :nimble_pool, :owl, :phoenix, :phoenix_html, :phoenix_live_view, :phoenix_pubsub, :phoenix_template, :phx_new, :plug, :plug_crypto, :postgrex, :public_key, :req, :rewrite, :sourceror, :spitfire, :ssl, :stdlib, :stream_data, :telemetry, :text_diff, :websock, :websock_adapter]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"priv/plts/dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt",
+  files: [~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Clock.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Test.PeriodSources.FutureWindow.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Migration.BackfillIncompleteError.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Test.Faults.Injected.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Billing.Noop.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m3.93s
+done (passed successfully)
+Running ExUnit with seed: 959566, max_cases: 48
+Excluding tags: [:headless]
+
+.......................................................................................................................................................................................................................................................
+03:23:18.676 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :receipt_insert) context: %{kind: :write, schema: AuroraMeter.Schema.FlushReceipt, statement: :receipt_insert, repo_fun: :insert_all}"
+.
+03:23:18.711 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+03:23:18.742 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :history_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.History, statement: :history_upsert, repo_fun: :insert_all}"
+.
+03:23:18.771 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+...
+03:23:18.834 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :lost_acknowledgement) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"flush_batch_17731\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"flush_batch_17731\"}]}}, batch_id: \"086401a0-6acf-4cfc-82f3-8cefcc453881\"}"
+....................................................................
+03:25:26.269 [error] Postgrex.Protocol (#PID<0.13071.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.15459.0> ({:sql_sandbox_owner, %{started_by: #PID<0.15458.0>}}) timed out because it owned the connection for longer than 120000ms (set via the :ownership_timeout option)
+
+[clock control] 150s, 24 loaders, 119141972 samples: Clock.now/0 backwards=0 worst=0.0s; DateTime.utc_now/0 backwards=0 worst=0.0s
+.................................
+03:26:01.853 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_29635\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_29635\"}]}}, batch_id: \"0396fe64-0173-437e-bce7-72a2e5eb57ab\"}"
+..................................
+03:26:01.941 [warning] AuroraMeter: feature :nothing is not declared on the tenant's plan (first seen from quota). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+..........................
+03:26:02.158 [warning] AuroraMeter: feature :nothing is not declared on the tenant's plan (first seen from feature_value). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....................................................................
+03:26:02.420 [warning] AuroraMeter: feature :nowhere is not declared on the tenant's plan (first seen from check). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+..................
+03:26:02.446 [warning] AuroraMeter: feature :elsewhere is not declared on the tenant's plan (first seen from entitled?). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.............................................................................................................
+03:26:02.748 [warning] AuroraMeter: feature :elsewhere is not declared on the tenant's plan (first seen from remaining). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.....
+03:26:02.754 [warning] AuroraMeter: feature :nowhere is not declared on the tenant's plan (first seen from allowed?). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....................................................
+03:26:02.824 [warning] AuroraMeter: feature :elsewhere is not declared on the tenant's plan (first seen from with_quota). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.....................................
+03:26:02.911 [warning] AuroraMeter: feature :nowhere is not declared on the tenant's plan (first seen from quota). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.............
+03:26:02.930 [warning] AuroraMeter: feature :elsewhere is not declared on the tenant's plan (first seen from feature_value). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.....................
+03:26:02.956 [warning] AuroraMeter: feature :nowhere is not declared on the tenant's plan (first seen from entitled?). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+................................
+03:26:03.008 [warning] AuroraMeter: feature :nothing_declared is not declared on the tenant's plan (first seen from feature_value). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....................
+03:26:03.059 [warning] AuroraMeter: feature :some_new_thing is not declared on the tenant's plan (first seen from check). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.............................................................................
+Finished in 181.2 seconds (1.3s async, 179.9s sync)
+
+Result: 866 passed (42 doctests, 10 properties, 814 tests), 3 excluded
+Generating docs...
+View html docs at "/tmp/aurora_meter-check-doc/index.html"
+[mixlane] core exit=0 started=2026-09-14T17:23:03Z finished=2026-09-14T17:26:12Z

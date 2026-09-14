@@ -1,0 +1,416 @@
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test mix ecto.migrate --log-migrations-sql
+
+03:18:45.624 [info] == Running 20260711000001 AuroraMeter.TestRepo.Migrations.AddAuroraMeter.up/0
+
+03:18:45.629 [info] create table if not exists aurora_meter_subscriptions
+
+03:18:45.645 [debug] QUERY OK db=15.2ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_subscriptions" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "plan_id" varchar(255) NOT NULL, "status" varchar(255) DEFAULT 'active' NOT NULL, "provider" varchar(255), "provider_customer_id" varchar(255), "provider_subscription_id" varchar(255), "current_period_start" timestamp(0), "current_period_end" timestamp(0), "inserted_at" timestamp NOT NULL, "updated_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.645 [info] create index if not exists aurora_meter_subscriptions_tenant_key_index
+
+03:18:45.650 [debug] QUERY OK db=4.6ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_subscriptions_tenant_key_index" ON "aurora_meter_subscriptions" ("tenant_key") []
+
+03:18:45.650 [info] create table if not exists aurora_meter_counters
+
+03:18:45.660 [debug] QUERY OK db=9.6ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_counters" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "feature" varchar(255) NOT NULL, "period_start" timestamp(0) NOT NULL, "value" bigint DEFAULT 0 NOT NULL, "inserted_at" timestamp NOT NULL, "updated_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.660 [info] create index if not exists aurora_meter_counters_tenant_key_feature_period_start_index
+
+03:18:45.665 [debug] QUERY OK db=4.7ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_counters_tenant_key_feature_period_start_index" ON "aurora_meter_counters" ("tenant_key", "feature", "period_start") []
+
+03:18:45.665 [info] create table if not exists aurora_meter_events
+
+03:18:45.676 [debug] QUERY OK db=10.1ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_events" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "feature" varchar(255) NOT NULL, "quantity" integer DEFAULT 1 NOT NULL, "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL, "inserted_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.676 [info] create index if not exists aurora_meter_events_tenant_key_feature_inserted_at_index
+
+03:18:45.681 [debug] QUERY OK db=5.2ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_events_tenant_key_feature_inserted_at_index" ON "aurora_meter_events" ("tenant_key", "feature", "inserted_at") []
+
+03:18:45.682 [info] == Migrated 20260711000001 in 0.0s
+
+03:18:45.707 [info] == Running 20260906000002 AuroraMeter.TestRepo.Migrations.UpgradeAuroraMeterV2.up/0
+
+03:18:45.708 [info] create table if not exists aurora_meter_history
+
+03:18:45.719 [debug] QUERY OK db=10.7ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_history" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "feature" varchar(255) NOT NULL, "bucket_kind" varchar(255) DEFAULT 'day' NOT NULL, "bucket_start" date NOT NULL, "value" bigint DEFAULT 0 NOT NULL, "inserted_at" timestamp NOT NULL, "updated_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.720 [info] create index if not exists aurora_meter_history_bucket_index
+
+03:18:45.725 [debug] QUERY OK db=5.4ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_history_bucket_index" ON "aurora_meter_history" ("tenant_key", "feature", "bucket_kind", "bucket_start") []
+
+03:18:45.725 [info] == Migrated 20260906000002 in 0.0s
+
+03:18:45.729 [info] == Running 20260910000003 AuroraMeter.TestRepo.Migrations.UpgradeAuroraMeterV3.up/0
+
+03:18:45.730 [info] create table if not exists aurora_meter_credit_balances
+
+03:18:45.740 [debug] QUERY OK db=10.0ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_credit_balances" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "balance" bigint DEFAULT 0 NOT NULL, "held" bigint DEFAULT 0 NOT NULL, "promotional" bigint DEFAULT 0 NOT NULL, "low_balance_threshold" bigint, "currency" varchar(255) DEFAULT 'usd' NOT NULL, "inserted_at" timestamp NOT NULL, "updated_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.740 [info] create index if not exists aurora_meter_credit_balances_tenant_key_index
+
+03:18:45.745 [debug] QUERY OK db=5.0ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_credit_balances_tenant_key_index" ON "aurora_meter_credit_balances" ("tenant_key") []
+
+03:18:45.745 [info] create table if not exists aurora_meter_credit_transactions
+
+03:18:45.756 [debug] QUERY OK db=10.0ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_credit_transactions" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "kind" varchar(255) NOT NULL, "category" varchar(255), "amount" bigint NOT NULL, "held_delta" bigint DEFAULT 0 NOT NULL, "balance_after" bigint NOT NULL, "held_after" bigint NOT NULL, "reference" varchar(255), "status" varchar(255), "settled_amount" bigint, "expires_at" timestamp(0), "expired_at" timestamp(0), "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL, "inserted_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.756 [info] create index if not exists aurora_meter_credit_transactions_kind_reference_index
+
+03:18:45.761 [debug] QUERY OK db=4.6ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_credit_transactions_kind_reference_index" ON "aurora_meter_credit_transactions" ("kind", "reference") WHERE reference IS NOT NULL []
+
+03:18:45.761 [info] create index if not exists aurora_meter_credit_transactions_tenant_key_inserted_at_index
+
+03:18:45.766 [debug] QUERY OK db=5.3ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_credit_transactions_tenant_key_inserted_at_index" ON "aurora_meter_credit_transactions" ("tenant_key", "inserted_at") []
+
+03:18:45.766 [info] create index if not exists aurora_meter_credit_transactions_promo_expiry_index
+
+03:18:45.772 [debug] QUERY OK db=4.9ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_credit_transactions_promo_expiry_index" ON "aurora_meter_credit_transactions" ("expires_at") WHERE kind = 'grant' AND category = 'promotional' AND expired_at IS NULL []
+
+03:18:45.772 [info] == Migrated 20260910000003 in 0.0s
+
+03:18:45.776 [info] == Running 20260911135608 AuroraMeter.TestRepo.Migrations.UpgradeCoreV6.up/0
+
+03:18:45.777 [info] create table if not exists aurora_meter_flush_receipts
+
+03:18:45.782 [debug] QUERY OK db=4.7ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_flush_receipts" ("id" uuid, "inserted_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.782 [info] == Migrated 20260911135608 in 0.0s
+
+03:18:45.785 [info] == Running 20260911160000 AuroraMeter.TestRepo.Migrations.UpgradeAuroraMeterV4.up/0
+
+03:18:45.787 [info] alter table aurora_meter_credit_transactions
+
+03:18:45.787 [debug] QUERY OK db=0.2ms
+ALTER TABLE "aurora_meter_credit_transactions" ADD COLUMN IF NOT EXISTS "promotional_after" bigint []
+
+03:18:45.787 [info] == Migrated 20260911160000 in 0.0s
+
+03:18:45.791 [info] == Running 20260911230000 AuroraMeter.TestRepo.Migrations.UpgradeAuroraMeterV5.up/0
+
+03:18:45.792 [info] create index if not exists aurora_meter_pending_holds_index
+
+03:18:45.798 [debug] QUERY OK db=5.2ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_pending_holds_index" ON "aurora_meter_credit_transactions" ("inserted_at") WHERE kind = 'hold' AND status = 'pending' []
+
+03:18:45.798 [info] == Migrated 20260911230000 in 0.0s
+
+03:18:45.802 [info] == Running 20260915090000 AuroraMeter.TestRepo.Migrations.UpgradeAuroraMeterV7.up/0
+
+03:18:45.803 [debug] QUERY OK db=0.2ms
+SHOW lock_timeout []
+
+03:18:45.804 [info] execute "SET lock_timeout = '5s'"
+
+03:18:45.805 [debug] QUERY OK db=0.1ms
+SET lock_timeout = '5s' []
+
+03:18:45.809 [debug] QUERY OK db=2.5ms
+SELECT column_name, data_type FROM information_schema.columns
+WHERE table_schema = current_schema() AND table_name = $1
+ ["aurora_meter_events"]
+
+03:18:45.809 [info] execute "ALTER TABLE aurora_meter_events\n  ALTER COLUMN quantity TYPE bigint,\n  ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY"
+
+03:18:45.825 [debug] QUERY OK db=15.6ms
+ALTER TABLE aurora_meter_events
+  ALTER COLUMN quantity TYPE bigint,
+  ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY []
+
+03:18:45.825 [info] alter table aurora_meter_events
+
+03:18:45.826 [debug] QUERY OK db=0.5ms
+ALTER TABLE "aurora_meter_events" ADD COLUMN IF NOT EXISTS "event_id" text, ADD COLUMN IF NOT EXISTS "payload_hash" bytea, ADD COLUMN IF NOT EXISTS "occurred_at" timestamp, ADD COLUMN IF NOT EXISTS "period_start" timestamp(0), ADD COLUMN IF NOT EXISTS "period_source" text, ADD COLUMN IF NOT EXISTS "kind" text DEFAULT 'usage' NOT NULL, ADD COLUMN IF NOT EXISTS "original_event_id" text, ADD COLUMN IF NOT EXISTS "dimensions" jsonb DEFAULT '{}'::jsonb NOT NULL, ADD COLUMN IF NOT EXISTS "plan_id" text, ADD COLUMN IF NOT EXISTS "plan_version" text, ADD COLUMN IF NOT EXISTS "attribution" text []
+
+03:18:45.826 [info] create index if not exists aurora_meter_events_tenant_key_event_id_index
+
+03:18:45.831 [debug] QUERY OK db=4.6ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_events_tenant_key_event_id_index" ON "aurora_meter_events" ("tenant_key", "event_id") []
+
+03:18:45.831 [info] create index if not exists aurora_meter_events_seq_index
+
+03:18:45.836 [debug] QUERY OK db=5.1ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_events_seq_index" ON "aurora_meter_events" ("seq") []
+
+03:18:45.836 [info] create index if not exists aurora_meter_events_corrections_index
+
+03:18:45.842 [debug] QUERY OK db=5.2ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_events_corrections_index" ON "aurora_meter_events" ("tenant_key", "original_event_id") WHERE kind = 'correction' []
+
+03:18:45.842 [debug] QUERY OK db=0.3ms
+SELECT count(*) FROM pg_constraint
+WHERE conrelid = to_regclass($1)::oid AND conname = $2
+ ["aurora_meter_events", "aurora_meter_events_kind_check"]
+
+03:18:45.842 [info] execute "ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_kind_check CHECK (kind in ('usage','correction')) NOT VALID"
+
+03:18:45.843 [debug] QUERY OK db=0.2ms
+ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_kind_check CHECK (kind in ('usage','correction')) NOT VALID []
+
+03:18:45.843 [debug] QUERY OK db=0.1ms
+SELECT count(*) FROM pg_constraint
+WHERE conrelid = to_regclass($1)::oid AND conname = $2
+ ["aurora_meter_events", "aurora_meter_events_correction_pairing_check"]
+
+03:18:45.843 [info] execute "ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_correction_pairing_check CHECK ((kind = 'correction') = (original_event_id is not null)) NOT VALID"
+
+03:18:45.844 [debug] QUERY OK db=0.2ms
+ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_correction_pairing_check CHECK ((kind = 'correction') = (original_event_id is not null)) NOT VALID []
+
+03:18:45.844 [debug] QUERY OK db=0.2ms
+SELECT count(*) FROM pg_constraint
+WHERE conrelid = to_regclass($1)::oid AND conname = $2
+ ["aurora_meter_events", "aurora_meter_events_event_id_length_check"]
+
+03:18:45.844 [info] execute "ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_event_id_length_check CHECK (octet_length(event_id) <= 128) NOT VALID"
+
+03:18:45.845 [debug] QUERY OK db=0.2ms
+ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_event_id_length_check CHECK (octet_length(event_id) <= 128) NOT VALID []
+
+03:18:45.845 [debug] QUERY OK db=0.2ms
+SELECT count(*) FROM pg_constraint
+WHERE conrelid = to_regclass($1)::oid AND conname = $2
+ ["aurora_meter_events", "aurora_meter_events_dimensions_object_check"]
+
+03:18:45.845 [info] execute "ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_dimensions_object_check CHECK (jsonb_typeof(dimensions) = 'object') NOT VALID"
+
+03:18:45.846 [debug] QUERY OK db=0.2ms
+ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_dimensions_object_check CHECK (jsonb_typeof(dimensions) = 'object') NOT VALID []
+
+03:18:45.846 [info] create table if not exists aurora_meter_event_totals
+
+03:18:45.856 [debug] QUERY OK db=10.0ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_event_totals" ("id" uuid DEFAULT gen_random_uuid(), "tenant_key" varchar(255) NOT NULL, "feature" varchar(255) NOT NULL, "period_start" timestamp(0) NOT NULL, "generation" integer DEFAULT 0 NOT NULL, "quantity" bigint DEFAULT 0 NOT NULL, "events" bigint DEFAULT 0 NOT NULL, "inserted_at" timestamp NOT NULL, "updated_at" timestamp NOT NULL, PRIMARY KEY ("id")) []
+
+03:18:45.856 [info] create index if not exists aurora_meter_event_totals_key_index
+
+03:18:45.861 [debug] QUERY OK db=4.5ms
+CREATE UNIQUE INDEX IF NOT EXISTS "aurora_meter_event_totals_key_index" ON "aurora_meter_event_totals" ("tenant_key", "feature", "period_start", "generation") []
+
+03:18:45.861 [info] create index if not exists aurora_meter_event_totals_generation_index
+
+03:18:45.866 [debug] QUERY OK db=4.6ms
+CREATE INDEX IF NOT EXISTS "aurora_meter_event_totals_generation_index" ON "aurora_meter_event_totals" ("generation") []
+
+03:18:45.867 [debug] QUERY OK db=0.3ms
+SELECT count(*) FROM pg_constraint
+WHERE conrelid = to_regclass($1)::oid AND conname = $2
+ ["aurora_meter_event_totals", "aurora_meter_event_totals_quantity_check"]
+
+03:18:45.867 [info] execute "ALTER TABLE aurora_meter_event_totals ADD CONSTRAINT aurora_meter_event_totals_quantity_check CHECK (quantity >= 0)"
+
+03:18:45.867 [debug] QUERY OK db=0.2ms
+ALTER TABLE aurora_meter_event_totals ADD CONSTRAINT aurora_meter_event_totals_quantity_check CHECK (quantity >= 0) []
+
+03:18:45.868 [debug] QUERY OK db=0.1ms
+SELECT count(*) FROM pg_constraint
+WHERE conrelid = to_regclass($1)::oid AND conname = $2
+ ["aurora_meter_event_totals", "aurora_meter_event_totals_events_check"]
+
+03:18:45.868 [info] execute "ALTER TABLE aurora_meter_event_totals ADD CONSTRAINT aurora_meter_event_totals_events_check CHECK (events >= 0)"
+
+03:18:45.868 [debug] QUERY OK db=0.2ms
+ALTER TABLE aurora_meter_event_totals ADD CONSTRAINT aurora_meter_event_totals_events_check CHECK (events >= 0) []
+
+03:18:45.868 [info] create table if not exists aurora_meter_checkpoints
+
+03:18:45.878 [debug] QUERY OK db=9.6ms
+CREATE TABLE IF NOT EXISTS "aurora_meter_checkpoints" ("name" text, "cursor" jsonb DEFAULT '{}'::jsonb NOT NULL, "counts" jsonb DEFAULT '{}'::jsonb NOT NULL, "state" text DEFAULT 'idle' NOT NULL, "updated_at" timestamp DEFAULT (clock_timestamp() AT TIME ZONE 'UTC') NOT NULL, PRIMARY KEY ("name")) []
+
+03:18:45.878 [info] execute "INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)\nVALUES ('events_projection', '{\"active_generation\": 0}'::jsonb, '{}'::jsonb, 'active',\n        (clock_timestamp() AT TIME ZONE 'UTC'))\nON CONFLICT (name) DO NOTHING\n"
+
+03:18:45.879 [debug] QUERY OK db=0.3ms
+INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+VALUES ('events_projection', '{"active_generation": 0}'::jsonb, '{}'::jsonb, 'active',
+        (clock_timestamp() AT TIME ZONE 'UTC'))
+ON CONFLICT (name) DO NOTHING
+ []
+
+03:18:45.879 [info] execute "SET lock_timeout = '0'"
+
+03:18:45.879 [debug] QUERY OK db=0.1ms
+SET lock_timeout = '0' []
+
+03:18:45.881 [debug] QUERY OK db=0.2ms
+INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+VALUES ('schema:core', jsonb_build_object('version', $1::integer), '{}'::jsonb, 'applied',
+        (clock_timestamp() AT TIME ZONE 'UTC'))
+ON CONFLICT (name) DO UPDATE
+  SET cursor = jsonb_set(aurora_meter_checkpoints.cursor, '{version}', to_jsonb($1::integer)),
+      state = 'applied',
+      updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+ [7]
+
+03:18:45.881 [info] == Migrated 20260915090000 in 0.0s
+
+03:18:45.885 [info] == Running 20260915090100 AuroraMeter.TestRepo.Migrations.BackfillAuroraMeterEvents.up/0
+
+03:18:45.887 [debug] QUERY OK db=0.2ms
+SELECT pg_try_advisory_lock($1, $2) [1096110671, 7]
+
+03:18:45.889 [debug] QUERY OK db=0.2ms
+SELECT name, cursor, counts, state, updated_at FROM aurora_meter_checkpoints WHERE name = $1 ["events_backfill"]
+
+03:18:45.889 [debug] QUERY OK db=0.1ms
+SELECT clock_timestamp() AT TIME ZONE 'UTC' []
+
+03:18:45.896 [debug] QUERY OK db=2.8ms
+INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+VALUES ($1, $2, $3, $4, (clock_timestamp() AT TIME ZONE 'UTC'))
+ON CONFLICT (name) DO UPDATE
+  SET cursor = EXCLUDED.cursor,
+      counts = EXCLUDED.counts,
+      state = EXCLUDED.state,
+      updated_at = EXCLUDED.updated_at
+ ["events_backfill", %{"seq" => 0}, %{"already_filled" => 0, "batches" => 0, "cursor" => 0, "finished_at" => nil, "nonpositive_quantity" => 0, "oversized_metadata" => 0, "resolved" => 0, "scanned" => 0, "started_at" => "2026-09-14T17:18:45.889391Z", "unresolved" => 0, "unresolved_reasons" => %{}, "updated" => 0}, "running"]
+
+03:18:45.897 [debug] QUERY OK db=0.3ms
+SELECT id, seq, tenant_key, feature, quantity, metadata, inserted_at, event_id,
+       octet_length(metadata::text)
+FROM aurora_meter_events
+WHERE seq > $1
+ORDER BY seq
+LIMIT $2
+ [0, 5000]
+
+03:18:45.898 [debug] QUERY OK db=0.1ms
+SELECT clock_timestamp() AT TIME ZONE 'UTC' []
+
+03:18:45.898 [debug] QUERY OK db=0.1ms
+INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+VALUES ($1, $2, $3, $4, (clock_timestamp() AT TIME ZONE 'UTC'))
+ON CONFLICT (name) DO UPDATE
+  SET cursor = EXCLUDED.cursor,
+      counts = EXCLUDED.counts,
+      state = EXCLUDED.state,
+      updated_at = EXCLUDED.updated_at
+ ["events_backfill", %{"seq" => 0}, %{"already_filled" => 0, "batches" => 0, "cursor" => 0, "finished_at" => "2026-09-14T17:18:45.898196Z", "nonpositive_quantity" => 0, "oversized_metadata" => 0, "resolved" => 0, "scanned" => 0, "started_at" => "2026-09-14T17:18:45.889391Z", "unresolved" => 0, "unresolved_reasons" => %{}, "updated" => 0}, "idle"]
+
+03:18:45.898 [debug] QUERY OK db=0.1ms
+SELECT pg_advisory_unlock($1, $2) [1096110671, 7]
+
+03:18:45.898 [info] == Migrated 20260915090100 in 0.0s
+
+03:18:45.901 [info] == Running 20260915090200 AuroraMeter.TestRepo.Migrations.UpgradeAuroraMeterV8Concurrent.up/0
+
+03:18:45.903 [debug] QUERY OK db=0.3ms queue=0.3ms
+SELECT i.indisvalid, i.indisready
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+WHERE c.relname = $1
+ ["aurora_meter_events_tenant_event_id_index"]
+
+03:18:45.903 [debug] QUERY OK db=0.2ms queue=0.2ms
+SELECT count(*) FROM aurora_meter_events WHERE event_id IS NULL []
+
+03:18:45.903 [info] execute "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS aurora_meter_events_tenant_event_id_index ON aurora_meter_events (tenant_key, event_id)"
+
+03:18:45.915 [debug] QUERY OK db=10.9ms queue=0.1ms
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS aurora_meter_events_tenant_event_id_index ON aurora_meter_events (tenant_key, event_id) []
+
+03:18:45.915 [debug] QUERY OK db=0.2ms queue=0.2ms
+SELECT i.indisvalid, i.indisready
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+WHERE c.relname = $1
+ ["aurora_meter_events_tenant_event_id_index"]
+
+03:18:45.915 [info] execute "ALTER TABLE aurora_meter_events ALTER COLUMN event_id SET NOT NULL"
+
+03:18:45.918 [debug] QUERY OK db=2.1ms queue=0.2ms
+ALTER TABLE aurora_meter_events ALTER COLUMN event_id SET NOT NULL []
+
+03:18:45.918 [info] execute "ALTER TABLE aurora_meter_events ALTER COLUMN payload_hash SET NOT NULL"
+
+03:18:45.920 [debug] QUERY OK db=2.2ms queue=0.2ms
+ALTER TABLE aurora_meter_events ALTER COLUMN payload_hash SET NOT NULL []
+
+03:18:45.920 [info] execute "ALTER TABLE aurora_meter_events ALTER COLUMN occurred_at SET NOT NULL"
+
+03:18:45.923 [debug] QUERY OK db=2.1ms queue=0.2ms
+ALTER TABLE aurora_meter_events ALTER COLUMN occurred_at SET NOT NULL []
+
+03:18:45.923 [info] execute "DROP INDEX CONCURRENTLY IF EXISTS aurora_meter_events_tenant_key_event_id_index"
+
+03:18:45.930 [debug] QUERY OK db=6.9ms queue=0.2ms
+DROP INDEX CONCURRENTLY IF EXISTS aurora_meter_events_tenant_key_event_id_index []
+
+03:18:45.931 [debug] QUERY OK db=0.2ms queue=0.2ms
+SELECT count(*) FROM pg_constraint WHERE conrelid = to_regclass($1)::oid AND conname = $2 ["aurora_meter_events", "aurora_meter_events_quantity_check"]
+
+03:18:45.931 [info] execute "ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_quantity_check CHECK (quantity > 0) NOT VALID"
+
+03:18:45.933 [debug] QUERY OK db=2.5ms queue=0.1ms
+ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_quantity_check CHECK (quantity > 0) NOT VALID []
+
+03:18:45.934 [debug] QUERY OK db=0.2ms queue=0.2ms
+SELECT count(*) FROM pg_constraint WHERE conrelid = to_regclass($1)::oid AND conname = $2 ["aurora_meter_events", "aurora_meter_events_metadata_size_check"]
+
+03:18:45.934 [info] execute "ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_metadata_size_check CHECK (octet_length(metadata::text) <= 16384) NOT VALID"
+
+03:18:45.937 [debug] QUERY OK db=2.4ms queue=0.2ms
+ALTER TABLE aurora_meter_events ADD CONSTRAINT aurora_meter_events_metadata_size_check CHECK (octet_length(metadata::text) <= 16384) NOT VALID []
+
+03:18:45.937 [info] execute "ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_kind_check"
+
+03:18:45.939 [debug] QUERY OK db=2.2ms queue=0.1ms
+ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_kind_check []
+
+03:18:45.939 [info] execute "ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_correction_pairing_check"
+
+03:18:45.942 [debug] QUERY OK db=2.3ms queue=0.1ms
+ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_correction_pairing_check []
+
+03:18:45.942 [info] execute "ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_event_id_length_check"
+
+03:18:45.944 [debug] QUERY OK db=2.2ms queue=0.1ms
+ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_event_id_length_check []
+
+03:18:45.944 [info] execute "ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_dimensions_object_check"
+
+03:18:45.947 [debug] QUERY OK db=2.2ms queue=0.2ms
+ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_dimensions_object_check []
+
+03:18:45.947 [info] execute "ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_quantity_check"
+
+03:18:45.950 [debug] QUERY OK db=2.2ms queue=0.2ms
+ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_quantity_check []
+
+03:18:45.950 [info] execute "ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_metadata_size_check"
+
+03:18:45.952 [debug] QUERY OK db=2.2ms queue=0.1ms
+ALTER TABLE aurora_meter_events VALIDATE CONSTRAINT aurora_meter_events_metadata_size_check []
+
+03:18:45.955 [debug] QUERY OK db=2.2ms queue=0.2ms
+UPDATE aurora_meter_checkpoints
+SET counts = jsonb_set(counts, '{unvalidated_constraints}', $1::jsonb),
+    updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+WHERE name = 'schema:core'
+ [[]]
+
+03:18:45.957 [debug] QUERY OK db=2.2ms queue=0.2ms
+INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+VALUES ('schema:core', jsonb_build_object('version', $1::integer), '{}'::jsonb, 'applied',
+        (clock_timestamp() AT TIME ZONE 'UTC'))
+ON CONFLICT (name) DO UPDATE
+  SET cursor = jsonb_set(aurora_meter_checkpoints.cursor, '{version}', to_jsonb($1::integer)),
+      state = 'applied',
+      updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+ [8]
+
+03:18:45.957 [info] == Migrated 20260915090200 in 0.0s
+[mixlane] core exit=0 started=2026-09-14T17:18:44Z finished=2026-09-14T17:18:45Z

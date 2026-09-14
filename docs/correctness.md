@@ -308,16 +308,22 @@ configuration.
 
 **Known limits.** The current durable insert happens after the ETS bump, outside a
 transaction and without a rescue, so inside a host transaction the row can roll
-back while the ETS increment stays (open finding C14). There is no event identity
-and therefore no deduplication on retry today: a caller that retries a durable
-`track/4` writes a second row. Event quantity is a 32 bit column (open finding
-C13). None of these are fixed by this index; they are named so that a reader
-cannot mistake the current behaviour for the phase 03 guarantee.
+back while the ETS increment stays (open finding C14). The `track/4` path still
+has no caller identity and therefore no deduplication on retry: build unit 03a
+gives each of its rows a freshly generated `track:` identity so the column can be
+`NOT NULL`, which satisfies the database and changes nothing about retries, and a
+caller that retries a durable `track/4` still writes a second row.
+`AuroraMeter.record/4` (03b) is the path that deduplicates. Event quantity is no
+longer a 32 bit column: core schema version 7 widened it to `bigint` (open
+finding C13, closed by 03a). The rest are named so that a reader cannot mistake
+the current behaviour for the phase 03 guarantee.
 
 **Tests.**
 
 - `AuroraMeter.MeteringTest` / `test a durable feature writes an event row on track`
 - `AuroraMeter.StorageTest` / `test insert_events/1 appends rows`
+- `AuroraMeter.MigrationV8Test` / `test one identity, one fact I06 two inserts of the same (tenant_key, event_id) leave exactly one row`
+- `AuroraMeter.MigrationV8Test` / `test one identity, one fact I06 the same event_id under two tenants is two facts`
 - PLANNED (03b): `AuroraMeter.EventsTest` / `test I06 a kill before commit leaves nothing behind`
 - PLANNED (03b): `AuroraMeter.EventsTest` / `test I06 a kill after commit before reply then a same id retry reports a duplicate`
 - PLANNED (03b): `AuroraMeter.EventsTest` / `test I06 restart and replay reproduce the same totals`
@@ -326,23 +332,34 @@ cannot mistake the current behaviour for the phase 03 guarantee.
 
 ## I07 Conflicting reuse of event identity is rejected
 
-**Guarantee.** Not guaranteed by the shipped code. Phase 03 introduces event
-identity and a canonical form, after which reusing an identity with a changed
-quantity, timestamp, feature, dimension set or metadata is rejected rather than
-silently accepted or silently ignored, including under same tenant races and
-inside batches, where a single conflict rolls the batch back.
+**Guarantee.** Not yet guaranteed end to end. The *mechanism* ships in core
+schema version 8 (build unit 03a): a unique index on `(tenant_key, event_id)`
+with `event_id`, `payload_hash` and `occurred_at` `NOT NULL`, so a second row
+under one identity is refused by the database rather than by application code,
+on any connection and in any order. What does not ship yet is the facade that
+turns that refusal into a result a caller can act on and that tells a duplicate
+from a conflict by comparing the payload hash. Phase 03b adds it, after which
+reusing an identity with a changed quantity, timestamp, feature, dimension set
+or metadata is rejected rather than silently accepted or silently ignored,
+including under same tenant races and inside batches, where a single conflict
+rolls the batch back.
 
 **Prerequisites.** The phase 03 durable event path, the Ecto storage adapter and
 the schema version that adds the event identity constraint.
 
-**Known limits.** Nothing in the current release rejects a conflicting reuse,
-because there is no event identity to conflict with. Until phase 03 lands, a host
-that needs this must deduplicate before calling `track/4`. A guarantee statement
-must not be copied from this section into customer-facing documentation before its
-tests exist.
+**Known limits.** The database now refuses a duplicate identity, but nothing in
+the facade yet turns that refusal into a result a caller can act on, and
+`AuroraMeter.track/4` generates a fresh identity per call, so on that path there
+is still no identity to conflict with. Until 03b lands, a host that needs this
+must deduplicate before calling `track/4`. A guarantee statement must not be
+copied from this section into customer-facing documentation before its tests
+exist.
 
 **Tests.**
 
+- `AuroraMeter.MigrationV8Test` / `test it refuses rather than guess I07 it refuses while any event_id is null, and names the count`
+- `AuroraMeter.MigrationV8Test` / `test it refuses rather than guess I07 it runs once the backfill has filled them`
+- `AuroraMeter.MigrationV8Test` / `test it refuses rather than guess I07 it promotes event_id, payload_hash and occurred_at to NOT NULL`
 - PLANNED (03b): `AuroraMeter.EventsTest` / `test I07 a changed quantity, time, feature, dimension set or metadata each conflict`
 - PLANNED (03b): `AuroraMeter.EventsTest` / `test I07 twelve independent connections racing one identity admit one`
 - PLANNED (03b): `AuroraMeter.EventsTest` / `test I07 one conflict rolls the whole batch back`
@@ -692,17 +709,29 @@ with different schemas.
 shipping `priv/`.
 
 **Known limits.** The structural checks prove that the version ladder is complete
-and pinned. They do not prove that a *populated* database upgrades without losing
-commercial state, that an interrupted backfill resumes correctly, or that a backup
-and restore round trips: those need populated upgrade fixtures and are the phase 11
-migration rehearsal, whose evidence lives in the storefront repository because it
-exercises core, Pro and the storefront together.
+and pinned. Build unit 03a adds running proof for core schema versions 7 and 8:
+every published starting point reaches both, a fresh install and an incremental
+upgrade produce identical catalogues, and an interrupted backfill resumes to the
+same bytes. Those run against small disposable databases the tests seed
+themselves. They do not prove that a *populated customer* database upgrades
+without losing commercial state, or that a backup and restore round trips: those
+need the populated upgrade fixtures of the phase 11 migration rehearsal, whose
+evidence lives in the storefront repository because it exercises core, Pro and
+the storefront together.
 
 **Tests.**
 
 - `AuroraMeter.MigrationTest` / `test every version up to the latest has a module, and none beyond it`
 - `AuroraMeter.MigrationTest` / `test the moduledoc describes every version`
 - `AuroraMeter.MigrationTest` / `test the test database is migrated through every version`
+- `AuroraMeter.MigrationTest` / `test I19 up/1 records the reached version in the checkpoints table`
+- `AuroraMeter.MigrationV7Test` / `test the ladder I19 a fresh install and an incremental upgrade produce the same catalogue`
+- `AuroraMeter.MigrationV7Test` / `test the ladder I19 each published schema history reaches 7 and then 8`
+- `AuroraMeter.MigrationV7Test` / `test the ladder I19 the schema marker is absent below version 7`
+- `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 it fills every row, and no row twice`
+- `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 it is idempotent: a second run updates nothing and changes no hash`
+- `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 a run killed between batches resumes byte for byte`
+- `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 rows an old writer inserts during the run are picked up by the same pass`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 a populated core1 database upgrades with every total preserved`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 an interrupted backfill resumes without double counting`
 

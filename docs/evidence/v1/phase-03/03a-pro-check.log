@@ -1,0 +1,83 @@
+[mixlane] pro: DB_PORT=5490 mix check
+Compiling 46 files (.ex)
+Generated aurora_meter_pro app
+Checking 95 source files (this might take a while) ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.5 seconds (0.02s to load, 0.5s running 69 checks on 95 files)
+1041 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:asn1, :aurora_meter, :aurora_meter_pro, :certifi, :compiler, :crypto, :db_connection, :decimal, :ecto, :ecto_sql, :eex, :elixir, :ex_unit, :floki, :h2, :hackney, :idna, :jason, :kernel, :logger, :mime, :mimerl, :mix, :nimble_options, :oban, :phoenix, :phoenix_html, :phoenix_live_view, :phoenix_pubsub, :phoenix_template, :plug, :plug_crypto, :postgrex, :public_key, :quic, :ssl, :ssl_verify_fun, :stdlib, :stripity_stripe, :telemetry, :uri_query, :websock, :websock_adapter, :webtransport]
+PLT is up to date!
+ignore_warnings: .dialyzer_ignore.exs
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"priv/plts/dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt",
+  files: [~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Migration.V9.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Stripe.Fake.State.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Test.Faults.Injected.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.Mix.Tasks.AuroraMeterPro.Gen.Migration.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Migration.V1.beam",
+   ...],
+  ...
+]
+Total errors: 1, Skipped: 1, Unnecessary Skips: 0
+done in 0m4.7s
+done (passed successfully)
+Running ExUnit with seed: 10010, max_cases: 48
+
+...................................................................................................................................................................................................................................................
+03:22:57.817 [warning] AuroraMeter.Pro.Credits: refund for pi_org_24136 (org_24136) arrived before its grant; refusing so Stripe redelivers it
+...........
+03:22:58.088 [warning] AuroraMeter.Pro.Credits: refund for pi_org_6982 (tenant unknown) arrived before its grant; refusing so Stripe redelivers it
+.......
+03:22:58.325 [warning] AuroraMeter.Pro auto top-up for worker_14471 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+.
+03:22:58.343 [warning] AuroraMeter.Pro auto top-up for worker_14663 got no answer (%Stripe.Error{source: :stripe, code: :api_error, request_id: nil, extra: %{http_status: 500}, message: "server error", user_message: nil}); leaving the attempt open rather than counting it against the card
+.
+03:22:58.357 [warning] AuroraMeter.Pro auto top-up for worker_24584 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+................
+03:22:58.940 [warning] AuroraMeter.Pro auto top-up for org_5957 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+...
+03:22:59.249 [warning] AuroraMeter.Pro auto top-up for org_15431 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+03:22:59.253 [warning] AuroraMeter.Pro auto top-up for org_15431 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+03:22:59.257 [warning] AuroraMeter.Pro auto top-up for org_15431 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+03:22:59.261 [warning] AuroraMeter.Pro auto top-up for org_15431 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+03:22:59.265 [warning] AuroraMeter.Pro auto top-up for org_15431 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+.
+03:22:59.395 [warning] AuroraMeter.Pro auto top-up for org_8134 got no answer (%Stripe.Error{source: :stripe, code: :rate_limit_error, request_id: nil, extra: %{http_status: 429}, message: "too many requests", user_message: nil}); leaving the attempt open rather than counting it against the card
+......
+03:22:59.567 [error] Postgrex.Protocol (#PID<0.9726.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.10983.0> exited
+..
+03:22:59.623 [error] Postgrex.Protocol (#PID<0.9725.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.10996.0> exited
+.
+03:22:59.657 [warning] AuroraMeter.Pro auto top-up for org_24904 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+...
+03:22:59.742 [error] Postgrex.Protocol (#PID<0.9736.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.11021.0> exited
+...............................................................
+03:23:00.931 [warning] AuroraMeter.Pro.Credits: refund for pi_refund_first_org_17351 (org_17351) arrived before its grant; refusing so Stripe redelivers it
+
+03:23:00.931 [warning] AuroraMeter.Pro.Webhook: charge.refunded evt_17415 not applied: :grant_not_found
+..............................................
+03:23:01.442 [warning] AuroraMeter.Pro.Credits: refund for pi_early_dispute_org_15241 (tenant unknown) arrived before its grant; refusing so Stripe redelivers it
+.............
+03:23:01.576 [warning] AuroraMeter.Pro.Credits: dispute reinstatement for pi_legacy_other_org_10502 (org_10502) arrived before its grant; refusing so Stripe redelivers it
+
+03:23:01.577 [warning] AuroraMeter.Pro.Credits: refund for pi_legacy_ungranted_org_10502 (org_10502) arrived before its grant; refusing so Stripe redelivers it
+...
+Finished in 6.5 seconds (0.8s async, 5.6s sync)
+
+Result: 420 passed (28 doctests, 392 tests)
+Generating docs...
+View html docs at "/tmp/aurora_meter_pro-check-doc/index.html"
+[mixlane] pro exit=0 started=2026-09-14T17:22:48Z finished=2026-09-14T17:23:02Z

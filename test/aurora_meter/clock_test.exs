@@ -288,7 +288,18 @@ defmodule AuroraMeter.ClockTest do
         "lib/aurora_meter/store.ex"
       ]
 
-      assert callers -- ["lib/aurora_meter/clock.ex", "lib/aurora_meter/credits.ex"] == []
+      # The Mix task reads it to say how long a stalled backfill checkpoint has
+      # said "running". Both sides of that comparison are database-stamped, and
+      # it decides nothing: the backfill's refusal is decided by an advisory
+      # lock, never by a clock (03a, open-findings.md X100). A Mix task is also
+      # not a path, hot or otherwise.
+      allowed = [
+        "lib/aurora_meter/clock.ex",
+        "lib/aurora_meter/credits.ex",
+        "lib/mix/tasks/aurora_meter.events.backfill.ex"
+      ]
+
+      assert callers -- allowed == []
       assert Enum.all?(hot, &(&1 not in callers))
     end
   end

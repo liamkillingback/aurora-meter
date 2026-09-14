@@ -14,6 +14,7 @@ defmodule AuroraMeter.Storage.Ecto do
   import Ecto.Query
 
   alias AuroraMeter.Clock
+  alias AuroraMeter.Events.Canonical
   alias AuroraMeter.Schema.Counter
   alias AuroraMeter.Schema.Event
   alias AuroraMeter.Schema.FlushReceipt
@@ -245,17 +246,48 @@ defmodule AuroraMeter.Storage.Ecto do
   end
 
   @impl AuroraMeter.Storage
+  # Core schema version 8 makes `event_id`, `payload_hash` and `occurred_at`
+  # NOT NULL, so this path has to supply all three or stop writing. It supplies
+  # the weakest possible versions of them, because that is exactly what the
+  # legacy durable-track path is.
+  #
+  # The `event_id` is a fresh `track:` value per call, so a retry of the same
+  # `AuroraMeter.track/4` writes a second row, as it always has. This path has
+  # no caller identity to deduplicate on; `AuroraMeter.record/4` (03b) is the
+  # one that does. `occurred_at` is the write instant, because `track/4` never
+  # accepted an occurrence time. `attribution` is `"legacy_track"`, which is
+  # what marks a row on this path as never having been billed.
+  #
+  # `period_start` is deliberately left null here rather than resolved a second
+  # time: `AuroraMeter.track/4` already has the period in hand and passing it
+  # down is a change to the `AuroraMeter.Storage.insert_events/1` row shape,
+  # which build unit 03c owns along with the rest of the legacy track identity
+  # rule. Nothing reads these rows for billing.
   def insert_events(rows) do
     now = Clock.now()
 
     entries =
       Enum.map(rows, fn row ->
+        feature = to_string(row.feature)
+        quantity = Map.get(row, :quantity, 1)
+        metadata = Map.get(row, :metadata, %{})
+
         %{
           tenant_key: row.tenant_key,
-          feature: to_string(row.feature),
-          quantity: Map.get(row, :quantity, 1),
-          metadata: Map.get(row, :metadata, %{}),
-          inserted_at: now
+          feature: feature,
+          quantity: quantity,
+          metadata: metadata,
+          inserted_at: now,
+          event_id: "track:" <> Ecto.UUID.generate(),
+          occurred_at: now,
+          attribution: "legacy_track",
+          payload_hash:
+            Canonical.legacy_payload_hash(%{
+              feature: feature,
+              quantity: quantity,
+              occurred_at: now,
+              metadata: metadata
+            })
         }
       end)
 

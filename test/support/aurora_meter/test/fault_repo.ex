@@ -200,8 +200,19 @@ defmodule AuroraMeter.Test.FaultRepo do
   def checkout(fun), do: target().checkout(fun)
 
   @doc false
+  @spec checkout((-> term()), keyword()) :: term()
+  def checkout(fun, opts), do: target().checkout(fun, opts)
+
+  @doc false
   @spec query!(String.t(), list()) :: term()
   def query!(sql, params \\ []), do: target().query!(sql, params)
+
+  # `AuroraMeter.Events.Backfill` bounds its bulk statements with an explicit
+  # `:timeout`, because the driver's 15 second default is the wrong bound for a
+  # batch of thousands of rows.
+  @doc false
+  @spec query!(String.t(), list(), keyword()) :: term()
+  def query!(sql, params, opts), do: target().query!(sql, params, opts)
 
   @doc false
   @spec in_transaction?() :: boolean()

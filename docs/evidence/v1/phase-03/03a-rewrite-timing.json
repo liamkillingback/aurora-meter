@@ -1,0 +1,21 @@
+{
+  "caveat": "A local measurement on one machine with an idle database. It is not a customer-scale claim and must not be quoted as one. Build unit 11.05 repeats it on the migration fixtures.",
+  "measured_at_utc": "2026-09-14T17:18:35.819966Z",
+  "measured_on": "development host, Postgres 16.13 in Docker on port 5490, WSL2",
+  "rehearsal": {
+    "alter_seconds": 0.131619,
+    "lock_waits": 0,
+    "rows": 12002,
+    "table_bytes_after": 2990080,
+    "table_bytes_before": 2244608
+  },
+  "synthetic_million": {
+    "rows": 1000000,
+    "lock_waits": 0,
+    "backfill_seconds": 60.359412,
+    "v8_seconds": 4.113903,
+    "table_bytes_before": 190668800,
+    "table_bytes_after": 195387392,
+    "alter_seconds": 6.350246
+  }
+}
