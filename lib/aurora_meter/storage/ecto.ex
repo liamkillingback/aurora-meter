@@ -281,6 +281,36 @@ defmodule AuroraMeter.Storage.Ecto do
   end
 
   @impl AuroraMeter.Storage
+  # Keyset on `tenant_key`, which carries the table's unique index, so the scan
+  # is index-backed and a page cannot repeat or skip a row when another process
+  # inserts or deletes one between pages. `next_cursor` is nil exactly when the
+  # page came back shorter than `limit`, which is the only honest end signal: a
+  # page that is exactly full may or may not be the last one, so the caller is
+  # asked once more rather than guessing.
+  def list_subscriptions(cursor, opts) do
+    limit = Keyword.get(opts, :limit, 100)
+
+    rows =
+      Subscription
+      |> after_cursor(cursor)
+      |> with_statuses(Keyword.get(opts, :status_in))
+      |> then(&from(s in &1, order_by: [asc: s.tenant_key], limit: ^limit))
+      |> repo().all()
+
+    if length(rows) < limit do
+      {rows, nil}
+    else
+      {rows, List.last(rows).tenant_key}
+    end
+  end
+
+  defp after_cursor(query, nil), do: query
+  defp after_cursor(query, cursor), do: from(s in query, where: s.tenant_key > ^cursor)
+
+  defp with_statuses(query, nil), do: query
+  defp with_statuses(query, statuses), do: from(s in query, where: s.status in ^statuses)
+
+  @impl AuroraMeter.Storage
   # Core schema version 8 makes `event_id`, `payload_hash` and `occurred_at`
   # NOT NULL, so this path has to supply all three or stop writing. It supplies
   # the weakest possible versions of them, because that is exactly what the

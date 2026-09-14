@@ -72,17 +72,51 @@ defmodule AuroraMeter.ReleaseMetadataTest do
              "#{@changelog}: the #{top} heading carries no release date"
     end
 
+    # Scoped to the release cut on 2026-09-15 (open-findings.md X139).
+    #
+    # As written this ran on every `mix test` and asserted that [Unreleased] is
+    # empty. That is right at a release cut and wrong on a development branch,
+    # where "in the tree but not in any release" is exactly the state, and where
+    # finding X86 requires every unit to append its entry as it lands rather
+    # than leaving the changelog to be written from memory at release time. The
+    # two rules contradicted each other and this one won by running more often:
+    # core's gate went red the moment the section was populated.
+    #
+    # So the check now runs where the decision is made. AURORA_RELEASE=1 is set
+    # by the release preflight; 11e owns wiring it into `scripts/v1/release.sh`,
+    # and until it does, a release cut runs this file with the variable set.
+    # The assertion itself is unchanged and is deliberately not weakened.
+    @tag :release_gate
     test "G02 nothing is left in an Unreleased section above the release heading" do
-      above =
-        @changelog
-        |> File.read!()
-        |> String.split(~r/^## \[/m)
-        |> Enum.find(&String.starts_with?(&1, "Unreleased]"))
+      if System.get_env("AURORA_RELEASE") == "1" do
+        above =
+          @changelog
+          |> File.read!()
+          |> String.split(~r/^## \[/m)
+          |> Enum.find(&String.starts_with?(&1, "Unreleased]"))
 
-      assert above == nil or String.trim(String.replace(above, "Unreleased]", "")) == "",
-             "#{@changelog} has a non-empty [Unreleased] section. Everything in the tree " <>
-               "is either in the release or is not in the release; a heading that says " <>
-               "neither is how a change ships undocumented"
+        assert above == nil or String.trim(String.replace(above, "Unreleased]", "")) == "",
+               "#{@changelog} has a non-empty [Unreleased] section at a release cut. " <>
+                 "Everything in the tree is either in the release or is not in the " <>
+                 "release; a heading that says neither is how a change ships undocumented"
+      else
+        # The development-branch half of the same rule: if the section exists it
+        # must carry content, because an empty [Unreleased] on a branch that has
+        # moved past its last release is the undocumented-change failure in the
+        # other direction.
+        text = File.read!(@changelog)
+
+        if String.contains?(text, "## [Unreleased]") do
+          above =
+            text
+            |> String.split(~r/^## \[/m)
+            |> Enum.find(&String.starts_with?(&1, "Unreleased]"))
+
+          refute String.trim(String.replace(above, "Unreleased]", "")) == "",
+                 "#{@changelog} has an empty [Unreleased] heading. Either record what " <>
+                   "is in the tree and not in a release, or remove the heading"
+        end
+      end
     end
 
     test "G02 the README install snippet matches the version's requirement" do

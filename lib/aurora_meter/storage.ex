@@ -182,6 +182,24 @@ defmodule AuroraMeter.Storage do
   @callback stream_counters(DateTime.t()) :: [Counter.t()]
 
   @doc """
+  One bounded page of subscriptions, in keyset order by `tenant_key`.
+
+  `cursor` is the `tenant_key` the previous page ended on, or `nil` for the
+  first page; the page returned is strictly after it. The second element of the
+  return is the cursor to pass next, or `nil` when that page was the last one.
+
+  Options: `:limit` (default 100) and `:status_in` (a list of status strings;
+  omitted means every status).
+
+  Keyset, not offset, because the caller is a worker that walks every
+  subscription while other processes insert and delete them. An offset page
+  silently skips a row when an earlier one is removed under it, and a skipped
+  subscription is usage nobody bills.
+  """
+  @callback list_subscriptions(cursor :: String.t() | nil, opts :: keyword()) ::
+              {[Subscription.t()], next_cursor :: String.t() | nil}
+
+  @doc """
   The durable operations this adapter supports.
 
   An adapter that returns `[]` still defines every callback below; the
@@ -410,6 +428,24 @@ defmodule AuroraMeter.Storage do
   @doc "Returns all counter snapshots for a period (used by Pro rollups)."
   @spec stream_counters(DateTime.t()) :: [Counter.t()]
   def stream_counters(period_start), do: impl().stream_counters(period_start)
+
+  @doc """
+  One bounded page of subscriptions, keyset by `tenant_key`.
+
+  `{rows, next_cursor}`; pass `next_cursor` back for the following page and
+  stop when it is `nil`. Options: `:limit` (default 100), `:status_in`.
+
+      {page, cursor} = AuroraMeter.Storage.list_subscriptions(nil, limit: 200)
+      {next, cursor} = AuroraMeter.Storage.list_subscriptions(cursor, limit: 200)
+
+  This is the supported way for Aurora Meter Pro to walk subscriptions; it
+  replaces the direct `AuroraMeter.Schema.Subscription` query the usage
+  reporter used to run (`free-pro-boundary.md` rule 1).
+  """
+  @spec list_subscriptions(String.t() | nil, keyword()) ::
+          {[Subscription.t()], String.t() | nil}
+  def list_subscriptions(cursor \\ nil, opts \\ []),
+    do: impl().list_subscriptions(cursor, opts)
 
   @doc """
   The durable operations the configured adapter supports.

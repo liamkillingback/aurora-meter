@@ -89,6 +89,9 @@ defmodule AuroraMeter.Test.IncapableStorage do
 
   @impl AuroraMeter.Storage
   defdelegate stream_counters(period_start), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate list_subscriptions(cursor, opts), to: Backend
 end
 
 defmodule AuroraMeter.Test.UnresolvedStorage do
@@ -177,4 +180,7 @@ defmodule AuroraMeter.Test.UnresolvedStorage do
 
   @impl AuroraMeter.Storage
   defdelegate stream_counters(period_start), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate list_subscriptions(cursor, opts), to: Backend
 end

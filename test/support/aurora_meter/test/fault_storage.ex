@@ -146,6 +146,14 @@ defmodule AuroraMeter.Test.FaultStorage do
     result
   end
 
+  @impl AuroraMeter.Storage
+  def list_subscriptions(cursor, opts) do
+    Faults.check(:before_commit, %{callback: :list_subscriptions, cursor: cursor})
+    result = Backend.list_subscriptions(cursor, opts)
+    Faults.check(:after_commit_before_ack, %{callback: :list_subscriptions, result: result})
+    result
+  end
+
   # Deliberately NOT instrumented, and named in `@uninstrumentable` below so
   # the parity guard still passes. It is a declaration, not an operation: it
   # opens no transaction and has no commit boundary. Worse, every durable

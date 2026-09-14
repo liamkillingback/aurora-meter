@@ -32,12 +32,24 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
   so a host can write its own exporter and prove it behaves.
 - Seven storage callbacks and a `capabilities/0` declaration, so an adapter that
   cannot do durable events says so instead of failing obscurely.
+- `AuroraMeter.Storage.list_subscriptions/2`, a keyset page of subscriptions
+  ordered by `tenant_key`, with `:limit` and `:status_in`. It is what a worker
+  that must walk every subscription uses instead of loading the table at once,
+  and it is what Aurora Meter Pro's usage reporter now reads instead of
+  querying `AuroraMeter.Schema.Subscription` directly. `AuroraMeter.StorageCase`
+  gained two cases for it: a page walked one row at a time may not repeat a
+  row, skip one, or fail to end.
 
 ### Changed
 
 - `AuroraMeter.Clock` gained `db_now/0`. Comparisons against a persisted
   timestamp now take the database's clock, because a node clock and a database
   stamp are two clocks and comparing them is what blocker B01 was.
+- **`AuroraMeter.Storage` gained a required callback**, `list_subscriptions/2`.
+  A custom adapter must add it. No third-party adapter is known to exist, and
+  the alternative (an optional callback with a default that loads the whole
+  table) would make the unbounded read the silent default for exactly the
+  adapters nobody has reviewed.
 
 ### Notes
 

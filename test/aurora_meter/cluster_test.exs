@@ -182,6 +182,7 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate put_subscription(attrs), to: AuroraMeter.Storage.Ecto
       defdelegate insert_events(rows), to: AuroraMeter.Storage.Ecto
       defdelegate stream_counters(p), to: AuroraMeter.Storage.Ecto
+      defdelegate list_subscriptions(cursor, opts), to: AuroraMeter.Storage.Ecto
       defdelegate capabilities(), to: AuroraMeter.Storage.Ecto
       defdelegate record_events(entries, opts), to: AuroraMeter.Storage.Ecto
       defdelegate record_correction(entry, opts), to: AuroraMeter.Storage.Ecto
@@ -243,6 +244,7 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate put_subscription(attrs), to: EctoStorage
       defdelegate insert_events(rows), to: EctoStorage
       defdelegate stream_counters(p), to: EctoStorage
+      defdelegate list_subscriptions(cursor, opts), to: EctoStorage
       defdelegate capabilities(), to: EctoStorage
       defdelegate record_events(entries, opts), to: EctoStorage
       defdelegate record_correction(entry, opts), to: EctoStorage

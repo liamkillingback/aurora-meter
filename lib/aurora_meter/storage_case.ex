@@ -41,8 +41,12 @@ defmodule AuroraMeter.StorageCase do
   `test` blocks are one line each, so a failure names the function you can read
   rather than a line inside a macro expansion.
 
-  It does not assert anything about counters, history or subscriptions: those
-  callbacks predate this suite and the existing adapter tests cover them.
+  It does not assert anything about counters or history: those callbacks
+  predate this suite and the existing adapter tests cover them. It does assert
+  `c:AuroraMeter.Storage.list_subscriptions/2`, which does not predate it: a
+  keyset page that repeats or skips a row is a subscription billed twice or not
+  at all, and that is not something an adapter author should have to discover
+  in production.
   """
 
   import ExUnit.Assertions
@@ -148,6 +152,19 @@ defmodule AuroraMeter.StorageCase do
 
         test "stream_events/2 is ordered by seq and bounded by limit", ctx do
           AuroraMeter.StorageCase.assert_streaming!(ctx)
+        end
+      end
+
+      describe "AuroraMeter.StorageCase: subscriptions" do
+        @describetag :storage_case
+
+        test "list_subscriptions/2 pages by keyset without repeating or skipping a row",
+             ctx do
+          AuroraMeter.StorageCase.assert_subscription_paging!(ctx)
+        end
+
+        test "list_subscriptions/2 honours status_in and ends its cursor", ctx do
+          AuroraMeter.StorageCase.assert_subscription_filter!(ctx)
         end
       end
 
@@ -605,6 +622,81 @@ defmodule AuroraMeter.StorageCase do
 
       assert length(next) == 3
       assert Enum.all?(next, &(&1.seq > List.last(seqs)))
+    end)
+  end
+
+  @doc false
+  # Paged one row at a time, which is the setting that exposes the two ways a
+  # keyset goes wrong: a cursor that is inclusive repeats its own last row for
+  # ever, and a cursor built from anything but the sort key skips rows. Neither
+  # shows up at a page size larger than the data.
+  @spec assert_subscription_paging!(map()) :: :ok
+  def assert_subscription_paging!(ctx) do
+    keys = subscription_keys(ctx)
+    for key <- Enum.shuffle(keys), do: put_subscription!(key, "active")
+
+    one_at_a_time = drain_subscriptions(limit: 1)
+
+    assert one_at_a_time == Enum.uniq(one_at_a_time),
+           "list_subscriptions/2 returned a tenant_key twice while paging by one"
+
+    assert one_at_a_time == Enum.sort(one_at_a_time),
+           "list_subscriptions/2 is not in ascending tenant_key order"
+
+    assert keys -- one_at_a_time == [],
+           "paging by one skipped #{inspect(keys -- one_at_a_time)}"
+
+    in_bulk = drain_subscriptions(limit: 500)
+
+    assert Enum.sort(in_bulk) == Enum.sort(one_at_a_time),
+           "the page size changed which rows came back"
+
+    :ok
+  end
+
+  @doc false
+  @spec assert_subscription_filter!(map()) :: :ok
+  def assert_subscription_filter!(ctx) do
+    [first, second, third] = keys = subscription_keys(ctx)
+    put_subscription!(first, "active")
+    put_subscription!(second, "canceled")
+    put_subscription!(third, "active")
+
+    active = drain_subscriptions(limit: 500, status_in: ["active"])
+
+    assert first in active and third in active
+    refute second in active, "status_in did not exclude a status it was not given"
+
+    everything = drain_subscriptions(limit: 500)
+    assert keys -- everything == []
+
+    # The end of the walk is a nil cursor, not an empty page the caller has to
+    # recognise for itself.
+    {_rows, cursor} = Storage.list_subscriptions(nil, limit: 500)
+    assert is_nil(cursor) or is_binary(cursor)
+
+    :ok
+  end
+
+  defp subscription_keys(ctx), do: for(n <- 1..3, do: "#{ctx.storage_tenant}_sub#{n}")
+
+  defp put_subscription!(key, status) do
+    assert {:ok, _row} =
+             Storage.put_subscription(%{tenant_key: key, plan_id: "free", status: status})
+  end
+
+  # Walks every page to the end, with a hard bound so a cursor that never
+  # terminates fails here rather than hanging the suite.
+  defp drain_subscriptions(opts) do
+    Enum.reduce_while(1..1_000, {nil, []}, fn iteration, {cursor, acc} ->
+      {rows, next} = Storage.list_subscriptions(cursor, opts)
+      acc = acc ++ Enum.map(rows, & &1.tenant_key)
+
+      cond do
+        is_nil(next) -> {:halt, acc}
+        iteration == 1_000 -> flunk("list_subscriptions/2's cursor never reached the end")
+        true -> {:cont, {next, acc}}
+      end
     end)
   end
 
