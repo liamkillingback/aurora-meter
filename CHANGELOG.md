@@ -4,6 +4,47 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Everything below landed after the 0.5.0 transition release and is not in any
+published version. The 0.5.0 section beneath is a historical record of that
+release and is deliberately not rewritten, including its statement that the
+schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
+
+### Added
+
+- Durable events. `AuroraMeter.record/4` and `record_batch/2` validate and
+  canonicalise at the facade and commit the event with its local totals in one
+  transaction. PubSub and ETS hydration happen only after commit.
+- Core schema 7 and 8. Events gain `seq` (a generated identity, so ordering
+  never comes from a wall clock), a payload hash, `occurred_at`, `period_start`
+  and `attribution`, with a concurrent unique index. A checkpointed backfill
+  gives legacy events deterministic ids and records what it approximated.
+- `AuroraMeter.correct/4` and `replace/4`. A correction never edits a fact; it
+  records a signed one against it, under a lock, and cumulative corrections can
+  never exceed the original.
+- `AuroraMeter.Events.Replay`. A resumable rebuild of a projection generation
+  from the event log, safe to interrupt and resume.
+- `feature_sources`, which declares where each billable feature's commercial
+  quantity comes from, so a quantity cannot be counted by both the buffered path
+  and the durable one.
+- `AuroraMeter.Exporter`, a reference journal exporter and a conformance suite,
+  so a host can write its own exporter and prove it behaves.
+- Seven storage callbacks and a `capabilities/0` declaration, so an adapter that
+  cannot do durable events says so instead of failing obscurely.
+
+### Changed
+
+- `AuroraMeter.Clock` gained `db_now/0`. Comparisons against a persisted
+  timestamp now take the database's clock, because a node clock and a database
+  stamp are two clocks and comparing them is what blocker B01 was.
+
+### Notes
+
+This section accumulates. **Every unit that changes behaviour appends its own
+entry here rather than leaving the whole changelog to be written from memory at
+release time**, which is finding X86 in the other direction.
+
 ## [0.5.0] - 2026-09-15
 
 The transition release. It warns about everything 1.0 will refuse and refuses

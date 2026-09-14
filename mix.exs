@@ -212,6 +212,7 @@ defmodule AuroraMeter.MixProject do
         "docs/configuration.md",
         "docs/metering.md",
         "docs/storage-adapters.md",
+        "docs/exporters.md",
         "docs/periods.md",
         "docs/entitlements.md",
         "docs/plans.md",
@@ -304,10 +305,24 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.LiveView,
         AuroraMeter.Components
       ],
-      Behaviours: [
+      # The seams a host implements, with their reference implementations and
+      # their conformance suites beside them. `AuroraMeter.Storage` and
+      # `AuroraMeter.Billing.Provider` moved here from "Behaviours" when the
+      # exporter seam landed (build unit 04a): an author writing an adapter
+      # needs the behaviour, the example and the suite on one page of the
+      # sidebar, and "Behaviours" keeps the ones a host configures rather than
+      # extends.
+      "Extension seams": [
         AuroraMeter.Storage,
+        AuroraMeter.StorageCase,
+        AuroraMeter.Exporter,
+        AuroraMeter.Exporter.Item,
+        AuroraMeter.Exporter.Journal,
+        AuroraMeter.ExporterCase,
+        AuroraMeter.Billing.Provider
+      ],
+      Behaviours: [
         AuroraMeter.Events.Outbox,
-        AuroraMeter.Billing.Provider,
         AuroraMeter.Tenant,
         AuroraMeter.Period,
         AuroraMeter.Clock
@@ -335,7 +350,6 @@ defmodule AuroraMeter.MixProject do
       ],
       "Test helpers": [
         AuroraMeter.Test,
-        AuroraMeter.StorageCase,
         AuroraMeter.Clock.Fixed
       ],
       "Mix tasks": [

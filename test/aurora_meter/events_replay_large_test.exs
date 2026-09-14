@@ -472,8 +472,24 @@ defmodule AuroraMeter.EventsReplayLargeTest do
     end
   end
 
+  # Evidence is written only when it is asked for. Until 2026-09-15 this wrote
+  # on every run, so an ordinary `mix test` rewrote three committed evidence
+  # files from phase 03 with different numbers each time (open-findings.md
+  # X135). Two things were wrong with that. The gate stopped leaving the tree
+  # byte identical, which is the property `--output` was added to protect (X21,
+  # X27). And a reviewer could no longer tell whether a committed evidence file
+  # came from the run its report cites: it had already misled the orchestrator
+  # once, whose verification run silently replaced 03d's digests with its own.
+  #
+  # The assertions above run every time regardless. This gate only controls
+  # whether the run is also recorded, which is 03c's pattern
+  # (`feature_source_evidence_test.exs`).
   defp write_json!(name, payload) do
-    File.mkdir_p!(@evidence)
-    File.write!(Path.join(@evidence, name), Jason.encode_to_iodata!(payload, pretty: true))
+    if System.get_env("AURORA_EVIDENCE") == "1" do
+      File.mkdir_p!(@evidence)
+      File.write!(Path.join(@evidence, name), Jason.encode_to_iodata!(payload, pretty: true))
+    else
+      :skipped
+    end
   end
 end

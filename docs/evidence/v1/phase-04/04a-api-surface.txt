@@ -1,0 +1,94 @@
+# 04a public API surface, for 02a's inventory and 11e's manifest to diff.
+# Read-only reflection, produced by: mix run --no-start -e <script> (tmp/v1/04a/evidence-artifacts.sh)
+# UTC: 2026-09-14T22:00:10Z
+
+== AuroraMeter.Exporter.behaviour_info(:callbacks) ==
+[deliver: 2, describe: 0]
+
+== AuroraMeter.Exporter.Item struct keys ==
+[:attempts, :first_attempt_at, :id, :payload, :subject_kind, :subject_ref,
+ :tenant_key]
+
+== AuroraMeter.Exporter.Item enforced keys ==
+[:id, :payload, :subject_kind, :subject_ref, :tenant_key]
+
+== AuroraMeter.Exporter ==
+  conservatism/1
+  item!/1
+  normalize/2
+  outcome?/1
+  subject_kinds/0
+
+== AuroraMeter.Exporter.Item ==
+  __struct__/0
+  __struct__/1
+
+== AuroraMeter.Exporter.Journal ==
+  child_spec/1
+  default_description/0
+  deliver/2
+  deliveries/0
+  deliveries/1
+  deliveries_for/1
+  deliveries_for/2
+  describe/0
+  reset/0
+  reset/1
+  script/2
+  script/3
+  start_link/0
+  start_link/1
+
+== AuroraMeter.ExporterCase ==
+  MACRO-__using__/2
+  __ex_unit__/2
+  areas/0
+  assert_coverage!/1
+  assert_description!/1
+  assert_description_constant!/1
+  assert_exceptions!/1
+  assert_identity!/1
+  assert_malformed_response!/1
+  assert_partial_success!/1
+  assert_payload_identity!/1
+  assert_rate_limiting!/1
+  assert_retry!/1
+  assert_unknown_outcome!/1
+  call/2
+  items/2
+  scenarios/0
+  script!/3
+  setup_case/2
+
+== AuroraMeter.Exporter.Journal.describe() default ==
+%{
+  supports: [:usage_window, :event, :correction],
+  idempotency_horizon: 86400,
+  max_batch: 100,
+  timestamp_window: %{future: 300, past: 2592000}
+}
+
+== AuroraMeter.ExporterCase.areas() ==
+[:identity, :payload_identity, :retry, :partial_success, :malformed_response,
+ :rate_limiting, :unknown_outcome, :exceptions, :description]
+
+== AuroraMeter.ExporterCase.scenarios() ==
+[
+  :accepted,
+  {:accepted, "ref"},
+  {:retry, 30},
+  :uncertain,
+  {:rejected, :invalid},
+  :rate_limited,
+  :malformed,
+  :unknown_status,
+  :raise
+]
+
+== AuroraMeter.Billing.Provider.behaviour_info(:callbacks) (UNCHANGED by 04a) ==
+[
+  billing_portal_url: 2,
+  create_checkout_session: 2,
+  report_usage: 1,
+  sync_subscription: 1
+]

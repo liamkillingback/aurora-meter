@@ -1,15 +1,15 @@
 {
   "equal": true,
   "computed": "the activated generation read from aurora_meter_event_totals, and a GROUP BY over aurora_meter_events taken after every recorder stopped",
-  "scanned": 11799,
-  "batches": 12,
   "batch_size": 1000,
+  "batches": 10,
   "differences": 0,
+  "scanned": 10000,
   "recorders": 12,
   "seeded_events": 10000,
   "records_committed": 1800,
   "keys_in_activated_generation": 762,
   "keys_in_independent_aggregate": 762,
-  "activated_generation_digest": "422494a75e92f6938542955e0f7971894597060ba2c5a25ab1b96168879f9ca9",
-  "independent_aggregate_digest": "422494a75e92f6938542955e0f7971894597060ba2c5a25ab1b96168879f9ca9"
+  "activated_generation_digest": "f02eaa58c431acf8ac34bf423c12c92443470ec138423742d984f370aa54fa5b",
+  "independent_aggregate_digest": "f02eaa58c431acf8ac34bf423c12c92443470ec138423742d984f370aa54fa5b"
 }

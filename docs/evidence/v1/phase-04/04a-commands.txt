@@ -1,0 +1,299 @@
+04a: every command, exit code, seed, UTC timestamp, toolchain and log path
+=========================================================================
+
+Toolchain, recorded once and unchanged for every row below:
+
+  Elixir 1.20.1 (compiled with Erlang/OTP 29)
+  Erlang/OTP 29 [erts-17.0.1] [64-bit] [smp:24:24] [jit:ns]
+  Linux DESKTOP-8R659B3 6.6.87.2-microsoft-standard-WSL2 x86_64 (WSL2, Ubuntu 24.04)
+  PostgreSQL 16, docker container aurora-meter-pro-testdb, host port 5490
+  (the container build unit 00a selected; no container was created, started or
+  removed by this unit)
+
+Revisions at the start:
+  core        4dbbbb5ceb0fd78b7c9b27fe4f6eb1feea381b7d   (clean)
+  Pro         f46b6864ffc0c0f3a6878a29cd2d02cb5c2095f3   (clean)
+  storefront  177d4ff639e1df789a2e3ed41420d2611c667e53   (branch aurorameter-v1)
+
+Every Mix command runs through tmp/v1/mixlane.sh, which holds a per-repository
+flock so that two Mix workloads never share one _build (wave rule 1, X18), and
+sets DB_PORT=5490. Log paths are relative to the storefront repository.
+
+Seeds: --seed 0 unless a row says otherwise. Pro's `mix check` runs `mix test`
+through its own alias and therefore takes ExUnit's random seed; that run's seed
+is recorded in its log.
+
+
+A. THE X126 PRECONDITION (Pro test contamination)
+-------------------------------------------------
+
+A1  2026-09-14T21:30:50Z .. 21:30:58Z   exit 0    seed 0
+    mix test                                          (Pro, baseline, before any change)
+    Result: 420 passed (28 doctests, 392 tests)
+    log: tmp/v1/04a/logs/pro-baseline.log
+
+A2  2026-09-14T21:31:00Z                exit 0
+    read-only SQL probe of the Pro test database, by tenant prefix
+    Result: no leftover rows; a clean run leaks nothing, which is why the leak
+    has to be reproduced by interrupting one
+    script: tmp/v1/04a/probe.sh
+
+A3  2026-09-14T21:31:15Z .. 21:31:19Z   exit 137 (SIGKILL)   seed 0
+    timeout -s KILL 4 mix test <the five non-sandbox files> --seed 0
+    log: tmp/v1/04a/logs/x126-reproduce.log
+
+A4  2026-09-14T21:31:20Z .. 21:32:25Z   exit 137 / 2 / 0     seed 0
+    the same five files killed at 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5 and 6 s
+    log: tmp/v1/04a/logs/x126-hunt.log
+    NOTE: the per-prefix half of that script's SQL was malformed (an aggregate in
+    GROUP BY) and printed an error rather than a count. It is recorded because the
+    leak below was found by the corrected probe immediately afterwards, not by
+    this script, and a reader should not take its empty output for a clean result.
+
+A5  2026-09-14T21:32:26Z                exit 0
+    corrected read-only probe
+    Result, the reproduction of X126 in Pro:
+      aurora_meter_credit_accounts      tenant_key org_3215  cus_org_3215
+      aurora_meter_credit_transactions  tenant_key org_3215  grant pi_org_3215  30000000
+      aurora_meter_credit_balances      tenant_key org_3215  balance 30000000
+    The reference pi_org_3215 is AuroraMeter.Pro.Credits.SyncRefundTest's shape,
+    and "org" is AuroraMeter.Test.unique_tenant/0's default prefix.
+    script: tmp/v1/04a/probe.sh, detail tmp/v1/04a/probe-detail.sh
+
+A6  2026-09-14T21:32:31Z .. 21:32:55Z   exit 0    seeds 0 to 7
+    the same five files run again with the leaked rows present
+    Result: 107 passed at every seed. The collision is probabilistic: it needs a
+    later run to draw the same System.unique_integer/1 value. The leak is the
+    necessary condition and it is measured; the failure it causes is X126's, in
+    core, at seed 7.
+    log: tmp/v1/04a/logs/x126-consequence.log and -seed{0..7}.log
+
+A7  2026-09-14T21:35:00Z .. 21:35:02Z   exit 2    seed 0
+    mix test test/aurora_meter/pro/test/harness_test.exs      (Pro, first attempt)
+    Result: 53/54 passed. The new guard "no non-sandbox module takes the bare
+    unique_tenant default" was too blunt: it flagged
+    AuroraMeter.Pro.Credits.AutoTopUpWorkerTest, whose zero-arity unique_tenant/0
+    is a LOCAL helper that already supplies @tenant_prefix. Recorded because the
+    guard was corrected rather than the module.
+    log: tmp/v1/04a/logs/pro-harness.log (overwritten by A8; the failure text is
+    quoted in the report)
+
+A8  2026-09-14T21:35:16Z .. 21:35:18Z   exit 0    seed 0
+    mix test test/aurora_meter/pro/test/harness_test.exs
+    Result: 54 passed
+    log: tmp/v1/04a/logs/pro-harness.log
+
+A9  2026-09-14T21:35:25Z .. 21:35:32Z   exit 0    seed 0
+    mix test                                          (Pro, after the X126 fix)
+    Result: 425 passed (28 doctests, 397 tests)   [420 before, +5]
+    log: tmp/v1/04a/logs/pro-suite-after-x126.log
+
+A10 2026-09-14T21:35:40Z .. 21:35:41Z   exit 0    seed 0
+    the sweep proved directly, with its bound:
+      seed aurora_meter_credit_balances and oban_jobs rows under
+      harnessa_999999 (a swept prefix) and notswept_999999 (not one),
+      run one Pro test file, probe again.
+      Before: both present. After: harnessa gone, notswept untouched.
+    log: tmp/v1/04a/logs/x126-prove-sweep.log
+
+
+B. CORE: THE UNIT
+------------------
+
+B1  2026-09-14T21:41:27Z .. 21:41:28Z   exit 2    seed 0
+    mix test test/aurora_meter/exporter_test.exs --seed 0
+    Result: 24/25. One failure: behaviour_info(:callbacks) was asserted in the
+    compiler's order rather than sorted. Recorded because the first verification
+    target is supposed to be run and read, not assumed.
+    log: tmp/v1/04a/logs/core-exporter1.log (overwritten by B2)
+
+B2  2026-09-14T21:41:33Z .. 21:41:34Z   exit 0    seed 0
+    mix test test/aurora_meter/exporter_test.exs --seed 0
+    Result: 25 passed (3 doctests, 22 tests)
+    THE FIRST VERIFICATION TARGET, including the normalize/2 missing-id and
+    unknown-id cases.
+    log: tmp/v1/04a/logs/core-exporter1.log
+
+B3  2026-09-14T21:42:22Z .. 21:42:23Z   exit 0    seed 0
+    mix test test/aurora_meter/exporter/journal_test.exs --seed 0
+    Result: 18 passed
+    log: tmp/v1/04a/logs/core-journal1.log
+
+B4  2026-09-14T21:44:01Z .. 21:44:02Z   exit 2    seed 0
+    mix test test/aurora_meter/exporter_case_test.exs --seed 0
+    Result: 31/33. Two failures, both in the suite rather than in an adapter:
+    `refute a == b, "message"` drops the message, and `assert pattern = expr,
+    "message"` raises MatchError before the assertion sees it. Both are fixed and
+    the second is commented in lib/aurora_meter/exporter_case.ex, because a
+    conformance suite that fails with the wrong error teaches the wrong thing.
+    log: tmp/v1/04a/logs/core-case1.log
+
+B5  2026-09-14T21:44:20Z .. 21:44:21Z   exit 0    seed 0
+    mix test test/aurora_meter/exporter_case_test.exs --seed 0
+    Result: 33 passed
+    log: tmp/v1/04a/logs/core-case2.log
+
+B6  2026-09-14T21:44:23Z .. 21:44:25Z   exit 0    seed 0
+    the same file with --trace, to confirm the eleven injected tests really ran
+    against the journal rather than being generated and skipped
+    log: tmp/v1/04a/logs/core-case-trace.log
+
+B7  2026-09-14T21:45:20Z .. 21:48:47Z   exit 0    seed 0
+    mix test                                          (core, whole suite)
+    Result: 1197 passed (49 doctests, 12 properties, 1136 tests), 3 excluded
+    log: tmp/v1/04a/logs/core-full-after.log
+
+B8  2026-09-14T21:48:55Z .. 21:48:57Z   exit 8
+    mix check                                         (core, first attempt)
+    credo --strict: one refactoring opportunity, function body nested too deep in
+    a test setup. Fixed by extracting a helper.
+    log: tmp/v1/04a/logs/core-check.log (overwritten by B9)
+
+B9  2026-09-14T21:49:12Z .. 21:49:15Z   exit 2
+    mix check                                         (core, second attempt)
+    credo --strict: nested module could be aliased. Fixed with an alias.
+    log: tmp/v1/04a/logs/core-check.log (overwritten by B10)
+
+B10 2026-09-14T21:49:23Z .. 21:52:53Z   exit 0
+    mix check                                         (core)
+    format --check-formatted, compile --warnings-as-errors --force,
+    credo --strict (2194 mods/funs, no issue), dialyzer (passed successfully),
+    test (1197 passed, 3 excluded), docs --warnings-as-errors (generated)
+    log: tmp/v1/04a/logs/core-check.log
+
+B11 2026-09-14T21:52:59Z .. 21:57:12Z   exit 0    seed 0
+    mix test <the 58 test files that are NOT this unit's three>
+    Result: 1120 passed (46 doctests, 12 properties, 1062 tests), 3 excluded
+    This is the BEFORE count, produced by the same tree and toolchain rather than
+    by subtraction.
+    log: tmp/v1/04a/logs/core-before-count.log
+
+B12 2026-09-14T22:00:08Z .. 22:00:10Z   exit 0    seed 0
+    mix test <the three new files> --seed 0 --trace
+    Result: 77 passed (3 doctests, 74 tests)
+    log: docs/evidence/v1/phase-04/04a-conformance-run.log (sanitised)
+
+B13 2026-09-14T22:00:10Z              exit 0
+    mix run --no-start -e '<read-only reflection>'
+    log: docs/evidence/v1/phase-04/04a-api-surface.txt
+
+
+C. PRO: mix check WITH THE PLT CLEARED (X114)
+----------------------------------------------
+
+C1  2026-09-14T21:57:19Z .. 21:57:22Z   exit 2
+    rm -f product-workspaces/aurora_meter_pro/priv/plts/*.plt{,.hash}
+    then mix check                                    (Pro, first attempt)
+    The deleted file is recorded in the log:
+      dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt  7728133 bytes
+    credo --strict: nested module could be aliased in the new harness test.
+    log: tmp/v1/04a/logs/pro-check.log (overwritten by C2)
+
+C2  2026-09-14T21:57:30Z .. 21:58:58Z   exit 0    seed 936442 (ExUnit's own)
+    the same, with the PLT deleted again and rebuilt from scratch
+    ("Adding 1497 modules ... done in 0m57.52s")
+    dialyzer: Total errors: 1, Skipped: 1, Unnecessary Skips: 0, passed successfully
+    test: 425 passed (28 doctests, 397 tests)
+    docs: generated
+    log: tmp/v1/04a/logs/pro-check.log
+
+    The PLT was cleared because core's lib/ gained three modules in this unit and
+    a path dependency's beams changing does not invalidate the consumer's PLT
+    (X114). A green Pro dialyzer over a warm PLT after a core change is not
+    evidence.
+
+
+D. NEGATIVE CONTROLS
+---------------------
+
+D1  2026-09-14T21:59:16Z .. 21:59:39Z
+    tmp/v1/04a/negative-controls.sh, eleven controls n1 to n11.
+    Each mutates exactly one thing, runs the affected test file, asserts the
+    named test fails, then restores from a saved COPY and asserts the restore
+    with sha256 before the next control runs (X97, X132).
+    Ten passed as required. n9 did not run: its mutation left a binding unused
+    and core compiles with --warnings-as-errors, so it failed to compile rather
+    than failing the test it was aimed at.
+    logs: tmp/v1/04a/logs/nc-n1.log .. nc-n11.log
+    restored sha256:
+      Pro  test/test_helper.exs                                   31a6a075...15399
+      Pro  test/support/aurora_meter/pro/test/connections.ex       b26703da...1d0e6
+      Pro  test/aurora_meter/pro/credits/sync_refund_test.exs      5a42ad6c...af077
+      core lib/aurora_meter/exporter.ex                            1b5a2cc9...d102a
+      core lib/aurora_meter/exporter_case.ex                       53438fe3...28282
+
+D2  2026-09-14T21:59:50Z .. 21:59:56Z   exit 2    seed 0
+    n9 redone, with a mutation that keeps every binding used and only defeats the
+    unknown-id branch.
+    Failed: E1 normalize rejects a result carrying an id that was not delivered;
+            E1 normalize names every unknown id once, however often it appears;
+            the suite rejects a wrong adapter an exporter that invents an item id
+            fails the identity area;
+            and one doctest of normalize/2.
+    Result: 55/59 passed. Restore asserted: sha256 1b5a2cc9...d102a.
+    script: tmp/v1/04a/n9-redo.sh, log tmp/v1/04a/logs/nc-n9.log
+
+
+D3  2026-09-14T22:06:11Z .. 22:06:13Z   exit 0    seed 0
+    every wrong adapter against every conformance assertion, to measure the
+    acceptance criterion's "and no other" rather than assume it.
+    The probe file is copied into test/, run, and removed; it touches no
+    database so it needs no sweep prefix (X130).
+    Result: all twelve fail their target; six fail only their target.
+    probe: tmp/v1/04a/wrong-adapter-matrix.exs
+    log:   tmp/v1/04a/logs/wrong-adapter-matrix.log
+
+D4  2026-09-14T22:06:20Z .. 22:06:23Z   exit 0
+    mix docs --warnings-as-errors --output /tmp/aurora_meter-04a-doc, then the
+    generated sidebar parsed for the "Extension seams" group and the extras list.
+    The docs step of mix check exits 0 whether or not a page is registered, so
+    the question is asked of the output (X82).
+    Result: exporters.html rendered (55745 bytes); Extension seams holds all
+    four new modules plus Storage, StorageCase and Billing.Provider.
+    script: tmp/v1/04a/docs-group-check.sh
+
+D5  2026-09-14T22:01:28Z .. 22:05:22Z   exit 0
+    mix check                                         (core, final state)
+    Result: 1197 passed, 3 excluded; dialyzer passed; docs generated.
+    Run AFTER the evidence files in this directory were written, so the state it
+    certifies is the state being handed over.
+    log: tmp/v1/04a/logs/core-check.log
+
+D6  2026-09-14T22:05:45Z .. 22:05:55Z   exit 0    seed 0
+    mix test                                          (Pro, final state)
+    Result: 425 passed. Read-only probe afterwards: the Pro test database holds
+    no rows under any tenant prefix and no oban_jobs.
+    log: tmp/v1/04a/logs/pro-suite-final.log
+
+
+E. TREE STATE AFTER THE UNIT
+-----------------------------
+
+core   git status --porcelain
+         M mix.exs
+         ?? docs/exporters.md
+         ?? docs/evidence/v1/phase-04/
+         ?? lib/aurora_meter/exporter.ex
+         ?? lib/aurora_meter/exporter/
+         ?? lib/aurora_meter/exporter_case.ex
+         ?? test/aurora_meter/exporter/
+         ?? test/aurora_meter/exporter_case_test.exs
+         ?? test/aurora_meter/exporter_test.exs
+
+Pro    git status --porcelain
+         M test/aurora_meter/pro/credits/pending_payment_test.exs
+         M test/aurora_meter/pro/credits/sync_refund_test.exs
+         M test/aurora_meter/pro/test/harness_test.exs
+         M test/support/aurora_meter/pro/test/connections.ex
+         M test/test_helper.exs
+
+Nothing in Pro's lib/ was touched. No migration was touched. No commit, tag,
+push, publish or deploy was made.
+
+One thing had to be put back by hand, and it is worth a reader's attention:
+running core's suite REWRITES three committed evidence files of build unit 03d
+(03d-activation-atomicity.txt, 03d-interleaved.json, 03d-replay-100k.json),
+because those tests write their own evidence on every run. They were restored
+with `git checkout -- docs/evidence/v1/phase-03/`. It is reported as a finding:
+`mix check` no longer leaves the tree byte identical, which is the property
+open-findings.md X21 and X27 put the --output flag there to preserve.
