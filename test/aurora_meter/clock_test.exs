@@ -293,9 +293,16 @@ defmodule AuroraMeter.ClockTest do
       # it decides nothing: the backfill's refusal is decided by an advisory
       # lock, never by a clock (03a, open-findings.md X100). A Mix task is also
       # not a path, hot or otherwise.
+      # A replay stamps `started_at` and `finished_at` into its checkpoint so an
+      # operator can see how long a rebuild took. It is a REPORT: the replay's
+      # exclusion is an advisory lock and its resumability is a cursor, so no
+      # decision anywhere subtracts these (03d, open-findings.md X100). It is
+      # read once per run and once per phase, never per batch and never on a
+      # metering call.
       allowed = [
         "lib/aurora_meter/clock.ex",
         "lib/aurora_meter/credits.ex",
+        "lib/aurora_meter/events/replay.ex",
         "lib/mix/tasks/aurora_meter.events.backfill.ex"
       ]
 

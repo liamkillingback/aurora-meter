@@ -1,0 +1,26 @@
+file sha256 before the mutation: 5312b2ba5d8dc18bac8130abd1a5114abb954eee4097911d72ce7623cfd36fb8
+
+--- control: the unmutated comparison for three record-path symbols ---
+SAME     lock_generations                         clauses=1   sha256=bb67405c0f5ebbb2
+SAME     apply_totals                             clauses=2   sha256=1290723fe366a1f6
+SAME     record_events                            clauses=2   sha256=e9e2023b7bb8e838
+exit=0
+
+--- mutating lock_generations/2: FOR SHARE becomes FOR UPDATE ---
+mutated
+
+--- the same comparison, mutated ---
+CHANGED  lock_generations                         HEAD clauses=1 sha256=bb67405c0f5ebbb2 -> tree clauses=1 sha256=010288067ca84372
+SAME     apply_totals                             clauses=2   sha256=1290723fe366a1f6
+SAME     record_events                            clauses=2   sha256=e9e2023b7bb8e838
+exit=1  (1 is the expected answer: the tool reported the change)
+
+--- restoring from the saved copy ---
+file sha256 after the restore:  5312b2ba5d8dc18bac8130abd1a5114abb954eee4097911d72ce7623cfd36fb8
+RESTORE ASSERTED: the file is byte-identical to what it was before the mutation.
+
+--- and the comparison is clean again ---
+SAME     lock_generations                         clauses=1   sha256=bb67405c0f5ebbb2
+SAME     apply_totals                             clauses=2   sha256=1290723fe366a1f6
+SAME     record_events                            clauses=2   sha256=e9e2023b7bb8e838
+exit=0

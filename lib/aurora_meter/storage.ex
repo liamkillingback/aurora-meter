@@ -100,8 +100,10 @@ defmodule AuroraMeter.Storage do
 
   `:durable_events` covers `c:record_events/2`, `c:load_event/2` and
   `c:load_event_total/3`; `:corrections` covers `record_correction/2` (build
-  unit 03e); `:projection_generations` covers `c:write_projection_totals/2` and
-  `c:activate_projection/1`; `:event_streaming` covers `c:stream_events/2`.
+  unit 03e); `:projection_generations` covers `c:begin_projection_generation/0`,
+  `c:projection_state/0`, `c:write_projection_totals/2`,
+  `c:drain_projection_seed/2` and `c:activate_projection/1`;
+  `:event_streaming` covers `c:stream_events/2`.
   """
   @type capability :: :durable_events | :corrections | :projection_generations | :event_streaming
 
@@ -262,9 +264,66 @@ defmodule AuroraMeter.Storage do
   @callback stream_events(non_neg_integer(), keyword()) ::
               {:ok, [Event.t()]} | {:error, {:unsupported, capability()}}
 
-  @doc "Writes absolute projection totals for `generation`. Used by replay (03d)."
+  @typedoc """
+  What `c:projection_state/0` reports and `c:begin_projection_generation/0`
+  returns.
+
+  `building_generation` is present while a replay is building one;
+  `seed_generation` names the frozen copy of the active generation that the
+  announcement took, and `watermark` the `seq` the scan is bounded by. All
+  three are absent between replays.
+  """
+  @type projection_state :: %{
+          required(:active_generation) => non_neg_integer(),
+          required(:building_generation) => integer() | nil,
+          required(:previous_generation) => non_neg_integer() | nil,
+          required(:seed_generation) => integer() | nil,
+          required(:watermark) => non_neg_integer() | nil
+        }
+
+  @doc """
+  Announces a new building generation and returns the state it announced.
+
+  One short transaction that takes the projection row `FOR UPDATE`, so it is
+  granted only once every record transaction holding `FOR SHARE` on that row
+  has committed or rolled back. In that transaction it reads the watermark
+  `max(seq)`, copies the active generation's rows into both the new building
+  generation and a frozen seed generation, and publishes the building
+  generation so every later record writes both.
+
+  Idempotent: when a building generation already exists it is returned with
+  `resumed: true` and nothing is copied.
+  """
+  @callback begin_projection_generation() ::
+              {:ok, %{optional(atom()) => term()}} | {:error, term()}
+
+  @doc "Reads the projection state without locking anything."
+  @callback projection_state() :: {:ok, projection_state()} | {:error, term()}
+
+  @doc """
+  **Adds** projection deltas to `generation`, creating rows that are absent.
+
+  Adds rather than sets, because a record that commits while a generation is
+  being built writes its own delta there too, and a replay's batch must not
+  overwrite it. Entries are applied in one statement, sorted by
+  `{tenant_key, feature, period_start}` so two writers cannot deadlock.
+
+  Call it inside the caller's transaction: a replay commits the totals and its
+  checkpoint together, which is the whole of its resumability.
+  """
   @callback write_projection_totals(non_neg_integer(), [projection_total()]) ::
               :ok | {:error, term()}
+
+  @doc """
+  Subtracts up to `limit` seed rows from the generation they seeded and deletes
+  them, in one transaction, returning how many were consumed.
+
+  The seed row's own existence is the cursor: draining is finished when none is
+  left, so an interrupted drain needs no checkpoint and can never subtract a
+  row twice.
+  """
+  @callback drain_projection_seed(integer(), pos_integer()) ::
+              {:ok, non_neg_integer()} | {:error, term()}
 
   @doc "Makes `generation` the one `c:load_event_total/3` reads."
   @callback activate_projection(non_neg_integer()) :: :ok | {:error, term()}
@@ -419,12 +478,32 @@ defmodule AuroraMeter.Storage do
     with :ok <- require!(:event_streaming), do: impl().stream_events(cursor, opts)
   end
 
-  @doc "Writes absolute projection totals for a generation. See `c:write_projection_totals/2`."
+  @doc "Adds projection deltas to a generation. See `c:write_projection_totals/2`."
   @spec write_projection_totals(non_neg_integer(), [projection_total()]) ::
           :ok | {:error, term()}
   def write_projection_totals(generation, rows) do
     with :ok <- require!(:projection_generations),
          do: impl().write_projection_totals(generation, rows)
+  end
+
+  @doc "Announces a building generation. See `c:begin_projection_generation/0`."
+  @spec begin_projection_generation() :: {:ok, %{optional(atom()) => term()}} | {:error, term()}
+  def begin_projection_generation do
+    with :ok <- require!(:projection_generations), do: impl().begin_projection_generation()
+  end
+
+  @doc "Reads the projection state. See `c:projection_state/0`."
+  @spec projection_state() :: {:ok, projection_state()} | {:error, term()}
+  def projection_state do
+    with :ok <- require!(:projection_generations), do: impl().projection_state()
+  end
+
+  @doc "Consumes a bounded slice of a seed generation. See `c:drain_projection_seed/2`."
+  @spec drain_projection_seed(integer(), pos_integer()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def drain_projection_seed(seed_generation, limit) do
+    with :ok <- require!(:projection_generations),
+         do: impl().drain_projection_seed(seed_generation, limit)
   end
 
   @doc "Makes a generation the one reads see. See `c:activate_projection/1`."

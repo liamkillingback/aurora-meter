@@ -34,12 +34,24 @@ defmodule AuroraMeter.Checkpoints do
   question from it or from the age of `updated_at`. A clock cannot decide
   exclusion here: `clock_timestamp()` is the database host's OS clock and it is
   corrected, so a short lease compared against it can invert. Exclusion between
-  two runners is taken with a Postgres advisory lock instead
-  (`AuroraMeter.Events.Backfill`), which has no clock in it at all.
+  two runners is taken with a Postgres advisory lock instead (`claim/3`, and
+  `AuroraMeter.Events.Backfill`), which has no clock in it at all.
 
   `updated_at` is stamped by the database, with `clock_timestamp()` in the
   statement, so any comparison against it is a comparison of two readings of
   one clock. Read the other side with `AuroraMeter.Clock.db_now/0`.
+
+  ## The heartbeat is not a lease
+
+  `heartbeat/3` stamps `cursor["heartbeat_at"]` and `cursor["runner"]` so an
+  operator can tell a stalled task from a finished one. **Nothing in this
+  package subtracts it from anything.** `open-findings.md` X100 measured
+  `clock_timestamp()` stepping backwards nine times in 300 seconds, worst
+  439 ms, on a 32.5 second cadence, so "the heartbeat is older than N seconds"
+  is not a sound test for "the runner is gone" at any N a person would pick.
+  The sound test is `claim/3`: a session advisory lock dies with the connection
+  that held it, so a runner that was killed has already released it and a
+  runner that is alive has not, with no duration anywhere in the decision.
 
   ## The missing table
 
@@ -63,6 +75,12 @@ defmodule AuroraMeter.Checkpoints do
 
   @typedoc "Fields `update/2` accepts."
   @type attrs :: [cursor: map(), counts: map(), state: String.t()]
+
+  # The advisory-lock namespace for name-derived task claims. Deliberately not
+  # `AuroraMeter.Events.Backfill`'s `0x4155524F`, which holds hand-picked
+  # integer keys: two namespaces cannot collide, so a new checkpoint name can
+  # never accidentally take the backfill's lock.
+  @claim_namespace 0x4155524E
 
   @select "SELECT name, cursor, counts, state, updated_at FROM aurora_meter_checkpoints"
 
@@ -208,6 +226,98 @@ defmodule AuroraMeter.Checkpoints do
       _other -> false
     end
   end
+
+  @doc """
+  Stamps `cursor["heartbeat_at"]` and `cursor["runner"]` and sets the state to
+  `"running"`, leaving every other cursor key and the counts alone.
+
+  The instant is `clock_timestamp()`, written by the database in the same
+  statement, so it is never a node's reading of the time. Call it inside the
+  transaction that commits a batch, so a heartbeat can never be fresher than
+  the work it claims to be reporting.
+
+  It is a **report for a human**, not a lease: see the module documentation.
+  Returns `{:error, :not_found}` when there is no such row.
+
+  Options: `:repo`, and `:runner` (default `"<node>/<pid>"`).
+  """
+  @spec heartbeat(String.t(), keyword()) :: :ok | {:error, :not_found}
+  def heartbeat(name, opts \\ []) when is_binary(name) do
+    runner = Keyword.get(opts, :runner) || runner()
+
+    result =
+      repo(opts).query!(
+        """
+        UPDATE aurora_meter_checkpoints
+           SET cursor = cursor || jsonb_build_object(
+                 'heartbeat_at', to_jsonb((clock_timestamp() AT TIME ZONE 'UTC')::text),
+                 'runner', to_jsonb($2::text)),
+               state = 'running',
+               updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+         WHERE name = $1
+        """,
+        [name, runner]
+      )
+
+    case result do
+      %{num_rows: 0} -> {:error, :not_found}
+      %{num_rows: _} -> :ok
+    end
+  end
+
+  @doc """
+  Runs `fun` while holding a Postgres **session** advisory lock derived from
+  `name`, on one pinned connection, and returns `{:ok, fun.()}`.
+
+  Returns `{:error, :already_running}` without calling `fun` when another
+  connection holds it. This is the exclusion every bounded task in this package
+  uses, and it has no clock in it: the lock is granted or it is not, and it is
+  released by `pg_advisory_unlock`, by the connection closing or by the process
+  that held it dying. A runner killed with `kill -9` therefore leaves nothing
+  behind to time out (`open-findings.md` X100).
+
+  The lock key is `{0x4155524E, :erlang.phash2(name)}`. The namespace is
+  distinct from the fixed-key namespace `0x4155524F` that
+  `AuroraMeter.Events.Backfill` uses, so a name can never collide with a task
+  that took a hand-picked key. Two *different* names that hash alike would
+  exclude each other, which is over-exclusion rather than a correctness
+  failure, and there are four names in this package.
+
+  Options: `:repo`, `:timeout` (per statement, default 15_000).
+  """
+  @spec claim(String.t(), (-> result), keyword()) :: {:ok, result} | {:error, :already_running}
+        when result: term()
+  def claim(name, fun, opts \\ []) when is_binary(name) and is_function(fun, 0) do
+    repo = repo(opts)
+    timeout = Keyword.get(opts, :timeout, 15_000)
+    lock = [@claim_namespace, :erlang.phash2(name)]
+
+    repo.checkout(
+      fn ->
+        case repo.query!("SELECT pg_try_advisory_lock($1, $2)", lock, timeout: timeout) do
+          %{rows: [[true]]} ->
+            try do
+              {:ok, fun.()}
+            after
+              repo.query!("SELECT pg_advisory_unlock($1, $2)", lock, timeout: timeout)
+            end
+
+          %{rows: [[false]]} ->
+            {:error, :already_running}
+        end
+      end,
+      timeout: :infinity
+    )
+  end
+
+  @doc """
+  The runner identity `heartbeat/2` stamps: this node and this process.
+
+  Informational. Nothing decides anything from it; it is what an operator reads
+  to find the machine a stalled task is on.
+  """
+  @spec runner() :: String.t()
+  def runner, do: "#{node()}/#{inspect(self())}"
 
   defp set_state(name, state, opts) do
     case update(name, [state: state], opts) do

@@ -1,0 +1,62 @@
+n1-watermark
+  layer disabled: the `seq <= watermark` bound on the scan
+  expected: the scan reads events recorded after the announcement, which the dual write has already applied, so the built generation double counts them
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test a correction while a generation is building L-03d-1 the seed is fully removed, so a built generation is the events and nothing else (AuroraMeter.EventsReplayTest); 2) test prune/1 prune/1 abandons a half-built generation and clears it from the projection state (AuroraMeter.EventsReplayTest); 3) test the comparison I06 require_match refuses to activate when a difference exists (AuroraMeter.EventsReplayTest); 4) test the scan I06 the scan is bounded by the watermark and the tail arrives by the dual write (AuroraMeter.EventsReplayTest); 5) test the claim a second replay is refused while the first holds the claim, and runs once it does not (AuroraMeter.EventsReplayTest); 6) test activation L-03d-3 a reader across an activation sees exactly two values and never a partial sum (AuroraMeter.EventsReplayTest); 7) test a correction while a generation is building I09 a correction for an unscanned original commits and lands in both generations (AuroraMeter.EventsReplayTest); 8) test status/0 status/0 reports the generations, the watermark and the replay checkpoint (AuroraMeter.EventsReplayTest)
+  constraint named in the output: False
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n1-watermark.log
+
+n2-seed
+  layer disabled: the announcement's copy of the active generation into the building one
+  expected: a correction whose original the scan has not reached drives the building generation below zero and aurora_meter_event_totals_quantity_check refuses a legal correction
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test a correction while a generation is building I09 a correction for an unscanned original commits and lands in both generations (AuroraMeter.EventsReplayTest); 2) test the announcement the announcement seeds the building generation from the active one (AuroraMeter.EventsReplayTest)
+  constraint named in the output: True
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n2-seed.log
+
+n3-drain
+  layer disabled: taking the seed back out before the comparison
+  expected: every key is double counted by exactly its seed, so require_match refuses to activate and the rebuilt totals are wrong
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test a correction while a generation is building L-03d-1 the seed is fully removed, so a built generation is the events and nothing else (AuroraMeter.EventsReplayTest); 2) test prune/1 prune/1 abandons a half-built generation and clears it from the projection state (AuroraMeter.EventsReplayTest); 3) test the scan I06 the scan is bounded by the watermark and the tail arrives by the dual write (AuroraMeter.EventsReplayTest); 4) test the claim a second replay is refused while the first holds the claim, and runs once it does not (AuroraMeter.EventsReplayTest); 5) test activation L-03d-3 a reader across an activation sees exactly two values and never a partial sum (AuroraMeter.EventsReplayTest); 6) test a correction while a generation is building I09 a correction for an unscanned original commits and lands in both generations (AuroraMeter.EventsReplayTest); 7) test status/0 status/0 reports the generations, the watermark and the replay checkpoint (AuroraMeter.EventsReplayTest); 8) test the scan I06 a rebuilt generation reproduces the live totals for usage events (AuroraMeter.EventsReplayTest)
+  constraint named in the output: False
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n3-drain.log
+
+n4-for-update
+  layer disabled: the exclusive lock the announcement takes on the projection row
+  expected: the announcement no longer waits for an in-flight record transaction, so a record that is already holding the share lock can commit below a watermark taken after it started
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test the announcement I06 the announcement waits for an in-flight record transaction (AuroraMeter.EventsReplayTest)
+  constraint named in the output: False
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n4-for-update.log
+
+n5-cursor-runs-ahead
+  layer disabled: committing the totals write and the cursor advance in ONE transaction
+  expected: the cursor is written before the totals it claims, so a kill between them leaves a cursor naming a batch that was never applied and the restart skips it
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test I06 restart and replay reproduce the same totals (AuroraMeter.EventsReplayTest)
+  constraint named in the output: False
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n5-cursor-runs-ahead.log
+
+n6-single-upsert
+  layer disabled: writing a projection delta as insert-at-zero then update, rather than one upsert
+  expected: a batch holding only corrections for a key proposes a negative tuple, and PostgreSQL applies the CHECK to the tuple the INSERT proposes rather than the row the UPDATE would leave (X124)
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test I06 a replay interrupted at the activation leaves a consistent state either way (AuroraMeter.EventsReplayLargeTest); 2) test I06 a replay interleaved with 12 concurrent recorders reproduces exact totals (AuroraMeter.EventsReplayLargeTest); 3) test I06 100,000 facts and corrections replay to exact totals after a kill and a restart (AuroraMeter.EventsReplayLargeTest)
+  constraint named in the output: True
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n6-single-upsert.log
+
+n7-legacy-filter
+  layer disabled: excluding legacy track rows, which the live projection never counted
+  expected: a legacy track row is summed into the rebuild although the live projection never counted it, so the two disagree for every key with legacy history
+  exit: 2  (0 means the control PASSED when it should have FAILED)
+  failing tests: 1) test the scan a legacy track row is in the events table and in no rebuilt total (AuroraMeter.EventsReplayTest)
+  constraint named in the output: False
+  restore asserted: True
+  log: /home/liamk/src/PhxTemplates/tmp/v1/03d/logs/control-n7-legacy-filter.log

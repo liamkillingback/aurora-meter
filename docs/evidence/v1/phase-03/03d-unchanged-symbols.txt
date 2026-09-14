@@ -1,0 +1,163 @@
+
+=== lib/aurora_meter/storage/ecto.ex: the record and correction transactions ===
+SAME     record_events                            clauses=2   sha256=e9e2023b7bb8e838
+SAME     record_correction                        clauses=1   sha256=4028758e0501ac5a
+SAME     in_transaction                           clauses=1   sha256=200f7df1cb7e03e3
+SAME     lock_generations                         clauses=1   sha256=bb67405c0f5ebbb2
+SAME     insert_events_returning                  clauses=1   sha256=362f5effbc99677c
+SAME     resolve                                  clauses=1   sha256=ee2f2f3b207ac82d
+SAME     outcome                                  clauses=3   sha256=3afe0cdaf7049d1e
+SAME     read_back                                clauses=2   sha256=ad9c24c8f333dae9
+SAME     apply_totals                             clauses=2   sha256=1290723fe366a1f6
+SAME     enqueue                                  clauses=2   sha256=786f7b89ff6798be
+SAME     eligibility                              clauses=1   sha256=581db933968ad157
+SAME     correction_transaction                   clauses=1   sha256=4f42cdc2ed6af1de
+SAME     lock_original                            clauses=1   sha256=3eb2ad74e2628573
+SAME     recheck_duplicate                        clauses=1   sha256=c52a683fa2bbefaa
+SAME     check_bound                              clauses=1   sha256=b19479d9d6a8f2be
+SAME     magnitude                                clauses=2   sha256=a69bc6db3abaf460
+SAME     insert_correction                        clauses=1   sha256=e6b58419f384e329
+SAME     mixed!                                   clauses=2   sha256=72e70adf15918764
+SAME     entries                                  clauses=1   sha256=d5684e86974718bc
+SAME     correction_entry                         clauses=1   sha256=c76e0fa52ce2c56e
+SAME     replacement                              clauses=1   sha256=9e6e9a83e91cbe31
+SAME     apply_correction_totals                  clauses=2   sha256=4723ead2ce3a2901
+SAME     move_total                               clauses=1   sha256=0d3bfc02978c1534
+SAME     projection_delta                         clauses=2   sha256=cfb6a49a1629d21d
+SAME     enqueue_corrections                      clauses=2   sha256=33c18a07a1c97504
+SAME     correction_eligibility                   clauses=2   sha256=ed3f74604fa78061
+SAME     read_event                               clauses=1   sha256=e768af5f2c8fa8fd
+SAME     settle_duplicate                         clauses=2   sha256=73b49ef627fcef42
+SAME     stated_quantity                          clauses=2   sha256=b9a9be420d010919
+SAME     duplicate_outcomes                       clauses=1   sha256=f41fb422bf5708fb
+SAME     duplicate_replacement                    clauses=1   sha256=ff5c2a07e2a7d3ed
+SAME     unwrap_correction                        clauses=4   sha256=acb8327b714db008
+SAME     identity                                 clauses=1   sha256=8a9fc1cb58a2d90c
+SAME     row                                      clauses=1   sha256=b78a29c536f243a4
+SAME     guarded                                  clauses=1   sha256=2bceb0c0d4ff50ec
+SAME     postgres_reason                          clauses=4   sha256=b64b92b085eb93da
+SAME     repo                                     clauses=1   sha256=469b64f82b6fdc8f
+SAME     flush_batch                              clauses=1   sha256=aa584011c4429a3b
+SAME     upsert_counters                          clauses=1   sha256=d5557a8c2fc64ce6
+SAME     add_counters                             clauses=1   sha256=910c7af92b657844
+SAME     add_history                              clauses=1   sha256=702508685b3502f3
+SAME     load_counter                             clauses=1   sha256=269177ea12c9ad3d
+SAME     upsert_history                           clauses=1   sha256=fbf3a96ee6853c26
+SAME     load_history                             clauses=1   sha256=87f19d3d16092e6b
+SAME     load_history_range                       clauses=1   sha256=a3f627d7c3be2f86
+SAME     get_subscription                         clauses=1   sha256=7f109887acf159f1
+SAME     put_subscription                         clauses=1   sha256=18b67ba35c608b68
+SAME     insert_events                            clauses=1   sha256=9c4a710eb21934d3
+SAME     period_source                            clauses=3   sha256=8e287b79f76c1d5d
+SAME     stream_counters                          clauses=1   sha256=5c16dfd6c02a7888
+SAME     capabilities                             clauses=1   sha256=b5b3f99dde246430
+SAME     host_transaction?                        clauses=1   sha256=415fd16ccf31c63c
+SAME     load_event                               clauses=1   sha256=74bf443d668ed159
+SAME     load_event_total                         clauses=1   sha256=237242193a1d80b7
+SAME     stream_events                            clauses=1   sha256=c3e59de4d2eb70fc
+SAME     active_generation                        clauses=1   sha256=b8e9f266b6f301d3
+SAME     filter                                   clauses=3   sha256=0347b42fdf38c862
+SAME     feature_filter                           clauses=2   sha256=0ef9c8c69c73bb5d
+SAME     occurred_from                            clauses=2   sha256=a5230a2e99510304
+SAME     occurred_to                              clauses=2   sha256=a04b3acfeca0c3d0
+
+=== lib/aurora_meter/counter.ex: the hot path and the projection ===
+SAME     incr                                     clauses=1   sha256=843771dc60174417
+SAME     bump                                     clauses=1   sha256=46a5d28f2fee4bdc
+SAME     reserve                                  clauses=1   sha256=9ec606127c26933e
+SAME     release                                  clauses=1   sha256=3bcd74902391af9b
+SAME     commit_work                              clauses=1   sha256=506d30e786710691
+SAME     apply_projection                         clauses=1   sha256=bcad3a17dc88c1d9
+SAME     add_projection                           clauses=1   sha256=97424c73d2dc0fc7
+SAME     subtract_projection                      clauses=1   sha256=0d83cf39c5a55969
+SAME     reseat                                   clauses=1   sha256=a696065d9c77287c
+SAME     apply_remote                             clauses=1   sha256=dc7d3e714e8e2b89
+SAME     rebase                                   clauses=1   sha256=b2f64944067e7d30
+SAME     base                                     clauses=1   sha256=4e7032ed84902fac
+SAME     value                                    clauses=1   sha256=3deb247037930a48
+SAME     all_for                                  clauses=1   sha256=1b58ab8a88007896
+SAME     stored_value                             clauses=1   sha256=b926353d15de1e41
+SAME     event_total                              clauses=1   sha256=e50b686566ca23aa
+SAME     table                                    clauses=1   sha256=b3393c19519972bd
+
+=== lib/aurora_meter/store.ex: the ETS owner and the flush batch snapshot ===
+SAME     counters_table                           clauses=1   sha256=f5e3cc0ec784a976
+SAME     dirty_table                              clauses=1   sha256=eaa5930090d00abd
+SAME     flush_batches_table                      clauses=1   sha256=6fb0c822762fbb38
+SAME     handle_call                              clauses=1   sha256=4b80cbdc7d23f430
+SAME     handle_info                              clauses=2   sha256=c24d5c3055cc9077
+SAME     init                                     clauses=1   sha256=af859df385304e5e
+SAME     invalidation_topic                       clauses=1   sha256=f8d4cbf21dc45b03
+SAME     snapshot                                 clauses=1   sha256=365bc2c3ef1d2880
+SAME     snapshot_flush_batch                     clauses=1   sha256=20e4a0774ce85b0b
+SAME     start_link                               clauses=1   sha256=4e23509ba6b6d074
+SAME     subscription_cache_table                 clauses=1   sha256=bf4912055f6252fd
+SAME     touched_table                            clauses=1   sha256=fa26e66e1f687d12
+
+=== lib/aurora_meter/flusher.ex: persist/1 and the rest ===
+SAME     batch                                    clauses=1   sha256=cbcc22511543139b
+SAME     do_flush                                 clauses=1   sha256=c7d8986106f8b170
+SAME     failed                                   clauses=1   sha256=156f6e908034b945
+SAME     flush                                    clauses=1   sha256=9a543cb6557b7464
+SAME     handle_call                              clauses=1   sha256=6250679ebe5a05c2
+SAME     handle_info                              clauses=2   sha256=9f8a77eb34127b24
+SAME     init                                     clauses=1   sha256=b362d8a70763a1c3
+SAME     persist                                  clauses=1   sha256=66315a4305f94da7
+SAME     schedule                                 clauses=1   sha256=e55f1383dc1f1e94
+SAME     start_link                               clauses=1   sha256=4e23509ba6b6d074
+SAME     terminate                                clauses=1   sha256=535df479a2724907
+SAME     triple                                   clauses=4   sha256=278305727d1237ca
+
+=== lib/aurora_meter/credits/: whole files, byte for byte ===
+SAME     lib/aurora_meter/credits.ex  sha256=4d0a64c211e88fe5
+SAME     lib/aurora_meter/credits/ledger.ex  sha256=684bc12530e54291
+SAME     lib/aurora_meter/credits/money.ex  sha256=a7bf1486b3d7f40b
+SAME     lib/aurora_meter/credits/promotions.ex  sha256=6a7f687d4ee7ca95
+SAME     lib/aurora_meter/credits/series.ex  sha256=55305fbc84913112
+
+=== lib/aurora_meter/events.ex: the facade the record path goes through ===
+SAME     admit                                    clauses=1   sha256=960ab9a258d314c3
+SAME     after_commit                             clauses=2   sha256=98263687e6f2a457
+SAME     attribute                                clauses=1   sha256=b7cad156f2bdd43c
+SAME     batch_result                             clauses=2   sha256=5b6fd85eebba0dc7
+SAME     build                                    clauses=1   sha256=2af9a2edf4b7fee5
+SAME     build_batch                              clauses=1   sha256=68187d90f4b46d93
+SAME     build_correction                         clauses=1   sha256=29b1afe3f4a7dea9
+SAME     build_replacement                        clauses=1   sha256=09d6d5b67c80bd5f
+SAME     correct                                  clauses=1   sha256=7f802ee538ff4f5d
+SAME     count                                    clauses=1   sha256=9624a7f442e18530
+SAME     declared                                 clauses=2   sha256=2f7a77387dfa2c71
+SAME     declared_batch                           clauses=1   sha256=1dde6ee34d6a660c
+SAME     drafts                                   clauses=1   sha256=80519707bdbd2f26
+SAME     durability                               clauses=2   sha256=4174a555aaaec3ae
+SAME     effects                                  clauses=3   sha256=4d659927142cdf86
+SAME     feature!                                 clauses=1   sha256=1155acd7ee9c6d66
+SAME     forbid                                   clauses=1   sha256=cdd30f2f37ebe38b
+SAME     get                                      clauses=1   sha256=0a6406414d27f650
+SAME     merge_effect                             clauses=2   sha256=67155b11b4195942
+SAME     one_correction                           clauses=2   sha256=bdf4dee896fdd183
+SAME     one_result                               clauses=3   sha256=6a42ab62308c410f
+SAME     period                                   clauses=1   sha256=79dcad85cd5ae0c0
+SAME     post_commit                              clauses=1   sha256=ed67051e535657b1
+SAME     project                                  clauses=1   sha256=47501153ac1b05fd
+SAME     projection_delta                         clauses=2   sha256=f26e2169d26b01a8
+SAME     publish                                  clauses=1   sha256=58329a539a826bc6
+SAME     record                                   clauses=1   sha256=da5bf34f0f690007
+SAME     record_batch                             clauses=1   sha256=5ebd9aab516c79ee
+SAME     replaced                                 clauses=3   sha256=bb572f8861d781ec
+SAME     replacement_entry                        clauses=1   sha256=d580cdf5664288e6
+SAME     replacement_feature                      clauses=1   sha256=348e3cc35bfa3b28
+SAME     replacement_ids                          clauses=1   sha256=8cf80656eadc174b
+SAME     span                                     clauses=1   sha256=b97d1b6f9b877f8a
+SAME     storage_opts                             clauses=1   sha256=38283e89d0c7701a
+SAME     stream                                   clauses=1   sha256=d36e00d9155cd126
+SAME     tenant_key                               clauses=1   sha256=687a706505c520b8
+SAME     too_long_for_replace                     clauses=1   sha256=cec6f84b6f152d89
+SAME     total                                    clauses=1   sha256=0b354051b9660a93
+SAME     validate                                 clauses=1   sha256=53712581614585f5
+SAME     wrap_batch                               clauses=2   sha256=3376ed7400f70a6a
+SAME     write                                    clauses=1   sha256=98a063253c3a8ad6
+SAME     write_correction                         clauses=1   sha256=fcbfdd56492977d9
+
+exit codes: record=0 counter=0 store=0 flusher=0 credits=0 events=0
+0 means every named symbol is byte-identical to HEAD.

@@ -186,6 +186,72 @@ UUIDs, so a keyset scan ordered by one can miss a row committed by a transaction
 that started earlier than the cursor it has already passed. If your storage has
 no such identity, `:event_streaming` is a capability you do not have.
 
+## If you can: what the five generation callbacks must do
+
+`:projection_generations` is the capability behind `AuroraMeter.Events.Replay`:
+rebuilding the projection into an isolated generation while the system keeps
+recording. Declaring it commits you to five callbacks and to one property that
+is easy to miss.
+
+`begin_projection_generation/0` announces a build. It must, in **one
+transaction**:
+
+1. take an exclusive lock on the same state `record_events/2` share-locks first,
+   so it is granted only once every in-flight record has finished;
+2. read the watermark, the highest insertion identity committed at that moment;
+3. seed the new generation from the active one (see below);
+4. publish the building generation, so every record that starts afterwards
+   writes its delta to both.
+
+It must be **idempotent**: called again while a build exists, it returns that
+build with `resumed: true` and copies nothing.
+
+`projection_state/0` reports the active, building, previous and seed
+generations and the watermark, without locking anything.
+
+`write_projection_totals/2` **adds** its deltas to a generation and creates the
+rows that are absent. It must not set an absolute value: a record that commits
+mid-build has already written its own delta there. Call it inside the caller's
+transaction, because a replay commits its totals and its cursor together and
+that is the whole of its resumability.
+
+`drain_projection_seed/2` subtracts a bounded slice of the seed from the
+generation it seeded and deletes that slice, in one statement, returning how
+many rows it consumed. The seed row's own existence is the cursor, so an
+interrupted drain resumes with no bookkeeping and can never subtract a row
+twice.
+
+`activate_projection/1` swaps the generation reads resolve to, under the same
+exclusive lock, and records the previous one. It must be atomic for readers:
+either the whole of the old generation or the whole of the new one, never a
+mixture.
+
+### Why the seed exists, and what breaks without it
+
+A correction contributes a **negative** delta. While a generation is being
+built, that delta goes to both generations. A correction whose original
+committed below the watermark but whose key the scan has not reached yet would
+drive the building generation's row below zero, and a storage with a
+non-negative constraint on the column would refuse it: a perfectly legal
+correction rejected, with a misleading reason, because a rebuild happened to be
+running.
+
+Copying the active generation into the building generation at announcement time
+makes one thing true for the whole build:
+
+    building(key) == active(key) + (whatever the scan has added so far)
+
+Both terms are non-negative, so the building generation is refused exactly when
+the active one would have been and never on its own account. The same rows are
+frozen in a seed generation so the copy can be taken back out once the scan is
+complete, which is what `drain_projection_seed/2` is for.
+
+A replay batch's net delta for one key can also be negative on its own, because
+events are read in insertion order and a batch can hold only corrections for a
+key. If your storage evaluates a constraint against the tuple an upsert
+*proposes* rather than the row it leaves, as PostgreSQL does, write it as "make
+the row exist at zero, then move it" rather than as one upsert.
+
 ## Timeouts and concurrency
 
 `record_events/2` receives `:timeout` in its options. Apply it to the

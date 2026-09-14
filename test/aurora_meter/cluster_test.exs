@@ -184,11 +184,15 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate stream_counters(p), to: AuroraMeter.Storage.Ecto
       defdelegate capabilities(), to: AuroraMeter.Storage.Ecto
       defdelegate record_events(entries, opts), to: AuroraMeter.Storage.Ecto
+      defdelegate record_correction(entry, opts), to: AuroraMeter.Storage.Ecto
       defdelegate load_event(t, e), to: AuroraMeter.Storage.Ecto
       defdelegate load_event_total(t, f, p), to: AuroraMeter.Storage.Ecto
       defdelegate stream_events(cursor, opts), to: AuroraMeter.Storage.Ecto
       defdelegate write_projection_totals(g, rows), to: AuroraMeter.Storage.Ecto
       defdelegate activate_projection(g), to: AuroraMeter.Storage.Ecto
+      defdelegate begin_projection_generation(), to: AuroraMeter.Storage.Ecto
+      defdelegate projection_state(), to: AuroraMeter.Storage.Ecto
+      defdelegate drain_projection_seed(seed, limit), to: AuroraMeter.Storage.Ecto
       def add_counters(_rows), do: raise("database down")
       def add_history(_rows), do: raise("database down")
       def flush_batch(_id, _rows, _history), do: raise("database down")
@@ -241,11 +245,15 @@ defmodule AuroraMeter.ClusterTest do
       defdelegate stream_counters(p), to: EctoStorage
       defdelegate capabilities(), to: EctoStorage
       defdelegate record_events(entries, opts), to: EctoStorage
+      defdelegate record_correction(entry, opts), to: EctoStorage
       defdelegate load_event(t, e), to: EctoStorage
       defdelegate load_event_total(t, f, p), to: EctoStorage
       defdelegate stream_events(cursor, opts), to: EctoStorage
       defdelegate write_projection_totals(g, rows), to: EctoStorage
       defdelegate activate_projection(g), to: EctoStorage
+      defdelegate begin_projection_generation(), to: EctoStorage
+      defdelegate projection_state(), to: EctoStorage
+      defdelegate drain_projection_seed(seed, limit), to: EctoStorage
 
       # Exactly the shape of a statement that times out client-side: the row
       # is written, and then the caller is told the write failed.

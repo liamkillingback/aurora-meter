@@ -38,10 +38,23 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 # The sweep deletes ONLY what these prefixes name (X38: a prefix sweep that
 # reaches further deletes rows a concurrent run created), and it runs before
 # `ExUnit.start/0` so no test is racing it.
+#
+# `probe` is here for a reason worth reading (build unit 03d). 03b's
+# measurement script `tmp/v1/03b/probe_unresolved.exs` commits two event rows
+# under `probe_<n>` with no projection delta, by design: it was measuring
+# whether `{:unavailable, :conflict_unresolved}` is reachable. Nothing cleaned
+# them up and nothing noticed, because until 03d no test read the whole events
+# table and compared it with the whole projection. `AuroraMeter.Events.Replay`
+# does exactly that, so those two rows made every `compare: :require_match`
+# assertion fail. A probe script that commits rows needs a prefix in this list.
 AuroraMeter.Test.Connections.sweep!(~w(
-  concurrent corrconc flush_batch gate killt model projection recordconc
-  storagecase stmt
+  concurrent corrconc flush_batch gate killt model probe projection recordconc
+  replay storagecase stmt
 ))
+
+# The non-prefix half of the same sweep: the projection generation is
+# installation-wide, so no `tenant_key LIKE` can put it back.
+AuroraMeter.Test.Connections.reset_projection!()
 
 # The ONLY excluded tag in this repository, and it is excluded because the tests
 # that carry it assert the ABSENCE of the optional integrations: they are

@@ -463,9 +463,176 @@ defmodule AuroraMeter.Storage.Ecto do
     {:ok, Enum.map(repo().all(query), &AuroraMeter.Event.from_row/1)}
   end
 
+  # -- projection generations (build unit 03d) --------------------------------
+
+  # The announcement, and the whole of why a forward scan of a table that is
+  # still being written is sound here.
+  #
+  # `FOR UPDATE` on the `events_projection` row is granted only once every
+  # in-flight `record_events/2` and `record_correction/2`, each of which took
+  # `FOR SHARE` on that row before inserting anything, has committed or rolled
+  # back. So `max(seq)` read in this transaction is a watermark: every event at
+  # or below it belongs to a transaction that committed before this one
+  # returned, and every record that starts afterwards reads
+  # `building_generation` and writes both generations. There is no third case.
+  #
+  # ## The seed, and the reason it is not optional
+  #
+  # 03a put `CHECK (quantity >= 0)` on `aurora_meter_event_totals`. A
+  # correction applies a NEGATIVE delta, and while a generation is being built
+  # it applies it to both generations (03b's dual write). A correction whose
+  # original committed at or below the watermark but whose key the scan has not
+  # reached yet would therefore drive the BUILDING generation's row below zero
+  # and be refused by that constraint, with `record_correction/2` reporting
+  # `exceeds_original` for a correction that is perfectly legal. 03e recorded
+  # this as replay's problem to solve ("NOTE FOR 03d" in
+  # `apply_correction_totals/2`).
+  #
+  # Copying the active generation into the building generation inside this
+  # transaction fixes it by making one thing true for the whole build:
+  #
+  #     building(key) == active(key) + (whatever the scan has added so far)
+  #
+  # Both terms are non-negative (the constraint holds on the active generation,
+  # and the scan's running sum per key is non-negative because an original
+  # always has a lower `seq` than its corrections), so the building generation
+  # is refused by that constraint exactly when the active generation would have
+  # been, and never on its own account.
+  #
+  # The seed then has to be taken back out, so the same rows are frozen in a
+  # second generation, `-building`, which nothing else ever writes.
+  # `drain_projection_seed/2` subtracts and deletes them once the scan is
+  # complete, leaving `scan + live deltas`, which is the answer.
+  @impl AuroraMeter.Storage
+  def begin_projection_generation do
+    guarded(fn -> repo().transaction(&announce_or_resume/0) end)
+  end
+
+  defp announce_or_resume do
+    cursor = lock_projection_row()
+    active = Map.get(cursor, "active_generation", 0)
+
+    case Map.get(cursor, "building_generation") do
+      nil -> announce(cursor, active)
+      building -> resumed(cursor, active, building)
+    end
+  end
+
+  defp announce(_cursor, active) do
+    building = active + 1
+    seed = seed_generation(building)
+
+    %{rows: [[watermark]]} =
+      repo().query!("SELECT coalesce(max(seq), 0) FROM aurora_meter_events", [])
+
+    seeded = copy_generation(active, building, seed)
+
+    repo().query!(
+      """
+      UPDATE aurora_meter_checkpoints
+         SET cursor = cursor || jsonb_build_object(
+               'building_generation', $2::int,
+               'seed_generation', $3::int,
+               'watermark', $4::bigint),
+             state = 'active',
+             updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+       WHERE name = $1
+      """,
+      [@projection_checkpoint, building, seed, watermark]
+    )
+
+    %{
+      generation: building,
+      active_generation: active,
+      seed_generation: seed,
+      watermark: watermark,
+      seeded: seeded,
+      resumed: false
+    }
+  end
+
+  defp resumed(cursor, active, building) do
+    %{
+      generation: building,
+      active_generation: active,
+      seed_generation: Map.get(cursor, "seed_generation", seed_generation(building)),
+      watermark: Map.get(cursor, "watermark", 0),
+      seeded: 0,
+      resumed: true
+    }
+  end
+
+  # One statement, two target generations, so the copy cannot be half done.
+  # `ORDER BY` the key columns for the same reason every other multi-row write
+  # in this module sorts (L-03b-3), although nothing can be concurrent with it:
+  # the caller holds `FOR UPDATE` on the row every writer share-locks first.
+  defp copy_generation(active, building, seed) do
+    %{num_rows: rows} =
+      repo().query!(
+        """
+        INSERT INTO aurora_meter_event_totals
+          (id, tenant_key, feature, period_start, generation, quantity, events,
+           inserted_at, updated_at)
+        SELECT gen_random_uuid(), t.tenant_key, t.feature, t.period_start, g.generation,
+               t.quantity, t.events,
+               (clock_timestamp() AT TIME ZONE 'UTC'), (clock_timestamp() AT TIME ZONE 'UTC')
+          FROM aurora_meter_event_totals t
+          CROSS JOIN (VALUES ($2::int), ($3::int)) AS g(generation)
+         WHERE t.generation = $1
+         ORDER BY t.tenant_key, t.feature, t.period_start, g.generation
+        ON CONFLICT (tenant_key, feature, period_start, generation) DO NOTHING
+        """,
+        [active, building, seed]
+      )
+
+    rows
+  end
+
+  @impl AuroraMeter.Storage
+  def projection_state do
+    guarded(fn ->
+      %{rows: [[cursor]]} =
+        repo().query!("SELECT cursor FROM aurora_meter_checkpoints WHERE name = $1", [
+          @projection_checkpoint
+        ])
+
+      cursor = cursor || %{}
+
+      {:ok,
+       %{
+         active_generation: Map.get(cursor, "active_generation", 0),
+         building_generation: Map.get(cursor, "building_generation"),
+         previous_generation: Map.get(cursor, "previous_generation"),
+         seed_generation: Map.get(cursor, "seed_generation"),
+         watermark: Map.get(cursor, "watermark")
+       }}
+    end)
+  end
+
   @impl AuroraMeter.Storage
   def write_projection_totals(_generation, []), do: :ok
 
+  # ADD, not replace, and in TWO statements rather than one upsert.
+  #
+  # Add, because a record that commits while this generation is being built has
+  # already written its own delta here (03b's dual write) and a replay batch
+  # that set an absolute value would erase it.
+  #
+  # Two statements, because a batch's net delta for a key can be **negative**:
+  # a replay reads events in `seq` order, and a batch that happens to contain
+  # only corrections for a key proposes a negative quantity for it. `open-
+  # findings.md` X124: Postgres applies a `CHECK` to the tuple an
+  # `INSERT ... ON CONFLICT DO UPDATE` proposes, before the conflict is
+  # resolved, so a single upsert is refused by
+  # `aurora_meter_event_totals_quantity_check` even though the row the UPDATE
+  # would leave is positive. Measured here on the 10,000 corrections of
+  # `AuroraMeter.EventsReplayLargeTest`, which is the same defect 03e's
+  # `move_total/2` documents and the same remedy: make the row exist at zero,
+  # then move it, so the constraint judges the value that results.
+  #
+  # Both statements take the entries in one total order, the same
+  # `{tenant_key, feature, period_start}` order the record and correction paths
+  # sort by (L-03b-3), so writers meet rows in the same sequence.
   def write_projection_totals(generation, rows) do
     now = Clock.now()
 
@@ -476,22 +643,111 @@ defmodule AuroraMeter.Storage.Ecto do
           tenant_key: row.tenant_key,
           feature: to_string(row.feature),
           period_start: row.period_start,
-          generation: generation,
           quantity: row.quantity,
-          events: row.events,
+          events: row.events
+        }
+      end)
+      |> Enum.sort_by(&{&1.tenant_key, &1.feature, &1.period_start})
+
+    guarded(fn ->
+      ensure_total_rows(generation, entries, now)
+      move_totals(generation, entries)
+      :ok
+    end)
+  end
+
+  defp ensure_total_rows(generation, entries, now) do
+    zeroes =
+      Enum.map(entries, fn entry ->
+        %{
+          tenant_key: entry.tenant_key,
+          feature: entry.feature,
+          period_start: entry.period_start,
+          generation: generation,
+          quantity: 0,
+          events: 0,
           inserted_at: now,
           updated_at: now
         }
       end)
-      |> Enum.sort_by(&{&1.tenant_key, &1.feature, &1.period_start, &1.generation})
 
+    repo().insert_all(EventTotal, zeroes,
+      on_conflict: :nothing,
+      conflict_target: [:tenant_key, :feature, :period_start, :generation]
+    )
+  end
+
+  defp move_totals(generation, entries) do
+    repo().query!(
+      """
+      UPDATE aurora_meter_event_totals t
+         SET quantity = t.quantity + v.quantity,
+             events = t.events + v.events,
+             updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+        FROM (SELECT * FROM unnest($2::text[], $3::text[], $4::timestamp[],
+                                   $5::bigint[], $6::bigint[])
+                       AS u(tenant_key, feature, period_start, quantity, events)
+               ORDER BY tenant_key, feature, period_start) AS v
+       WHERE t.generation = $1
+         AND t.tenant_key = v.tenant_key
+         AND t.feature = v.feature
+         AND t.period_start = v.period_start
+      """,
+      [
+        generation,
+        Enum.map(entries, & &1.tenant_key),
+        Enum.map(entries, & &1.feature),
+        Enum.map(entries, & &1.period_start),
+        Enum.map(entries, & &1.quantity),
+        Enum.map(entries, & &1.events)
+      ]
+    )
+  end
+
+  # The seed row is its own cursor: it is subtracted and deleted in one
+  # statement, so a kill between two slices leaves the remaining rows to be
+  # drained and no row can ever be subtracted twice. `taken` and `applied` are
+  # counted separately and compared by the caller, because a seed row with no
+  # partner in the generation it seeded would mean the copy was not atomic.
+  @impl AuroraMeter.Storage
+  def drain_projection_seed(seed_generation, limit)
+      when is_integer(seed_generation) and is_integer(limit) and limit > 0 do
     guarded(fn ->
-      repo().insert_all(EventTotal, entries,
-        on_conflict: {:replace, [:quantity, :events, :updated_at]},
-        conflict_target: [:tenant_key, :feature, :period_start, :generation]
-      )
+      %{rows: [[taken, applied]]} =
+        repo().query!(
+          """
+          WITH slice AS (
+            SELECT id FROM aurora_meter_event_totals
+             WHERE generation = $1
+             ORDER BY tenant_key, feature, period_start
+             LIMIT $3
+          ), taken AS (
+            DELETE FROM aurora_meter_event_totals t
+             USING slice
+             WHERE t.id = slice.id
+            RETURNING t.tenant_key, t.feature, t.period_start, t.quantity, t.events
+          ), applied AS (
+            UPDATE aurora_meter_event_totals b
+               SET quantity = b.quantity - taken.quantity,
+                   events = b.events - taken.events,
+                   updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+              FROM taken
+             WHERE b.generation = $2
+               AND b.tenant_key = taken.tenant_key
+               AND b.feature = taken.feature
+               AND b.period_start = taken.period_start
+            RETURNING b.id
+          )
+          SELECT (SELECT count(*) FROM taken), (SELECT count(*) FROM applied)
+          """,
+          [seed_generation, generation_of_seed(seed_generation), limit]
+        )
 
-      :ok
+      if taken == applied do
+        {:ok, taken}
+      else
+        {:error, {:seed_without_generation, %{taken: taken, applied: applied}}}
+      end
     end)
   end
 
@@ -503,22 +759,22 @@ defmodule AuroraMeter.Storage.Ecto do
         # The exclusive lock is granted only once every in-flight record has
         # committed, so a generation can never be activated underneath a record
         # that already read the old one.
-        repo().query!(
-          "SELECT cursor FROM aurora_meter_checkpoints WHERE name = $1 FOR UPDATE",
-          [@projection_checkpoint]
-        )
+        cursor = lock_projection_row()
+        previous = Map.get(cursor, "active_generation", 0)
 
         repo().query!(
           """
           UPDATE aurora_meter_checkpoints
-             SET cursor = (cursor - 'building_generation') || jsonb_build_object(
-                   'active_generation', $2::int
+             SET cursor = (cursor - 'building_generation' - 'watermark' - 'seed_generation')
+                          || jsonb_build_object(
+                   'active_generation', $2::int,
+                   'previous_generation', $3::int
                  ),
                  state = 'active',
                  updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
            WHERE name = $1
           """,
-          [@projection_checkpoint, generation]
+          [@projection_checkpoint, generation, previous]
         )
 
         :ok
@@ -527,6 +783,35 @@ defmodule AuroraMeter.Storage.Ecto do
       :ok
     end)
   end
+
+  defp lock_projection_row do
+    %{rows: [[cursor]]} =
+      repo().query!(
+        "SELECT cursor FROM aurora_meter_checkpoints WHERE name = $1 FOR UPDATE",
+        [@projection_checkpoint]
+      )
+
+    cursor || %{}
+  end
+
+  @doc """
+  The generation that holds the frozen copy of the active generation taken when
+  `building` was announced.
+
+  Negative, so it cannot collide with any generation a replay will ever build
+  and an operator reading the table can see at a glance which rows are the
+  seed for which build.
+
+  ## Examples
+
+      iex> AuroraMeter.Storage.Ecto.seed_generation(3)
+      -3
+
+  """
+  @spec seed_generation(pos_integer()) :: neg_integer()
+  def seed_generation(building) when is_integer(building) and building > 0, do: -building
+
+  defp generation_of_seed(seed) when is_integer(seed) and seed < 0, do: -seed
 
   # -- the record transaction ------------------------------------------------
 

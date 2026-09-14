@@ -75,6 +75,11 @@ it wraps a record in a transaction of its own. See [Metering](metering.md).
 | `AuroraMeter.Events.count/3` | `(tenant, atom(), DateTime.t()) :: %{quantity: non_neg_integer(), events: non_neg_integer()}` | stable | 1.0.0 | The total and the number of events behind it. |
 | `AuroraMeter.Events.stream/1` | `(keyword()) :: Enumerable.t()` | stable | 1.0.0 | Keyset by `seq`, one bounded query per chunk. Options `:after_seq`, `:limit`, `:tenant`, `:feature`, `:from`, `:to`. |
 | `AuroraMeter.Events.after_commit/1` | `([AuroraMeter.Event.t()] \| AuroraMeter.Event.t()) :: :ok` | stable | 1.0.0 | Applies the in-memory projection and publishes, for events recorded inside a host transaction. Call once, after your commit. |
+| `AuroraMeter.Events.Replay.run/1` | `(keyword()) :: {:ok, map()} \| {:ok, :paused, map()} \| {:error, term()}` | stable | 1.0.0 | Rebuilds the projection into a new generation and activates it. Options `:batch_size`, `:compare`, `:activate`, `:resume`, `:generation`, `:compare_limit`, `:max_batches`, `:rehydrate`, `:timeout`. An operator action; nothing schedules it. |
+| `AuroraMeter.Events.Replay.status/0` | `() :: map()` | stable | 1.0.0 | The active, building and previous generations, the watermark, the seed generation and the replay's own checkpoint. |
+| `AuroraMeter.Events.Replay.prune/1` | `(integer()) :: {:ok, non_neg_integer()} \| {:error, term()}` | stable | 1.0.0 | Deletes a retired generation's rows in bounded slices. Refuses the active one and refuses while a replay holds its claim. |
+| `AuroraMeter.Events.Replay.checkpoint_name/1` | `(integer()) :: String.t()` | stable | 1.0.0 | The `aurora_meter_checkpoints` row a build of that generation keeps. |
+| `AuroraMeter.Events.Replay.claim_name/0` | `() :: String.t()` | stable | 1.0.0 | The advisory-lock claim every replay holds, whichever generation it builds. |
 
 ### 1.3 `AuroraMeter.Entitlements`
 
@@ -206,6 +211,9 @@ in section 2.
 | `AuroraMeter.Storage.stream_events/2` | `(non_neg_integer(), keyword()) :: {:ok, [AuroraMeter.Event.t()]} \| {:error, {:unsupported, capability()}}` | stable | 1.0.0 | Keyset by `seq`. |
 | `AuroraMeter.Storage.write_projection_totals/2` | `(non_neg_integer(), [projection_total()]) :: :ok \| {:error, term()}` | stable | 1.0.0 | Absolute totals for a generation. Replay (03d) writes them. |
 | `AuroraMeter.Storage.activate_projection/1` | `(non_neg_integer()) :: :ok \| {:error, term()}` | stable | 1.0.0 | Makes a generation the one reads see. |
+| `AuroraMeter.Storage.begin_projection_generation/0` | `() :: {:ok, map()} \| {:error, term()}` | stable | 1.0.0 | Announces a building generation under `FOR UPDATE` on the projection row, reads the watermark and seeds the new generation from the active one. |
+| `AuroraMeter.Storage.projection_state/0` | `() :: {:ok, map()} \| {:error, term()}` | stable | 1.0.0 | The active, building, previous and seed generations and the watermark. |
+| `AuroraMeter.Storage.drain_projection_seed/2` | `(integer(), pos_integer()) :: {:ok, non_neg_integer()} \| {:error, term()}` | stable | 1.0.0 | Subtracts a bounded slice of a seed generation from the generation it seeded and deletes it. |
 
 ### 1.9 Subscriptions, flusher, live updates
 
@@ -457,6 +465,8 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
+| `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |
+| `[:aurora_meter, :replay, :phase]` | `duration` | `generation`, `phase`, and per phase `seeded`, `resumed`, `drained`, `differences` | stable | 1.0.0 | `[:aurora_meter, :replay, :phase]` |
 
 `declared` was added to the `track` and `reserve` metadata in 0.5.0, which is an
 additive change: a handler matching on the old keys is unaffected.
@@ -475,6 +485,16 @@ an error.
 The backfill batch event is emitted once per committed batch of
 `mix aurora_meter.events.backfill`. It is the only observable a long backfill
 has, and `cursor` is the `seq` an interrupted run resumes from.
+
+The two replay events are `AuroraMeter.Events.Replay.run/1`'s observables.
+`[:aurora_meter, :replay, :batch]` fires once per committed batch with
+`phase: :scan`, and its `cursor` is the `seq` an interrupted run resumes from.
+`[:aurora_meter, :replay, :phase]` fires once for each of `:announce`,
+`:drain`, `:compare` and `:activate`; `:announce` carries `seeded` (rows copied
+into the building generation) and `resumed`, `:drain` carries `drained`, and
+`:compare` and `:activate` carry `differences`. A replay that finds differences
+under the default `compare: :require_match` emits `:compare` and no `:activate`,
+which is the shape a dashboard should alert on.
 
 `kind` in the credits event is one of `:grant`, `:hold`, `:settle`, `:release`,
 `:debit` or `:expire`. `duplicate: true` marks an idempotent grant replay (with
@@ -540,6 +560,9 @@ sees node A's slightly different number.
 | `AuroraMeter.Checkpoints.pause/1` | `(String.t()) :: :ok` | stable | 1.0.0 | The task stops at its next batch boundary. |
 | `AuroraMeter.Checkpoints.resume/1` | `(String.t()) :: :ok` | stable | 1.0.0 | |
 | `AuroraMeter.Checkpoints.paused?/1` | `(String.t()) :: boolean()` | stable | 1.0.0 | |
+| `AuroraMeter.Checkpoints.heartbeat/2` | `(String.t(), keyword()) :: :ok \| {:error, :not_found}` | stable | 1.0.0 | Stamps `heartbeat_at` and `runner` into the cursor with the database's clock. A report for a human; nothing decides anything from it. |
+| `AuroraMeter.Checkpoints.claim/3` | `(String.t(), (-> result), keyword()) :: {:ok, result} \| {:error, :already_running}` | stable | 1.0.0 | Runs the function under a Postgres session advisory lock on a pinned connection. The exclusion every bounded task uses, with no clock in it. |
+| `AuroraMeter.Checkpoints.runner/0` | `() :: String.t()` | stable | 1.0.0 | The `<node>/<pid>` identity `heartbeat/2` stamps. |
 
 The schema-version contract: a host calls these from its own Ecto migration.
 Versions are additive during 1.x. `AuroraMeter.Migration.V1` to `V8` are

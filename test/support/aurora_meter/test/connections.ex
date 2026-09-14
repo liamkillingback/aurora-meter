@@ -169,6 +169,48 @@ defmodule AuroraMeter.Test.Connections do
   end
 
   @doc """
+  Puts the projection generation back where a fresh installation has it: one
+  active generation `0`, no building generation, no seed, no replay checkpoint.
+
+  The other half of `sweep!/1`, and it exists because a prefix cannot express
+  it. A projection generation is **installation-wide**, not tenant-scoped: the
+  announcement in build unit 03d copies every key in the active generation,
+  and the `events_projection` checkpoint row is the single row every reader of
+  `load_event_total/3` resolves through. A replay test killed between its
+  announcement and its activation would therefore leave the whole suite reading
+  a generation that holds almost nothing, and no `tenant_key LIKE` can undo
+  that.
+
+  Bounded by `generation <> 0`, which names only rows a replay or a
+  conformance run created. Call it from `test/test_helper.exs` beside
+  `sweep!/1` (`open-findings.md` X109: an interruption test cannot guarantee
+  its own teardown, so the cleanup belongs at the start of the next run).
+  """
+  @spec reset_projection!() :: :ok
+  def reset_projection! do
+    own = checkout!()
+
+    try do
+      repo().query!("DELETE FROM aurora_meter_event_totals WHERE generation <> 0", [])
+
+      repo().query!(
+        """
+        UPDATE aurora_meter_checkpoints
+           SET cursor = '{"active_generation": 0}'::jsonb, state = 'active',
+               updated_at = (clock_timestamp() AT TIME ZONE 'UTC')
+         WHERE name = 'events_projection'
+        """,
+        []
+      )
+
+      repo().query!("DELETE FROM aurora_meter_checkpoints WHERE name LIKE 'events_replay:%'", [])
+      :ok
+    after
+      if own, do: Sandbox.checkin(repo())
+    end
+  end
+
+  @doc """
   Registers a bare alphabetic prefix (`"flush_batch"`, say) that `cleanup!/1`
   will accept in addition to `unique_tenant/1` values.
   """

@@ -157,6 +157,19 @@ defmodule AuroraMeter.StorageCase do
         test "write_projection_totals/2 then activate_projection/1 changes what reads see", ctx do
           AuroraMeter.StorageCase.assert_generations!(ctx)
         end
+
+        test "write_projection_totals/2 adds to a generation rather than replacing it", ctx do
+          AuroraMeter.StorageCase.assert_generation_adds!(ctx)
+        end
+
+        test "begin_projection_generation/0 announces a generation, a watermark and a seed",
+             ctx do
+          AuroraMeter.StorageCase.assert_announcement!(ctx)
+        end
+
+        test "drain_projection_seed/2 takes the seed back out in bounded slices", ctx do
+          AuroraMeter.StorageCase.assert_seed_drain!(ctx)
+        end
       end
     end
   end
@@ -214,6 +227,126 @@ defmodule AuroraMeter.StorageCase do
   def assert_supports_agrees! do
     Enum.each(@capabilities, fn capability ->
       assert Storage.supports?(capability) == capability in Storage.capabilities()
+    end)
+  end
+
+  @doc false
+  @spec assert_generation_adds!(map()) :: :ok
+  def assert_generation_adds!(ctx) do
+    durable(:projection_generations, fn ->
+      row = fn quantity, events ->
+        %{
+          tenant_key: ctx.storage_tenant,
+          feature: "storage_case",
+          period_start: ctx.storage_period,
+          quantity: quantity,
+          events: events
+        }
+      end
+
+      assert :ok = Storage.write_projection_totals(2, [row.(10, 2)])
+      assert :ok = Storage.write_projection_totals(2, [row.(5, 1)])
+
+      # Adds, because a record that commits while a generation is being built
+      # writes its own delta there too and a replay batch must not erase it.
+      assert generation_total(ctx, 2) == %{quantity: 15, events: 3}
+
+      # And a NEGATIVE delta is accepted onto a row that stays positive. A
+      # replay reads events in `seq` order, so a batch can hold only
+      # corrections for a key; an adapter that writes this as one
+      # `INSERT ... ON CONFLICT DO UPDATE` is refused by its own
+      # `quantity >= 0` check, on the tuple the insert proposes rather than the
+      # row the update would leave (`open-findings.md` X124).
+      assert :ok = Storage.write_projection_totals(2, [row.(-4, 1)])
+      assert generation_total(ctx, 2) == %{quantity: 11, events: 4}
+    end)
+  end
+
+  @doc false
+  @spec assert_announcement!(map()) :: :ok
+  def assert_announcement!(ctx) do
+    durable(:projection_generations, fn ->
+      active = active_generation()
+
+      assert {:ok, [{_event, :inserted}]} =
+               Storage.record_events([entry(ctx, "announce", 6)], [])
+
+      try do
+        assert {:ok, announced} = Storage.begin_projection_generation()
+
+        assert announced.generation == active + 1
+        assert announced.active_generation == active
+        assert announced.watermark >= 1
+        refute announced.resumed
+
+        # The building generation starts as a copy of the active one, which is
+        # what keeps a concurrent correction's negative delta off the
+        # `quantity >= 0` check while the scan has not reached its key.
+        assert generation_total(ctx, announced.generation) == %{quantity: 6, events: 1}
+        assert generation_total(ctx, announced.seed_generation) == %{quantity: 6, events: 1}
+
+        assert {:ok, state} = Storage.projection_state()
+        assert state.active_generation == active
+        assert state.building_generation == announced.generation
+        assert state.seed_generation == announced.seed_generation
+        assert state.watermark == announced.watermark
+
+        # Idempotent: a second call resumes the first rather than announcing a
+        # third generation nothing would ever write to.
+        assert {:ok, again} = Storage.begin_projection_generation()
+        assert again.generation == announced.generation
+        assert again.resumed
+      after
+        restore_projection!(active)
+      end
+
+      # The restore is asserted, not assumed (open-findings.md X97).
+      assert active_generation() == active
+    end)
+  end
+
+  @doc false
+  @spec assert_seed_drain!(map()) :: :ok
+  def assert_seed_drain!(ctx) do
+    durable(:projection_generations, fn ->
+      active = active_generation()
+
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "drain", 8)], [])
+
+      try do
+        assert {:ok, announced} = Storage.begin_projection_generation()
+        building = announced.generation
+        seed = announced.seed_generation
+
+        # The scan's contribution, on top of the seed.
+        assert :ok =
+                 Storage.write_projection_totals(building, [
+                   %{
+                     tenant_key: ctx.storage_tenant,
+                     feature: "storage_case",
+                     period_start: ctx.storage_period,
+                     quantity: 8,
+                     events: 1
+                   }
+                 ])
+
+        assert generation_total(ctx, building) == %{quantity: 16, events: 2}
+
+        # Draining subtracts the seed and deletes it, so the generation holds
+        # the scan plus whatever the live path wrote and nothing else. The seed
+        # row's own existence is the cursor: draining until it returns 0 is the
+        # whole of the bookkeeping.
+        assert {:ok, drained} = Storage.drain_projection_seed(seed, 1000)
+        assert drained >= 1
+        assert {:ok, 0} = Storage.drain_projection_seed(seed, 1000)
+
+        assert generation_total(ctx, building) == %{quantity: 8, events: 1}
+        assert generation_total(ctx, seed) == %{quantity: 0, events: 0}
+      after
+        restore_projection!(active)
+      end
+
+      assert active_generation() == active
     end)
   end
 
@@ -568,6 +701,48 @@ defmodule AuroraMeter.StorageCase do
       quantity: quantity,
       metadata: %{}
     }
+  end
+
+  @doc """
+  The projected total for one generation, `%{quantity: 0, events: 0}` when the
+  row is absent, without going through the active-generation indirection.
+  """
+  @spec generation_total(map(), integer()) :: %{quantity: integer(), events: integer()}
+  def generation_total(ctx, generation) do
+    import Ecto.Query, only: [from: 2]
+
+    total =
+      AuroraMeter.Config.repo().one(
+        from(t in AuroraMeter.Schema.EventTotal,
+          where:
+            t.tenant_key == ^ctx.storage_tenant and t.feature == "storage_case" and
+              t.period_start == ^ctx.storage_period and t.generation == ^generation,
+          select: %{quantity: t.quantity, events: t.events}
+        )
+      )
+
+    total || %{quantity: 0, events: 0}
+  end
+
+  @doc """
+  Puts the projection state back to one active generation with nothing being
+  built, for a suite that announced one.
+  """
+  @spec restore_projection!(non_neg_integer()) :: :ok
+  def restore_projection!(active) do
+    Storage.activate_projection(active)
+
+    AuroraMeter.Config.repo().query!(
+      """
+      UPDATE aurora_meter_checkpoints
+         SET cursor = cursor - 'building_generation' - 'watermark' - 'seed_generation'
+                              - 'previous_generation'
+       WHERE name = 'events_projection'
+      """,
+      []
+    )
+
+    :ok
   end
 
   @doc """

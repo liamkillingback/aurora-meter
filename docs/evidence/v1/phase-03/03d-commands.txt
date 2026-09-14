@@ -1,0 +1,147 @@
+# 03d replay: every command, exit code, seed, timestamp and log path
+
+Host: Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
+Recorded (UTC): 2026-09-14T20:39:19Z
+elixir:   Erlang/OTP 29 [erts-17.0.1] [source] [64-bit] [smp:24:24] [ds:24:24:10] [async-threads:1] [jit:ns]  Elixir 1.20.1 (compiled with Erlang/OTP 29) 
+erlang:   29/17.0.1
+postgres: unavailable
+core HEAD: ddb8ecb feat(v1): immutable corrections, and a negative control that had been lying
+
+Every command below was run through tmp/v1/mixlane.sh (X18: one Mix
+workload per _build at a time) with DB_PORT=5490.
+
+## Baseline: core mix test before 03d
+repo:      core
+command:   mix test --seed 0
+started:   2026-09-14T20:39:21Z
+finished:  2026-09-14T20:42:31Z
+exit:      0
+log:       tmp/v1/03d/logs/baseline-core-test.log
+
+## core: full suite after 03d implementation
+repo:      core
+command:   mix test --seed 0
+started:   2026-09-14T20:54:49Z
+finished:  2026-09-14T20:58:28Z
+exit:      2
+log:       tmp/v1/03d/logs/core-test-1.log
+
+## core: mix check after 03d
+repo:      core
+command:   mix check
+started:   2026-09-14T21:02:21Z
+finished:  2026-09-14T21:02:24Z
+exit:      15
+log:       tmp/v1/03d/logs/core-check-1.log
+
+## core: mix check after 03d (2)
+repo:      core
+command:   mix check
+started:   2026-09-14T21:02:39Z
+finished:  2026-09-14T21:02:42Z
+exit:      6
+log:       tmp/v1/03d/logs/core-check-2.log
+
+## core: mix check after 03d (3)
+repo:      core
+command:   mix check
+started:   2026-09-14T21:02:49Z
+finished:  2026-09-14T21:06:59Z
+exit:      0
+log:       tmp/v1/03d/logs/core-check-3.log
+
+## pro: mix check after core 03d, PLT deleted first (X114)
+repo:      pro
+command:   mix check
+started:   2026-09-14T21:07:19Z
+finished:  2026-09-14T21:08:45Z
+exit:      0
+log:       tmp/v1/03d/logs/pro-check-1.log
+
+## 03d: replay tests after the negative controls (tree restored)
+repo:      core
+command:   mix test test/aurora_meter/events_replay_test.exs test/aurora_meter/events_replay_large_test.exs --seed 0
+started:   2026-09-14T21:12:11Z
+finished:  2026-09-14T21:12:23Z
+exit:      0
+log:       tmp/v1/03d/logs/replay-after-controls.log
+
+## Negative controls (tmp/v1/03d/controls.py)
+
+Each control mutates ONE layer, runs the tests that layer holds up through
+tmp/v1/mixlane.sh with `--seed 7`, restores the file from a saved copy and
+asserts the bytes. Full summary: docs/evidence/v1/phase-03/03d-negative-controls.txt
+
+  python3 tmp/v1/03d/controls.py
+  seed:     7 (every control)
+  repo:     core
+  exit:     2 for every control (2 is the expected answer: tests failed)
+  restore:  asserted by sha256 for every control
+  logs:     tmp/v1/03d/logs/control-n1-watermark.log
+            tmp/v1/03d/logs/control-n2-seed.log
+            tmp/v1/03d/logs/control-n3-drain.log
+            tmp/v1/03d/logs/control-n4-for-update.log
+            tmp/v1/03d/logs/control-n5-cursor-runs-ahead.log
+            tmp/v1/03d/logs/control-n6-single-upsert.log
+            tmp/v1/03d/logs/control-n7-legacy-filter.log
+
+## The record-path and hot-path symbol comparison
+
+  bash tmp/v1/03d/unchanged.sh
+  exit:     0 (148 symbols byte-identical to HEAD, nothing CHANGED or REMOVED)
+  log:      tmp/v1/03d/logs/unchanged.log
+  evidence: docs/evidence/v1/phase-03/03d-unchanged-symbols.txt
+
+  bash tmp/v1/03d/prove_tool.sh
+  exit:     0 (the mutated comparison reported CHANGED, the restore was asserted)
+  log:      tmp/v1/03d/logs/prove-tool.log
+  evidence: docs/evidence/v1/phase-03/03d-symbol-tool-proof.txt
+
+  NOTE: the first run of prove_tool.sh restored WRONGLY and the sha256 assertion
+  caught it (see 03d-report.md section 7). The file was repaired by hand back to
+  5312b2ba5d8dc18bac8130abd1a5114abb954eee4097911d72ce7623cfd36fb8 and the
+  script was changed to restore from a saved copy.
+
+## Checksums and toolchain
+
+  bash tmp/v1/03d/toolchain.sh    (wrote the header of this file)
+  bash tmp/v1/03d/checksums.sh    (the table in 03d-report.md section 1)
+
+## Formatting
+
+  bash tmp/v1/03d/format.sh       (mix format on ONLY the files this unit changed)
+  bash tmp/v1/03d/unix.sh         (CRLF to LF: files written from the Windows
+                                   side of the WSL share arrive with CRLF and
+                                   Credo's consistency check reports them)
+## core: final mix check for 03d
+repo:      core
+command:   mix check
+started:   2026-09-14T21:14:03Z
+finished:  2026-09-14T21:17:30Z
+exit:      0
+log:       tmp/v1/03d/logs/core-check-final.log
+
+## pro: final mix test after 03d
+repo:      pro
+command:   mix test --seed 0
+started:   2026-09-14T21:17:32Z
+finished:  2026-09-14T21:17:40Z
+exit:      0
+log:       tmp/v1/03d/logs/pro-test-final.log
+
+## core: mix check for 03d, final
+repo:      core
+command:   mix check
+started:   2026-09-14T21:18:19Z
+finished:  2026-09-14T21:22:18Z
+exit:      0
+log:       tmp/v1/03d/logs/core-check-final2.log
+
+## 03d: replay tests, final (after the doctest registration)
+repo:      core
+command:   mix test test/aurora_meter/events_replay_test.exs test/aurora_meter/events_replay_large_test.exs --seed 0
+started:   2026-09-14T21:22:28Z
+finished:  2026-09-14T21:22:38Z
+exit:      0
+log:       tmp/v1/03d/logs/replay-after-controls.log
+

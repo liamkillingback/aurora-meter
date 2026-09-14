@@ -38,7 +38,8 @@ defmodule AuroraMeter.Test.FaultStorage do
   # Keep this list as short as the argument for it: a callback that writes, or
   # that a caller could observe half-done, does not belong in it.
   @uninstrumentable [
-    {{:capabilities, 0}, "a declaration, not an operation: no transaction, no commit boundary"}
+    {{:capabilities, 0}, "a declaration, not an operation: no transaction, no commit boundary"},
+    {{:projection_state, 0}, "one SELECT of one row: nothing to observe half done"}
   ]
 
   @impl AuroraMeter.Storage
@@ -225,6 +226,30 @@ defmodule AuroraMeter.Test.FaultStorage do
     result
   end
 
+  @impl AuroraMeter.Storage
+  def begin_projection_generation do
+    Faults.check(:before_commit, %{callback: :begin_projection_generation})
+    result = Backend.begin_projection_generation()
+
+    Faults.check(:after_commit_before_ack, %{
+      callback: :begin_projection_generation,
+      result: result
+    })
+
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  defdelegate projection_state(), to: Backend
+
+  @impl AuroraMeter.Storage
+  def drain_projection_seed(seed, limit) do
+    Faults.check(:before_commit, %{callback: :drain_projection_seed, seed: seed, limit: limit})
+    result = Backend.drain_projection_seed(seed, limit)
+    Faults.check(:after_commit_before_ack, %{callback: :drain_projection_seed, result: result})
+    result
+  end
+
   @doc """
   The callbacks of `behaviour` this shim implements *and* instruments with
   `AuroraMeter.Test.Faults.check/2`, read from this module's source.
@@ -263,11 +288,17 @@ defmodule AuroraMeter.Test.FaultStorage do
   @spec uninstrumentable() :: [{{atom(), non_neg_integer()}, String.t()}]
   def uninstrumentable, do: @uninstrumentable
 
+  # `args` is `nil` rather than `[]` for a zero-arity `def foo do`, which is how
+  # `begin_projection_generation/0` is written (build unit 03d). Reading it as
+  # "not a definition" would have silently dropped an instrumented callback out
+  # of the parity guard, which is the one thing this guard exists to notice.
   defp collect_instrumented(ast) do
     {_ast, found} =
       Macro.prewalk(ast, [], fn
-        {:def, _, [{name, _, args}, body]} = node, acc when is_atom(name) and is_list(args) ->
-          if checks_faults?(body), do: {node, [{name, length(args)} | acc]}, else: {node, acc}
+        {:def, _, [{name, _, args}, body]} = node, acc
+        when is_atom(name) and (is_list(args) or is_nil(args)) ->
+          arity = if is_list(args), do: length(args), else: 0
+          if checks_faults?(body), do: {node, [{name, arity} | acc]}, else: {node, acc}
 
         node, acc ->
           {node, acc}

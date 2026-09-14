@@ -368,6 +368,28 @@ defmodule AuroraMeter.Counter do
     end
   end
 
+  # Re-seats a warm events-source key on the total a newly activated projection
+  # generation holds (build unit 03d).
+  #
+  # `rebase/3` with `:flush` and not `:gossip`, and the distinction matters:
+  # `:flush` clears `remote`, which is what "this node has just read the
+  # authoritative total, so every peer delta it already contains is accounted
+  # for" means. `:gossip` would leave `remote` standing and the next reader of
+  # `remote_since_rebase/1` would be told this node is carrying peer deltas the
+  # database does not yet have, which after an activation is false.
+  #
+  # `pending_flush` is always zero for an events-source key (03c, I08), so
+  # `rebase/3`'s `total + pending_flush + reserved` is `total + reserved`: a
+  # reservation taken under `with_quota/4` survives the re-seat, which it must,
+  # because it is work that is still running.
+  #
+  # A cold key is left alone and answers `:cold`: it seeds from
+  # `Storage.load_event_total/3` on its first read, and that already reads the
+  # new generation.
+  @doc false
+  @spec rehydrate(key()) :: :ok | :cold
+  def rehydrate(key), do: rebase(key, stored_value(key) || 0, :flush)
+
   @doc "This node's base for a key: what it believes the database holds (`value - pending_flush`)."
   @spec base(key()) :: integer() | nil
   def base(key) do

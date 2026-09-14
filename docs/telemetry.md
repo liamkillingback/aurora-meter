@@ -13,6 +13,8 @@ Aurora Meter emits `:telemetry` events you can attach to for metrics and logs.
 | `[:aurora_meter, :credits, kind]` | `%{amount, balance_after, available_after}` | `%{tenant_key, reference, category, duplicate, overrun}` — one per committed ledger entry; `kind` is `:grant`, `:hold`, `:settle`, `:release`, `:debit` or `:expire`. `duplicate: true` marks an idempotent grant replay (amount `0`), `overrun: true` a settlement above its hold |
 | `[:aurora_meter, :credits, :low_balance]` | `%{available, threshold}` | `%{tenant_key}` — the available balance crossed below the threshold (once per crossing) |
 | `[:aurora_meter, :record, :start]`, `[..., :stop]`, `[..., :exception]` | `%{duration, count}` on `:stop` | `%{result, kind, feature, batch_size, tenant_key, durability, projection}`: one span per `AuroraMeter.record/4`, `record_batch/2`, `correct/4` or `replace/4`, covering validation, admission, the transaction and the post-commit effects |
+| `[:aurora_meter, :replay, :batch]` | `%{scanned, keys, duration}` | `%{generation, cursor, phase}` — one per committed batch of `AuroraMeter.Events.Replay.run/1`; `phase` is `:scan` and `cursor` is the `seq` an interrupted run resumes from |
+| `[:aurora_meter, :replay, :phase]` | `%{duration}` | `%{generation, phase}` plus `seeded` and `resumed` on `:announce`, `drained` on `:drain`, `differences` on `:compare` and `:activate` |
 
 `record` is a span rather than a flat event so that an OpenTelemetry bridge can
 open it before the database work starts and Ecto's own spans nest inside it.
@@ -28,6 +30,12 @@ see how much of the recorded quantity is credit: `count` is the magnitude, and
 for a `:correction` it is what was taken away. A `replace/4` is one span with
 `kind: :correction` and `batch_size: 2`, whose `count` is the reversal plus the
 replacement.
+
+A replay emits nothing else. It writes projection totals and its own
+checkpoint rows and touches no other seam, so `[:aurora_meter, :flush]`,
+`[:aurora_meter, :record, :stop]` and the credits events stay silent for the
+whole of a rebuild. That silence is asserted, not assumed: see
+`AuroraMeter.EventsReplayTest`.
 
 `declared` is `false` when no plan declares the feature. It is metadata on
 `track` and `reserve` from 0.5.0, and it is a report rather than a refusal:

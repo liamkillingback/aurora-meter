@@ -45,6 +45,16 @@ defmodule AuroraMeter.Test.IncapableStorage do
   def activate_projection(_generation), do: {:error, {:unsupported, :projection_generations}}
 
   @impl AuroraMeter.Storage
+  def begin_projection_generation, do: {:error, {:unsupported, :projection_generations}}
+
+  @impl AuroraMeter.Storage
+  def projection_state, do: {:error, {:unsupported, :projection_generations}}
+
+  @impl AuroraMeter.Storage
+  def drain_projection_seed(_seed, _limit),
+    do: {:error, {:unsupported, :projection_generations}}
+
+  @impl AuroraMeter.Storage
   defdelegate upsert_counters(rows), to: Backend
 
   @impl AuroraMeter.Storage
@@ -122,6 +132,15 @@ defmodule AuroraMeter.Test.UnresolvedStorage do
 
   @impl AuroraMeter.Storage
   defdelegate activate_projection(generation), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate begin_projection_generation(), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate projection_state(), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate drain_projection_seed(seed, limit), to: Backend
 
   @impl AuroraMeter.Storage
   defdelegate upsert_counters(rows), to: Backend

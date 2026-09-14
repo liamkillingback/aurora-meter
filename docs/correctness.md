@@ -369,7 +369,14 @@ the current behaviour for the phase 03 guarantee.
 - `AuroraMeter.RecordProjectionTest` / `test a host's own transaction I06 an outer host transaction commit plus after_commit/1 hydrates ETS and publishes one message`
 - `AuroraMeter.CorrectConcurrencyTest` / `test process death I06 killing a corrector before commit leaves no row, no delta and no outbox item`
 - `AuroraMeter.CorrectConcurrencyTest` / `test process death I06 killing a corrector after commit before the reply leaves exactly one of each and the retry is a duplicate`
-- PLANNED (03d): `AuroraMeter.EventsReplayTest` / `test I06 restart and replay reproduce the same totals`
+- `AuroraMeter.EventsReplayTest` / `test I06 restart and replay reproduce the same totals`
+- `AuroraMeter.EventsReplayTest` / `test the announcement I06 the announcement waits for an in-flight record transaction`
+- `AuroraMeter.EventsReplayTest` / `test the scan I06 a rebuilt generation reproduces the live totals for usage events`
+- `AuroraMeter.EventsReplayTest` / `test the scan I06 the scan is bounded by the watermark and the tail arrives by the dual write`
+- `AuroraMeter.EventsReplayTest` / `test the comparison I06 require_match refuses to activate when a difference exists`
+- `AuroraMeter.EventsReplayLargeTest` / `test I06 100,000 facts and corrections replay to exact totals after a kill and a restart`
+- `AuroraMeter.EventsReplayLargeTest` / `test I06 a replay interleaved with 12 concurrent recorders reproduces exact totals`
+- `AuroraMeter.EventsReplayLargeTest` / `test I06 a replay interrupted at the activation leaves a consistent state either way`
 
 **Evidence.** `docs/evidence/v1/phase-03/i06.md`
 
@@ -482,6 +489,7 @@ test for them, because core has no `usage_reports` table to refuse against.
 - `AuroraMeter.FeatureSourceTest` / `test the track and reserve guards I08 reserve/2 and reserve/3 raise for an events-source feature and write nothing`
 - `AuroraMeter.FeatureSourceTest` / `test flush isolation I08 a thousand recorded events reach no flush batch, no counter row and no reporter read`
 - `AuroraMeter.FeatureSourceTest` / `test flush isolation I08 one flush writes the buffered feature and not the events-source one`
+- `AuroraMeter.EventsReplayTest` / `test side effects I08 a replay enqueues nothing, grants nothing, notifies nothing and flushes nothing`
 
 **Evidence.** `docs/evidence/v1/phase-03/i08.md`
 
@@ -534,6 +542,8 @@ are not supported in 1.0.
 - `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 12 concurrent submissions of one correction identity produce one row, one delta and one outbox item`
 - `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 concurrent corrections of two different originals in one key both commit`
 - `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 the lock that serialises correctors is the one on the original row`
+- `AuroraMeter.EventsReplayTest` / `test the scan I09 a correction contributes a negative quantity and a positive event count`
+- `AuroraMeter.EventsReplayTest` / `test a correction while a generation is building I09 a correction for an unscanned original commits and lands in both generations`
 
 The provider half of I09, "a correction after the provider window opens a
 reconciliation item instead of silently diverging", is Aurora Meter Pro's and is

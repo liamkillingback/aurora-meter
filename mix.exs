@@ -217,6 +217,7 @@ defmodule AuroraMeter.MixProject do
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
+        "docs/operations/replay.md",
         "docs/testing.md",
         "docs/clustering.md",
         "docs/adr/0001-resolved-decisions.md",
@@ -241,6 +242,7 @@ defmodule AuroraMeter.MixProject do
         # top-level file under docs/.
         Reference: ~r/docs\/(api|support-policy)\.md$/,
         Examples: ~r/docs\/examples\//,
+        Operations: ~r/docs\/operations\//,
         Guides: ~r/docs\/[^\/]+$/,
         ADRs: ~r/docs\/adr\//
       ],
