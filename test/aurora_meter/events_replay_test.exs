@@ -845,7 +845,20 @@ defmodule AuroraMeter.EventsReplayTest do
     end
   end
 
+  # Records only when asked (open-findings.md X135, X149). This wrote on every
+  # run until 2026-09-15, so an ordinary `mix test` rewrote a committed evidence
+  # file with different numbers each time, the gate stopped leaving the tree byte
+  # identical, and a reviewer could not tell which run produced the committed
+  # file. It escaped the first sweep of X135 because it names the path inline
+  # rather than through the `@evidence` attribute the other writers use, which is
+  # why `evidence_writes_test.exs` now checks this by parsing rather than by
+  # grepping for a constant.
+  #
+  # The assertions in the test above run every time regardless.
   defp write_atomicity_evidence!(observed, distinct) do
+    if System.get_env("AURORA_EVIDENCE") != "1" do
+      :skipped
+    else
     File.mkdir_p!("docs/evidence/v1/phase-03")
 
     File.write!("docs/evidence/v1/phase-03/03d-activation-atomicity.txt", """
@@ -864,6 +877,7 @@ defmodule AuroraMeter.EventsReplayTest do
     Every read is one of the two. A partial sum is any other number, and the
     assertion `distinct -- [1005, 5] == []` is what refuses one.
     """)
+    end
   end
 
   defp aggregate_as_totals(tenant) do
