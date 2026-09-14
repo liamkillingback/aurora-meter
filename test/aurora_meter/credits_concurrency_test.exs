@@ -7,14 +7,29 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
   # rows really commit; the test deletes them afterwards.
   use ExUnit.Case, async: false
 
+  # `mix v1.faults` (an alias in mix.exs) runs every module tagged :fault with a
+  # fixed seed, and CI runs it as its own job. The tag is NOT excluded in
+  # test/test_helper.exs, so this module also runs inside the ordinary `mix test`
+  # and the dedicated job is a second, seeded run rather than the only one.
+  @moduletag :fault
+
   import Ecto.Query, only: [from: 2]
 
   alias AuroraMeter.Credits
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
+  alias AuroraMeter.Test.Connections
   alias AuroraMeter.TestRepo
   alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
+
+  @doc false
+  def handle_event(event, measurements, metadata, %{parent: parent, tenant: tenant}) do
+    if metadata.tenant_key == tenant,
+      do: send(parent, {:telemetry, event, measurements, metadata})
+
+    :ok
+  end
 
   setup do
     :ok = Sandbox.checkout(TestRepo, sandbox: false)
@@ -30,7 +45,7 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
     {:ok, tenant: tenant}
   end
 
-  test "a refusal does not destroy the caller's own transaction", %{tenant: tenant} do
+  test "I10 a refusal does not destroy the caller's own transaction", %{tenant: tenant} do
     # A host wraps a ledger call in its own transaction — a settle beside the
     # status flip it arms, say — and the ledger refuses, because the hold was
     # already settled by a delivery that arrived twice. Answered with
@@ -69,7 +84,7 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
     TestRepo.delete_all(from(b in CreditBalance, where: b.tenant_key == ^(tenant <> ":witness")))
   end
 
-  test "twenty concurrent $0.10 holds against $1.00 admit exactly ten", %{tenant: tenant} do
+  test "I11 twenty concurrent $0.10 holds against $1.00 admit exactly ten", %{tenant: tenant} do
     {:ok, _} = Credits.grant(tenant, 1_000_000, reference: "seed:#{tenant}")
 
     results =
@@ -95,7 +110,72 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
     assert holds |> Enum.map(& &1.held_after) |> Enum.sort() == Enum.map(1..10, &(&1 * 100_000))
   end
 
-  test "concurrent settle and release of one hold: exactly one wins", %{tenant: tenant} do
+  test "I11 fifty independent connections holding against one hot wallet admit exactly the funded count",
+       %{tenant: tenant} do
+    # $2.50, which covers exactly twenty-five $0.10 holds and no more.
+    {:ok, _} = Credits.grant(tenant, 2_500_000, reference: "seed:#{tenant}")
+
+    # Connections.run/3 refuses more tasks than the pool can serve (30 less the
+    # four it reserves), so the fifty attempts are made in two waves of
+    # twenty-five against the same wallet and the admitted count is cumulative.
+    # Every wave contends on the same balance row lock.
+    results =
+      Enum.flat_map([0, 25], fn offset ->
+        Connections.run(25, fn i ->
+          Credits.hold(tenant, 100_000, "hot:#{tenant}:#{offset + i}")
+        end)
+      end)
+
+    assert length(results) == 50
+    assert Enum.count(results, &match?({:ok, _}, &1)) == 25
+    assert Enum.count(results, &match?({:error, :insufficient_credits}, &1)) == 25
+
+    assert %{balance: 2_500_000, held: 2_500_000, available: 0} = Credits.balance(tenant)
+
+    holds = Credits.history(tenant, kinds: [:hold], limit: 100)
+    assert length(holds) == 25
+
+    # Every entry snapshots a consistent running total: held_after climbs 1..25
+    # with no repeat, which is what two holds spending the same funds would
+    # break.
+    assert holds |> Enum.map(& &1.held_after) |> Enum.sort() == Enum.map(1..25, &(&1 * 100_000))
+  end
+
+  test "I10 a host transaction that rolls back undoes the ledger row although the side effects already fired (L18, fixed in 06c)",
+       %{tenant: tenant} do
+    handler = {__MODULE__, make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:aurora_meter, :credits, :grant],
+        &__MODULE__.handle_event/4,
+        %{parent: self(), tenant: tenant}
+      )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    assert {:error, :host_rolled_back} =
+             TestRepo.transaction(fn ->
+               assert {:ok, _txn} = Credits.grant(tenant, 1_000_000, reference: "l18:#{tenant}")
+
+               # L18: `transact_outcome/1` emits when its own `repo.transaction/1`
+               # returns, and inside a host transaction that return is a savepoint
+               # release, not a commit. Telemetry, PubSub and the low-balance
+               # handler have all already run at this point.
+               assert_received {:telemetry, [:aurora_meter, :credits, :grant],
+                                %{amount: 1_000_000}, _metadata}
+
+               TestRepo.rollback(:host_rolled_back)
+             end)
+
+    # ...and the entry they described never existed. 06c defers the side effects
+    # to the outermost commit and flips this test.
+    assert Credits.history(tenant, kinds: [:grant], limit: 10) == []
+    assert Credits.available(tenant) == 0
+  end
+
+  test "I11 concurrent settle and release of one hold: exactly one wins", %{tenant: tenant} do
     {:ok, _} = Credits.grant(tenant, 1_000_000, reference: "seed:#{tenant}")
     {:ok, _} = Credits.hold(tenant, 500_000, "job:#{tenant}")
 

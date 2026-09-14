@@ -1,0 +1,90 @@
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 mix coverage
+Cover compiling modules ...
+Running ExUnit with seed: 908425, max_cases: 48
+
+................................................................................................................................................
+18:46:04.367 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_10884\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_10884\"}]}}, batch_id: \"65aa4986-6efa-4d16-b0ae-76d0fdf360a7\"}"
+...........................................................................................................................................
+
+  1) test FaultStorage implements every AuroraMeter.Storage callback (AuroraMeter.Test.HarnessTest)
+     test/aurora_meter/test/harness_test.exs:366
+     Assertion with == failed
+     code:  assert FaultStorage.uncovered_callbacks(Storage) == []
+     left:  [throwaway_probe_01b: 1]
+     right: []
+     stacktrace:
+       test/aurora_meter/test/harness_test.exs:367: (test)
+
+....
+
+  2) test FaultRepo exports every repo function lib/ calls (AuroraMeter.Test.HarnessTest)
+     test/aurora_meter/test/harness_test.exs:433
+     Assertion with == failed
+     code:  assert FaultRepo.uncovered_call_sites(["lib"]) == []
+     left:  [
+              %{
+                arity: 2,
+                line: 269,
+                file: "lib/aurora_meter/storage/ecto.ex",
+                fun: :update_all
+              }
+            ]
+     right: []
+     stacktrace:
+       test/aurora_meter/test/harness_test.exs:436: (test)
+
+.........
+Finished in 3.2 seconds (1.2s async, 1.9s sync)
+
+Result: 296/298 passed (35/35 doctests, 4/4 properties, 257/259 tests)
+Failed: 2 tests
+
+Generating cover results ...
+
+| Percentage | Module                               |
+|------------|--------------------------------------|
+|      8.33% | AuroraMeter.Migration                |
+|     50.00% | AuroraMeter.Billing.Noop             |
+|     62.50% | AuroraMeter.Test                     |
+|     75.00% | AuroraMeter.Install.Templates        |
+|     75.00% | AuroraMeter.Schema.Subscription      |
+|     82.76% | AuroraMeter.Broadcaster              |
+|     83.33% | AuroraMeter.Billing                  |
+|     86.05% | AuroraMeter.Flusher                  |
+|     89.29% | AuroraMeter.Credits.Promotions       |
+|     90.00% | AuroraMeter.Counter                  |
+|     91.26% | AuroraMeter.Components               |
+|     92.86% | AuroraMeter.Cluster                  |
+|     94.12% | AuroraMeter.Entitlements             |
+|     94.44% | AuroraMeter.Storage                  |
+|     95.00% | AuroraMeter                          |
+|     96.97% | AuroraMeter.Store                    |
+|     97.30% | AuroraMeter.Plans                    |
+|     97.33% | AuroraMeter.Credits                  |
+|     97.73% | AuroraMeter.Credits.Series           |
+|     98.14% | AuroraMeter.Credits.Ledger           |
+|     98.70% | AuroraMeter.Storage.Ecto             |
+|    100.00% | AuroraMeter.Billing.Provider         |
+|    100.00% | AuroraMeter.Config                   |
+|    100.00% | AuroraMeter.Credits.Money            |
+|    100.00% | AuroraMeter.LiveView                 |
+|    100.00% | AuroraMeter.Period                   |
+|    100.00% | AuroraMeter.Period.Calendar          |
+|    100.00% | AuroraMeter.Plan                     |
+|    100.00% | AuroraMeter.Schema.Counter           |
+|    100.00% | AuroraMeter.Schema.CreditBalance     |
+|    100.00% | AuroraMeter.Schema.CreditTransaction |
+|    100.00% | AuroraMeter.Schema.Event             |
+|    100.00% | AuroraMeter.Schema.FlushReceipt      |
+|    100.00% | AuroraMeter.Schema.History           |
+|    100.00% | AuroraMeter.Subscriptions            |
+|    100.00% | AuroraMeter.Supervisor               |
+|    100.00% | AuroraMeter.Tenant                   |
+|    100.00% | AuroraMeter.Tenant.Default           |
+|------------|--------------------------------------|
+|     92.46% | Total                                |
+
+Generated HTML coverage results in "cover" directory
+[mixlane] core exit=2 started=2026-09-14T08:46:01Z finished=2026-09-14T08:46:06Z

@@ -303,9 +303,33 @@ Read this before you rely on it. The design choices are recorded as
 - **Periods are UTC calendar months** in the free core. A new period starts a
   fresh counter with no reset job. Pro aligns periods to the Stripe
   subscription.
-- **Postgres only** through Ecto. Elixir 1.15+.
+- **Postgres only** through Ecto. See the supported versions below.
 - **Restart-safe reads.** A cold counter is seeded once from the last flushed
   value, so `usage/2` is correct after a deploy.
+
+### Supported versions
+
+Every pair below is exercised by CI on every push, at the exact patch shown, and
+the whole test suite runs on each of them.
+
+| | Elixir | Erlang/OTP |
+|---|---|---|
+| Floor | 1.15.8 | 25.3.2.21 |
+| Supported | 1.18.5 | 27.3.4.17 |
+| Current | 1.20.4 | 29.0.6 |
+
+Postgres: **16.13** is the tested version and **13** is the floor
+(`gen_random_uuid()` needs Postgres 13 or the `pgcrypto` extension). A second CI
+lane runs the suite on **15.6** as well.
+
+Two things worth knowing before you pick the floor. Elixir 1.15.8 is the last
+release of the 1.15 line, so it will not receive further security patches; a
+host that needs a patched Elixir wants 1.20.4 or newer. And Erlang/OTP 25 is no
+longer maintained upstream. The floor is a compatibility guarantee, not a
+recommendation.
+
+Optional integrations stay optional: a CI lane builds and tests this library
+with no `phoenix_live_view`, no `phoenix_html` and no `igniter` present.
 
 ## Free vs Pro
 

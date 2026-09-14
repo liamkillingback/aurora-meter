@@ -1,0 +1,19 @@
+=== 01e lot-view run (AURORA_LOT_VIEW=1, V8 after every step) ===
+started 2026-09-14T10:06:12Z
+seed    20260914
+
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 env AURORA_LOT_VIEW=1 AURORA_LEAK_REPORT=/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/docs/evidence/v1/phase-01/logs/01e-leaks-lotview.jsonl mix test test/aurora_meter/credits_model_test.exs --seed 20260914
+Running ExUnit with seed: 20260914, max_cases: 48
+Excluding tags: [:headless]
+
+.........................
+Finished in 9.9 seconds (0.00s async, 9.9s sync)
+
+Result: 25 passed (6 properties, 19 tests)
+[mixlane] core exit=0 started=2026-09-14T10:06:24Z finished=2026-09-14T10:06:35Z
+
+lot-view exit code  0
+lot-view wall time  23s
+finished            2026-09-14T10:06:35Z

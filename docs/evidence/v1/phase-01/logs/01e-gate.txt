@@ -1,0 +1,178 @@
+01e gate, started 2026-09-14T10:06:55Z
+=== format --check-formatted ===
+[mixlane] core: DB_PORT=5490 mix format --check-formatted
+[mixlane] core exit=0 started=2026-09-14T10:06:55Z finished=2026-09-14T10:06:55Z
+--- format --check-formatted exit=0 wall=0s ---
+=== compile --warnings-as-errors --force ===
+[mixlane] core: DB_PORT=5490 mix compile --warnings-as-errors --force
+Compiling 40 files (.ex)
+Generated aurora_meter app
+[mixlane] core exit=0 started=2026-09-14T10:06:55Z finished=2026-09-14T10:06:56Z
+--- compile --warnings-as-errors --force exit=0 wall=1s ---
+=== credo --strict (whole repo) ===
+[mixlane] core: DB_PORT=5490 mix credo --strict
+Checking 96 source files (this might take a while) ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.4 seconds (0.04s to load, 0.4s running 69 checks on 96 files)
+972 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+[mixlane] core exit=0 started=2026-09-14T10:06:56Z finished=2026-09-14T10:06:57Z
+--- credo --strict (whole repo) exit=0 wall=1s ---
+=== credo --strict (01e files only) ===
+[mixlane] core: DB_PORT=5490 mix credo --strict test/support/aurora_meter/test/ledger_model.ex test/support/aurora_meter/test/ledger_commands.ex test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_regressions_test.exs
+Checking 4 source files ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.1 seconds (0.01s to load, 0.1s running 69 checks on 4 files)
+193 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+[mixlane] core exit=0 started=2026-09-14T10:06:57Z finished=2026-09-14T10:06:58Z
+--- credo --strict (01e files only) exit=0 wall=1s ---
+=== dialyzer ===
+[mixlane] core: DB_PORT=5490 mix dialyzer
+Finding suitable PLTs
+Checking PLT...
+[:asn1, :aurora_meter, :compiler, :crypto, :db_connection, :decimal, :ecto, :ecto_sql, :eex, :elixir, :ex_ast, :ex_unit, :finch, :glob_ex, :hpax, :igniter, :inets, :jason, :kernel, :logger, :mime, :mint, :mix, :nimble_options, :nimble_pool, :owl, :phoenix, :phoenix_html, :phoenix_live_view, :phoenix_pubsub, :phoenix_template, :phx_new, :plug, :plug_crypto, :postgrex, :public_key, :req, :rewrite, :sourceror, :spitfire, :ssl, :stdlib, :telemetry, :text_diff, :websock, :websock_adapter]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"priv/plts/dialyxir_erlang-29.0.1_elixir-1.20.1_deps-dev.plt",
+  files: [~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/dev/lib/aurora_meter/ebin/Elixir.AuroraMeter.Billing.Noop.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/dev/lib/aurora_meter/ebin/Elixir.Mix.Tasks.AuroraMeter.Gen.Migration.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/dev/lib/aurora_meter/ebin/Elixir.AuroraMeter.Schema.FlushReceipt.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/dev/lib/aurora_meter/ebin/Elixir.AuroraMeter.Plans.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/dev/lib/aurora_meter/ebin/Elixir.AuroraMeter.Period.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m3.77s
+done (passed successfully)
+[mixlane] core exit=0 started=2026-09-14T10:06:58Z finished=2026-09-14T10:07:03Z
+--- dialyzer exit=0 wall=5s ---
+=== test (full suite, seed 0) ===
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 mix test --seed 0
+warning: the following files do not match any of the configured `:test_load_filters` / `:test_ignore_filters`:
+
+test/regressions/seeds/i10-l1-released-reservation-on-expired-grant.exs
+test/regressions/seeds/i10-l16-settlement-above-its-hold-goes-negative.exs
+test/regressions/seeds/i10-l2-reverse-shares-the-debit-reference-namespace.exs
+test/regressions/seeds/i10-l7-partial-expiry-finishes-on-a-second-pass.exs
+
+This might indicate a typo in a test file name (for example, using "foo_tests.exs" instead of "foo_test.exs").
+
+See the configuration for `:test_pattern` under `mix help test` for more information.
+
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+..............................................................................................................................................................
+20:07:12.474 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_1423\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_1423\"}]}}, batch_id: \"61997ab2-cd9c-4bf3-9250-c888b975a09e\"}"
+..........................................
+20:07:13.341 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :receipt_insert) context: %{kind: :write, schema: AuroraMeter.Schema.FlushReceipt, statement: :receipt_insert, repo_fun: :insert_all}"
+.
+20:07:13.375 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+20:07:13.405 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :history_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.History, statement: :history_upsert, repo_fun: :insert_all}"
+.
+20:07:13.437 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+...
+20:07:13.508 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :lost_acknowledgement) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"flush_batch_14146\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"flush_batch_14146\"}]}}, batch_id: \"71988990-d002-433e-ac59-dd25b919cfd1\"}"
+.............................................................................................................................................................
+Finished in 12.1 seconds (1.6s async, 10.5s sync)
+
+Result: 363 passed (35 doctests, 10 properties, 318 tests), 3 excluded
+[mixlane] core exit=0 started=2026-09-14T10:07:09Z finished=2026-09-14T10:07:22Z
+--- test (full suite, seed 0) exit=0 wall=19s ---
+=== coverage ===
+[mixlane] core: DB_PORT=5490 mix coverage
+Cover compiling modules ...
+warning: the following files do not match any of the configured `:test_load_filters` / `:test_ignore_filters`:
+
+test/regressions/seeds/i10-l1-released-reservation-on-expired-grant.exs
+test/regressions/seeds/i10-l16-settlement-above-its-hold-goes-negative.exs
+test/regressions/seeds/i10-l2-reverse-shares-the-debit-reference-namespace.exs
+test/regressions/seeds/i10-l7-partial-expiry-finishes-on-a-second-pass.exs
+
+This might indicate a typo in a test file name (for example, using "foo_tests.exs" instead of "foo_test.exs").
+
+See the configuration for `:test_pattern` under `mix help test` for more information.
+
+Running ExUnit with seed: 31505, max_cases: 48
+Excluding tags: [:headless]
+
+..................................................................................................................................................................
+20:07:25.664 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_517\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_517\"}]}}, batch_id: \"0e119c22-4c76-4965-9d03-f59083d1eccd\"}"
+............................................
+20:07:26.261 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :history_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.History, statement: :history_upsert, repo_fun: :insert_all}"
+.
+20:07:26.291 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :receipt_insert) context: %{kind: :write, schema: AuroraMeter.Schema.FlushReceipt, statement: :receipt_insert, repo_fun: :insert_all}"
+.
+20:07:26.320 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+20:07:26.349 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+20:07:26.378 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :lost_acknowledgement) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"flush_batch_4036\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"flush_batch_4036\"}]}}, batch_id: \"ffd760d9-0d4c-4900-8451-abc674172c4b\"}"
+.........................................................................................................................................................
+Finished in 13.1 seconds (1.3s async, 11.8s sync)
+
+Result: 363 passed (35 doctests, 10 properties, 318 tests), 3 excluded
+
+Generating cover results ...
+
+| Percentage | Module                               |
+|------------|--------------------------------------|
+|      8.33% | AuroraMeter.Migration                |
+|     71.88% | AuroraMeter.Test                     |
+|     75.00% | AuroraMeter.Install.Templates        |
+|     75.00% | AuroraMeter.Schema.Subscription      |
+|     82.76% | AuroraMeter.Broadcaster              |
+|     86.05% | AuroraMeter.Flusher                  |
+|     91.25% | AuroraMeter.Counter                  |
+|     91.26% | AuroraMeter.Components               |
+|     92.86% | AuroraMeter.Cluster                  |
+|     92.86% | AuroraMeter.Credits.Promotions       |
+|     94.12% | AuroraMeter.Entitlements             |
+|     94.44% | AuroraMeter.Storage                  |
+|     95.00% | AuroraMeter                          |
+|     96.97% | AuroraMeter.Store                    |
+|     97.30% | AuroraMeter.Plans                    |
+|     97.33% | AuroraMeter.Credits                  |
+|     97.73% | AuroraMeter.Credits.Series           |
+|     98.76% | AuroraMeter.Credits.Ledger           |
+|    100.00% | AuroraMeter.Billing                  |
+|    100.00% | AuroraMeter.Billing.Noop             |
+|    100.00% | AuroraMeter.Billing.Provider         |
+|    100.00% | AuroraMeter.Config                   |
+|    100.00% | AuroraMeter.Credits.Money            |
+|    100.00% | AuroraMeter.LiveView                 |
+|    100.00% | AuroraMeter.Period                   |
+|    100.00% | AuroraMeter.Period.Calendar          |
+|    100.00% | AuroraMeter.Plan                     |
+|    100.00% | AuroraMeter.Schema.Counter           |
+|    100.00% | AuroraMeter.Schema.CreditBalance     |
+|    100.00% | AuroraMeter.Schema.CreditTransaction |
+|    100.00% | AuroraMeter.Schema.Event             |
+|    100.00% | AuroraMeter.Schema.FlushReceipt      |
+|    100.00% | AuroraMeter.Schema.History           |
+|    100.00% | AuroraMeter.Storage.Ecto             |
+|    100.00% | AuroraMeter.Subscriptions            |
+|    100.00% | AuroraMeter.Supervisor               |
+|    100.00% | AuroraMeter.Tenant                   |
+|    100.00% | AuroraMeter.Tenant.Default           |
+|------------|--------------------------------------|
+|     93.43% | Total                                |
+
+Generated HTML coverage results in "cover" directory
+[mixlane] core exit=0 started=2026-09-14T10:07:22Z finished=2026-09-14T10:07:36Z
+--- coverage exit=0 wall=14s ---

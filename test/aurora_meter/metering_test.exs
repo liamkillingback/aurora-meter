@@ -39,7 +39,7 @@ defmodule AuroraMeter.MeteringTest do
     end
   end
 
-  test "Counter.reserve/5 blocks at the hard limit and rolls the increment back" do
+  test "I04 Counter.reserve blocks at the hard limit and rolls the increment back" do
     tenant = unique_tenant()
     p = period()
 

@@ -375,7 +375,7 @@ defmodule AuroraMeter.CreditsTest do
       assert length(Credits.history(tenant, kinds: [:expire])) == 1
     end
 
-    test "expiry never claws back credit a hold has reserved" do
+    test "I12 expiry never claws back credit a hold has reserved" do
       # hold/4 promises the money will be there when the work settles. Expiry
       # used to walk straight through that: it took the balance below `held`,
       # and the settle that followed took the balance itself negative — a debt
@@ -409,7 +409,7 @@ defmodule AuroraMeter.CreditsTest do
                TestRepo.get!(CreditTransaction, grant.id)
     end
 
-    test "a grant expires only its own remainder, not credit a later grant put in" do
+    test "I12 a grant expires only its own remainder" do
       # `promotional` on the balance is the sum of every live grant, so
       # expiring against that total let the first grant to expire reclaim
       # money the second had contributed.
@@ -434,7 +434,7 @@ defmodule AuroraMeter.CreditsTest do
                TestRepo.get!(CreditTransaction, soon.id)
     end
 
-    test "a new expiring grant cannot absorb spending that happened before it existed" do
+    test "I12 a new expiring grant cannot absorb spending that predates it" do
       tenant = unique_tenant()
       fund!(tenant, 500_000, category: :promotional)
       {:ok, _} = Credits.debit(tenant, 500_000, "spent-before-new-grant:#{tenant}")
@@ -445,6 +445,29 @@ defmodule AuroraMeter.CreditsTest do
       )
 
       assert {:ok, _} = Credits.expire_due()
+      assert %{balance: 0, promotional: 0} = Credits.balance(tenant)
+    end
+
+    test "I12 a release after the grant expired returns spendable credit (L1, fixed in 06a)" do
+      # L1, the mirror of the test above. Expiry leaves alone what a hold has
+      # reserved, which is right; what it cannot do is remember. When the hold
+      # is released the value goes back to the balance as ordinary spendable
+      # credit, although the grant it came from expired an hour ago, and it
+      # stays spendable until some scheduler happens to run expire_due/1 again.
+      tenant = unique_tenant()
+      past = DateTime.add(DateTime.utc_now(), -60, :second)
+
+      fund!(tenant, 500_000, category: :promotional, expires_at: past)
+      {:ok, _} = Credits.hold(tenant, 400_000, "work:#{tenant}")
+
+      assert {:ok, _} = Credits.expire_due()
+      assert %{balance: 400_000, held: 400_000, available: 0} = Credits.balance(tenant)
+
+      assert {:ok, _} = Credits.release("work:#{tenant}")
+
+      # Spendable, not expired. 06a's lot model makes the released value expired.
+      assert %{balance: 400_000, held: 0, available: 400_000} = Credits.balance(tenant)
+      assert {:ok, _} = Credits.debit(tenant, 400_000, "after-expiry:#{tenant}")
       assert %{balance: 0, promotional: 0} = Credits.balance(tenant)
     end
 

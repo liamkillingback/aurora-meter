@@ -12,6 +12,11 @@ defmodule AuroraMeter.MigrationTest do
   """
   use ExUnit.Case, async: true
 
+  # `mix v1.migrations` (an alias in mix.exs) runs every module tagged :migration,
+  # and CI runs it as its own job. The tag is NOT excluded in
+  # test/test_helper.exs, so this module also runs inside the ordinary `mix test`.
+  @moduletag :migration
+
   alias AuroraMeter.Migration
 
   @sources "priv/test_repo/migrations/*.exs"

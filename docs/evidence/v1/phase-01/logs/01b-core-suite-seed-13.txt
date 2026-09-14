@@ -1,0 +1,11 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 13
+Running ExUnit with seed: 13, max_cases: 48
+Excluding tags: [:headless]
+
+...........................................................................................................................................................
+19:01:37.645 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_3266\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_3266\"}]}}, batch_id: \"4ca9923e-a21c-41f0-bf76-2638a0754993\"}"
+..........................................................................................................................................................
+Finished in 3.2 seconds (1.2s async, 1.9s sync)
+
+Result: 309 passed (35 doctests, 4 properties, 270 tests), 3 excluded
+[mixlane] core exit=0 started=2026-09-14T09:01:35Z finished=2026-09-14T09:01:39Z

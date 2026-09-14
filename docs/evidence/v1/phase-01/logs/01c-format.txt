@@ -1,0 +1,4 @@
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 mix format --check-formatted
+[mixlane] core exit=0 started=2026-09-14T09:57:22Z finished=2026-09-14T09:57:23Z

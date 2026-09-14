@@ -1,0 +1,20 @@
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/correctness_index_test.exs --seed 0
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+
+.
+
+  1) test the index against the test tree every test whose description starts with an invariant id is named in the index (AuroraMeter.CorrectnessIndexTest)
+     test/aurora_meter/correctness_index_test.exs:50
+     these tests claim an invariant but are not listed in docs/correctness.md:
+       AuroraMeter.ZzOrphanDemoTest / test I07 a conflicting reuse of event identity is rejected  (test/aurora_meter/zz_orphan_demo_test.exs:5)
+     code: assert orphans == [],
+     stacktrace:
+       test/aurora_meter/correctness_index_test.exs:59: (test)
+
+..........
+Finished in 0.2 seconds (0.2s async, 0.00s sync)
+
+Result: 11/12 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-14T08:45:17Z finished=2026-09-14T08:45:18Z

@@ -3,6 +3,13 @@ defmodule AuroraMeter.EntitlementsTest do
   use AuroraMeter.DataCase, async: false
 
   alias AuroraMeter.Billing
+  alias AuroraMeter.Billing.Noop
+  alias AuroraMeter.Billing.Provider
+  alias AuroraMeter.Counter
+  alias AuroraMeter.Flusher
+  alias AuroraMeter.Period
+  alias AuroraMeter.Storage
+  alias AuroraMeter.Store
 
   test "subscribe/2 assigns a plan and plan/1 resolves it" do
     tenant = unique_tenant()
@@ -151,7 +158,7 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.remaining(tenant, :undeclared_thing) == :unlimited
   end
 
-  test "with_quota/3 enforces the hard limit under concurrency" do
+  test "I04 sixty concurrent with_quota calls against a limit of fifty admit exactly fifty on one node" do
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :free)
 
@@ -169,7 +176,7 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.usage(tenant, :ai_generations) == 50
   end
 
-  test "and when it exits, which is how gated work usually fails" do
+  test "I04 an exiting callback releases its capacity" do
     # A `GenServer.call`, a `Task.await`, a database checkout: they all time
     # out by exiting rather than raising, and an exit unwinds straight past a
     # `rescue`. The reservation was counted for good, so a plan's hard limit
@@ -182,7 +189,7 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.usage(tenant, :ai_generations) == 0
   end
 
-  test "and when it throws" do
+  test "I04 a throwing callback releases its capacity" do
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :pro)
 
@@ -191,7 +198,7 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.usage(tenant, :ai_generations) == 0
   end
 
-  test "with_quota releases the reservation when the function raises" do
+  test "I04 a raising callback releases its capacity" do
     tenant = unique_tenant()
     AuroraMeter.subscribe(tenant, :pro)
 
@@ -202,8 +209,126 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.usage(tenant, :ai_generations) == 0
   end
 
-  test "the Noop billing provider returns :not_configured" do
+  test "I03 a callback that flushed and then raises is not billed" do
+    assert_not_billed(:raise, fn -> raise "boom" end)
+  end
+
+  test "I03 a callback that flushed and then throws is not billed" do
+    assert_not_billed(:throw, fn -> throw(:nope) end)
+  end
+
+  test "I03 a callback that flushed and then exits is not billed" do
+    assert_not_billed(:exit, fn -> exit(:timeout) end)
+  end
+
+  test "I03 a reservation is never in a flush batch" do
+    tenant = unique_tenant()
+    AuroraMeter.subscribe(tenant, :pro)
+    period = Period.current(tenant).start
+    key = {tenant, :ai_generations, period}
+
+    # Drain whatever an earlier test left dirty, so the snapshot below is this
+    # test's answer and not somebody else's leftovers.
+    {:ok, _} = Flusher.flush()
+
+    assert :ok = Counter.reserve(tenant, :ai_generations, 3, period, nil, true)
+
+    # Z1: a deferred reserve raises `value` and `reserved` and touches neither
+    # `pending_flush` nor `pending_gossip`, so the key is not even dirty.
+    assert [{^key, 3, 0, 0, 0, 3}] = :ets.lookup(Store.counters_table(), key)
+    assert Store.snapshot_flush_batch() == nil
+
+    assert {:ok, 0} = Flusher.flush()
+    assert Storage.load_counter(tenant, :ai_generations, period) == nil
+
+    # The local view does include it, which is what makes the quota strict on
+    # this node (I04) while nothing is billed (I03).
+    assert AuroraMeter.usage(tenant, :ai_generations) == 3
+  end
+
+  test "I03 a reservation committed against a captured day lands in that day's bucket (partial until 02c)" do
+    # Partial until 02c: `lib/` has no clock seam (open finding C11), so the
+    # crossing is expressed by passing the period and the day explicitly, which
+    # is exactly what `with_quota/4` captures before the callback runs. 02c
+    # introduces the seam and owns the full crossing test.
+    tenant = unique_tenant()
+    AuroraMeter.subscribe(tenant, :pro)
+    chosen_period = ~U[2026-01-01 00:00:00Z]
+    chosen_day = ~D[2026-01-15]
+    today = Date.utc_today()
+
+    # The period half: `reserve/4` counts against the period it is given, not
+    # against the one the clock is in.
+    assert :ok = AuroraMeter.Entitlements.reserve(tenant, :ai_generations, 2, chosen_period)
+    assert Counter.value(tenant, :ai_generations, chosen_period) == 2
+    assert Counter.value(tenant, :ai_generations, Period.current(tenant).start) == 0
+
+    # A plain reserve has no captured day, so its history goes to today. That is
+    # the contrast the day half exists to make.
+    assert Counter.day_value(tenant, :ai_generations, today) == 2
+
+    # The day half: work that reserved yesterday commits into yesterday.
+    assert :ok = Counter.reserve(tenant, :ai_generations, 3, chosen_period, nil, true)
+    assert :ok = Counter.commit_work(tenant, :ai_generations, 3, chosen_period, chosen_day)
+    assert Counter.day_value(tenant, :ai_generations, chosen_day) == 3
+    assert Counter.day_value(tenant, :ai_generations, today) == 2
+    assert Counter.value(tenant, :ai_generations, chosen_period) == 5
+  end
+
+  test "I20 every Noop billing provider callback returns :not_configured" do
     assert Billing.checkout(unique_tenant(), :pro) == {:error, :not_configured}
     assert Billing.portal_url(unique_tenant()) == {:error, :not_configured}
+    assert Billing.sync_subscription(%{"id" => "sub_example"}) == {:error, :not_configured}
+    assert Noop.report_usage([]) == {:error, :not_configured}
+
+    # Every callback the behaviour declares is answered above. A new one would
+    # otherwise default to nothing at all on a core-only install.
+    assert Enum.sort(Provider.behaviour_info(:callbacks)) == [
+             billing_portal_url: 2,
+             create_checkout_session: 2,
+             report_usage: 1,
+             sync_subscription: 1
+           ]
+  end
+
+  # I03's central claim: work that did real, durable metering before it failed
+  # is still not billed. The callback tracks a second feature, flushes it to the
+  # database, reads the persisted counter for the gated feature back (Z1: the
+  # reservation is not in it), and only then fails.
+  defp assert_not_billed(kind, fail) do
+    tenant = unique_tenant()
+    AuroraMeter.subscribe(tenant, :pro)
+    period = Period.current(tenant).start
+
+    gated = fn ->
+      AuroraMeter.with_quota(tenant, :ai_generations, 3, fn ->
+        AuroraMeter.track(tenant, :ops, 4)
+        {:ok, _} = Flusher.flush()
+
+        assert Storage.load_counter(tenant, :ops, period) == 4
+        assert Storage.load_counter(tenant, :ai_generations, period) == nil
+
+        fail.()
+      end)
+    end
+
+    # catch_throw/1 and catch_exit/1 are macros, so the three kinds are branched
+    # here rather than passed in as a function.
+    case kind do
+      :raise -> assert_raise RuntimeError, gated
+      :throw -> assert catch_throw(gated.()) == :nope
+      :exit -> assert catch_exit(gated.()) == :timeout
+    end
+
+    # The reservation is back, nothing was persisted for the gated feature, and
+    # no later flush writes it either.
+    assert AuroraMeter.usage(tenant, :ai_generations) == 0
+    assert Storage.load_counter(tenant, :ai_generations, period) == nil
+
+    {:ok, _} = Flusher.flush()
+    assert Storage.load_counter(tenant, :ai_generations, period) == nil
+
+    # And the work the callback really did is still there.
+    assert Storage.load_counter(tenant, :ops, period) == 4
   end
 end

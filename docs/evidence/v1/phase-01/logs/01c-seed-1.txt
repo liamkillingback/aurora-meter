@@ -1,0 +1,65 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 1
+warning: the following files do not match any of the configured `:test_load_filters` / `:test_ignore_filters`:
+
+test/regressions/seeds/i10-20260914T095318-20260914.exs
+test/regressions/seeds/i10-l1-released-reservation-on-expired-grant.exs
+test/regressions/seeds/i10-l16-settlement-above-its-hold-goes-negative.exs
+test/regressions/seeds/i10-l2-reverse-shares-the-debit-reference-namespace.exs
+test/regressions/seeds/i10-l7-partial-expiry-finishes-on-a-second-pass.exs
+
+This might indicate a typo in a test file name (for example, using "foo_tests.exs" instead of "foo_test.exs").
+
+See the configuration for `:test_pattern` under `mix help test` for more information.
+
+Running ExUnit with seed: 1, max_cases: 48
+Excluding tags: [:headless]
+
+.....................................................
+
+  1) test the index against the test tree every test whose description starts with an invariant id is named in the index (AuroraMeter.CorrectnessIndexTest)
+     test/aurora_meter/correctness_index_test.exs:50
+     these tests claim an invariant but are not listed in docs/correctness.md:
+       AuroraMeter.CreditsModelTest / property generated histories I10 a generated history of grants, holds, settles, releases, debits and reversals matches the pure model  (test/aurora_meter/credits_model_test.exs:298)
+       AuroraMeter.CreditsModelTest / property generated histories I10 a generated history including expiry matches the pure model  (test/aurora_meter/credits_model_test.exs:305)
+       AuroraMeter.CreditsModelTest / property generated histories I10 balance equals the sum of every transaction amount after every step  (test/aurora_meter/credits_model_test.exs:311)
+       AuroraMeter.CreditsModelTest / property generated histories I10 held equals the sum of open holds after every step  (test/aurora_meter/credits_model_test.exs:318)
+       AuroraMeter.CreditsModelTest / property generated histories I10 the newest row's snapshot columns equal the balance row  (test/aurora_meter/credits_model_test.exs:326)
+       AuroraMeter.CreditsModelTest / property generated histories I10 no two rows of one kind share a reference  (test/aurora_meter/credits_model_test.exs:335)
+       AuroraMeter.CreditsModelTest / test integer bounds and rounding I10 a grant at the bigint ceiling is refused by the database (L17, fixed in 06c)  (test/aurora_meter/credits_model_test.exs:343)
+       AuroraMeter.CreditsModelTest / test integer bounds and rounding I10 a reversal at the bigint floor is refused by the database (L17, fixed in 06c)  (test/aurora_meter/credits_model_test.exs:369)
+       AuroraMeter.CreditsModelTest / test integer bounds and rounding I10 cents round-trip through micro-dollars at the boundaries  (test/aurora_meter/credits_model_test.exs:388)
+       AuroraMeter.CreditsModelTest / test integer bounds and rounding I10 to_cents rounds half away from zero at the boundaries  (test/aurora_meter/credits_model_test.exs:403)
+       AuroraMeter.CreditsModelTest / test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a)  (test/aurora_meter/credits_model_test.exs:420)
+       AuroraMeter.CreditsModelTest / test the clock the ledger orders itself by I10 a backwards step in the wall clock leaves a promotional grant that can never expire (L20, fixed in 06a)  (test/aurora_meter/credits_model_test.exs:465)
+     code: assert orphans == [],
+     stacktrace:
+       test/aurora_meter/correctness_index_test.exs:59: (test)
+
+........................................................................................................
+19:56:01.225 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_2371\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_2371\"}]}}, batch_id: \"5b923854-a31f-44b5-ac1b-f1a7d5fb94a1\"}"
+.............
+
+  2) test replays i10-20260914T095318-20260914.exs (AuroraMeter.CreditsRegressionsTest)
+     test/aurora_meter/credits_regressions_test.exs:92
+     Expected exception ExUnit.AssertionError but nothing was raised
+     code: replay!(@path)
+     stacktrace:
+       test/aurora_meter/credits_regressions_test.exs:119: AuroraMeter.CreditsRegressionsTest.replay!/1
+       test/aurora_meter/credits_regressions_test.exs:93: (test)
+
+.............................
+19:56:02.102 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :history_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.History, statement: :history_upsert, repo_fun: :insert_all}"
+.
+19:56:02.139 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+19:56:02.172 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+19:56:02.205 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :receipt_insert) context: %{kind: :write, schema: AuroraMeter.Schema.FlushReceipt, statement: :receipt_insert, repo_fun: :insert_all}"
+.......
+19:56:02.267 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :lost_acknowledgement) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"flush_batch_3652\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"flush_batch_3652\"}]}}, batch_id: \"60f0102d-3eb6-426c-a971-3f1f33c1402c\"}"
+.........................................................................................................................................................
+Finished in 13.3 seconds (1.3s async, 11.9s sync)
+
+Result: 362/364 passed (35/35 doctests, 10/10 properties, 317/319 tests), 3 excluded
+Failed: 2 tests
+[mixlane] core exit=2 started=2026-09-14T09:55:58Z finished=2026-09-14T09:56:13Z

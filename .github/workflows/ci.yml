@@ -1,10 +1,44 @@
 name: CI
 
+# Aurora Meter V1, build unit 01f (tasks 01.07, 01.08, 01.09).
+#
+# Every Elixir, OTP and Postgres version in this file is an exact patch, chosen
+# from the official Elixir/OTP compatibility table and from the precompiled
+# build lists erlef/setup-beam installs from. The table URL, the access date and
+# the reason for each pin are in docs/evidence/v1/phase-01/compatibility.md.
+# Do not change a version here without updating that file.
+#
+# THE MINIMUM-RUNTIME RULE (invariant M4, decision D12)
+#
+#   A minimum-runtime leg runs deps.get, compile --warnings-as-errors --force,
+#   test.setup and test. It may omit a TOOL (credo, dialyzer, ex_doc, coverage,
+#   mix_audit) only when that tool cannot resolve or run on the pair, and only
+#   with the exact resolution or runtime failure recorded in
+#   docs/evidence/v1/phase-01/compatibility.md. It may never omit a test. If the
+#   library itself, its hard dependencies, or its test suite fail on the pair,
+#   the pair is NOT supported: the floor is raised in mix.exs, the README,
+#   docs/supported-versions.md and the CHANGELOG, with an upgrade route. A
+#   tooling exemption is never a reason to keep a support claim.
+#
+#   As it stands, no tool is omitted on the minimum leg. Every dev dependency
+#   resolves on Elixir 1.15 (credo >= 1.13, mix_audit ~> 1.8, dialyxir >= 1.6,
+#   ex_doc ~> 1.15) and the one known formatter difference between 1.15 and the
+#   current Elixir was already made version stable in commit cb38c3c, so
+#   `mix format --check-formatted` runs on every leg rather than being exempted.
+#   The exemption table in compatibility.md is therefore empty, which is the
+#   strongest form this rule can take.
+#
+# NOTHING HERE MAY PUBLISH, DEPLOY OR TAG (decision D13, invariant M5).
+# `mix hex.build` is a build. `mix hex.publish`, `mix hex.organization auth`,
+# `fly deploy`, `git tag` and `git push` appear nowhere in this file and must
+# never be added to it.
+
 on:
   push:
-    branches: [main]
+    branches: [main, aurorameter-v1]
   pull_request:
-    branches: [main]
+    branches: [main, aurorameter-v1]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,27 +47,134 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Postgres images, pinned to an exact patch tag. A `services.image` cannot take
+# an expression, so each is written out at its service; the digests they resolved
+# to when they were pinned are in compatibility.md section 5, and every job logs
+# the digest it actually ran so a re-pushed tag is detectable after the fact.
+#
+#   postgres:16.13  sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59
+#   postgres:15.6   sha256:1ebd963e5c598f944a4e9ba27de4c95289d663dcc73731025aa53c5254094d8f
+
 jobs:
-  # ── Library: format, warnings-as-errors compile, credo, tests, audits, docs ──
+  # ---------------------------------------------------------------------------
+  # The runtime and dependency matrix. One entry per named leg; the same names
+  # mean the same thing in aurora_meter_pro.
+  # ---------------------------------------------------------------------------
   library:
-    name: Library (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    name: ${{ matrix.leg }} (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental == 'yes' }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - elixir: "1.15"
-            otp: "25"
-          - elixir: "1.18"
-            otp: "27"
+          # The declared floor. Elixir 1.15 supports OTP 24 to 26; 25 is inside
+          # that range. 1.15.8 is the last patch of the 1.15 series.
+          - leg: minimum
+            elixir: "1.15.8"
+            otp: "25.3.2.21"
+            unlock: "yes"
+            headless: "no"
+            liveview: ""
+            audits: "yes"
+            suites: "yes"
+            dialyzer: "no"
+            coverage: "no"
+            docs: "no"
+            package: "no"
+            experimental: "no"
+          # The retained middle pair, and the leg that carries the expensive
+          # one-per-repo tools.
+          - leg: supported
+            elixir: "1.18.5"
+            otp: "27.3.4.17"
+            unlock: "yes"
+            headless: "no"
+            liveview: ""
+            audits: "yes"
+            suites: "yes"
+            dialyzer: "yes"
+            coverage: "yes"
+            docs: "no"
+            package: "no"
+            experimental: "no"
+          # The then-current pair, verified against the compatibility table's
+          # "1.20: 27 to 29" row.
+          - leg: current
+            elixir: "1.20.4"
+            otp: "29.0.6"
+            unlock: "yes"
+            headless: "no"
+            liveview: ""
+            audits: "yes"
+            suites: "yes"
+            dialyzer: "no"
+            coverage: "no"
+            docs: "yes"
+            package: "yes"
+            experimental: "no"
+          # D03 and invariant I20: a host with no phoenix_live_view, no
+          # phoenix_html and no igniter compiles, installs and runs. `optional:
+          # true` only affects consumers, so mix.exs needs the AURORA_HEADLESS
+          # switch for this to be possible at all.
+          - leg: headless
+            elixir: "1.18.5"
+            otp: "27.3.4.17"
+            headless: "yes"
+            unlock: "no"
+            liveview: ""
+            audits: "no"
+            suites: "no"
+            dialyzer: "no"
+            coverage: "no"
+            docs: "no"
+            package: "no"
+            experimental: "no"
+          # The two halves of the declared LiveView range. These legs resolve a
+          # different dependency set from the same requirements, into their own
+          # lock file, so mix.lock is never rewritten.
+          - leg: liveview-1.0
+            elixir: "1.18.5"
+            otp: "27.3.4.17"
+            liveview: "1.0"
+            unlock: "no"
+            headless: "no"
+            audits: "no"
+            suites: "no"
+            dialyzer: "no"
+            coverage: "no"
+            docs: "no"
+            package: "no"
+            experimental: "no"
+          # EXPECTED TO FAIL, and non-blocking for exactly one merge.
+          # open-findings.md C9: lib/aurora_meter/components.ex uses LiveView 1.0
+          # body interpolation, which is literal text in 0.20, while mix.exs
+          # claims "~> 0.20 or ~> 1.0". This leg is the evidence build unit 09b
+          # uses to decide whether to widen the component syntax or drop the
+          # "~> 0.20" clause. When 09b decides, this entry goes away with it.
+          - leg: liveview-0.20
+            elixir: "1.18.5"
+            otp: "27.3.4.17"
+            liveview: "0.20"
+            unlock: "no"
+            headless: "no"
+            audits: "no"
+            suites: "no"
+            dialyzer: "no"
+            coverage: "no"
+            docs: "no"
+            package: "no"
+            experimental: "yes"
     env:
       MIX_ENV: test
-      # config/test.exs reads DB_PORT (defaults to 5432); CI uses the service on 5432,
-      # local dev uses the dedicated Docker Postgres on 5490.
+      # config/config.exs:24 reads DB_PORT (the earlier comment here named
+      # config/test.exs, which does not exist in this repository).
       DB_PORT: "5432"
+      AURORA_HEADLESS: ${{ matrix.headless == 'yes' && '1' || '' }}
+      AURORA_LIVEVIEW: ${{ matrix.liveview || '' }}
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.13
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -50,41 +191,211 @@ jobs:
         with:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
+          # An unavailable build must fail loudly and name the version, rather
+          # than resolving to something close.
+          version-type: strict
 
-      - name: Restore deps/build/plt cache
+      - name: Record the resolved toolchain and database
+        run: |
+          set -euo pipefail
+          elixir --version
+          erl -noshell -eval 'io:format("otp_release ~s, erts ~s~n", [erlang:system_info(otp_release), erlang:system_info(version)]), halt().'
+          echo "--- postgres image identity ---"
+          docker images --digests --format '{{.Repository}}:{{.Tag}} {{.Digest}}' postgres || true
+          echo "--- postgres server version ---"
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -tAc 'select version()' || true
+
+      - name: Restore deps and build cache
         uses: actions/cache@v4
         with:
           path: |
             deps
             _build
-            priv/plts
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-otp-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-${{ matrix.elixir }}-otp-${{ matrix.otp }}-
+          # M3: the leg, the Elixir version, the OTP version and the lock hash.
+          # The leg is in the key because the headless and LiveView legs resolve
+          # a different dependency set from the same lock; restore-keys stop one
+          # component earlier so a partial restore cannot cross a leg boundary.
+          key: ${{ runner.os }}-mix-${{ matrix.leg }}-${{ matrix.elixir }}-otp-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.leg }}-${{ matrix.elixir }}-otp-${{ matrix.otp }}-
 
-      - run: mix deps.get
+      # priv/plts has its own cache entry. It used to be listed beside deps and
+      # _build while no job ran Dialyzer, so it was never written: pure key
+      # churn. Only the dialyzer leg restores and saves it now.
+      - name: Restore PLT cache
+        if: matrix.dialyzer == 'yes'
+        uses: actions/cache@v4
+        with:
+          path: priv/plts
+          key: ${{ runner.os }}-plt-${{ matrix.elixir }}-otp-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-plt-${{ matrix.elixir }}-otp-${{ matrix.otp }}-
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      - name: Show the resolved optional dependencies
+        run: |
+          set -euo pipefail
+          echo "AURORA_HEADLESS=${AURORA_HEADLESS:-<unset>} AURORA_LIVEVIEW=${AURORA_LIVEVIEW:-<unset>}"
+          mix deps | grep -E 'phoenix_live_view|phoenix_html|igniter' || echo "no optional integration is present on this leg"
+
       - name: Check formatting
         run: mix format --check-formatted
+
       - name: Compile (warnings as errors)
         run: mix compile --warnings-as-errors --force
-      - name: Unused deps check
+
+      # Skipped only on the legs that deliberately resolve a different
+      # dependency set, where the committed lock legitimately does not describe
+      # what was fetched. Never skipped on a runtime leg.
+      - name: Unused dependency check
+        if: matrix.unlock == 'yes'
         run: mix deps.unlock --check-unused
+
       - name: Credo
         run: mix credo --strict
-      - name: Dependency audit
-        run: mix deps.audit
-      - name: Hex retirement/audit
-        run: mix hex.audit
-      - name: Set up test database
-        run: mix test.setup
-      - name: Tests
-        run: mix test
-      - name: Docs build
-        if: matrix.elixir == '1.18'
-        env:
-          MIX_ENV: dev
-        run: mix deps.get && mix docs
 
-  # ── Secret scanning ──
+      - name: Dependency advisory audit
+        if: matrix.audits == 'yes'
+        run: mix deps.audit
+
+      - name: Retired package audit
+        if: matrix.audits == 'yes'
+        run: mix hex.audit
+
+      - name: Dialyzer
+        if: matrix.dialyzer == 'yes'
+        run: mix dialyzer
+
+      - name: Set up the test database
+        run: mix test.setup
+
+      # M4: never skipped on any leg. The headless leg additionally includes the
+      # tests that assert the optional modules are ABSENT, which are excluded
+      # everywhere else because they would be meaningless with the modules
+      # present (test/test_helper.exs).
+      - name: Tests
+        run: |
+          if [ "${AURORA_HEADLESS:-}" = "1" ]; then
+            mix test --include headless
+          else
+            mix test
+          fi
+
+      - name: Coverage floor
+        if: matrix.coverage == 'yes'
+        run: mix coverage
+
+      - name: Migration suite
+        if: matrix.suites == 'yes'
+        run: mix v1.migrations
+
+      - name: Fault and independent-connection suites
+        if: matrix.suites == 'yes'
+        run: mix v1.faults
+
+      # --output keeps doc/ out of the working tree. A bare `mix docs` writes
+      # into the package, and .gitignore hides it from every porcelain-based
+      # tree check (open-findings.md X21, X27).
+      # Stays in MIX_ENV=test. mix.exs makes ex_doc available in :test as well as
+      # :dev precisely so the `check` alias can build docs without a second full
+      # compile, and the old `MIX_ENV: dev` here paid for one every run.
+      - name: Docs build
+        if: matrix.docs == 'yes'
+        run: mix docs --output "$RUNNER_TEMP/doc"
+
+      # A packaging smoke test, not the full package audit: build unit 11c owns
+      # that. -o keeps the tarball out of the working tree for the same reason
+      # as --output above.
+      - name: Package build and tarball assertions
+        if: matrix.package == 'yes'
+        run: |
+          set -euo pipefail
+          tarball="$RUNNER_TEMP/aurora_meter.tar"
+          mix hex.build -o "$tarball"
+          work="$RUNNER_TEMP/tarball"
+          mkdir -p "$work"
+          tar -xf "$tarball" -C "$work"
+          tar -xOf "$tarball" metadata.config > "$RUNNER_TEMP/metadata.txt"
+          tar -xzf "$work/contents.tar.gz" -C "$work"
+          echo "--- files in the package ---"
+          find "$work" -maxdepth 2 -not -path "$work" | sort
+          echo "--- assertions ---"
+          for forbidden in test demo priv/plts priv doc cover; do
+            if [ -e "$work/$forbidden" ]; then
+              echo "FAIL: the package contains $forbidden, which package.files does not name"
+              exit 1
+            fi
+            echo "ok: no $forbidden in the package"
+          done
+          for required in LICENSE CHANGELOG.md NOTICE.md README.md mix.exs .formatter.exs; do
+            if [ ! -f "$work/$required" ]; then
+              echo "FAIL: the package is missing $required, which package.files names"
+              exit 1
+            fi
+            echo "ok: $required is in the package"
+          done
+          if [ ! -d "$work/lib" ]; then
+            echo "FAIL: the package has no lib/"
+            exit 1
+          fi
+          echo "ok: lib/ is in the package"
+          echo "--- package metadata (informational; 11c audits it properly) ---"
+          grep -E '^\{<<"(name|version|elixir|app|licenses)">>' "$RUNNER_TEMP/metadata.txt" || true
+          echo "--- tarball sha256 (logged, never compared: archives are not byte reproducible across toolchains, open-findings.md X23) ---"
+          sha256sum "$tarball"
+
+  # ---------------------------------------------------------------------------
+  # Production database parity (open-findings.md X4). Production Postgres is
+  # flyio/postgres-flex 15.6 while every other lane here runs 16. A green 16 run
+  # is not proof for 15, so the suite and the migration subset run on 15.6 too.
+  # ---------------------------------------------------------------------------
+  database:
+    name: postgres-15 (production parity)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+      DB_PORT: "5432"
+    services:
+      postgres:
+        image: postgres:15.6
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.5"
+          otp-version: "27.3.4.17"
+          version-type: strict
+      - name: Record the resolved database
+        run: |
+          set -euo pipefail
+          docker images --digests --format '{{.Repository}}:{{.Tag}} {{.Digest}}' postgres || true
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -tAc 'select version()'
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -tAc 'show max_connections'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-pg15-1.18.5-otp-27.3.4.17-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-pg15-1.18.5-otp-27.3.4.17-
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors --force
+      - run: mix test.setup
+      - run: mix test
+      - run: mix v1.migrations
+
+  # ---------------------------------------------------------------------------
+  # Secret scanning.
+  # ---------------------------------------------------------------------------
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
@@ -96,3 +407,8 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # .gitleaks.toml extends the default rule set. It removes no rule and
+          # adds no rule: all it does is stop scanning content this repository
+          # does not author and could never publish. open-findings.md X26 and
+          # X28 are why it exists, and why it holds no bare key prefixes.
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml

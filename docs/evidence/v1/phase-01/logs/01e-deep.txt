@@ -1,0 +1,123 @@
+=== 01e deep run ===
+started       2026-09-14T09:52:56Z
+seed          20260914
+runs          AURORA_PROPERTY_RUNS=500
+concurrent    2 other mix test process(es) at launch
+
+[mixlane] core: DB_PORT=5490 env AURORA_PROPERTY_RUNS=500 AURORA_LEAK_REPORT=/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/docs/evidence/v1/phase-01/logs/01e-leaks.jsonl mix test test/aurora_meter/credits_model_test.exs --seed 20260914 --trace
+Compiling 2 files (.ex)
+Running ExUnit with seed: 20260914, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsModelTest [test/aurora_meter/credits_model_test.exs]
+  * test the model itself I10 model: a grant then a hold then a settle below the hold leaves the difference spendable [L#49]  * test the model itself I10 model: a grant then a hold then a settle below the hold leaves the difference spendable (0.02ms) [L#49]
+  * test the model itself I10 model: attribution spends the soonest-expiring grant first, then the oldest, then by id [L#155]  * test the model itself I10 model: attribution spends the soonest-expiring grant first, then the oldest, then by id (0.02ms) [L#155]
+  * property generated histories I10 balance equals the sum of every transaction amount after every step [L#305]  * property generated histories I10 balance equals the sum of every transaction amount after every step (7725.0ms) [L#305]
+  * property generated histories I10 no two rows of one kind share a reference [L#329]  * property generated histories I10 no two rows of one kind share a reference (7370.2ms) [L#329]
+  * test the model itself I10 model: a duplicate grant reference is a duplicate, not a second grant [L#108]  * test the model itself I10 model: a duplicate grant reference is a duplicate, not a second grant (0.00ms) [L#108]
+  * test the model itself I10 model: expiry refuses with :held when the whole remainder is reserved [L#198]  * test the model itself I10 model: expiry refuses with :held when the whole remainder is reserved (0.01ms) [L#198]
+  * test the model itself I10 model: a reversal does not consume the promotional figure [L#86]  * test the model itself I10 model: a reversal does not consume the promotional figure (0.01ms) [L#86]
+  * test integer bounds and rounding I10 a grant at the bigint ceiling is refused by the database (L17, fixed in 06c) [L#337]  * test integer bounds and rounding I10 a grant at the bigint ceiling is refused by the database (L17, fixed in 06c) (27.3ms) [L#337]
+  * test the model itself I10 model: promotional is clamped to the balance and never negative [L#135]  * test the model itself I10 model: promotional is clamped to the balance and never negative (0.02ms) [L#135]
+  * property generated histories I10 held equals the sum of open holds after every step [L#312]  * property generated histories I10 held equals the sum of open holds after every step (6807.0ms) [L#312]
+  * property generated histories I10 a generated history including expiry matches the pure model [L#299]  * property generated histories I10 a generated history including expiry matches the pure model (22610.1ms) [L#299]
+
+  1) property generated histories I10 a generated history including expiry matches the pure model (AuroraMeter.CreditsModelTest)
+     test/aurora_meter/credits_model_test.exs:299
+     Failed with generated values (after 2 successful runs):
+
+         * Clause:    history <- LedgerCommands.history()
+           Generated: [{:hold, "h1", 1}, {:expire_due, ~U[2026-01-01 00:00:00Z]}, {:reverse, "v3", 47824853}, {:grant, "g5", 3721052, :adjustment, nil}, {:hold, "h7", 1}, {:hold, "h8", 1}, {:hold, "h9", 1}, {:hold, "h10", 1}, {:hold, "h11", 1}, {:debit, "d12", 1}, {:expire_due, ~U[2026-01-01 00:00:00Z]}, {:hold, "h14", 1}, {:hold, "h15", 1}, {:grant, "g16", 18584971, :paid, nil}, {:debit, "v3", 1}, {:expire_due, ~U[2026-01-01 00:00:00Z]}, {:grant, "g20", 1, :promotional, ~U[2026-01-02 00:00:00Z]}, {:grant, "g16", 2225659, :adjustment, nil}, {:reverse, "v23", 16845750}, {:grant, "g5", 22952022, :promotional, nil}, {:debit, "d26", 1}, {:hold, "h27", 1}, {:grant, "g28", 23722446, :paid, nil}, {:reverse, "v30", 999999}, {:grant, "g32", 15590754, :promotional, ~U[2026-01-01 00:01:00Z]}, {:grant, "g34", 38749679, :paid, nil}, {:expire_due, ~U[2026-01-01 00:01:00Z]}, {:hold, "h38", 24323140}, {:grant, "g40", 999999, :promotional, ~U[2026-01-02 00:00:00Z]}, {:settle, "h38", 9972008}, {:debit, "d44", 9299848}, {:release, "h38"}, {:hold, "h47", 11395538}, {:hold, "h49", 2690118}]
+
+     the ledger and the model disagree at step 17 of 34.
+
+       - V4: balance_after -25518830 != -25518829
+
+     tenant:  "model_35906"
+     command: {:grant, "g20", 1, :promotional, ~U[2026-01-02 00:00:00Z]}
+     saved:   test/regressions/seeds/i10-20260914T095318-20260914.exs
+
+     Replay it with `mix test test/aurora_meter/credits_regressions_test.exs`, which runs every file in test/regressions/seeds with StreamData out of the picture.
+     code: check all history <- LedgerCommands.history(), max_runs: LedgerCommands.runs() do
+     stacktrace:
+       (aurora_meter 0.4.0) test/support/aurora_meter/test/ledger_commands.ex:746: AuroraMeter.Test.LedgerCommands.fail!/1
+       (elixir 1.20.1) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+       (aurora_meter 0.4.0) test/support/aurora_meter/test/ledger_commands.ex:318: AuroraMeter.Test.LedgerCommands.run/2
+       test/aurora_meter/credits_model_test.exs:301: anonymous fn/2 in AuroraMeter.CreditsModelTest."property generated histories I10 a generated history including expiry matches the pure model"/1
+       (stream_data 1.3.0) lib/stream_data.ex:2510: StreamData.check_all/7
+       test/aurora_meter/credits_model_test.exs:300: (test)
+
+  * test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a) [L#414]  * test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a) (35.9ms) [L#414]
+  * test integer bounds and rounding I10 a reversal at the bigint floor is refused by the database (L17, fixed in 06c) [L#363]  * test integer bounds and rounding I10 a reversal at the bigint floor is refused by the database (L17, fixed in 06c) (19.9ms) [L#363]
+  * property generated histories I10 a generated history of grants, holds, settles, releases, debits and reversals matches the pure model [L#292]  * property generated histories I10 a generated history of grants, holds, settles, releases, debits and reversals matches the pure model (19801.4ms) [L#292]
+
+  2) property generated histories I10 a generated history of grants, holds, settles, releases, debits and reversals matches the pure model (AuroraMeter.CreditsModelTest)
+     test/aurora_meter/credits_model_test.exs:292
+     Failed with generated values (after 67 successful runs):
+
+         * Clause:    history <- LedgerCommands.history(expiry: false)
+           Generated: [{:grant, "g1", 18188285, :promotional, nil}, {:grant, "g3", 20636640, :adjustment, nil}, {:grant, "g5", 1, :paid, nil}, {:hold, "h7", 730667}, {:debit, "d9", 4405863}, {:reverse, "v11", 999999}, {:settle, "h7", 1058255}, {:settle, "h7", 552722}, {:release, "h7"}, {:settle, "h7", 127507}, {:reverse, "v18", 42037853}, {:settle, "h7", 92213}, {:debit, "d21", 1}]
+
+     the ledger and the model disagree at step 11 of 13.
+
+       - V4: balance_after 32360809 != -9677044
+       - V7 attribution: g1 model 0 vs Promotions 12724167
+
+     tenant:  "model_52610"
+     command: {:reverse, "v18", 42037853}
+     saved:   test/regressions/seeds/i10-20260914T095318-20260914.exs
+
+     Replay it with `mix test test/aurora_meter/credits_regressions_test.exs`, which runs every file in test/regressions/seeds with StreamData out of the picture.
+     code: check all history <- LedgerCommands.history(expiry: false),
+     stacktrace:
+       (aurora_meter 0.4.0) test/support/aurora_meter/test/ledger_commands.ex:746: AuroraMeter.Test.LedgerCommands.fail!/1
+       (elixir 1.20.1) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+       (aurora_meter 0.4.0) test/support/aurora_meter/test/ledger_commands.ex:318: AuroraMeter.Test.LedgerCommands.run/2
+       test/aurora_meter/credits_model_test.exs:295: anonymous fn/2 in AuroraMeter.CreditsModelTest."property generated histories I10 a generated history of grants, holds, settles, releases, debits and reversals matches the pure model"/1
+       (stream_data 1.3.0) lib/stream_data.ex:2510: StreamData.check_all/7
+       test/aurora_meter/credits_model_test.exs:293: (test)
+
+  * test the dormant lot view I10 lot view: released value on an expired lot becomes expired, not spendable (the L1 difference 06a will land) [L#234]  * test the dormant lot view I10 lot view: released value on an expired lot becomes expired, not spendable (the L1 difference 06a will land) (0.04ms) [L#234]
+  * test the dormant lot view I10 lot view: every lot conserves amount across available, reserved, consumed, reversed and expired [L#215]  * test the dormant lot view I10 lot view: every lot conserves amount across available, reserved, consumed, reversed and expired (0.03ms) [L#215]
+  * test the dormant lot view I10 lot view: a paid reversal never touches a promotional lot [L#262]  * test the dormant lot view I10 lot view: a paid reversal never touches a promotional lot (0.00ms) [L#262]
+  * test the model itself I10 model: a settle above the hold takes the balance negative and flags an overrun [L#70]  * test the model itself I10 model: a settle above the hold takes the balance negative and flags an overrun (0.00ms) [L#70]
+  * test the model itself I10 model: expiry takes the minimum of the grant's remainder, the promotional figure and the spendable balance [L#182]  * test the model itself I10 model: expiry takes the minimum of the grant's remainder, the promotional figure and the spendable balance (0.00ms) [L#182]
+  * property generated histories I10 the newest row's snapshot columns equal the balance row [L#320]  * property generated histories I10 the newest row's snapshot columns equal the balance row (2282.1ms) [L#320]
+
+  3) property generated histories I10 the newest row's snapshot columns equal the balance row (AuroraMeter.CreditsModelTest)
+     test/aurora_meter/credits_model_test.exs:320
+     ** (ExUnitProperties.Error) failed with generated values (after 29 successful runs):
+
+         * Clause:    history <- LedgerCommands.history(length: {5, 15})
+           Generated: [{:hold, "h1", 1}, {:expire_due, ~U[2026-01-01 00:00:00Z]}, {:expire_due, ~U[2026-01-01 00:00:00Z]}, {:expire_due, ~U[2026-01-01 00:00:00Z]}, {:hold, "h5", 1}]
+
+     got exception:
+
+         ** (BadMapError) expected a map, got:
+         
+             nil
+         
+     code: check_law("V4", fn _model, aggregates ->
+     stacktrace:
+       test/aurora_meter/credits_model_test.exs:323: anonymous fn/2 in AuroraMeter.CreditsModelTest."property generated histories I10 the newest row's snapshot columns equal the balance row"/1
+       test/aurora_meter/credits_model_test.exs:469: anonymous fn/4 in AuroraMeter.CreditsModelTest.check_law/2
+       (stream_data 1.3.0) lib/stream_data.ex:2556: StreamData.shrink_failure/6
+       (stream_data 1.3.0) lib/stream_data.ex:2516: StreamData.check_all/7
+       test/aurora_meter/credits_model_test.exs:464: AuroraMeter.CreditsModelTest.check_law/2
+       test/aurora_meter/credits_model_test.exs:321: (test)
+
+  * test integer bounds and rounding I10 to_cents rounds half away from zero at the boundaries [L#397]  * test integer bounds and rounding I10 to_cents rounds half away from zero at the boundaries (1.6ms) [L#397]
+  * test the model itself I10 model: a non-expiring grant is spent last within its category [L#169]  * test the model itself I10 model: a non-expiring grant is spent last within its category (0.02ms) [L#169]
+  * test integer bounds and rounding I10 cents round-trip through micro-dollars at the boundaries [L#382]  * test integer bounds and rounding I10 cents round-trip through micro-dollars at the boundaries (0.00ms) [L#382]
+  * test the model itself I10 model: a hold and a debit share no reference namespace, but a debit and a reversal do (L2) [L#120]  * test the model itself I10 model: a hold and a debit share no reference namespace, but a debit and a reversal do (L2) (0.00ms) [L#120]
+
+Finished in 66.9 seconds (0.00s async, 66.9s sync)
+
+Result: 21/24 passed (3/6 properties, 18/18 tests)
+Failed: 3 properties
+[mixlane] core exit=2 started=2026-09-14T09:52:56Z finished=2026-09-14T09:54:02Z
+
+deep exit code   2
+deep wall time   66s
+finished         2026-09-14T09:54:02Z

@@ -1,0 +1,23 @@
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/correctness_index_test.exs --seed 0
+Compiling 2 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+
+
+
+  1) test the index against the test tree every test named in docs/correctness.md exists exactly once in test/ (AuroraMeter.CorrectnessIndexTest)
+     test/aurora_meter/correctness_index_test.exs:38
+     these tests are named in docs/correctness.md but do not exist in test/:
+       I19: AuroraMeter.MigrationTest / test the moduledoc describes every version
+            nearest: AuroraMeter.MigrationTest / test the moduledoc lists every version
+            nearest: AuroraMeter.MigrationTest / test the test database is migrated through every version
+            nearest: AuroraMeter.MigrationTest / test every version up to the latest has a module, and none beyond it
+     code: assert missing == [], missing_message(missing, names)
+     stacktrace:
+       test/aurora_meter/correctness_index_test.exs:47: (test)
+
+...........
+Finished in 0.1 seconds (0.1s async, 0.00s sync)
+
+Result: 11/12 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-14T08:39:58Z finished=2026-09-14T08:39:59Z

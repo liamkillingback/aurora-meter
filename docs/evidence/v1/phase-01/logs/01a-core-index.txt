@@ -1,0 +1,23 @@
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/correctness_index_test.exs --trace --seed 0
+Running ExUnit with seed: 0, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CorrectnessIndexTest [test/aurora_meter/correctness_index_test.exs]
+  * test the index against the test tree every test named in docs/correctness.md exists exactly once in test/ [L#38]  * test the index against the test tree every test named in docs/correctness.md exists exactly once in test/ (25.2ms) [L#38]
+  * test the index against the test tree every test whose description starts with an invariant id is named in the index [L#50]  * test the index against the test tree every test whose description starts with an invariant id is named in the index (21.4ms) [L#50]
+  * test the index against the test tree a planned test bullet does not yet exist, and is promoted when it does [L#64]  * test the index against the test tree a planned test bullet does not yet exist, and is promoted when it does (20.3ms) [L#64]
+  * test the index against the test tree no invariant test description is interpolated [L#79]  * test the index against the test tree no invariant test description is interpolated (17.1ms) [L#79]
+  * test the shape of the index every invariant this package owns has a section with all five fields in order [L#92]  * test the shape of the index every invariant this package owns has a section with all five fields in order (3.4ms) [L#92]
+  * test the shape of the index every invariant section names at least one test [L#103]  * test the shape of the index every invariant section names at least one test (1.7ms) [L#103]
+  * test the shape of the index an invariant this package does not own has no section [L#109]  * test the shape of the index an invariant this package does not own has no section (1.6ms) [L#109]
+  * test the shape of the index the section order is ascending by invariant id and no id repeats [L#116]  * test the shape of the index the section order is ascending by invariant id and no id repeats (2.0ms) [L#116]
+  * test the shape of the index evidence paths are unique, repo-relative and under docs/evidence/v1/ [L#124]  * test the shape of the index evidence paths are unique, repo-relative and under docs/evidence/v1/ (1.7ms) [L#124]
+  * test the parser itself a section missing Known limits fails with the id and the missing field [L#137]  * test the parser itself a section missing Known limits fails with the id and the missing field (0.1ms) [L#137]
+  * test the parser itself a test bullet whose module does not exist fails with the nearest match [L#145]  * test the parser itself a test bullet whose module does not exist fails with the nearest match (0.02ms) [L#145]
+  * test the parser itself a describe-wrapped test is matched by its full ExUnit name, not its bare description [L#155]  * test the parser itself a describe-wrapped test is matched by its full ExUnit name, not its bare description (0.1ms) [L#155]
+
+Finished in 0.2 seconds (0.2s async, 0.00s sync)
+
+Result: 12 passed
+[mixlane] core exit=0 started=2026-09-14T08:59:36Z finished=2026-09-14T08:59:37Z

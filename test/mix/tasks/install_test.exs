@@ -1,77 +1,89 @@
-defmodule Mix.Tasks.AuroraMeter.InstallTest do
-  @moduledoc false
-  # async: false — `Igniter.Test.test_project/1` puts the generated project's
-  # config into the *global* application environment, so while this runs
-  # `AuroraMeter.Config.repo/0` briefly answers `Demo.Repo`. Racing it against
-  # an async test that touches the database fails that test, not this one.
-  use ExUnit.Case, async: false
+# Compiled only when Igniter.Test is available, the same guard
+# lib/aurora_meter/components.ex:1 uses on the module under test here.
+# Without it the `headless` CI leg (AURORA_HEADLESS=1, build unit 01f)
+# cannot compile its test suite at all, and invariant I20 ("optional
+# integrations remain optional") could never be proved by running
+# anything. igniter is an optional dependency.
+#
+# The absence of this module on a headless build is asserted positively by
+# test/aurora_meter/optional_deps_test.exs, so a guard that silently
+# swallowed the whole suite would be caught.
+if Code.ensure_loaded?(Igniter.Test) do
+  defmodule Mix.Tasks.AuroraMeter.InstallTest do
+    @moduledoc false
+    # async: false — `Igniter.Test.test_project/1` puts the generated project's
+    # config into the *global* application environment, so while this runs
+    # `AuroraMeter.Config.repo/0` briefly answers `Demo.Repo`. Racing it against
+    # an async test that touches the database fails that test, not this one.
+    use ExUnit.Case, async: false
 
-  import Igniter.Test
+    import Igniter.Test
 
-  test "wires config, supervision child, a plans module and the migration" do
-    igniter =
-      test_project(app_name: :demo)
-      |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
+    test "wires config, supervision child, a plans module and the migration" do
+      igniter =
+        test_project(app_name: :demo)
+        |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
 
-    # A fresh test project has no config.exs, so the installer creates it.
-    assert_creates(igniter, "config/config.exs")
+      # A fresh test project has no config.exs, so the installer creates it.
+      assert_creates(igniter, "config/config.exs")
 
-    config =
-      igniter.rewrite |> Rewrite.source!("config/config.exs") |> Rewrite.Source.get(:content)
+      config =
+        igniter.rewrite |> Rewrite.source!("config/config.exs") |> Rewrite.Source.get(:content)
 
-    assert config =~ "config :aurora_meter"
-    assert config =~ "repo: Demo.Repo"
-    assert config =~ "pubsub: Demo.PubSub"
-    assert config =~ "plans: Demo.Plans"
+      assert config =~ "config :aurora_meter"
+      assert config =~ "repo: Demo.Repo"
+      assert config =~ "pubsub: Demo.PubSub"
+      assert config =~ "plans: Demo.Plans"
 
-    # Likewise the application module is created in a bare test project.
-    assert_creates(igniter, "lib/demo/application.ex")
+      # Likewise the application module is created in a bare test project.
+      assert_creates(igniter, "lib/demo/application.ex")
 
-    application =
-      igniter.rewrite
-      |> Rewrite.source!("lib/demo/application.ex")
-      |> Rewrite.Source.get(:content)
+      application =
+        igniter.rewrite
+        |> Rewrite.source!("lib/demo/application.ex")
+        |> Rewrite.Source.get(:content)
 
-    assert application =~ "children = [AuroraMeter]"
+      assert application =~ "children = [AuroraMeter]"
 
-    assert_creates(igniter, "lib/demo/plans.ex")
+      assert_creates(igniter, "lib/demo/plans.ex")
 
-    plans =
-      igniter.rewrite |> Rewrite.source!("lib/demo/plans.ex") |> Rewrite.Source.get(:content)
+      plans =
+        igniter.rewrite |> Rewrite.source!("lib/demo/plans.ex") |> Rewrite.Source.get(:content)
 
-    assert plans =~ "use AuroraMeter.Plans"
-    assert plans =~ "plan :free do"
+      assert plans =~ "use AuroraMeter.Plans"
+      assert plans =~ "plan :free do"
 
-    migration =
-      igniter.rewrite
-      |> Rewrite.sources()
-      |> Enum.map(& &1.path)
-      |> Enum.find(&String.match?(&1, ~r{priv/repo/migrations/\d+_add_aurora_meter\.exs}))
+      migration =
+        igniter.rewrite
+        |> Rewrite.sources()
+        |> Enum.map(& &1.path)
+        |> Enum.find(&String.match?(&1, ~r{priv/repo/migrations/\d+_add_aurora_meter\.exs}))
 
-    assert migration, "expected a migration to be generated"
+      assert migration, "expected a migration to be generated"
 
-    body = igniter.rewrite |> Rewrite.source!(migration) |> Rewrite.Source.get(:content)
-    assert body =~ "AuroraMeter.Migration.up()"
-  end
+      body = igniter.rewrite |> Rewrite.source!(migration) |> Rewrite.Source.get(:content)
+      assert body =~ "AuroraMeter.Migration.up()"
+    end
 
-  test "does not overwrite an existing plans module" do
-    igniter =
-      test_project(
-        app_name: :demo,
-        files: %{
-          "lib/demo/plans.ex" => """
-          defmodule Demo.Plans do
-            use AuroraMeter.Plans
+    test "does not overwrite an existing plans module" do
+      igniter =
+        test_project(
+          app_name: :demo,
+          files: %{
+            "lib/demo/plans.ex" => """
+            defmodule Demo.Plans do
+              use AuroraMeter.Plans
 
-            plan :custom do
-              price 0
+              plan :custom do
+                price 0
+              end
             end
-          end
-          """
-        }
-      )
-      |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
+            """
+          }
+        )
+        |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
 
-    assert_unchanged(igniter, "lib/demo/plans.ex")
+      assert_unchanged(igniter, "lib/demo/plans.ex")
+    end
   end
 end

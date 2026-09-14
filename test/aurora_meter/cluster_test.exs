@@ -67,7 +67,7 @@ defmodule AuroraMeter.ClusterTest do
       assert AuroraMeter.usage(tenant, :ops) == 43
     end
 
-    test "never move a view backwards" do
+    test "I05 a totals announcement never moves a view backwards" do
       tenant = unique_tenant()
       AuroraMeter.track(tenant, :ops, 3)
       {:ok, _} = Flusher.flush()
@@ -126,7 +126,7 @@ defmodule AuroraMeter.ClusterTest do
       assert AuroraMeter.usage(tenant, :ops) == 7
     end
 
-    property "final database total equals the sum of all deltas and the local view matches it" do
+    property "I05 final database total equals the sum of all deltas and the local view matches it" do
       check all(
               local <- list_of(integer(-3..10), min_length: 1, max_length: 12),
               remote <- list_of(integer(0..10), max_length: 8),

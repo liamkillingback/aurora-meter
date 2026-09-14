@@ -1,0 +1,34 @@
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 mix test --seed 4242
+warning: the following files do not match any of the configured `:test_load_filters` / `:test_ignore_filters`:
+
+test/regressions/seeds/i10-l1-released-reservation-on-expired-grant.exs
+test/regressions/seeds/i10-l16-settlement-above-its-hold-goes-negative.exs
+test/regressions/seeds/i10-l2-reverse-shares-the-debit-reference-namespace.exs
+test/regressions/seeds/i10-l7-partial-expiry-finishes-on-a-second-pass.exs
+
+This might indicate a typo in a test file name (for example, using "foo_tests.exs" instead of "foo_test.exs").
+
+See the configuration for `:test_pattern` under `mix help test` for more information.
+
+Running ExUnit with seed: 4242, max_cases: 48
+Excluding tags: [:headless]
+
+............................................................................................................................................................
+19:57:09.064 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_5829\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"org_5829\"}]}}, batch_id: \"1fd2dcdc-5cee-45a8-8709-11ffe11170d6\"}"
+..................................
+19:57:09.753 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :receipt_insert) context: %{kind: :write, schema: AuroraMeter.Schema.FlushReceipt, statement: :receipt_insert, repo_fun: :insert_all}"
+.
+19:57:09.785 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+19:57:09.819 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.Counter, statement: :counter_upsert, repo_fun: :insert_all}"
+.
+19:57:09.852 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :history_upsert) context: %{kind: :write, schema: AuroraMeter.Schema.History, statement: :history_upsert, repo_fun: :insert_all}"
+...
+19:57:09.931 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :lost_acknowledgement) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"flush_batch_12034\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-14], feature: \"ops\", tenant_key: \"flush_batch_12034\"}]}}, batch_id: \"1b09b0c5-76d5-4ec5-a64d-5166e79e56ce\"}"
+.......................................................................................................................................................................
+Finished in 14.5 seconds (1.3s async, 13.1s sync)
+
+Result: 363 passed (35 doctests, 10 properties, 318 tests), 3 excluded
+[mixlane] core exit=0 started=2026-09-14T09:57:06Z finished=2026-09-14T09:57:22Z

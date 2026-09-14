@@ -13,6 +13,7 @@ defmodule AuroraMeter.MixProject do
       elixirc_options: [warnings_as_errors: true],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      lockfile: lockfile(),
       aliases: aliases(),
       name: "Aurora Meter",
       description: description(),
@@ -20,12 +21,66 @@ defmodule AuroraMeter.MixProject do
       docs: docs(),
       source_url: @source_url,
       dialyzer: dialyzer(),
-      test_coverage: [summary: [threshold: 0]]
+      test_coverage: test_coverage(),
+      test_ignore_filters: test_ignore_filters()
+    ]
+  end
+
+  # `test/regressions/seeds/*.exs` are saved ledger histories, not test modules:
+  # `AuroraMeter.CreditsRegressionsTest` reads each one with `Code.eval_file/1`
+  # and generates a replay test for it. Elixir 1.20 warns on every `mix test`
+  # about any `.exs` under the test path that matches neither `:test_load_filters`
+  # nor this list, so they are declared here rather than left to nag. The
+  # directory is otherwise untouchable: build unit 01e's rule is that a seed file
+  # is never deleted to make a suite green.
+  defp test_ignore_filters do
+    [~r{regressions/seeds/.*\.exs$}]
+  end
+
+  # The threshold is a *measured* floor, not an aspiration: it is
+  # `floor(total) - 2` from the run recorded in
+  # `docs/evidence/v1/phase-01/coverage.md`, with the command and the commit that
+  # produced it. Two points of headroom absorb adding a module before its tests;
+  # they are not enough to hide a deleted test suite. Never raise or lower it from
+  # a number that is not in that file.
+  #
+  # It is enforced by `mix coverage` on the pinned-tooling CI leg only. A
+  # minimum-runtime leg stays on plain `mix test`: a coverage threshold failing
+  # there would be a tooling exemption inverted into a false failure, while a
+  # failing *test* there still fails, which is what the runtime claim needs.
+  defp test_coverage do
+    [
+      summary: [threshold: 90],
+      ignore_modules: [
+        # Test fixtures compiled from test/support by elixirc_paths(:test).
+        AuroraMeter.TestRepo,
+        AuroraMeter.TestPlans,
+        AuroraMeter.DataCase,
+        # Existing fault double, and the fault harness that grows beside it.
+        AuroraMeter.AmbiguousStorage,
+        ~r/^AuroraMeter\.Test\./,
+        # Run by `mix test.setup`, a separate Mix invocation that finishes before
+        # --cover starts its cover server. Their real proof is the migration
+        # matrix, which runs in its own OS processes.
+        ~r/^AuroraMeter\.Migration\.V\d+$/,
+        # Mix tasks are exercised by their own tests under test/mix. The install
+        # task needs Igniter, which is optional, so it is zero on the headless
+        # leg and would make the floor depend on the optional-dependency matrix.
+        ~r/^Mix\.Tasks\./
+      ]
     ]
   end
 
   def cli do
-    [preferred_envs: [check: :test, "test.setup": :test]]
+    [
+      preferred_envs: [
+        check: :test,
+        coverage: :test,
+        "test.setup": :test,
+        "v1.migrations": :test,
+        "v1.faults": :test
+      ]
+    ]
   end
 
   def application do
@@ -39,6 +94,8 @@ defmodule AuroraMeter.MixProject do
 
   # Runtime deps are deliberately minimal. Phoenix LiveView/HTML are OPTIONAL —
   # the core is usable headless and they only light up the usage components.
+  # They and Igniter live in optional_deps/0 below, because the `headless` CI leg
+  # has to be able to remove them.
   defp deps do
     [
       {:ecto_sql, "~> 3.10"},
@@ -47,11 +104,6 @@ defmodule AuroraMeter.MixProject do
       {:telemetry, "~> 1.2"},
       {:nimble_options, "~> 1.1"},
       {:jason, "~> 1.4"},
-      {:phoenix_live_view, "~> 0.20 or ~> 1.0", optional: true},
-      {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true},
-      # Optional: powers the one-step `mix aurora_meter.install`. Hosts without
-      # it get the print-the-steps fallback.
-      {:igniter, "~> 0.8", optional: true},
 
       # Dev/test tooling — never shipped to consumers. ex_doc and dialyxir are
       # available in :test too so the `check` alias (which runs in :test) can
@@ -62,7 +114,56 @@ defmodule AuroraMeter.MixProject do
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: :test},
       {:floki, ">= 0.30.0", only: :test}
-    ]
+    ] ++ optional_deps()
+  end
+
+  # `optional: true` affects CONSUMERS, not this project: a plain `mix deps.get`
+  # here fetches and compiles all three, so the flag alone cannot produce a
+  # headless build of Aurora Meter itself. AURORA_HEADLESS=1 removes them, which
+  # is what lets the `headless` CI leg prove decision D03 and invariant I20: a
+  # host with none of them present compiles, installs and runs.
+  #
+  # AURORA_LIVEVIEW pins one half of the declared LiveView range so each half can
+  # be exercised on its own. See .github/workflows/ci.yml and
+  # docs/evidence/v1/phase-01/ci.md. Both variables are build switches for this
+  # repository's CI, not a consumer API, and both default to absent.
+  defp optional_deps do
+    if System.get_env("AURORA_HEADLESS") == "1" do
+      []
+    else
+      [
+        {:phoenix_live_view, live_view_requirement(), optional: true},
+        {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true},
+        # Optional: powers the one-step `mix aurora_meter.install`. Hosts without
+        # it get the print-the-steps fallback.
+        {:igniter, "~> 0.8", optional: true}
+      ]
+    end
+  end
+
+  # The declared requirement is unchanged. Build unit 09b owns whether the
+  # "~> 0.20" half survives (open-findings.md C9); this only lets CI resolve one
+  # half at a time so that decision has evidence behind it.
+  defp live_view_requirement do
+    case System.get_env("AURORA_LIVEVIEW") do
+      nil -> "~> 0.20 or ~> 1.0"
+      "" -> "~> 0.20 or ~> 1.0"
+      "1.0" -> "~> 1.0"
+      "0.20" -> "~> 0.20"
+      other -> Mix.raise("AURORA_LIVEVIEW must be \"1.0\" or \"0.20\", got: #{inspect(other)}")
+    end
+  end
+
+  # A LiveView leg resolves a different dependency set from the committed lock,
+  # so it resolves into its own lock file outside the working tree. mix.lock is
+  # then untouchable by any leg, locally as well as in CI, and no leg can commit
+  # a lock change by accident.
+  defp lockfile do
+    case System.get_env("AURORA_LIVEVIEW") do
+      nil -> "mix.lock"
+      "" -> "mix.lock"
+      version -> Path.join(System.tmp_dir!(), "aurora_meter-liveview-#{version}.lock")
+    end
   end
 
   defp description do
@@ -97,6 +198,7 @@ defmodule AuroraMeter.MixProject do
         "LICENSE",
         "NOTICE.md",
         "docs/getting-started.md",
+        "docs/correctness.md",
         "docs/examples/concepts.md",
         "docs/examples/team-saas.md",
         "docs/examples/allowance-and-overage.md",
@@ -145,8 +247,30 @@ defmodule AuroraMeter.MixProject do
         "credo --strict",
         "dialyzer",
         "test",
-        "docs"
+        # --output, because a bare `mix docs` writes doc/ into the package tree
+        # and .gitignore hides it from every porcelain-based tree check, so a
+        # gate that asserts "this run changed nothing" cannot see it
+        # (open-findings.md X21, X27). The gate is meant to leave the tree byte
+        # identical; now it actually does.
+        "docs --output #{Path.join(System.tmp_dir!(), "aurora_meter-check-doc")}"
       ],
+      # `check` keeps plain `test` so the local edit loop stays fast: cover
+      # compiled modules run several times slower. CI runs `mix coverage` as its
+      # own step on the pinned-tooling leg.
+      coverage: ["test --cover"],
+      # The two suites CI and scripts/v1/verify.sh both name. They are ALIASES on
+      # purpose: package CI runs in the package repository and the V1 runners
+      # live in the storefront, which package CI cannot check out, so the command
+      # line is defined once here and both callers invoke it by name rather than
+      # reimplementing it. Changing what a suite means is a change to this line.
+      #
+      # Neither tag is excluded in test/test_helper.exs, so both also run inside
+      # the ordinary `mix test`. These jobs are a second, seeded run, not the
+      # only run: a tagged suite that quietly stopped being included would
+      # otherwise vanish from CI, and a skipped required suite is a failure.
+      # test/aurora_meter/ci_contract_test.exs asserts exactly that.
+      "v1.migrations": ["test --only migration"],
+      "v1.faults": ["test --only fault --seed 0"],
       "test.setup": ["ecto.create --quiet", "ecto.migrate --quiet"]
     ]
   end

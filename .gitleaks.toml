@@ -1,0 +1,59 @@
+# .gitleaks.toml
+#
+# The configuration the CI secret scan uses (.github/workflows/ci.yml, job
+# `secrets`). Added by Aurora Meter V1 build unit 01f.
+#
+# It extends the default rule set. It removes no rule and adds no rule.
+#
+# WHY IT ADDS NO RULE (open-findings.md X26). The obvious "extra" rule to add is
+# a grep for a provider's key prefix. That is exactly the trap X8 and X26
+# describe: a bare prefix matches every document that merely names it, so the
+# scanner fails on its own prose and the only way to keep the gate green is to
+# stop writing about credentials. The default gitleaks rules are value shaped
+# (prefix plus length plus entropy) and do not have that problem, so this file
+# leaves them alone. Any rule a future maintainer adds here must match a value,
+# never a prefix on its own.
+#
+# WHAT IT DOES DO is stop scanning content this repository does not author and
+# could never publish: fetched dependencies, build output, compiled BEAM files,
+# generated docs and coverage, PLTs, and crash dumps. Scanning those produces
+# findings about other people's example strings and about local scratch, which
+# is noise rather than evidence.
+#
+# open-findings.md X28: a crash dump is a memory image, so it trips
+# `generic-api-key` on byte sequences that are not credentials at all. It is
+# git-ignored, so it cannot be published, and it is excluded here by name rather
+# than by disabling the rule for the whole repository.
+#
+# This file is the CI counterpart of scripts/v1/lib/gitleaks-v1.toml in the
+# storefront repository, which the local V1 runners use. The two lists are kept
+# deliberately similar; neither is generated from the other.
+
+title = "Aurora Meter CI scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Content this repository does not author and cannot publish"
+paths = [
+  '''(^|/)deps/''',
+  '''(^|/)_build/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.elixir_ls/''',
+  '''(^|/)priv/plts/''',
+  '''(^|/)cover/''',
+  '''(^|/)doc/''',
+  '''(^|/)tmp/''',
+  '''\.beam$''',
+  '''\.plt$''',
+  '''\.plt\.hash$''',
+  # A crash dump is a memory image, not authored content (X28).
+  '''(^|/)erl_crash\.dump$''',
+  # Git-ignored by design. Their absence from the index is what actually
+  # matters, and scripts/v1/lib/checks.sh asserts that separately by name,
+  # without ever opening one.
+  '''(^|/)config/secrets\.exs$''',
+  '''(^|/)\.env($|\.)''',
+  '''(^|/)\.gh_token$''',
+]

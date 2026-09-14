@@ -1,0 +1,30 @@
+=== 01e deep run 3 (clock-step quarantine in place) ===
+started  2026-09-14T10:03:08Z
+seed     20260914
+runs     AURORA_PROPERTY_RUNS=500
+also running on this machine at launch: 0 mix process(es)
+
+[mixlane] core: DB_PORT=5490 env AURORA_PROPERTY_RUNS=500 AURORA_LEAK_REPORT=/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/docs/evidence/v1/phase-01/logs/01e-leaks.jsonl mix test test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_regressions_test.exs --seed 20260914
+Running ExUnit with seed: 20260914, max_cases: 48
+Excluding tags: [:headless]
+
+..................
+20:05:05.131 [error] Postgrex.Protocol (#PID<0.354.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.425.0> (:erlang) timed out because it owned the connection for longer than 120000ms (set via the :ownership_timeout option)
+............
+5 generated history/histories were abandoned as inconclusive: the wall clock the ledger stamps `inserted_at` from (`ledger.ex:452`) stepped backwards mid-run, so the ledger's own `(inserted_at, id)` order stopped being the order it wrote in. That is finding L20, proved on its own by `test I10 a backwards step in the wall clock leaves a promotional grant that can never expire (L20, fixed in 06a)`. The properties above therefore covered 5 fewer histories than they asked for.
+
+  model_88194 step 23: [~U[2026-09-14 10:05:52.475331Z], ~U[2026-09-14 10:05:53.388530Z], ~U[2026-09-14 10:05:53.401618Z], ~U[2026-09-14 10:05:53.413415Z], ~U[2026-09-14 10:05:53.427220Z], ~U[2026-09-14 10:05:53.440126Z], ~U[2026-09-14 10:05:53.452161Z], ~U[2026-09-14 10:05:53.467006Z], ~U[2026-09-14 10:05:53.487538Z], ~U[2026-09-14 10:05:53.545637Z], ~U[2026-09-14 10:05:53.556312Z], ~U[2026-09-14 10:05:53.569186Z], ~U[2026-09-14 10:05:53.594639Z], ~U[2026-09-14 10:05:53.615901Z], ~U[2026-09-14 10:05:53.626988Z]]
+  model_80386 step 19: [~U[2026-09-14 10:05:21.170753Z], ~U[2026-09-14 10:05:22.317225Z], ~U[2026-09-14 10:05:22.324110Z], ~U[2026-09-14 10:05:22.330318Z], ~U[2026-09-14 10:05:22.345483Z], ~U[2026-09-14 10:05:22.354035Z], ~U[2026-09-14 10:05:22.381947Z], ~U[2026-09-14 10:05:22.389689Z], ~U[2026-09-14 10:05:22.397056Z], ~U[2026-09-14 10:05:22.405091Z], ~U[2026-09-14 10:05:22.413219Z], ~U[2026-09-14 10:05:22.422413Z], ~U[2026-09-14 10:05:22.431365Z], ~U[2026-09-14 10:05:22.440736Z]]
+  model_50626 step 25: [~U[2026-09-14 10:04:18.544913Z], ~U[2026-09-14 10:04:19.646367Z], ~U[2026-09-14 10:04:19.651505Z], ~U[2026-09-14 10:04:19.671171Z], ~U[2026-09-14 10:04:19.677496Z], ~U[2026-09-14 10:04:19.683242Z], ~U[2026-09-14 10:04:19.689433Z], ~U[2026-09-14 10:04:19.695559Z], ~U[2026-09-14 10:04:19.702123Z], ~U[2026-09-14 10:04:19.710301Z], ~U[2026-09-14 10:04:19.721269Z], ~U[2026-09-14 10:04:19.733113Z], ~U[2026-09-14 10:04:19.739664Z], ~U[2026-09-14 10:04:19.756646Z], ~U[2026-09-14 10:04:19.763188Z]]
+  model_31618 step 5: [~U[2026-09-14 10:03:47.268339Z], ~U[2026-09-14 10:03:48.460085Z], ~U[2026-09-14 10:03:48.466143Z], ~U[2026-09-14 10:03:48.472253Z]]
+  model_4994 step 8: [~U[2026-09-14 10:03:15.978185Z], ~U[2026-09-14 10:03:17.169339Z], ~U[2026-09-14 10:03:17.177322Z]]
+
+
+Finished in 190.8 seconds (0.00s async, 190.8s sync)
+
+Result: 30 passed (6 properties, 24 tests)
+[mixlane] core exit=0 started=2026-09-14T10:03:08Z finished=2026-09-14T10:06:12Z
+
+deep3 exit code  0
+deep3 wall time  184s
+finished         2026-09-14T10:06:12Z

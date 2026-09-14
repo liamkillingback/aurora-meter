@@ -1,0 +1,12 @@
+|    100.00% | AuroraMeter.Tenant                   |
+|    100.00% | AuroraMeter.Tenant.Default           |
+|------------|--------------------------------------|
+|     92.55% | Total                                |
+
+Coverage test failed, threshold not met:
+
+    Coverage:   92.55%
+    Threshold:  93.00%
+
+Generated HTML coverage results in "cover" directory
+[mixlane] core exit=3 started=2026-09-14T08:39:25Z finished=2026-09-14T08:39:29Z
