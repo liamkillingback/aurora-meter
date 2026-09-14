@@ -5,8 +5,16 @@ D13: the owner publishes, agents prepare and verify. No `mix hex.publish` was
 run, no git tag was created or moved, nothing was pushed to any remote, and no
 published version was edited.
 
-Branch: `release/0.5.0` at `477a7a6e6fb03bfbf67153243687cb316bf676b3`, cut from
-`aurorameter-v1` (the phase 02 merge point). Local only.
+Branch: `release/0.5.0`, cut from `aurorameter-v1` (the phase 02 merge point) at
+`477a7a6e6fb03bfbf67153243687cb316bf676b3`, then kept level with
+`aurorameter-v1` so that it carries this evidence too and the owner publishes
+from one branch rather than from one that is a commit behind. `docs/` is not in
+`package.files`, so the archive is unchanged, and that was **verified rather
+than assumed**: rebuilding after the evidence commit produces the same tarball
+sha256, the same inner `contents.tar` digest and the same Hex `CHECKSUM` as the
+build at `477a7a6`. The exact head is recorded in the storefront's
+`docs/evidence/v1/release-manifest.md` section 10.1. Local only; no tag, no
+push.
 
 ## 1. Why this release exists
 

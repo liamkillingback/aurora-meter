@@ -169,6 +169,21 @@ STEP 7: the release branch
 
     mix.lock unchanged, working tree clean after the run.
 
+12. git branch -f release/0.5.0 aurorameter-v1
+    After the evidence commit, so the owner publishes from one branch rather
+    than from one that is a commit behind. The exact head is recorded in the
+    storefront's docs/evidence/v1/release-manifest.md section 10.1, which is
+    committed after this repository and can therefore name it.
+
+13. bash tmp/v1/02d-core-reverify.sh
+    2026-09-14T15:41:58Z  exit 0
+    docs/ is not in package.files, so the archive should be unchanged. Verified
+    rather than assumed: mix hex.build at f0da8d1 produces
+      tarball sha256 b63d928d68ea45440e3918ad669fe12ed9b7d269eff6148a589271d93ffad7d7
+      contents.tar   6661e22c1e3ce980eebee03710eca017226ce91870b20176513f3617e329da5d
+      CHECKSUM       097CB498517DCFAC7114871C88E426DF087D30F87A48A189C7205AA3FCBFCEA6
+    all three identical to the build at 477a7a6.
+
 --------------------------------------------------------------------------------
 Left for the owner, verbatim, never run here
 --------------------------------------------------------------------------------
