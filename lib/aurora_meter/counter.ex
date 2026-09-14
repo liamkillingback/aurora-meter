@@ -35,6 +35,35 @@ defmodule AuroraMeter.Counter do
     * `{tenant_key, feature, {:day, date}}` — a UTC day bucket, maintained
       alongside the period counter when `:history` is enabled, feeding
       `AuroraMeter.history/3`
+
+  ## Events-source features
+
+  A feature configured `feature_sources: %{name => :events}` keeps a row here,
+  because `AuroraMeter.usage/2` and the quota functions read it, but the row is
+  maintained differently and two of its columns behave in ways that look wrong
+  and are not.
+
+  `pending_flush` stays at zero and the key is never marked dirty:
+  `apply_projection/2` is the only writer of `value` for such a key other than a
+  `with_quota` reservation, and it writes neither. That is what keeps a durable
+  event out of `Store.snapshot_flush_batch/0`, out of `Storage.flush_batch/3`
+  and therefore out of `aurora_meter_counters` (I08).
+
+  `remote` grows without ever being cleared. `apply_remote/2` adds to it when a
+  peer gossips a projected delta, and only `rebase/3` clears it: the flusher
+  rebases the keys in a batch it wrote, and `AuroraMeter.Cluster` rebases the
+  keys a peer announced in one, and an events-source key is in neither. A large
+  `remote` on such a key is therefore the expected steady state, not a
+  diagnostic. `remote_since_rebase/1` exists for the flusher's reasoning about
+  buffered keys and has no caller that reaches these.
+
+  There is no day bucket at all for an events-source feature: every caller of
+  `bump_history/4` is either blocked by a guard (`incr/4` from
+  `AuroraMeter.track/4`, the non-deferred branch of `reserve/6` from
+  `AuroraMeter.reserve/2,3`) or not reached (`commit_work/5`, which
+  `AuroraMeter.Entitlements.with_quota/4` does not call for these features). So
+  `AuroraMeter.history/3` reports zeros; the durable series is
+  `AuroraMeter.Events.stream/1`.
   """
 
   alias AuroraMeter.Clock

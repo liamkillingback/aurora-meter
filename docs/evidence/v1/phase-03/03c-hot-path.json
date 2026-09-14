@@ -1,0 +1,277 @@
+{
+  "functions": [
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 264,
+      "symbol": "bump/2",
+      "head_sha256": "46a5d28f2fee4bdcf3446afe6fabd56a8a69231392984ccd4ee26bd8494e82a5",
+      "working_sha256": "46a5d28f2fee4bdcf3446afe6fabd56a8a69231392984ccd4ee26bd8494e82a5",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 628,
+      "symbol": "commit_work/5",
+      "head_sha256": "506d30e786710691daac2610fa415a18a59d1d7aaa6f2dde68047a9844a55ed1",
+      "working_sha256": "506d30e786710691daac2610fa415a18a59d1d7aaa6f2dde68047a9844a55ed1",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 406,
+      "symbol": "release_work/4",
+      "head_sha256": "9949779f22c9f30aff82d3ddded988f4eb9f157c592b2598e7c4d8d7f8ad960a",
+      "working_sha256": "9949779f22c9f30aff82d3ddded988f4eb9f157c592b2598e7c4d8d7f8ad960a",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 210,
+      "symbol": "reserve_pending/2",
+      "head_sha256": "d27acf4e45ab3d410dba8f88474cc89e192b3826ad465cd5abb49275919d753a",
+      "working_sha256": "d27acf4e45ab3d410dba8f88474cc89e192b3826ad465cd5abb49275919d753a",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 493,
+      "symbol": "reserve/6",
+      "head_sha256": "9ec606127c26933efede1deee0877c5edac9d27334e6587da5b18a73cbaf42c9",
+      "working_sha256": "9ec606127c26933efede1deee0877c5edac9d27334e6587da5b18a73cbaf42c9",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 182,
+      "symbol": "incr/4",
+      "head_sha256": "843771dc60174417e588cf942319807f0ffe866c304329af20d78d59f2027f23",
+      "working_sha256": "843771dc60174417e588cf942319807f0ffe866c304329af20d78d59f2027f23",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 245,
+      "symbol": "apply_projection/2",
+      "head_sha256": "6323bff66a8703b0ccc72af06f0319eb5ef483604cf90855b908da8d65e64c86",
+      "working_sha256": "6323bff66a8703b0ccc72af06f0319eb5ef483604cf90855b908da8d65e64c86",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 551,
+      "symbol": "apply_remote/2",
+      "head_sha256": "dc7d3e714e8e2b8956dc0bb67b51e51388b66fa492229ec085ad0a2c7b9b495b",
+      "working_sha256": "dc7d3e714e8e2b8956dc0bb67b51e51388b66fa492229ec085ad0a2c7b9b495b",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 471,
+      "symbol": "rebase/3",
+      "head_sha256": "b2f64944067e7d30aeb6c5f9805e493a9208e0a95e674a41265383bc22039089",
+      "working_sha256": "b2f64944067e7d30aeb6c5f9805e493a9208e0a95e674a41265383bc22039089",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 204,
+      "symbol": "base/1",
+      "head_sha256": "4e7032ed84902facf3850ba80ed9170fc15d5af46f5bd3e1f12b3e55c1bdf688",
+      "working_sha256": "4e7032ed84902facf3850ba80ed9170fc15d5af46f5bd3e1f12b3e55c1bdf688",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 128,
+      "symbol": "mark_dirty/1",
+      "head_sha256": "865007b32f9543e6df8d37dcfc63dfbb9f2c9e151d503bfdcb3436caef4836c1",
+      "working_sha256": "865007b32f9543e6df8d37dcfc63dfbb9f2c9e151d503bfdcb3436caef4836c1",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 245,
+      "symbol": "take_pending/2",
+      "head_sha256": "46ebce448acafe67f5b66e0873b1f7dc5904ac506947c56f8659c10096aef0bc",
+      "working_sha256": "46ebce448acafe67f5b66e0873b1f7dc5904ac506947c56f8659c10096aef0bc",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 141,
+      "symbol": "bump_history/4",
+      "head_sha256": "c22125577aafeb4e91b4e9a0b4c0d17d19fca72128076df47e43afe5f38de1a8",
+      "working_sha256": "c22125577aafeb4e91b4e9a0b4c0d17d19fca72128076df47e43afe5f38de1a8",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 181,
+      "symbol": "ensure_seeded/1",
+      "head_sha256": "fb684b09e0776810927dba3efc8620d463415ec4bb715653ead3dc2e2bbd8462",
+      "working_sha256": "fb684b09e0776810927dba3efc8620d463415ec4bb715653ead3dc2e2bbd8462",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 328,
+      "symbol": "stored_value/1",
+      "head_sha256": "7cb9610b616b02f510572b9b5841224f9e079e5885fb9d0f79455b028190d73c",
+      "working_sha256": "7cb9610b616b02f510572b9b5841224f9e079e5885fb9d0f79455b028190d73c",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/counter.ex",
+      "bytes": 225,
+      "symbol": "event_total/3",
+      "head_sha256": "e50b686566ca23aa6c46177c1f8dd1b0a6bf0b2a4dba25eed34e964802f5789f",
+      "working_sha256": "e50b686566ca23aa6c46177c1f8dd1b0a6bf0b2a4dba25eed34e964802f5789f",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/store.ex",
+      "bytes": 790,
+      "symbol": "snapshot/0",
+      "head_sha256": "365bc2c3ef1d288063076441e5b9986c4d4a685a61333263f3fe763b76626258",
+      "working_sha256": "365bc2c3ef1d288063076441e5b9986c4d4a685a61333263f3fe763b76626258",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/store.ex",
+      "bytes": 81,
+      "symbol": "snapshot_flush_batch/0",
+      "head_sha256": "20e4a0774ce85b0bd188c93319aeac889d0ffbae766393e05d42d1d09e3762ca",
+      "working_sha256": "20e4a0774ce85b0bd188c93319aeac889d0ffbae766393e05d42d1d09e3762ca",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/flusher.ex",
+      "bytes": 786,
+      "symbol": "persist/1",
+      "head_sha256": "66315a4305f94da716711d95d88d8ce31ec59a54e12d6c95f1568877932cc1dc",
+      "working_sha256": "66315a4305f94da716711d95d88d8ce31ec59a54e12d6c95f1568877932cc1dc",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/flusher.ex",
+      "bytes": 168,
+      "symbol": "batch/0",
+      "head_sha256": "cbcc22511543139b5adc9eb05b9737b52faf57558fbb4024702373c874e36cd5",
+      "working_sha256": "cbcc22511543139b5adc9eb05b9737b52faf57558fbb4024702373c874e36cd5",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage.ex",
+      "bytes": 87,
+      "symbol": "flush_batch/3",
+      "head_sha256": "b534a44a9fc97e6d86e03d3a536653ca8c91c904f9d16f5d8d312b33a9cd312c",
+      "working_sha256": "b534a44a9fc97e6d86e03d3a536653ca8c91c904f9d16f5d8d312b33a9cd312c",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage.ex",
+      "bytes": 108,
+      "symbol": "add_counters/1",
+      "head_sha256": "335e3083c99e9b0175b30d80b8bdc8b595e2ebd5bb76d6ff30d2378862d20ae2",
+      "working_sha256": "335e3083c99e9b0175b30d80b8bdc8b595e2ebd5bb76d6ff30d2378862d20ae2",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage.ex",
+      "bytes": 54,
+      "symbol": "load_counter/3",
+      "head_sha256": "b351528fae31affc28489a28ee209205e256de7295c9284274d2cf158885e5a9",
+      "working_sha256": "b351528fae31affc28489a28ee209205e256de7295c9284274d2cf158885e5a9",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage/ecto.ex",
+      "bytes": 1157,
+      "symbol": "flush_batch/3",
+      "head_sha256": "aa584011c4429a3b0eff81ad7ea8398197b80dd09df27737c24a1aa33d7ec701",
+      "working_sha256": "aa584011c4429a3b0eff81ad7ea8398197b80dd09df27737c24a1aa33d7ec701",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage/ecto.ex",
+      "bytes": 1005,
+      "symbol": "add_counters/1",
+      "head_sha256": "910c7af92b657844e25dc80adb4ab9ebfc4bee0f92cf52cc389222974df1969c",
+      "working_sha256": "910c7af92b657844e25dc80adb4ab9ebfc4bee0f92cf52cc389222974df1969c",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage/ecto.ex",
+      "bytes": 513,
+      "symbol": "upsert_counters/1",
+      "head_sha256": "d5557a8c2fc64ce6570c728bd9fbcd55be0cbc4e05401a061fa06fd2bea8db17",
+      "working_sha256": "d5557a8c2fc64ce6570c728bd9fbcd55be0cbc4e05401a061fa06fd2bea8db17",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/storage/ecto.ex",
+      "bytes": 303,
+      "symbol": "load_counter/3",
+      "head_sha256": "269177ea12c9ad3d7678fa5640d051f341c143da6ff0dfb5372415dd801464bc",
+      "working_sha256": "269177ea12c9ad3d7678fa5640d051f341c143da6ff0dfb5372415dd801464bc",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/broadcaster.ex",
+      "bytes": 554,
+      "symbol": "do_broadcast/0",
+      "head_sha256": "8d0c6103325160919b5e0f4e5d7a1fba3975a2e35f3d77dcae2178276685b707",
+      "working_sha256": "8d0c6103325160919b5e0f4e5d7a1fba3975a2e35f3d77dcae2178276685b707",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/cluster.ex",
+      "bytes": 805,
+      "symbol": "handle_batch/3",
+      "head_sha256": "d5e17d42b05b800707ecccf787a835fbaf21c18d28d606e0ded46d40d2a5a6db",
+      "working_sha256": "d5e17d42b05b800707ecccf787a835fbaf21c18d28d606e0ded46d40d2a5a6db",
+      "identical": true
+    }
+  ],
+  "summary": {
+    "functions_checked": 29,
+    "functions_identical": 29,
+    "files_checked": 4,
+    "files_identical": 4,
+    "pro_lib_changed": 0
+  },
+  "generated_at": "2026-09-14T19:22:25.158789Z",
+  "core_head": "6d798c0bb09f9e71973096df23dc2a5ab0fdb883",
+  "pro_head": "0da7e1d5518b75a72f4f8517ae48c2d2884c35ca",
+  "whole_files": [
+    {
+      "file": "lib/aurora_meter/store.ex",
+      "bytes": 4609,
+      "head_sha256": "b2c4d574193f4a4b15733f126ba0ba4a497994d8e87bb0708cff9f99a2735ddf",
+      "working_sha256": "b2c4d574193f4a4b15733f126ba0ba4a497994d8e87bb0708cff9f99a2735ddf",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/flusher.ex",
+      "bytes": 3881,
+      "head_sha256": "19cf12b73f70f93850fdd12cf9f86aef5b5266180e53ea4b6873bc00d9ef5db7",
+      "working_sha256": "19cf12b73f70f93850fdd12cf9f86aef5b5266180e53ea4b6873bc00d9ef5db7",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/broadcaster.ex",
+      "bytes": 3593,
+      "head_sha256": "f2b02ffe6289be9251ee56376cb3ecb88d8b44362b2a372208303f4392de29ce",
+      "working_sha256": "f2b02ffe6289be9251ee56376cb3ecb88d8b44362b2a372208303f4392de29ce",
+      "identical": true
+    },
+    {
+      "file": "lib/aurora_meter/cluster.ex",
+      "bytes": 4553,
+      "head_sha256": "6c2f668175160802b7c6bf895210110b4a64d8d88d338a1b9039bb5ebd1c5bdc",
+      "working_sha256": "6c2f668175160802b7c6bf895210110b4a64d8d88d338a1b9039bb5ebd1c5bdc",
+      "identical": true
+    }
+  ],
+  "pro_lib_changed_files": []
+}

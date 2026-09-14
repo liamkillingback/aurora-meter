@@ -39,7 +39,7 @@ every helper name.
 |---|---|---|---|---|
 | `AuroraMeter.version/0` | `() :: String.t()` | stable | 0.1.0 | The compiled package version. |
 | `AuroraMeter.start_link/1` | `(keyword()) :: Supervisor.on_start()` | stable | 0.1.0 | Validates configuration, then starts the runtime. Add `AuroraMeter` to the host supervision tree instead of calling it directly. Raises `NimbleOptions.ValidationError` on bad configuration. |
-| `AuroraMeter.track/4` | `(tenant, atom(), integer(), keyword()) :: :ok` | stable | 0.1.0 | Arities 2 and 3 exist through defaults (`qty` 1, `opts` `[]`). Options `:durable`, `:metadata`. Counts an undeclared feature under every policy. |
+| `AuroraMeter.track/4` | `(tenant, atom(), integer(), keyword()) :: :ok` | stable | 0.1.0 | Arities 2 and 3 exist through defaults (`qty` 1, `opts` `[]`). Options `:durable`, `:metadata`. Counts an undeclared feature under every policy. Raises `ArgumentError` for a feature whose `:feature_sources` entry is `:events`, with or without `durable: true`, before anything is written. |
 | `AuroraMeter.record/4` | `(tenant, atom(), pos_integer(), keyword()) :: {:ok, AuroraMeter.Event.t(), :inserted \| :duplicate} \| {:error, {:invalid, errors} \| {:conflict, AuroraMeter.Event.t()} \| {:unavailable, term()} \| {:unsupported, :durable_events}}` | stable | 1.0.0 | The durable path. Required options `:id` and `:occurred_at`; optional `:dimensions`, `:metadata`, `:future_tolerance`, `:timeout`. A retry with the same `:id` is a duplicate, never a second charge. No fallback to `track/4`. |
 | `AuroraMeter.record_batch/2` | `([map()], keyword()) :: {:ok, [{AuroraMeter.Event.t(), :inserted \| :duplicate}]} \| {:error, {:invalid, errors} \| {:conflict, index, AuroraMeter.Event.t()} \| {:unavailable, term()} \| {:unsupported, :durable_events}}` | stable | 1.0.0 | One transaction for the whole batch; results in input order. Limits 500 elements and 1 MiB of encoded payload. |
 | `AuroraMeter.usage/2` | `(tenant, atom()) :: integer()` | stable | 0.1.0 | Current period, warm ETS value. |
@@ -54,10 +54,10 @@ every helper name.
 | `AuroraMeter.remaining/2` | `(tenant, atom()) :: non_neg_integer() \| :unlimited` | stable | 0.1.0 | |
 | `AuroraMeter.feature_value/3` | `(tenant, atom(), default) :: boolean() \| non_neg_integer() \| default` | stable | 0.4.0 | Arity 2 exists through a `nil` default. |
 | `AuroraMeter.quota/2` | `(tenant, atom()) :: AuroraMeter.Entitlements.quota()` | stable | 0.2.0 | Dashboard snapshot. `kind` is `:hard`, `:metered`, `:feature`, `:counter`, `:boolean` or `:undeclared`. |
-| `AuroraMeter.reserve/2` | `(tenant, atom()) :: :ok \| {:error, :limit_exceeded \| :not_entitled}` | stable | 0.1.0 | Atomic on one node. |
-| `AuroraMeter.reserve/3` | `(tenant, atom(), pos_integer()) :: :ok \| {:error, :limit_exceeded \| :not_entitled}` | stable | 0.1.0 | |
+| `AuroraMeter.reserve/2` | `(tenant, atom()) :: :ok \| {:error, :limit_exceeded \| :not_entitled}` | stable | 0.1.0 | Atomic on one node. Raises `ArgumentError` for an `:events`-source feature: it bills what it reserves immediately. |
+| `AuroraMeter.reserve/3` | `(tenant, atom(), pos_integer()) :: :ok \| {:error, :limit_exceeded \| :not_entitled}` | stable | 0.1.0 | Raises `ArgumentError` for an `:events`-source feature, as `reserve/2`. |
 | `AuroraMeter.with_quota/3` | `(tenant, atom(), (-> result)) :: {:ok, result} \| {:error, term()}` | stable | 0.1.0 | Releases the reservation on a raise, throw or exit. |
-| `AuroraMeter.with_quota/4` | `(tenant, atom(), pos_integer(), (-> result)) :: {:ok, result} \| {:error, term()}` | stable | 0.1.0 | Reserve and release use the same captured period. |
+| `AuroraMeter.with_quota/4` | `(tenant, atom(), pos_integer(), (-> result)) :: {:ok, result} \| {:error, term()}` | stable | 0.1.0 | Reserve and release use the same captured period. For an `:events`-source feature the reservation is released on success too: it is admission control, and the recorded event is the charge. |
 
 ### 1.2 `AuroraMeter.Events`
 
@@ -235,6 +235,12 @@ in section 2.
 | `AuroraMeter.Config.undeclared_feature_policy/0` | `() :: :allow \| :warn \| :deny \| :raise` | stable | 0.5.0 | |
 | `AuroraMeter.Config.policy_for/1` | `(atom()) :: :allow \| :warn \| :deny \| :raise` | stable | 0.5.0 | The seam every entitlement entry point consults. |
 | `AuroraMeter.Config.durable_features/0` | `() :: [atom()]` | deprecated | 0.1.0 | Reads the deprecated `:durable_features` key. |
+| `AuroraMeter.Config.feature_sources/0` | `() :: %{atom() => :buffered \| :events}` | additive | 1.0.0 | The `:feature_sources` map as declared. |
+| `AuroraMeter.Config.feature_source/1` | `(atom()) :: :buffered \| :events` | additive | 1.0.0 | Where a feature's commercial quantity comes from, as in force on this node. Read once at boot; a runtime change to the key does not move it. |
+| `AuroraMeter.Config.events_outbox/0` | `() :: module() \| nil` | additive | 1.0.0 | |
+| `AuroraMeter.Config.events_future_tolerance/0` | `() :: non_neg_integer()` | additive | 1.0.0 | |
+| `AuroraMeter.Config.record_timeout/0` | `() :: pos_integer()` | additive | 1.0.0 | |
+| `AuroraMeter.Config.record_max_concurrency/0` | `() :: pos_integer()` | additive | 1.0.0 | |
 | `AuroraMeter.Config.flush_interval/0` | `() :: pos_integer()` | stable | 0.1.0 | |
 | `AuroraMeter.Config.broadcast_interval/0` | `() :: pos_integer()` | stable | 0.1.0 | |
 | `AuroraMeter.Config.history?/0` | `() :: boolean()` | stable | 0.2.0 | |

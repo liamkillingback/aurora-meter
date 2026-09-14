@@ -151,10 +151,12 @@ background flusher writes the totals to Postgres on the `:flush_interval`
 fast enough to call on every request, and also why losing the Store or the VM
 loses whatever is not yet in an acknowledged flush batch: usually the last
 interval, plus anything that piled up behind it while the database was
-unreachable. If a count matters more than that, list the feature in
-`:durable_features` and every increment also writes a raw event row
-synchronously. That row is a record, not the billing source: usage reporting
-reads the persisted counters either way.
+unreachable. If a count matters more than that, give the feature a different
+source: `config :aurora_meter, feature_sources: %{name => :events}` and
+`AuroraMeter.record/4` in place of `track/3`. You supply the identity, one
+transaction writes the fact and its total, and a retry is a duplicate rather
+than a second charge. See [billing from recorded
+events](events-source.md).
 
 ### "Are they allowed?"
 

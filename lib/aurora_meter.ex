@@ -60,6 +60,8 @@ defmodule AuroraMeter do
   ledger in micro-dollars, next to (not instead of) the plan counters above.
   """
 
+  require Logger
+
   alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Config.Schema, as: ConfigSchema
@@ -99,14 +101,23 @@ defmodule AuroraMeter do
   entitlement, and metering a name before it reaches a plan is a reasonable
   thing to do. It reports the condition instead, as `declared:` in
   `[:aurora_meter, :track]` telemetry metadata.
+
+  It does refuse one thing. A feature configured
+  `feature_sources: %{name => :events}` raises `ArgumentError`, with or without
+  `durable: true`, because its commercial quantity is the sum of the events
+  `record/4` committed and counting it here as well would bill the same usage
+  twice. The raise happens before the tenant key is resolved and before any ETS
+  write, so it leaves nothing behind. See [Metering](metering.md).
   """
   @spec track(term(), atom(), integer(), keyword()) :: :ok
   def track(tenant, feature, qty \\ 1, opts \\ []) do
     feature = feature!(feature)
+    buffered_source!(feature)
     tenant_key = Tenant.to_key(tenant)
-    period_start = Period.current!(tenant).start
+    period = Period.current!(tenant)
+    period_start = period.start
     Counter.incr(tenant_key, feature, qty, period_start)
-    maybe_write_event(tenant_key, feature, qty, opts)
+    maybe_write_event(tenant_key, feature, qty, period, opts)
 
     # `declared:` here is "does any plan declare this name", not "is this tenant
     # entitled to it". Answering the second would mean resolving the tenant's
@@ -403,20 +414,80 @@ defmodule AuroraMeter do
       "the history."
   end
 
-  @spec maybe_write_event(String.t(), atom(), integer(), keyword()) :: :ok
-  defp maybe_write_event(tenant_key, feature, qty, opts) do
-    if durable?(feature, opts) do
-      Storage.insert_events([
-        %{
-          tenant_key: tenant_key,
-          feature: feature,
-          quantity: qty,
-          metadata: Map.new(Keyword.get(opts, :metadata, %{}))
-        }
-      ])
+  # The one refusal on the `track/4` path, and it is I08's: a feature whose
+  # commercial quantity comes from durable events must not also be counted into
+  # the buffered path, because the flusher would write it to
+  # `aurora_meter_counters` and a reporter bills that table.
+  #
+  # It is checked before `Tenant.to_key/1` and before any ETS write on purpose:
+  # a guard that fires after a partial mutation leaves the thing it was meant to
+  # prevent, half-done.
+  #
+  # A binary feature name reaches here in the transition release (see
+  # `feature!/2`), and never matches: `:feature_sources` is keyed by atoms. That
+  # is correct rather than a gap, because a binary feature is already a warned
+  # deprecation on its way to an `ArgumentError` of its own in 1.0.
+  @spec buffered_source!(term()) :: :ok
+  defp buffered_source!(feature) do
+    if Config.feature_source(feature) == :events do
+      raise ArgumentError,
+            "#{inspect(feature)} is an events-source feature; use AuroraMeter.record/4. " <>
+              "Tracking it would create a second, separately billable count: its " <>
+              "commercial quantity is the sum of the events recorded for it, and an ETS " <>
+              "increment would be flushed to aurora_meter_counters and reported as well. " <>
+              "`config :aurora_meter, feature_sources: %{#{inspect(feature)} => :buffered}` " <>
+              "restores tracking, and is a period-boundary decision, not a call-site one."
     end
 
     :ok
+  end
+
+  # The legacy durable-track path. It is kept working and is deprecated; nothing
+  # reads these rows for billing and nothing deduplicates them. The row's
+  # identity rule lives in `AuroraMeter.Storage.Ecto.insert_events/1`; what is
+  # decided here is that the row is charged to the period the counter was just
+  # bumped in, resolved once, rather than to a second lookup that could land on
+  # the other side of a boundary from the increment it accompanies.
+  @spec maybe_write_event(String.t(), atom(), integer(), Period.t(), keyword()) :: :ok
+  defp maybe_write_event(tenant_key, feature, qty, period, opts) do
+    if durable?(feature, opts) do
+      write_legacy_event(tenant_key, feature, qty, period, opts)
+    end
+
+    :ok
+  end
+
+  # The rescue adds a log line and nothing else. It re-raises because swallowing
+  # the failure would leave the ETS counter bumped and the caller believing the
+  # row exists, which is worse than the exception it already got
+  # (`open-findings.md` C14). What the log adds is the tenant and the feature:
+  # without them the exception names a repo and a table and the operator cannot
+  # tell whose usage lost its row.
+  #
+  # The disagreement C14 records is NOT fixed here and must not be claimed to
+  # be: inside a host transaction this insert joins that transaction and rolls
+  # back with it, while the ETS bump survives and will flush. `record/4` is the
+  # path with no such window.
+  @spec write_legacy_event(String.t(), atom(), integer(), Period.t(), keyword()) :: :ok
+  defp write_legacy_event(tenant_key, feature, qty, period, opts) do
+    Storage.insert_events([
+      %{
+        tenant_key: tenant_key,
+        feature: feature,
+        quantity: qty,
+        metadata: Map.new(Keyword.get(opts, :metadata, %{})),
+        period_start: period.start,
+        period_source: period.source
+      }
+    ])
+  rescue
+    error ->
+      Logger.error(
+        "AuroraMeter durable event write failed for #{inspect(tenant_key)}/" <>
+          "#{inspect(feature)}: " <> Exception.message(error)
+      )
+
+      reraise error, __STACKTRACE__
   end
 
   @spec durable?(atom(), keyword()) :: boolean()

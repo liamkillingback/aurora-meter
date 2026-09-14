@@ -38,7 +38,7 @@ noted) and changes no behaviour in 0.5.x.
 | A feature name arrived as a binary rather than an atom, once per name | Raises `ArgumentError` | Pass the atom. Aurora Meter never calls `String.to_atom/1` on a feature name, and it never will: that is how a host turns user input into an unbounded atom table |
 | Your `AuroraMeter.Tenant` implementation returned `""` from `to_key/1`, once per module | Raises `ArgumentError` | Return a non-empty binary. An empty key is one shared counter row for every tenant that produces it |
 | A plan declares a metered feature with a float `unit_price` | Warns, exactly as 0.5.x does. This one does not become an error in 1.0 | Move to integer minor units (cents) when you can; a float is kept for compatibility and can lose precision |
-| `durable_features: [...]` is deprecated | Still works. It is kept until 2.0 | Nothing today. 1.0 introduces `feature_sources`, which says where a feature's commercial quantity comes from, and `AuroraMeter.record/4` for usage that must not be lost. Both are additive |
+| `durable_features: [...]` is deprecated | Still works. It is kept until 2.0 | Nothing today. The replacement is already here and additive: `feature_sources` says where a feature's commercial quantity comes from, and `AuroraMeter.record/4` records usage that must not be lost. Moving a feature that is already being billed needs a cutover; see [metering](metering.md) |
 
 ## The one thing 0.5.0 changes rather than warns about
 

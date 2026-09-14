@@ -25,7 +25,12 @@ treated as Aurora Meter keys.
 | `:period_source` | `AuroraMeter.Period` impl | — | `AuroraMeter.Period.Calendar` (see [periods](periods.md) for the contract) |
 | `:clock` | `AuroraMeter.Clock` impl | — | `AuroraMeter.Clock.System`, the only value supported in production |
 | `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise` | — | `:warn` in 0.5.x, `:deny` from 1.0. What the entitlement functions do with a feature the tenant's plan does not declare (see below) |
-| `:durable_features` | list of atoms | — | `[]` |
+| `:durable_features` | list of atoms | — | `[]`. **Deprecated**: the legacy durable-track list, see [metering](metering.md) |
+| `:feature_sources` | map of atom to `:buffered \| :events` | — | `%{}`. Where each feature's commercial quantity comes from; anything not listed is `:buffered` (see below) |
+| `:events_outbox` | `AuroraMeter.Events.Outbox` impl or `nil` | — | `nil`. Called inside the transaction that records an event, so an export intent commits with the fact |
+| `:events_future_tolerance` | seconds | — | `300`. How far ahead of the node clock an `occurred_at` may be before `AuroraMeter.record/4` refuses it |
+| `:record_timeout` | ms | — | `15_000`. How long one durable write may take before it is `{:error, {:unavailable, :timeout}}` |
+| `:record_max_concurrency` | positive integer | — | `64`. How many callers may hold an open record transaction at once |
 | `:flush_interval` | ms | — | `5_000` |
 | `:broadcast_interval` | ms | — | `1_000` |
 | `:history` | boolean | — | `true` — keep UTC day buckets for `AuroraMeter.history/3` |
@@ -43,10 +48,36 @@ config :aurora_meter,
   plans: MyApp.Plans,
   default_plan: :free,
   undeclared_feature_policy: :deny,
-  durable_features: [:ai_generations],
+  feature_sources: %{tokens: :events},
   flush_interval: 5_000,
   broadcast_interval: 1_000
 ```
+
+## `:feature_sources`
+
+Where each feature's commercial quantity comes from: `:buffered` (the ETS
+counter, flushed to `aurora_meter_counters`) or `:events` (the sum of the
+durable events `AuroraMeter.record/4` writes). Anything the map does not name is
+`:buffered`, which is every feature in 0.4.x, so adding the key changes nothing
+until you name a feature in it.
+
+A feature has exactly one source, and two boot checks hold that line:
+
+| Configuration | What happens at boot |
+|---|---|
+| a feature in both `:durable_features` and `:feature_sources` as `:events` | `ArgumentError` naming the feature; `AuroraMeter.start_link/1` does not return |
+| a value that is neither `:buffered` nor `:events` | `NimbleOptions.ValidationError` naming the key |
+| a feature declared `:events` that no plan declares | one warning per feature per node: the events are stored, but nothing will bill them |
+
+Three call-time consequences, all covered in [metering](metering.md):
+`AuroraMeter.track/4` and `AuroraMeter.reserve/2,3` raise `ArgumentError` for an
+`:events` feature, `AuroraMeter.with_quota/4` releases its reservation instead of
+committing it, and `AuroraMeter.history/3` returns zeros.
+
+The source is read once, at boot. Rewriting the key at runtime with
+`Application.put_env/3` changes the declaration and not the behaviour: a source
+that could change between two calls inside one period is precisely the double
+count the key exists to prevent, so changing a source is a deploy.
 
 ## `:undeclared_feature_policy`
 

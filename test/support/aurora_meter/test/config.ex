@@ -81,16 +81,32 @@ defmodule AuroraMeter.Test.Config do
     keys = Enum.map(overrides, fn {app, key, _value} -> {app, key} end)
     {:ok, snapshot} = GenServer.call(__MODULE__, {:acquire, self(), keys}, :infinity)
     Enum.each(overrides, fn {app, key, value} -> Application.put_env(app, key, value) end)
+    refresh_caches()
     %{holder: self(), snapshot: snapshot}
   end
 
   defp release(%{holder: holder, snapshot: snapshot}) do
     Enum.each(snapshot, &restore/1)
+    refresh_caches()
     GenServer.call(__MODULE__, {:release, holder})
   end
 
   defp restore({app, key, {:ok, value}}), do: Application.put_env(app, key, value)
   defp restore({app, key, :error}), do: Application.delete_env(app, key)
+
+  # `:feature_sources` is cached in `:persistent_term` because the `track/4` and
+  # `reserve/2,3` guards read it on every call (build unit 03c). The cache is
+  # filled by `AuroraMeter.Config.validate!/0`, which runs once at boot, so a
+  # region that overrides the key would otherwise change the declaration and not
+  # the behaviour, and a region that restored it would leave the previous
+  # region's sources in force for the rest of the run.
+  #
+  # It is called unconditionally rather than only for regions naming that key:
+  # the cost is one environment read and a comparison when nothing changed
+  # (`refresh!/0` writes the term only when the set actually differs), and a
+  # conditional here would be one more place that has to be kept in step with
+  # which keys are cached.
+  defp refresh_caches, do: AuroraMeter.Config.refresh!()
 
   defp validate_override!({app, key, _value}) when is_atom(app) and is_atom(key), do: :ok
 
@@ -137,6 +153,7 @@ defmodule AuroraMeter.Test.Config do
   @impl true
   def handle_info({:DOWN, ref, :process, pid, _reason}, %{monitor: ref, holder: pid} = state) do
     Enum.each(state.snapshot, &restore/1)
+    refresh_caches()
     {:noreply, next(%{state | holder: nil, monitor: nil, snapshot: []})}
   end
 

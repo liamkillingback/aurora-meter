@@ -117,3 +117,48 @@ end
 It increments the counter (the reservation *is* the usage), runs the function,
 and — if the function raises — releases the reservation before re-raising. Under
 concurrency, a hard limit of `n` admits exactly `n` reservations.
+
+### Over a feature whose source is `:events`
+
+For a feature configured `feature_sources: %{name => :events}` (see
+[metering](metering.md)) the gate is unchanged and the reservation is still
+strict on this node, but the reservation is **released** on success as well as on
+failure. It is admission control and nothing else: the billable fact is whatever
+`AuroraMeter.record/4` committed, and committing the reservation too would charge
+your estimate on top of the recorded quantity.
+
+The recipe is to record inside the callback:
+
+```elixir
+AuroraMeter.with_quota(org, :tokens, estimate, fn ->
+  {:ok, result} = do_work()
+
+  {:ok, _event, _outcome} =
+    AuroraMeter.record(org, :tokens, result.tokens,
+      id: result.request_id,
+      occurred_at: result.finished_at
+    )
+
+  result
+end)
+```
+
+The in-memory arithmetic over that sequence is `+estimate` at admission,
+`+result.tokens` from the projection, `-estimate` at release, so the value nets
+to the durable total. While the callback runs, every other caller sees the
+estimate held, which is the point of the gate.
+
+Two differences to plan around:
+
+  * **The cap counts what is in flight, plus what has been recorded.** For a
+    buffered feature an admitted call keeps its unit for the rest of the period.
+    Here a call that records nothing gives its estimate straight back, because
+    nothing was used.
+  * **`reserve/2,3` raises** for these features. It bills what it reserves
+    immediately, which would be the second count. Use `with_quota/4`, or
+    `check/2` to ask without reserving.
+
+A caller killed with `Process.exit(pid, :kill)` runs no release, so its estimate
+stays held on that node until the Store restarts or the period rolls over. That
+is the same documented local-quota leak buffered features have, and on this path
+it cannot become a charge at all.

@@ -207,6 +207,7 @@ defmodule AuroraMeter.MixProject do
         "docs/examples/team-saas.md",
         "docs/examples/allowance-and-overage.md",
         "docs/examples/prepaid-credits.md",
+        "docs/examples/events-source.md",
         "docs/examples/showing-usage.md",
         "docs/configuration.md",
         "docs/metering.md",

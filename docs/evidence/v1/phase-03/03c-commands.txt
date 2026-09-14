@@ -1,0 +1,242 @@
+03c: every command, with its exit code, seed, UTC timestamps and log.
+
+All Mix work ran through tmp/v1/mixlane.sh, which holds one flock per
+package _build, so no two Mix workloads shared a build tree (wave rule 1,
+open-findings.md X18). Logs named below live in tmp/v1/03c/logs/ in the
+storefront working tree; they are run artefacts and are not committed.
+
+== toolchain ==
+date_utc: 2026-09-14T18:58:35Z
+Erlang/OTP 29 [erts-17.0.1] [source] [64-bit] [smp:24:24] [ds:24:24:10] [async-threads:1] [jit:ns]
+
+Elixir 1.20.1 (compiled with Erlang/OTP 29)
+core version:   @version "0.5.0"
+core HEAD: 6d798c0
+pro version:   @version "0.3.0"
+pro HEAD: 0da7e1d
+/home/liamk/src/PhxTemplates/tmp/v1/03c/toolchain.sh: line 11: psql: command not found
+DB_PORT=5490 (already running; no container was created, started or removed)
+core mix.lock sha256: 70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3
+pro  mix.lock sha256: bd66012e64e0ce2cb97e5a9fdbee15c248277484a18f7176731e10649c6df424
+Seeds: --seed 0 where stated; the unseeded runs are ExUnit's own random
+seed, printed at the top of each log.
+
+== runs ==
+--- 00-baseline-core-test
+repo:      core
+command:   mix test
+started:   2026-09-14T18:58:37Z
+finished:  2026-09-14T19:01:44Z
+exit:      0
+log:       tmp/v1/03c/logs/00-baseline-core-test.log
+--- 01-guard-bench
+repo:      core
+command:   env MIX_ENV=test mix run tmp_03c_guard_bench.exs
+started:   2026-09-14T19:02:57Z
+finished:  2026-09-14T19:02:58Z
+exit:      0
+log:       tmp/v1/03c/logs/01-guard-bench.log
+--- 02-compile
+repo:      core
+command:   env MIX_ENV=test mix compile --warnings-as-errors
+started:   2026-09-14T19:04:46Z
+finished:  2026-09-14T19:04:47Z
+exit:      0
+log:       tmp/v1/03c/logs/02-compile.log
+--- 03-feature-source-first
+repo:      core
+command:   mix test test/aurora_meter/feature_source_test.exs --seed 0
+started:   2026-09-14T19:06:55Z
+finished:  2026-09-14T19:07:27Z
+exit:      2
+log:       tmp/v1/03c/logs/03-feature-source-first.log
+--- 04-feature-source-second
+repo:      core
+command:   mix test test/aurora_meter/feature_source_test.exs --seed 0
+started:   2026-09-14T19:07:45Z
+finished:  2026-09-14T19:07:56Z
+exit:      0
+log:       tmp/v1/03c/logs/04-feature-source-second.log
+--- 05-legacy-durable
+repo:      core
+command:   mix test test/aurora_meter/legacy_durable_track_test.exs --seed 0
+started:   2026-09-14T19:08:24Z
+finished:  2026-09-14T19:08:25Z
+exit:      2
+log:       tmp/v1/03c/logs/05-legacy-durable.log
+--- 06-legacy-durable-2
+repo:      core
+command:   mix test test/aurora_meter/legacy_durable_track_test.exs --seed 0
+started:   2026-09-14T19:08:35Z
+finished:  2026-09-14T19:08:37Z
+exit:      0
+log:       tmp/v1/03c/logs/06-legacy-durable-2.log
+--- 07-trace-names
+repo:      core
+command:   mix test test/aurora_meter/feature_source_test.exs test/aurora_meter/legacy_durable_track_test.exs --seed 0 --trace
+started:   2026-09-14T19:08:47Z
+finished:  2026-09-14T19:08:58Z
+exit:      0
+log:       tmp/v1/03c/logs/07-trace-names.log
+--- 08-guards
+repo:      core
+command:   mix test test/aurora_meter/correctness_index_test.exs test/aurora_meter/docs_claims_test.exs test/aurora_meter/api_inventory_test.exs test/aurora_meter/config_strictness_test.exs test/aurora_meter/config_test.exs --seed 0
+started:   2026-09-14T19:09:39Z
+finished:  2026-09-14T19:09:40Z
+exit:      2
+log:       tmp/v1/03c/logs/08-guards.log
+--- 09-guards2
+repo:      core
+command:   mix test test/aurora_meter/correctness_index_test.exs test/aurora_meter/docs_claims_test.exs test/aurora_meter/api_inventory_test.exs test/aurora_meter/config_strictness_test.exs test/aurora_meter/config_test.exs test/aurora_meter/feature_source_test.exs --seed 0
+started:   2026-09-14T19:09:52Z
+finished:  2026-09-14T19:09:56Z
+exit:      0
+log:       tmp/v1/03c/logs/09-guards2.log
+--- 10-full-suite
+repo:      core
+command:   mix test
+started:   2026-09-14T19:09:58Z
+finished:  2026-09-14T19:13:06Z
+exit:      0
+log:       tmp/v1/03c/logs/10-full-suite.log
+--- 11-examples
+repo:      core
+command:   mix test test/aurora_meter/examples_test.exs test/aurora_meter/docs_claims_test.exs --seed 0
+started:   2026-09-14T19:14:11Z
+finished:  2026-09-14T19:14:13Z
+exit:      0
+log:       tmp/v1/03c/logs/11-examples.log
+--- 12-core-check
+repo:      core
+command:   mix check
+started:   2026-09-14T19:14:57Z
+finished:  2026-09-14T19:15:00Z
+exit:      4
+log:       tmp/v1/03c/logs/12-core-check.log
+--- 13-core-check
+repo:      core
+command:   mix check
+started:   2026-09-14T19:15:03Z
+finished:  2026-09-14T19:15:10Z
+exit:      2
+log:       tmp/v1/03c/logs/13-core-check.log
+--- 14-core-check
+repo:      core
+command:   mix check
+started:   2026-09-14T19:15:16Z
+finished:  2026-09-14T19:18:32Z
+exit:      1
+log:       tmp/v1/03c/logs/14-core-check.log
+--- 15-core-check
+repo:      core
+command:   mix check
+started:   2026-09-14T19:18:44Z
+finished:  2026-09-14T19:22:00Z
+exit:      0
+log:       tmp/v1/03c/logs/15-core-check.log
+--- 16-hot-path
+repo:      core
+command:   env MIX_ENV=test mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/03c/hot_path.exs
+started:   2026-09-14T19:22:18Z
+finished:  2026-09-14T19:22:19Z
+exit:      1
+log:       tmp/v1/03c/logs/16-hot-path.log
+--- 17-hot-path
+repo:      core
+command:   env MIX_ENV=test mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/03c/hot_path.exs
+started:   2026-09-14T19:22:24Z
+finished:  2026-09-14T19:22:25Z
+exit:      0
+log:       tmp/v1/03c/logs/17-hot-path.log
+--- 19-pro-check
+repo:      pro
+command:   mix check
+started:   2026-09-14T19:23:40Z
+finished:  2026-09-14T19:24:55Z
+exit:      0
+log:       tmp/v1/03c/logs/19-pro-check.log
+--- 20-evidence
+repo:      core
+command:   mix test test/aurora_meter/feature_source_evidence_test.exs --seed 0
+started:   2026-09-14T19:25:21Z
+finished:  2026-09-14T19:25:22Z
+exit:      2
+log:       tmp/v1/03c/logs/20-evidence.log
+--- 21-evidence
+repo:      core
+command:   mix test test/aurora_meter/feature_source_evidence_test.exs --seed 0
+started:   2026-09-14T19:25:33Z
+finished:  2026-09-14T19:25:34Z
+exit:      2
+log:       tmp/v1/03c/logs/21-evidence.log
+--- 22-evidence
+repo:      core
+command:   mix test test/aurora_meter/feature_source_evidence_test.exs --seed 0
+started:   2026-09-14T19:25:42Z
+finished:  2026-09-14T19:25:43Z
+exit:      0
+log:       tmp/v1/03c/logs/22-evidence.log
+--- 23-core-check-final
+repo:      core
+command:   mix check
+started:   2026-09-14T19:27:51Z
+finished:  2026-09-14T19:27:52Z
+exit:      1
+log:       tmp/v1/03c/logs/23-core-check-final.log
+--- 24-core-check-final
+repo:      core
+command:   mix check
+started:   2026-09-14T19:27:59Z
+finished:  2026-09-14T19:31:34Z
+exit:      0
+log:       tmp/v1/03c/logs/24-core-check-final.log
+--- 25-evidence-write
+repo:      core
+command:   env AURORA_EVIDENCE=1 mix test test/aurora_meter/feature_source_evidence_test.exs --seed 0
+started:   2026-09-14T19:31:45Z
+finished:  2026-09-14T19:31:46Z
+exit:      0
+log:       tmp/v1/03c/logs/25-evidence-write.log
+--- 26-core-check-final
+repo:      core
+command:   mix check
+started:   2026-09-14T19:31:53Z
+finished:  2026-09-14T19:35:08Z
+exit:      0
+log:       tmp/v1/03c/logs/26-core-check-final.log
+--- 27-hot-path-final
+repo:      core
+command:   env MIX_ENV=test mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/03c/hot_path.exs
+started:   2026-09-14T19:35:08Z
+finished:  2026-09-14T19:35:09Z
+exit:      0
+log:       tmp/v1/03c/logs/27-hot-path-final.log
+--- 28-db-sweep
+repo:      core
+command:   env MIX_ENV=test mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/03c/db_sweep.exs
+started:   2026-09-14T19:35:19Z
+finished:  2026-09-14T19:35:19Z
+exit:      1
+log:       tmp/v1/03c/logs/28-db-sweep.log
+--- 29-db-sweep
+repo:      core
+command:   env MIX_ENV=test mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/03c/db_sweep.exs
+started:   2026-09-14T19:35:22Z
+finished:  2026-09-14T19:35:23Z
+exit:      0
+log:       tmp/v1/03c/logs/29-db-sweep.log
+
+== negative control mutations ==
+Driven by tmp/v1/03c/negative_controls.py, which applies one textual
+mutation, runs the watching test through the same lane, restores the
+original bytes and asserts the sha256 matches. Results, including the
+before and after hashes, are in 03c-negative-controls.json.
+  track-guard              exit=2 noticed=True restored=True watcher=test/aurora_meter/feature_source_test.exs
+  reserve-guard            exit=2 noticed=True restored=True watcher=test/aurora_meter/feature_source_test.exs
+  with-quota-settle        exit=1 noticed=True restored=True watcher=test/aurora_meter/feature_source_test.exs
+  projection-marks-dirty   exit=2 noticed=True restored=True watcher=test/aurora_meter/feature_source_test.exs
+  dual-source-boot         exit=2 noticed=True restored=True watcher=test/aurora_meter/feature_source_test.exs
+  buffered-eligibility     exit=2 noticed=True restored=True watcher=test/aurora_meter/feature_source_test.exs
+  legacy-write-rescue      exit=1 noticed=True restored=True watcher=test/aurora_meter/legacy_durable_track_test.exs
+  legacy-period            exit=2 noticed=True restored=True watcher=test/aurora_meter/legacy_durable_track_test.exs
+  hot-path-tool            exit=1 noticed=True restored=True watcher=tmp/v1/03c/hot_path.exs

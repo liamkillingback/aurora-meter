@@ -182,9 +182,22 @@ midnight; 02c introduces the seam and owns the full `with_quota` crossing test.
 - `AuroraMeter.KillTest` / `test I03 a with_quota caller killed with :kill is never billed and leaves a documented reservation`
 - `AuroraMeter.KillTest` / `test I03 Counter.commit_work after a Store restart seeds rather than raising (C6, fixed in 03b)`
 - `AuroraMeter.ExamplesTest` / `test team-saas.md with_quota/3 gives the reservation back when the work raises`
+- `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I03 with_quota releases its reservation on success and leaves the recorded quantity`
+- `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I03 with_quota over an events-source feature bills nothing when the callback records nothing`
+- `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I03 with_quota over an events-source feature releases on a raise, a throw and an exit`
+- `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I03 a killed with_quota caller over an events-source feature bills nothing`
 
 The three catchable-failure cases that give the capacity back (a raise, a throw
 and an exit) are named under I04, whose guarantee is the one they measure.
+
+The last four are build unit 03c's contribution. For a feature whose reporting
+source is `:events` the success path releases the reservation instead of
+committing it, so "failed tentative work is never billed" is joined by
+"successful tentative work is not billed either": the charge is the event the
+callback recorded, and the reservation was only ever the gate in front of it.
+The killed-caller case is the same documented leak as above, asserted again on
+this path because releasing rather than committing is the change that could have
+introduced a new one.
 
 **Evidence.** `docs/evidence/v1/phase-01/i03.md`
 
@@ -229,8 +242,18 @@ estimated: see I03's known limits and
 - `AuroraMeter.EntitlementsTest` / `test check/2 blocks a hard cap at the limit`
 - `AuroraMeter.FeaturePolicyTest` / `test I04 denial under :deny never reserves`
 - `AuroraMeter.FeaturePolicyTest` / `test I04 declared-feature reservation is policy-invariant`
+- `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I04 with_quota over an events-source feature admits exactly the limit of concurrent callers`
 
-The last two are build unit 02b's contribution: `:undeclared_feature_policy` adds
+The last one is build unit 03c's, and it measures a different quantity from the
+others, which is why it is worth stating rather than assuming. For a buffered
+feature the cap counts calls, because an admitted call keeps its unit for the
+period. For an events-source feature the reservation is released on success, so
+the cap counts what is **in flight at once** plus whatever has been durably
+recorded. Fifty-five callers held inside their callbacks admit exactly fifty; the
+same fifty-five run to completion recording nothing consume nothing, and that is
+correct rather than a hole, because nothing was used.
+
+The two before it are build unit 02b's contribution: `:undeclared_feature_policy` adds
 a branch in front of the reservation, so the guarantee above now also has to say
 that a denied call takes no capacity and that a declared feature's reservation
 behaves the same under all four policy values.
@@ -288,6 +311,16 @@ netsplit or a real rejoin; a multi-node harness is 11d's.
 - `AuroraMeter.ClusterTest` / `test two writers a seed that races another node's flush heals on the announcement`
 - `AuroraMeter.ClusterTest` / `test gossip from another node moves this node's view without making the delta ours to flush`
 - `AuroraMeter.ClusterTest` / `test configuration publishing with sync off is a no-op`
+- `AuroraMeter.FeatureSourceTest` / `test projection, seeding and the cluster I05 a peer's projected delta moves this node's value and a cold reseed corrects it`
+- `AuroraMeter.FeatureSourceTest` / `test projection, seeding and the cluster I05 a peer's totals announcement never rebases an events-source key`
+
+The last two are build unit 03c's contribution, and the convergence story for an
+events-source feature is the easier one: the durable total is shared state, so a
+node that is cold for the key reads every node's events in one query rather than
+waiting for gossip. A projected delta still gossips, so warm peers move within a
+`:broadcast_interval`, and nothing ever rebases the key, because no node puts it
+in a flush batch and `Cluster`'s totals branch refuses an announcement that would
+move a key backwards.
 
 **Evidence.** `docs/evidence/v1/phase-01/i05.md`
 
@@ -384,34 +417,67 @@ exist.
 
 ## I08 One input source yields one commercial usage effect
 
-**Guarantee.** Today this holds by construction rather than by enforcement:
-durable event rows are written alongside the ETS counter but are never read by the
-billing path, and the only thing a Pro reporter bills is a persisted counter. So a
-unit of usage produces exactly one commercial effect because there is only one
-commercial path. Phase 03 makes the source explicit per feature and enforces it,
-so a feature whose source is events never appears in a flush batch, calling
-`track/4` on an events sourced feature raises rather than double counting, and a
-cutover from buffered to events happens at a watermark with the buffer drained
-first.
+**Guarantee.** Every feature has exactly one reporting source, declared as
+`feature_sources: %{name => :buffered | :events}` and defaulting to `:buffered`.
+The guarantee is negative and is discharged by closing every route from a durable
+event into `aurora_meter_counters`, which is the only table a Pro reporter bills
+from (`AuroraMeter.Pro.UsageReporter.report_one/5` reads it through
+`AuroraMeter.Storage.load_counter/3`).
 
-**Prerequisites.** A single configured source per feature. While both paths exist,
-the host must not also bill from the event log by hand.
+Three writers can put a quantity into that table, and each is closed for an
+events-source feature. `AuroraMeter.track/4` raises before resolving the tenant
+key, so nothing partial is left. `AuroraMeter.reserve/2,3` raises for the same
+reason one function deeper: it takes the non-deferred path, which bumps
+`pending_flush` immediately. `AuroraMeter.Entitlements.with_quota/4` releases its
+reservation on success instead of committing it, so the reservation stays
+admission control and the recorded event stays the charge. What remains is
+`Counter.apply_projection/2`, which writes `value` and `pending_gossip` and
+neither `pending_flush` nor the dirty table, so a projected quantity cannot enter
+`AuroraMeter.Store`'s flush-batch snapshot and therefore cannot reach
+`AuroraMeter.Storage.flush_batch/3`.
 
-**Known limits.** There is no configuration today that prevents a host from
-reading `aurora_meter_events` and billing it in addition to the counters. Pro
-rollups do read durable events directly when `history: false` (open finding C15),
-which is a reporting read rather than a billing read, but it is the shape of the
-double counting this invariant will forbid. The enforcement, and the cutover
-watermark, belong to phase 03 and phase 04.
+A declaration that would make the question ambiguous is refused at boot: a
+feature listed in both `:durable_features` and `:feature_sources` as `:events`
+raises from `AuroraMeter.Config.validate!/0`, and therefore from
+`AuroraMeter.start_link/1`.
+
+**Prerequisites.** A single configured source per feature, decided at a period
+boundary and applied by a deploy: the source is read from a cache that
+`AuroraMeter.Config.validate!/0` fills, so changing it at runtime changes nothing until the
+node is validated again. While both paths exist, the host must not also bill from
+the event log by hand.
+
+**Known limits.** Nothing prevents a host from reading `aurora_meter_events` and
+billing it in addition to the counters; the invariant covers what this library
+writes, not what a host does with the rows afterwards. Pro rollups do read
+durable events directly when `history: false` (open finding C15), which is a
+reporting read rather than a billing read.
+
+An events-source feature has no day history at all, and
+`AuroraMeter.history/3` returns zeros for one. That is deliberate: a projected
+quantity in `aurora_meter_history` would feed the Pro day rollup from the same
+units the outbox exports. `AuroraMeter.Events.stream/1` is the durable series.
+
+The migration from `:buffered` to `:events` is the half core cannot make safe on
+its own. Core refuses a dual declaration but has no way to know whether a
+feature's existing counter rows were ever reported to a provider, so nothing here
+stops a host flipping a source mid-period and leaving that period's usage split
+across a counter row and an event total. The watermark, the boot refusal when
+`usage_reports` rows exist without a cutover, and the tests for both are Pro's
+(build unit 04c) and are evidenced in Pro; there is deliberately no planned core
+test for them, because core has no `usage_reports` table to refuse against.
 
 **Tests.**
 
 - `AuroraMeter.MeteringTest` / `test a durable feature writes an event row on track`
 - `AuroraMeter.RecordProjectionTest` / `test I08 the projection never reaches the flush path I08 a projected event never appears in a flush batch`
 - `AuroraMeter.RecordProjectionTest` / `test I08 the projection never reaches the flush path I08 apply_projection writes value and gossip but never pending_flush or dirty`
-- PLANNED (03c): `AuroraMeter.SourcesTest` / `test I08 a feature sourced from events never appears in a flush batch`
-- PLANNED (03c): `AuroraMeter.SourcesTest` / `test I08 calling track on an events sourced feature raises`
-- PLANNED (03c): `AuroraMeter.SourcesTest` / `test I08 a cutover at the watermark drains the buffer and takes events after it`
+- `AuroraMeter.FeatureSourceTest` / `test configuration I08 declaring a feature in durable_features and as an events source fails at boot`
+- `AuroraMeter.FeatureSourceTest` / `test the track and reserve guards I08 track/4 raises for an events-source feature and writes nothing`
+- `AuroraMeter.FeatureSourceTest` / `test the track and reserve guards I08 track/4 with durable: true raises for an events-source feature and writes no row`
+- `AuroraMeter.FeatureSourceTest` / `test the track and reserve guards I08 reserve/2 and reserve/3 raise for an events-source feature and write nothing`
+- `AuroraMeter.FeatureSourceTest` / `test flush isolation I08 a thousand recorded events reach no flush batch, no counter row and no reporter read`
+- `AuroraMeter.FeatureSourceTest` / `test flush isolation I08 one flush writes the buffered feature and not the events-source one`
 
 **Evidence.** `docs/evidence/v1/phase-03/i08.md`
 

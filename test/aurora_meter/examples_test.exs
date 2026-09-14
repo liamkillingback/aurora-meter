@@ -62,6 +62,62 @@ defmodule Parsely.Plans do
   end
 end
 
+defmodule Lumen.Plans do
+  @moduledoc "The plans module printed in docs/examples/events-source.md."
+  use AuroraMeter.Plans
+
+  plan :free do
+    price 0
+    limit :tokens, 100_000, :hard
+  end
+
+  plan :studio do
+    price 9_900
+    metered :tokens, included: 2_000_000, unit_price: 1
+  end
+end
+
+defmodule Lumen.Model do
+  @moduledoc """
+  The guide's `Lumen.Model` is the host's own model client, so it is the one
+  thing in that example this suite has to supply rather than copy. Its shape is
+  fixed by what `Lumen.Gateway.complete/2` below reads off the response, and
+  that function IS copied verbatim.
+  """
+
+  @spec run(String.t()) :: map()
+  def run(prompt) do
+    %{
+      text: "answer to " <> prompt,
+      tokens: 1_420,
+      request_id: "req_" <> Integer.to_string(System.unique_integer([:positive])),
+      finished_at: AuroraMeter.Clock.now(),
+      model: "sonnet"
+    }
+  end
+end
+
+defmodule Lumen.Gateway do
+  @moduledoc "Gate on an estimate, charge for what actually happened."
+
+  @estimate 4_000
+
+  def complete(org, prompt) do
+    AuroraMeter.with_quota(org, :tokens, @estimate, fn ->
+      response = Lumen.Model.run(prompt)
+
+      {:ok, event, _outcome} =
+        AuroraMeter.record(org, :tokens, response.tokens,
+          id: response.request_id,
+          occurred_at: response.finished_at,
+          dimensions: %{"model" => response.model}
+        )
+
+      %{text: response.text, tokens: event.quantity}
+    end)
+  end
+end
+
 defmodule MyApp.DailyPeriod do
   @moduledoc "Usage buckets to the UTC day."
 
@@ -527,6 +583,103 @@ defmodule AuroraMeter.ExamplesTest do
                  ~U[2026-02-02 00:00:00Z]
       end)
     end
+  end
+
+  describe "events-source.md" do
+    test "the plans module carries exactly what the guide prints" do
+      plans = Lumen.Plans.__aurora_plans__()
+
+      assert plans[:free].features[:tokens] == {:limit, 100_000, :hard}
+      assert plans[:studio].features[:tokens] == {:metered, 2_000_000, 1}
+      assert plans[:studio].price == 9_900
+    end
+
+    test "the gateway gates on an estimate and charges the tokens it recorded" do
+      tenant = unique_tenant()
+
+      as_lumen(fn ->
+        AuroraMeter.subscribe(tenant, :studio)
+
+        # Warm the key, so the projection writes rather than reporting it cold.
+        assert AuroraMeter.usage(tenant, :tokens) == 0
+
+        assert {:ok, %{tokens: 1_420, text: "answer to hello"}} =
+                 Lumen.Gateway.complete(tenant, "hello")
+
+        # The estimate came back; the recorded quantity stayed. The guide's
+        # arithmetic, asserted: +4_000, +1_420, -4_000.
+        assert AuroraMeter.usage(tenant, :tokens) == 1_420
+
+        period = AuroraMeter.period(tenant).start
+        assert AuroraMeter.Events.total(tenant, :tokens, period) == 1_420
+
+        # And nothing reached the table a reporter bills from.
+        assert {:ok, _flushed} = AuroraMeter.Flusher.flush()
+        assert AuroraMeter.Storage.load_counter(tenant, :tokens, period) == nil
+      end)
+    end
+
+    test "recording the same id twice is a duplicate and charges nothing more" do
+      tenant = unique_tenant()
+      at = AuroraMeter.Clock.now()
+
+      as_lumen(fn ->
+        assert {:ok, _event, :inserted} =
+                 AuroraMeter.record(tenant, :tokens, 1_420, id: "req_9", occurred_at: at)
+
+        assert {:ok, _event, :duplicate} =
+                 AuroraMeter.record(tenant, :tokens, 1_420, id: "req_9", occurred_at: at)
+
+        period = AuroraMeter.period(tenant).start
+        assert AuroraMeter.Events.total(tenant, :tokens, period) == 1_420
+
+        assert {:error, {:conflict, existing}} =
+                 AuroraMeter.record(tenant, :tokens, 9_999, id: "req_9", occurred_at: at)
+
+        assert existing.quantity == 1_420
+        assert AuroraMeter.Events.total(tenant, :tokens, period) == 1_420
+      end)
+    end
+
+    test "track/4 and reserve/3 raise for the feature the guide moves to events" do
+      tenant = unique_tenant()
+
+      as_lumen(fn ->
+        assert_raise ArgumentError, fn -> AuroraMeter.track(tenant, :tokens, 10) end
+        assert_raise ArgumentError, fn -> AuroraMeter.reserve(tenant, :tokens, 10) end
+      end)
+    end
+
+    test "history/3 returns zeros for the events-source feature, as the guide says" do
+      tenant = unique_tenant()
+
+      as_lumen(fn ->
+        assert AuroraMeter.usage(tenant, :tokens) == 0
+
+        assert {:ok, _event, :inserted} =
+                 AuroraMeter.record(tenant, :tokens, 500,
+                   id: "charted",
+                   occurred_at: AuroraMeter.Clock.now()
+                 )
+
+        assert {:ok, _flushed} = AuroraMeter.Flusher.flush()
+
+        assert AuroraMeter.history(tenant, :tokens, days: 3) |> Enum.map(& &1.value) == [0, 0, 0]
+        assert AuroraMeter.usage(tenant, :tokens) == 500
+      end)
+    end
+  end
+
+  # The guide's two configuration lines, in one region: one `with_config` per
+  # test, because a nested region queues behind itself (open-findings.md X51).
+  defp as_lumen(fun) do
+    TestConfig.with_config(
+      [
+        {:aurora_meter, :plans, Lumen.Plans},
+        {:aurora_meter, :feature_sources, %{tokens: :events}}
+      ],
+      fun
+    )
   end
 
   # The clock helper notices that this process already holds the configuration

@@ -1,0 +1,110 @@
+[
+  {
+    "id": "track-guard",
+    "what": "AuroraMeter.buffered_source!/1 stops refusing an events-source feature",
+    "file": "lib/aurora_meter.ex",
+    "watcher": "test/aurora_meter/feature_source_test.exs",
+    "exit_code": 2,
+    "noticed": true,
+    "first_failure": "1) test configuration a runtime change to feature_sources takes effect only when the cache is rebuilt (AuroraMeter.FeatureSourceTest)",
+    "sha256_before": "1b2d9254420d80f65bb4f06b6920cef80320f31e381a641b560b5a4f486daf60",
+    "sha256_after_restore": "1b2d9254420d80f65bb4f06b6920cef80320f31e381a641b560b5a4f486daf60",
+    "restored": true
+  },
+  {
+    "id": "reserve-guard",
+    "what": "Entitlements.buffered_source!/1 stops refusing an events-source feature",
+    "file": "lib/aurora_meter/entitlements.ex",
+    "watcher": "test/aurora_meter/feature_source_test.exs",
+    "exit_code": 2,
+    "noticed": true,
+    "first_failure": "1) test the track and reserve guards I08 reserve/2 and reserve/3 raise for an events-source feature and write nothing (AuroraMeter.FeatureSourceTest)",
+    "sha256_before": "0b5969deb3ecd19b34a6b4f6fabc282ca404ca70c6ce6307caeeebb217528392",
+    "sha256_after_restore": "0b5969deb3ecd19b34a6b4f6fabc282ca404ca70c6ce6307caeeebb217528392",
+    "restored": true
+  },
+  {
+    "id": "with-quota-settle",
+    "what": "with_quota/4 commits an events-source reservation instead of releasing it",
+    "file": "lib/aurora_meter/entitlements.ex",
+    "watcher": "test/aurora_meter/feature_source_test.exs",
+    "exit_code": 1,
+    "noticed": true,
+    "first_failure": "",
+    "sha256_before": "0b5969deb3ecd19b34a6b4f6fabc282ca404ca70c6ce6307caeeebb217528392",
+    "sha256_after_restore": "0b5969deb3ecd19b34a6b4f6fabc282ca404ca70c6ce6307caeeebb217528392",
+    "restored": true
+  },
+  {
+    "id": "projection-marks-dirty",
+    "what": "Counter.apply_projection/2 marks the key dirty, putting it in the flush path",
+    "file": "lib/aurora_meter/counter.ex",
+    "watcher": "test/aurora_meter/feature_source_test.exs",
+    "exit_code": 2,
+    "noticed": true,
+    "first_failure": "1) test flush isolation I08 a thousand recorded events reach no flush batch, no counter row and no reporter read (AuroraMeter.FeatureSourceTest)",
+    "sha256_before": "42ed11916f057c6875c2c3b4084e7a4e12557759789b9b2ad62739b78d00f4f2",
+    "sha256_after_restore": "42ed11916f057c6875c2c3b4084e7a4e12557759789b9b2ad62739b78d00f4f2",
+    "restored": true
+  },
+  {
+    "id": "dual-source-boot",
+    "what": "Config.check_sources!/1 stops refusing a dual declaration",
+    "file": "lib/aurora_meter/config.ex",
+    "watcher": "test/aurora_meter/feature_source_test.exs",
+    "exit_code": 2,
+    "noticed": true,
+    "first_failure": "1) test configuration I08 declaring a feature in durable_features and as an events source fails at boot (AuroraMeter.FeatureSourceTest)",
+    "sha256_before": "480c9bc6b99f2cb72bcfe8229f1df80957d18a4511277b2d3685a6a58ee8003e",
+    "sha256_after_restore": "480c9bc6b99f2cb72bcfe8229f1df80957d18a4511277b2d3685a6a58ee8003e",
+    "restored": true
+  },
+  {
+    "id": "buffered-eligibility",
+    "what": "Storage.Ecto.eligibility/1 calls a buffered feature's event exportable",
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "watcher": "test/aurora_meter/feature_source_test.exs",
+    "exit_code": 2,
+    "noticed": true,
+    "first_failure": "1) test export eligibility record/4 on a buffered feature stores the fact and marks the export intent ineligible (AuroraMeter.FeatureSourceTest)",
+    "sha256_before": "35db8bf9379629ddbba0839bbda3152039a5b969e737d048069c5d42ef4f96b5",
+    "sha256_after_restore": "35db8bf9379629ddbba0839bbda3152039a5b969e737d048069c5d42ef4f96b5",
+    "restored": true
+  },
+  {
+    "id": "legacy-write-rescue",
+    "what": "the legacy durable write loses its log line and swallows the failure",
+    "file": "lib/aurora_meter.ex",
+    "watcher": "test/aurora_meter/legacy_durable_track_test.exs",
+    "exit_code": 1,
+    "noticed": true,
+    "first_failure": "",
+    "sha256_before": "1b2d9254420d80f65bb4f06b6920cef80320f31e381a641b560b5a4f486daf60",
+    "sha256_after_restore": "1b2d9254420d80f65bb4f06b6920cef80320f31e381a641b560b5a4f486daf60",
+    "restored": true
+  },
+  {
+    "id": "legacy-period",
+    "what": "the legacy durable row stops carrying the period track/4 resolved",
+    "file": "lib/aurora_meter/storage/ecto.ex",
+    "watcher": "test/aurora_meter/legacy_durable_track_test.exs",
+    "exit_code": 2,
+    "noticed": true,
+    "first_failure": "1) test what a legacy durable row carries a legacy durable row carries the period the counter was bumped in (AuroraMeter.LegacyDurableTrackTest)",
+    "sha256_before": "35db8bf9379629ddbba0839bbda3152039a5b969e737d048069c5d42ef4f96b5",
+    "sha256_after_restore": "35db8bf9379629ddbba0839bbda3152039a5b969e737d048069c5d42ef4f96b5",
+    "restored": true
+  },
+  {
+    "id": "hot-path-tool",
+    "what": "Counter.bump/2 changes by one character, to prove the symbol comparison notices",
+    "file": "lib/aurora_meter/counter.ex",
+    "watcher": "tmp/v1/03c/hot_path.exs",
+    "exit_code": 1,
+    "noticed": true,
+    "first_failure": "\"identical\": false",
+    "sha256_before": "42ed11916f057c6875c2c3b4084e7a4e12557759789b9b2ad62739b78d00f4f2",
+    "sha256_after_restore": "42ed11916f057c6875c2c3b4084e7a4e12557759789b9b2ad62739b78d00f4f2",
+    "restored": true
+  }
+]

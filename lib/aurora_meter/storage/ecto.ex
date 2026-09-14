@@ -287,11 +287,26 @@ defmodule AuroraMeter.Storage.Ecto do
   # accepted an occurrence time. `attribution` is `"legacy_track"`, which is
   # what marks a row on this path as never having been billed.
   #
-  # `period_start` is deliberately left null here rather than resolved a second
-  # time: `AuroraMeter.track/4` already has the period in hand and passing it
-  # down is a change to the `AuroraMeter.Storage.insert_events/1` row shape,
-  # which build unit 03c owns along with the rest of the legacy track identity
-  # rule. Nothing reads these rows for billing.
+  # `period_start` and `period_source` are carried in the row by
+  # `AuroraMeter.track/4`, which already resolved the period for the counter it
+  # bumped: the row is charged to the same window as the increment it
+  # accompanies, and a second lookup that could land on the other side of a
+  # boundary is avoided. A caller that supplies neither (a 0.4.x caller of
+  # `AuroraMeter.Storage.insert_events/1`) still gets a valid row with a null
+  # period, as it always did.
+  #
+  # Three things this path deliberately does NOT do, each asserted by
+  # `AuroraMeter.LegacyDurableTrackTest`:
+  #
+  #   * no projection. `aurora_meter_event_totals` is untouched, so a legacy row
+  #     contributes to no total and `AuroraMeter.Events.total/3` never counts it.
+  #   * no outbox. The `AuroraMeter.Events.Outbox` seam is reached from
+  #     `record_events/2` only, so no export intent is ever staged from a track.
+  #   * no deduplication. The `event_id` is a fresh uuid, so two identical calls
+  #     make two rows.
+  #
+  # The negative space is the contract: `attribution: "legacy_track"` is what
+  # separates these rows from recorded ones in every query, report and replay.
   def insert_events(rows) do
     now = Clock.now()
 
@@ -309,6 +324,8 @@ defmodule AuroraMeter.Storage.Ecto do
           inserted_at: now,
           event_id: "track:" <> Ecto.UUID.generate(),
           occurred_at: now,
+          period_start: Map.get(row, :period_start),
+          period_source: period_source(Map.get(row, :period_source)),
           attribution: "legacy_track",
           payload_hash:
             Canonical.legacy_payload_hash(%{
@@ -323,6 +340,11 @@ defmodule AuroraMeter.Storage.Ecto do
     repo().insert_all(Event, entries)
     :ok
   end
+
+  @spec period_source(atom() | String.t() | nil) :: String.t() | nil
+  defp period_source(nil), do: nil
+  defp period_source(source) when is_binary(source), do: source
+  defp period_source(source) when is_atom(source), do: Atom.to_string(source)
 
   @impl AuroraMeter.Storage
   def stream_counters(period_start) do

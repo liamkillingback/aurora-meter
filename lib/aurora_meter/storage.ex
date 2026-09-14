@@ -44,12 +44,23 @@ defmodule AuroraMeter.Storage do
   @typedoc "A day bucket as read back: `%{date: Date.t(), value: integer()}`."
   @type history_point :: %{date: Date.t(), value: integer()}
 
-  @typedoc "A raw usage event to persist."
+  @typedoc """
+  A raw usage event to persist, as the legacy durable-track path writes them.
+
+  `period_start` and `period_source` are the period `AuroraMeter.track/4`
+  already resolved for the counter it bumped, passed down rather than looked up
+  again: a second resolution could land on the other side of a period boundary
+  from the increment the row accompanies. They are optional so that a 0.4.x
+  caller of `AuroraMeter.Storage.insert_events/1` keeps working, in which case
+  the row carries no period.
+  """
   @type event_row :: %{
           required(:tenant_key) => String.t(),
           required(:feature) => atom() | String.t(),
           optional(:quantity) => integer(),
-          optional(:metadata) => map()
+          optional(:metadata) => map(),
+          optional(:period_start) => DateTime.t() | nil,
+          optional(:period_source) => atom() | String.t() | nil
         }
 
   @typedoc "A counter delta to add: `value = value + delta`."

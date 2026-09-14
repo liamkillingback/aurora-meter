@@ -66,18 +66,30 @@ unreachable, because the pending set keeps growing until the database comes back
 or the VM stops.
 
 For a 2¢ generation, losing a few is cheaper than the machinery that would keep
-every one. If that is not true for you (say each unit is a dollar) make the
-feature durable:
+every one. If that is not true for you (say each unit is a dollar) move the
+feature's quantity to durable events:
 
 ```elixir
-config :aurora_meter, durable_features: [:generations]
+config :aurora_meter, feature_sources: %{generations: :events}
 ```
 
-A durable feature still increments the ETS counter, and also writes a raw event
-row synchronously on every call. Slower, and a database write on every request,
-in exchange for a record of each increment that survives the node. The counter
-remains what usage reporting reads; the event rows are the audit trail beside
-it. Choose per feature, not globally.
+and replace `AuroraMeter.track/4` with `AuroraMeter.record/4`, which takes an
+identity from you and writes the fact in a transaction:
+
+```elixir
+AuroraMeter.record(org, :generations, 1, id: request_id, occurred_at: finished_at)
+```
+
+Slower, and a database write per call, in exchange for a fact that survives the
+node and a retry that is recognised as a duplicate rather than charged twice.
+Choose per feature, not globally; [billing from recorded
+events](events-source.md) is the worked version, and [metering](../metering.md)
+has the source table.
+
+The older `config :aurora_meter, durable_features: [:generations]` still works
+and is deprecated. It writes an extra row per increment with no caller identity,
+and the counter remains what reporting reads, so it is an audit trail rather
+than a second source.
 
 ### Counting more than one
 

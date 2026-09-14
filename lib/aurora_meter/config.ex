@@ -146,6 +146,28 @@ defmodule AuroraMeter.Config do
   # There is deliberately no probe call with a synthetic tenant: a custom period
   # source may legitimately raise for an unknown tenant, so a probe would invent
   # a boot failure.
+  # The set of features whose commercial quantity comes from durable events,
+  # cached here because `AuroraMeter.track/4` and `AuroraMeter.reserve/2,3`
+  # consult it on every call and a live read is the most expensive thing that
+  # would be on that path.
+  #
+  # Measured on this machine, 2,000,000 iterations each, net of the loop:
+  # `Application.get_env/3` plus `Map.get/3` is 75.2 ns, `:persistent_term.get/1`
+  # plus `MapSet.member?/2` is 15.5 ns. `track/4` already makes five
+  # configuration reads (`tenant`, `period_source`, `history`,
+  # `durable_features`, `plans`), so a sixth live read would have been the
+  # single most expensive one on the hot path, for the one question that is
+  # asked on every call and answered the same way for the life of the node.
+  #
+  # `feature_source/1` reads the **same** term rather than the environment, and
+  # that is the point rather than an optimisation: the reporting source is one
+  # fact, and two readers of one fact is how the guard and the cold seed end up
+  # disagreeing about which source a feature has. A cached guard beside a live
+  # seed would let `track/4` bump a key into the flush path while
+  # `Counter.stored_value/1` seeded the same key from `load_event_total/3`,
+  # which is exactly the double count I08 forbids.
+  @events_features_term {__MODULE__, :events_features}
+
   @module_contracts [
     {:tenant, {:behaviour, AuroraMeter.Tenant}},
     {:storage, {:behaviour, AuroraMeter.Storage}},
@@ -182,6 +204,7 @@ defmodule AuroraMeter.Config do
     |> check_outbox!()
     |> check_plans!(mode)
     |> check_deprecations!()
+    |> check_sources!()
   end
 
   @doc """
@@ -245,17 +268,31 @@ defmodule AuroraMeter.Config do
   @spec durable_features() :: [atom()]
   def durable_features, do: get(:durable_features)
 
-  @doc "Where each declared feature's commercial quantity comes from."
+  @doc """
+  The `:feature_sources` map as configured.
+
+  This is the **declaration**. `feature_source/1` is what is in force on this
+  node, which is the declaration as it stood at the last `validate!/0`; the two
+  differ only for a host that rewrites the key at runtime, which is documented
+  in [Metering](metering.md) as unsupported.
+  """
   @spec feature_sources() :: %{atom() => :buffered | :events}
   def feature_sources, do: get(:feature_sources)
 
   @doc """
   Where `feature`'s commercial quantity comes from: `:buffered` or `:events`.
 
-  Anything the map does not name is `:buffered`, which is every feature in
-  0.4.x and the default in 1.0. This is the one seam that answers the question:
-  cold seeding, the record path's export eligibility and (from build unit 03c)
-  the `track/4` guard all read it here rather than each consulting the map.
+  Anything the configuration does not name is `:buffered`, which is every
+  feature in 0.4.x and the default in 1.0. This is the one seam that answers the
+  question: the `AuroraMeter.track/4` and `AuroraMeter.reserve/2,3` guards, the
+  `AuroraMeter.with_quota/4` commit rule, cold seeding and the record path's
+  export eligibility all read it here rather than each consulting the map.
+
+  The source is a **boot-time** property. It is read from the cache
+  `validate!/0` fills, so changing `:feature_sources` at runtime changes nothing
+  on this node until it is validated again. That is deliberate: a source that
+  could change between two calls in one period is precisely the double-count
+  this key exists to prevent.
 
   ## Examples
 
@@ -264,7 +301,77 @@ defmodule AuroraMeter.Config do
 
   """
   @spec feature_source(atom()) :: :buffered | :events
-  def feature_source(feature), do: Map.get(feature_sources(), feature, :buffered)
+  def feature_source(feature) do
+    if MapSet.member?(events_features(), feature), do: :events, else: :buffered
+  end
+
+  @doc false
+  # The hot-path form of `feature_source/1`, for a caller that is about to ask
+  # about several features or that wants the set itself. Not public: a host asks
+  # about one feature at a time and `feature_source/1` is the readable way to do
+  # that (`api-change-map.md` section 5).
+  #
+  # An unset term means `validate!/0` has not run on this node yet (a host that
+  # calls an accessor before starting the supervisor, or a doctest). It falls
+  # back to the declaration rather than to "everything is buffered", because a
+  # silent `:buffered` for a feature the host declared `:events` is the one
+  # wrong answer this seam must never give.
+  @spec events_features() :: MapSet.t(atom())
+  def events_features do
+    case :persistent_term.get(@events_features_term, :unset) do
+      :unset -> declared_events_features() || MapSet.new()
+      set -> set
+    end
+  end
+
+  @doc false
+  # Rebuilds the events-source cache from the current environment. Called by
+  # `validate!/0`, and by this repository's test harness
+  # (`AuroraMeter.Test.Config`) around every configuration region, so a test that
+  # overrides `:feature_sources` sees its override and the next test does not.
+  #
+  # It writes only when the set actually changed. `:persistent_term.put/2` scans
+  # every process for references to the value it replaces, so an unconditional
+  # write on every test region would be a real cost for no effect: the
+  # overwhelming majority of regions do not touch this key.
+  @spec refresh!() :: :ok
+  def refresh! do
+    case declared_events_features() do
+      nil ->
+        :ok
+
+      set ->
+        if :persistent_term.get(@events_features_term, :unset) != set do
+          :persistent_term.put(@events_features_term, set)
+        end
+
+        :ok
+    end
+  end
+
+  # `nil` means the declaration is not a map and no set can be derived from it.
+  # The schema refuses anything else at boot, so this is reached only when
+  # something has written the key directly: a host bypassing validation, or this
+  # repository's strictness suite, which walks every key through a placeholder
+  # value on its way to deleting it. Refusing to rebuild is the conservative
+  # answer, because the alternative (an empty set) would quietly turn an
+  # events-source feature back into a trackable one on the strength of a value
+  # that will not survive the next boot.
+  #
+  # It reads the raw configured value through `get/1` rather than through
+  # `feature_sources/0`: that accessor's spec promises a map, and this function
+  # exists for the case where the environment does not hold one, which is a
+  # runtime possibility the spec cannot express.
+  @spec declared_events_features() :: MapSet.t(atom()) | nil
+  defp declared_events_features do
+    case get(:feature_sources) do
+      sources when is_map(sources) ->
+        for {feature, :events} <- sources, into: MapSet.new(), do: feature
+
+      _not_a_map ->
+        nil
+    end
+  end
 
   @doc "The configured `AuroraMeter.Events.Outbox` implementation, or `nil` for none."
   @spec events_outbox() :: module() | nil
@@ -393,9 +500,9 @@ defmodule AuroraMeter.Config do
   # would be a breaking change dressed up as a warning. `warn_once/3` makes it
   # one line per node however many times a host revalidates its configuration.
   #
-  # `durable_features` is the only entry today. Build unit 03c adds
-  # `feature_sources`, which is the replacement named here, and must not add a
-  # second warning for the same key.
+  # `durable_features` is the only entry. `feature_sources`, the replacement it
+  # names, arrived in build unit 03c and deliberately adds no second warning for
+  # the same key: one deprecated key, one notice.
   @spec check_deprecations!(keyword()) :: keyword()
   defp check_deprecations!(opts) do
     case opts[:durable_features] do
@@ -417,6 +524,80 @@ defmodule AuroraMeter.Config do
     end
 
     opts
+  end
+
+  # Reporting sources (build unit 03c, invariant I08).
+  #
+  # One feature, one source. A feature listed in the legacy `durable_features`
+  # AND declared `:events` is asking for its usage to be counted twice in two
+  # places, which is the failure the whole unit exists to prevent, so it is a
+  # boot error in both modes rather than a warning: there is no reading of that
+  # configuration under which the host gets what it asked for.
+  #
+  # An `:events` feature no plan declares is only a warning. It cannot be
+  # billed, because a reporter stages a feature the plan declares; but metering
+  # a name before it reaches a plan is legitimate (the same reasoning that keeps
+  # `track/4` outside `:undeclared_feature_policy`), so it is reported, not
+  # refused.
+  #
+  # There is deliberately no check for "this feature already has counter rows".
+  # Core cannot know whether those rows were ever reported to a provider, and a
+  # refusal that cannot tell a fresh install from a mid-period migration would
+  # fire on the wrong one. That check belongs to Pro, which knows about
+  # `usage_reports`, and lands with the cutover watermark in build unit 04c.
+  @spec check_sources!(keyword()) :: keyword()
+  defp check_sources!(opts) do
+    sources = opts[:feature_sources] || %{}
+
+    Enum.each(opts[:durable_features] || [], fn feature ->
+      if Map.get(sources, feature) == :events do
+        raise ArgumentError, dual_source_message(feature)
+      end
+    end)
+
+    warn_undeclared_sources(sources, opts[:plans])
+
+    # The cache the guards read is filled from the configuration that has just
+    # been validated, and only after the dual declaration has been refused: a
+    # rejected configuration must not reach the hot path even for the instant
+    # between the raise and the supervisor giving up.
+    refresh!()
+
+    opts
+  end
+
+  @spec dual_source_message(atom()) :: String.t()
+  defp dual_source_message(feature) do
+    "config :aurora_meter: feature #{inspect(feature)} is declared both as a legacy " <>
+      "durable feature (in :durable_features) and as an events-source feature (in " <>
+      ":feature_sources). A feature has exactly one reporting source. Either remove " <>
+      "#{inspect(feature)} from :durable_features and record it with " <>
+      "`AuroraMeter.record/4`, or remove its :events entry from :feature_sources and " <>
+      "keep tracking it. Leaving both would count the same usage twice, once as a " <>
+      "buffered counter and once as a durable event."
+  end
+
+  # `AuroraMeter.Plans.declared_anywhere?/1` is reused rather than reimplemented
+  # here: it already handles both the compiled feature set and the fold over
+  # plans for a module that predates it, and it calls `Code.ensure_loaded?/1`
+  # before `function_exported?/3` (`open-findings.md` X113). It resolves the
+  # module from the environment, which during `validate!/1` is the same module
+  # `opts[:plans]` names; the argument is carried for the message only.
+  @spec warn_undeclared_sources(map(), module()) :: :ok
+  defp warn_undeclared_sources(sources, plans_module) do
+    for {feature, :events} <- sources,
+        not AuroraMeter.Plans.declared_anywhere?(feature) do
+      Schema.warn_once(:events_source_undeclared, feature, fn ->
+        "config :aurora_meter, feature_sources: #{inspect(feature)} is declared as an " <>
+          "events-source feature, but no plan in #{inspect(plans_module)} declares it. " <>
+          "Recording it works and the totals are kept, but nothing will ever bill it: a " <>
+          "reporter stages the features a plan declares. Declare it on a plan, or run " <>
+          "`mix aurora_meter.features` to see every other name a configuration " <>
+          "references and no plan declares."
+      end)
+    end
+
+    :ok
   end
 
   @spec check_default_plan!(module(), map(), atom(), Schema.mode()) :: :ok

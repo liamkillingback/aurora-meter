@@ -252,11 +252,42 @@ defmodule AuroraMeter.Entitlements do
   `period_start` names the period to count it against; without it the current
   one is used. A caller that will release the reservation later has to hold on
   to the period it reserved in — see `with_quota/4`.
+
+  Raises `ArgumentError` for a feature configured
+  `feature_sources: %{name => :events}`. This is the bill-immediately primitive:
+  it writes the quantity straight into the pending flush, so it would put
+  reserved units into `aurora_meter_counters` for a feature whose commercial
+  quantity is its recorded events. Use `with_quota/4`, whose reservation stays
+  in memory, or `check/2` to ask without reserving.
   """
   @spec reserve(term(), atom(), pos_integer(), DateTime.t() | nil) ::
           :ok | {:error, :limit_exceeded | :not_entitled}
   def reserve(tenant, feature, qty \\ 1, period_start \\ nil) do
+    buffered_source!(feature)
     do_reserve(tenant, feature, qty, period_start, false, :reserve)
+  end
+
+  # I08, the second half of the `track/4` guard in `AuroraMeter`. The public
+  # `reserve` takes the non-deferred path, which reaches `Counter.reserve/6`
+  # with `deferred: false`, which calls `bump/2`, which writes `pending_flush`
+  # and marks the key dirty. That is the flush path, and for an events-source
+  # feature it is the double count.
+  #
+  # `with_quota/4` is deliberately NOT guarded: its reservation is deferred, and
+  # `Counter.reserve_pending/2` writes only `value` and `reserved`, neither of
+  # which the flusher can see.
+  @spec buffered_source!(term()) :: :ok
+  defp buffered_source!(feature) do
+    if Config.feature_source(feature) == :events do
+      raise ArgumentError,
+            "#{inspect(feature)} is an events-source feature; AuroraMeter.reserve/2,3 " <>
+              "bills what it reserves immediately, which would count it a second time " <>
+              "alongside the events recorded for it. Use AuroraMeter.with_quota/4, whose " <>
+              "reservation never leaves memory, or AuroraMeter.check/2 to ask without " <>
+              "reserving."
+    end
+
+    :ok
   end
 
   # `entry_point` is `:reserve` or `:with_quota`: it reaches the log and the
@@ -297,6 +328,30 @@ defmodule AuroraMeter.Entitlements do
   (the reservation is the usage). If the reservation is denied, returns
   `{:error, reason}` without running `fun`. If `fun` raises, the reservation is
   released and the error re-raised.
+
+  ## Over an events-source feature
+
+  For a feature configured `feature_sources: %{name => :events}` the gate still
+  works and the reservation is still strict on this node, but the reservation is
+  **released** on success instead of being committed. It is admission control
+  and nothing else: the billable fact is whatever `AuroraMeter.record/4`
+  committed, and committing the reservation as well would charge the estimate on
+  top of the recorded quantity.
+
+  The recipe, and the arithmetic it produces, is to record inside the callback:
+
+      AuroraMeter.with_quota(org, :tokens, estimate, fn ->
+        {:ok, result} = do_work()
+        {:ok, _event, _outcome} =
+          AuroraMeter.record(org, :tokens, result.tokens,
+            id: result.request_id, occurred_at: result.finished_at)
+        result
+      end)
+
+  `+estimate` at admission, `+result.tokens` from the projection, `-estimate` at
+  release: the in-memory value nets to the durable total, and while the callback
+  runs every other caller sees the estimate held. Unlike a buffered feature,
+  nothing here can reach a flush batch.
   """
   @spec with_quota(term(), atom(), (-> result)) :: {:ok, result} | {:error, term()}
         when result: term()
@@ -317,6 +372,13 @@ defmodule AuroraMeter.Entitlements do
     period_start = period_start(tenant)
     on = Clock.today()
 
+    # Read once, beside the period and the day, and for the same reason. A
+    # source read after the callback could differ from the one the reservation
+    # was taken under, and the two halves of one call would then be settled by
+    # different rules: exactly the double count `:feature_sources` exists to
+    # prevent, arriving through the mechanism meant to prevent it.
+    source = Config.feature_source(feature)
+
     case do_reserve(tenant, feature, qty, period_start, true, :with_quota) do
       :ok ->
         # `catch`, not just `rescue`: an exit is the common failure in gated
@@ -334,13 +396,33 @@ defmodule AuroraMeter.Entitlements do
               :erlang.raise(kind, reason, __STACKTRACE__)
           end
 
-        Counter.commit_work(Tenant.to_key(tenant), feature, qty, period_start, on)
+        settle(source, Tenant.to_key(tenant), feature, qty, period_start, on)
         {:ok, result}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  # What a successful callback does with its reservation, and the only thing
+  # this unit changed about `with_quota/4`.
+  #
+  # A buffered feature commits: the reservation becomes pending flush, pending
+  # gossip and a day bucket, which is what makes it billable, and this clause is
+  # the same call with the same arguments it has always been.
+  #
+  # An events-source feature releases, which is identical to the failure path.
+  # Committing would write `pending_flush` for a quantity that is already
+  # committed as an event, and the flusher would put it in
+  # `aurora_meter_counters` on top of the event total (I08). The reservation
+  # gated the work; the recorded event is the charge.
+  @spec settle(:buffered | :events, String.t(), atom(), pos_integer(), DateTime.t(), Date.t()) ::
+          :ok
+  defp settle(:events, tenant_key, feature, qty, period_start, _on),
+    do: Counter.release_work(tenant_key, feature, qty, period_start)
+
+  defp settle(:buffered, tenant_key, feature, qty, period_start, on),
+    do: Counter.commit_work(tenant_key, feature, qty, period_start, on)
 
   @doc false
   # The one seam every non-entitlement caller applies the policy through.

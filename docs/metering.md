@@ -56,6 +56,72 @@ returns one point per day, oldest first, with today's live value merged in.
 This is what usage charts read. Disable with `config :aurora_meter, history: false`
 if you truly never chart usage.
 
+## Where a feature's quantity comes from
+
+Every feature has exactly one **reporting source**, and it is the answer to one
+question: when something asks how much this customer used, which number does it
+get? There are two answers, and the default is the first.
+
+```elixir
+config :aurora_meter, feature_sources: %{tokens: :events}
+# anything not listed is :buffered
+```
+
+| Source | The quantity is | Written by | What you lose in a crash |
+|---|---|---|---|
+| `:buffered` (default) | the ETS counter, flushed to `aurora_meter_counters` | `track/4`, `reserve/2,3`, `with_quota/4` | everything not in an acknowledged flush batch |
+| `:events` | the sum of the durable events in `aurora_meter_events` | `record/4`, `record_batch/2` | nothing that was committed |
+
+A feature cannot be both, and the library goes to some trouble to keep it that
+way, because a feature that was both would be billed twice: once as a counter
+delta and once as an event.
+
+  * `track/4` raises `ArgumentError` for an `:events` feature, with or without
+    `durable: true`. The raise happens before anything is written.
+  * `reserve/2,3` raises too. It is the reserve-and-bill-now primitive, so it
+    writes straight into the pending flush.
+  * `with_quota/4` keeps working and gates exactly as it always did, but
+    **releases** its reservation on success instead of committing it. See
+    [Entitlements](entitlements.md).
+  * `record/4` on a `:buffered` feature stores the fact, because local truth is
+    worth keeping, and marks the export intent ineligible so the same usage is
+    not sent to a provider twice.
+  * A feature named in both `:durable_features` and `:feature_sources` as
+    `:events` stops the boot.
+
+Two consequences worth knowing before you choose `:events`:
+
+  * **The source is a deploy-time decision, not a runtime toggle.** It is read
+    once at boot. A source that could change between two calls inside one period
+    is the double count this key exists to prevent.
+  * **An `:events` feature has no day history.** `AuroraMeter.history/3` returns
+    zeros for one, because putting projected quantities into
+    `aurora_meter_history` would feed a day rollup from the same units the export
+    path sends. Chart it from `AuroraMeter.Events.stream/1` instead.
+
+`AuroraMeter.usage/2`, `usage_all/1`, `quota/2`, `check/2`, `remaining/2` and
+`entitled?/2` all keep working for either source: they read the same in-memory
+row, which for an `:events` feature is hydrated from the durable total.
+
+### Migrating a feature from `:buffered` to `:events`
+
+Core cannot make this safe on its own, and this section says so rather than
+implying otherwise. The order is:
+
+1. Deploy your `record/4` calls while the feature is still `:buffered`. The
+   events are stored and their export intents are marked
+   `{:ineligible, :feature_buffered}`, so you can inspect what would have been
+   sent before anything is billed from it.
+2. Schedule the cutover in Aurora Meter Pro, choosing a period boundary as the
+   watermark.
+3. At that boundary, flip `:feature_sources` to `:events` and remove the
+   `track/4` calls **in the same deploy**. A call site you missed then raises on
+   that node, which is the failure you want rather than a silent second count.
+
+Without Pro there is no watermark, so a source flipped part way through a period
+leaves that period's usage split between a frozen counter row and an event
+total, and reconciling it is a manual job.
+
 ## Durability
 
 By default metering is **buffered**: counters live in ETS and are flushed to
@@ -64,12 +130,47 @@ losing the Store or the VM costs you is everything that is not yet in an
 acknowledged flush batch, which is usually the last interval and is not bounded
 by it: while the database is unreachable the pending set keeps growing until the
 database comes back or the VM dies. That is the right trade for dashboards and
-soft quotas, and the wrong one for anything you invoice. For billing-grade
-exactness, mark a feature **durable** and `track/4` also writes a raw event row
-synchronously:
+soft quotas, and the wrong one for anything you invoice.
+
+For usage you invoice, use `AuroraMeter.record/4`. You supply the identity, and
+one transaction writes the fact, its projected total and the export intent
+together, so a retry after a write you never saw the answer to is reported as a
+duplicate rather than charged again:
+
+```elixir
+config :aurora_meter, feature_sources: %{tokens: :events}
+
+AuroraMeter.record(tenant, :tokens, 1_420,
+  id: request_id,
+  occurred_at: finished_at,
+  dimensions: %{"model" => "sonnet"}
+)
+#=> {:ok, %AuroraMeter.Event{}, :inserted}
+```
+
+### The legacy durable track
 
 ```elixir
 config :aurora_meter, durable_features: [:ai_generations]
 # or per call:
 AuroraMeter.track(tenant, :ai_generations, 1, durable: true, metadata: %{req: id})
 ```
+
+This is the 0.4.x mechanism. It still works, it is deprecated, and it will be
+removed in 2.0. What it does is write a second row in `aurora_meter_events`
+after the ETS increment, and it is worth being precise about what that row is
+and is not:
+
+  * It has **no caller identity**, so there is nothing to recognise a retry by.
+    Two identical calls write two rows, and so do one call and its retry.
+  * It is **not** a second source. The quantity that is reported is still the
+    buffered counter; nothing reads these rows for billing.
+  * It contributes to no event total and stages no export intent. Its
+    `event_id` carries a `track:` prefix and its `attribution` is
+    `legacy_track`, which is how you tell these rows from recorded ones.
+  * The insert is not in a transaction with the ETS increment. Inside a
+    transaction of your own it joins that transaction and rolls back with it,
+    while the increment survives and will flush. `record/4` has no such window.
+
+Move to `feature_sources` and `record/4` when you need the fact to survive; the
+steps are under "Migrating a feature" above.

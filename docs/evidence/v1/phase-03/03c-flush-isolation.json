@@ -1,0 +1,27 @@
+{
+  "unit": "03c",
+  "expected": {
+    "load_counter": null,
+    "flush_batch_entries_for_tenant": 0,
+    "events_total": 1000
+  },
+  "generated_at": "2026-09-14T19:31:46.162558Z",
+  "what": "After 1000 AuroraMeter.record/4 quantities for an :events-source feature: the flush batch, the counter row a Pro reporter would read, and the durable total.",
+  "observed": {
+    "records": 1000,
+    "feature": "ai_generations",
+    "flush_batch": {
+      "present": false,
+      "counters_for_tenant": [],
+      "history_for_tenant": []
+    },
+    "ets_value_before_flush": 1000,
+    "flush_keys_persisted": 0,
+    "load_counter_after_flush": null,
+    "events_total_after_flush": 1000,
+    "event_rows": {
+      "events": 1000,
+      "quantity": 1000
+    }
+  }
+}
