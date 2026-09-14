@@ -42,6 +42,8 @@ every helper name.
 | `AuroraMeter.track/4` | `(tenant, atom(), integer(), keyword()) :: :ok` | stable | 0.1.0 | Arities 2 and 3 exist through defaults (`qty` 1, `opts` `[]`). Options `:durable`, `:metadata`. Counts an undeclared feature under every policy. Raises `ArgumentError` for a feature whose `:feature_sources` entry is `:events`, with or without `durable: true`, before anything is written. |
 | `AuroraMeter.record/4` | `(tenant, atom(), pos_integer(), keyword()) :: {:ok, AuroraMeter.Event.t(), :inserted \| :duplicate} \| {:error, {:invalid, errors} \| {:conflict, AuroraMeter.Event.t()} \| {:unavailable, term()} \| {:unsupported, :durable_events}}` | stable | 1.0.0 | The durable path. Required options `:id` and `:occurred_at`; optional `:dimensions`, `:metadata`, `:future_tolerance`, `:timeout`. A retry with the same `:id` is a duplicate, never a second charge. No fallback to `track/4`. |
 | `AuroraMeter.record_batch/2` | `([map()], keyword()) :: {:ok, [{AuroraMeter.Event.t(), :inserted \| :duplicate}]} \| {:error, {:invalid, errors} \| {:conflict, index, AuroraMeter.Event.t()} \| {:unavailable, term()} \| {:unsupported, :durable_events}}` | stable | 1.0.0 | One transaction for the whole batch; results in input order. Limits 500 elements and 1 MiB of encoded payload. |
+| `AuroraMeter.correct/4` | `(tenant, String.t(), pos_integer(), keyword()) :: {:ok, AuroraMeter.Event.t(), :inserted \| :duplicate} \| {:error, {:invalid, errors} \| {:conflict, AuroraMeter.Event.t()} \| {:not_found, :original} \| {:unavailable, term()} \| {:unsupported, :corrections}}` | stable | 1.0.0 | Appends a correction reducing an earlier fact by a positive magnitude; no row is ever updated. Required option `:id`; optional `:metadata`. `:dimensions` and `:occurred_at` are refused, because changing either is `replace/4`. Cumulative corrections of one original can never exceed it, checked under a lock on the original row. |
+| `AuroraMeter.replace/4` | `(tenant, String.t(), map(), keyword()) :: {:ok, %{correction: AuroraMeter.Event.t(), replacement: AuroraMeter.Event.t()}, :inserted \| :duplicate} \| {:error, {:invalid, errors} \| {:conflict, AuroraMeter.Event.t()} \| {:not_found, :original} \| {:unavailable, term()} \| {:unsupported, :corrections}}` | stable | 1.0.0 | A full reversal of the original plus one replacement, in one transaction. Required option `:id`, the correction's, at most 126 bytes; optional `:replacement_id`, default `id` followed by `~r`. `attrs` takes `:quantity`, `:occurred_at`, `:dimensions`, `:metadata` and optionally `:feature`, which must equal the original's. |
 | `AuroraMeter.usage/2` | `(tenant, atom()) :: integer()` | stable | 0.1.0 | Current period, warm ETS value. |
 | `AuroraMeter.usage_all/1` | `(tenant) :: %{atom() => integer()}` | stable | 0.1.0 | Warm counters only. |
 | `AuroraMeter.history/3` | `(tenant, atom(), keyword()) :: [AuroraMeter.Storage.history_point()]` | stable | 0.2.0 | Options `:days` (30), `:from`, `:to`. Zero-filled, oldest first. Needs `history: true` and schema version 2. |
@@ -198,6 +200,7 @@ in section 2.
 | `AuroraMeter.Storage.capabilities/0` | `() :: [AuroraMeter.Storage.capability()]` | stable | 1.0.0 | The durable operations the configured adapter supports. |
 | `AuroraMeter.Storage.supports?/1` | `(capability()) :: boolean()` | stable | 1.0.0 | |
 | `AuroraMeter.Storage.record_events/2` | `([event_entry()], keyword()) :: {:ok, [{AuroraMeter.Event.t(), :inserted \| :duplicate}]} \| {:error, term()}` | stable | 1.0.0 | One transaction for the events, their totals and the outbox intent. |
+| `AuroraMeter.Storage.record_correction/2` | `(correction_entry(), keyword()) :: {:ok, [{AuroraMeter.Event.t(), :inserted \| :duplicate}]} \| {:error, term()}` | stable | 1.0.0 | One correction, and optionally its replacement, in one transaction. The duplicate check precedes the cumulative bound, which is taken under a lock on the original. Options `:timeout`, `:outbox`, `:replacement`. |
 | `AuroraMeter.Storage.load_event/2` | `(String.t(), String.t()) :: {:ok, AuroraMeter.Event.t()} \| {:error, :not_found \| {:unsupported, capability()}}` | stable | 1.0.0 | |
 | `AuroraMeter.Storage.load_event_total/3` | `(String.t(), atom() \| String.t(), DateTime.t()) :: {:ok, %{quantity: non_neg_integer(), events: non_neg_integer()}} \| {:error, {:unsupported, capability()}}` | stable | 1.0.0 | Reads the active projection generation. |
 | `AuroraMeter.Storage.stream_events/2` | `(non_neg_integer(), keyword()) :: {:ok, [AuroraMeter.Event.t()]} \| {:error, {:unsupported, capability()}}` | stable | 1.0.0 | Keyset by `seq`. |
@@ -353,7 +356,7 @@ Named types a host will meet in a spec: `t:AuroraMeter.Period.t/0`,
 `t:AuroraMeter.Storage.counter_row/0`, `t:AuroraMeter.Storage.history_row/0`,
 `t:AuroraMeter.Storage.history_point/0`, `t:AuroraMeter.Storage.event_row/0`,
 `t:AuroraMeter.Storage.counter_delta/0`, `t:AuroraMeter.Storage.history_delta/0`,
-`t:AuroraMeter.Storage.counter_total/0` and `t:AuroraMeter.Storage.history_total/0`,
+`t:AuroraMeter.Storage.counter_total/0`, `t:AuroraMeter.Storage.correction_entry/0` and `t:AuroraMeter.Storage.history_total/0`,
 `t:AuroraMeter.Plan.t/0` and `t:AuroraMeter.Plan.feature_config/0`,
 `t:AuroraMeter.Clock.Fixed.unit/0`, and
 `t:AuroraMeter.Schema.CreditTransaction.kind/0`,
@@ -579,6 +582,7 @@ than by SemVer on every name, and nothing in production should call them.
 | `AuroraMeter.Clock.Fixed.stop/0` | `() :: :ok` | stable | 0.5.0 | Safe when the agent is not running. |
 | `AuroraMeter.Clock.Fixed.running?/0` | `() :: boolean()` | stable | 0.5.0 | |
 | `AuroraMeter.StorageCase.entry/3` | `(map(), String.t(), pos_integer()) :: AuroraMeter.Storage.event_entry()` | stable | 1.0.0 | One canonical entry for the adapter conformance suite. |
+| `AuroraMeter.StorageCase.correction/4` | `(map(), String.t(), String.t(), pos_integer() \| :remaining) :: AuroraMeter.Storage.correction_entry()` | stable | 1.0.0 | One correction entry for the adapter conformance suite. |
 | `AuroraMeter.StorageCase.active_generation/0` | `() :: non_neg_integer()` | stable | 1.0.0 | The projection generation reads currently resolve to. |
 
 `use AuroraMeter.StorageCase, adapter: MyApp.Storage` runs the adapter conformance

@@ -130,6 +130,28 @@ defmodule AuroraMeter.Storage do
           optional(:plan_version) => String.t() | nil
         }
 
+  @typedoc """
+  One correction to record: what the caller stated, and nothing it inherits.
+
+  A correction's feature, occurrence instant, period, plan attribution and
+  dimensions are the original's, read inside the transaction that holds it
+  under lock, so they cannot drift from it (L-03e-2). `quantity` is the
+  **magnitude of the reduction**, a positive integer, or `:remaining` for
+  `AuroraMeter.replace/4`, whose magnitude is `original.quantity` less the
+  corrections already committed and is therefore not known until then.
+
+  There is no `payload_hash` here for the same reason: the canonical tuple
+  covers fields that come from the original, so the adapter computes it with
+  `AuroraMeter.Events.Canonical.correction_hash/3` once it has read one.
+  """
+  @type correction_entry :: %{
+          required(:tenant_key) => String.t(),
+          required(:event_id) => String.t(),
+          required(:original_event_id) => String.t(),
+          required(:quantity) => pos_integer() | :remaining,
+          required(:metadata) => map()
+        }
+
   @typedoc "What one recorded event produced: the persisted fact and whether it was new."
   @type record_outcome :: {Event.t(), :inserted | :duplicate}
 
@@ -181,6 +203,41 @@ defmodule AuroraMeter.Storage do
   @callback record_events([event_entry()], keyword()) ::
               {:ok, [record_outcome()]}
               | {:error, {:conflict, non_neg_integer(), Event.t()}}
+              | {:error, term()}
+
+  @doc """
+  Records one **correction**, and optionally its replacement, in one transaction.
+
+  A correction is a new immutable row reducing the effective quantity of an
+  existing event in the same tenant; no historical row is ever updated. The
+  cumulative magnitude of the corrections of one original may never exceed that
+  original's quantity (**I09**), which an adapter enforces by serialising every
+  corrector of that original against one another. The Ecto adapter does it with
+  `SELECT ... FOR UPDATE` on the original row.
+
+  The order of the two checks is load bearing and an adapter must keep it: the
+  **duplicate check comes before the bound check**. A retry of a correction has
+  its own committed row inside the cumulative sum, so evaluating the bound
+  first makes every retry of a correct correction fail with
+  `exceeds_original`, which is the difference between an idempotent financial
+  operation and one that cannot be retried at all.
+
+  Results are `[{correction, outcome}]`, or `[{correction, outcome},
+  {replacement, outcome}]` when `opts[:replacement]` carries a usage entry to
+  insert in the same transaction (`AuroraMeter.replace/4`).
+
+  Refusals **return** `{:error, {:invalid, _}}` or `{:error, {:not_found,
+  :original}}` without rolling back, so a host transaction that wrapped the
+  call keeps its own writes. Conflicts roll back, because by then a write has
+  been attempted and the caller's intent is unsatisfiable.
+
+  Options: `:timeout`, `:outbox` and `:replacement`.
+  """
+  @callback record_correction(correction_entry(), keyword()) ::
+              {:ok, [record_outcome()]}
+              | {:error, {:conflict, non_neg_integer(), Event.t()}}
+              | {:error, {:invalid, [{atom(), atom()}]}}
+              | {:error, {:not_found, :original}}
               | {:error, term()}
 
   @doc "Reads one recorded event by its caller identity."
@@ -326,6 +383,17 @@ defmodule AuroraMeter.Storage do
           | {:error, term()}
   def record_events(entries, opts \\ []) do
     with :ok <- require!(:durable_events), do: impl().record_events(entries, opts)
+  end
+
+  @doc "Records one correction (and optionally its replacement). See `c:record_correction/2`."
+  @spec record_correction(correction_entry(), keyword()) ::
+          {:ok, [record_outcome()]}
+          | {:error, {:conflict, non_neg_integer(), Event.t()}}
+          | {:error, {:invalid, [{atom(), atom()}]}}
+          | {:error, {:not_found, :original}}
+          | {:error, term()}
+  def record_correction(entry, opts \\ []) do
+    with :ok <- require!(:corrections), do: impl().record_correction(entry, opts)
   end
 
   @doc "Reads one recorded event by its caller identity. See `c:load_event/2`."

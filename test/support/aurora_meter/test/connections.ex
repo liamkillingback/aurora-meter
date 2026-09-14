@@ -138,6 +138,37 @@ defmodule AuroraMeter.Test.Connections do
   end
 
   @doc """
+  Deletes every row whose `tenant_key` starts with any of `prefixes`, once,
+  before the suite runs (build unit 03e, `open-findings.md` X109).
+
+  A cleanup at the end of a test is not enough for a module that kills
+  processes: a test that exits rather than failing an assertion can leave
+  `on_exit` unable to take the connection its cleanup needs, and
+  `System.unique_integer/1` restarts from small values in every BEAM, so the
+  next run reuses the key and inherits the rows. Only the prefixes named here
+  are touched, because a sweep that reaches further deletes rows it does not own
+  (X38).
+
+  Call it from `test/test_helper.exs` before `ExUnit.start/0`, and pass only
+  prefixes belonging to modules that write on real connections.
+  """
+  @spec sweep!([String.t()]) :: :ok
+  def sweep!(prefixes) when is_list(prefixes) do
+    own = checkout!()
+
+    try do
+      Enum.each(prefixes, fn prefix ->
+        register_prefix(prefix)
+        cleanup!(prefix)
+      end)
+    after
+      if own, do: Sandbox.checkin(repo())
+    end
+
+    :ok
+  end
+
+  @doc """
   Registers a bare alphabetic prefix (`"flush_batch"`, say) that `cleanup!/1`
   will accept in addition to `unique_tenant/1` values.
   """

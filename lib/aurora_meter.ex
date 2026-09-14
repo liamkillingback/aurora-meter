@@ -244,6 +244,131 @@ defmodule AuroraMeter do
     Events.record_batch(events, opts)
   end
 
+  @doc """
+  Corrects a recorded fact by appending a **new** event that reduces it.
+
+  Nothing is ever updated or deleted. A correction is its own row, with its own
+  identity, pointing at the event it reduces, and both rows stay in the history
+  for ever. That is what makes a corrected invoice explicable six months later.
+
+      AuroraMeter.record(org, :api_calls, 10, id: "req_1", occurred_at: at)
+      AuroraMeter.correct(org, "req_1", 3, id: "credit_1", metadata: %{"ticket" => "SUP-42"})
+      #=> {:ok, %AuroraMeter.Event{kind: :correction, quantity: 3}, :inserted}
+
+      AuroraMeter.Events.total(org, :api_calls, period.start)
+      #=> 7
+
+  `quantity` is the **magnitude of the reduction**: a positive integer, never a
+  negative one and never zero. The cumulative magnitude of the corrections of
+  one original can never exceed that original's quantity, checked under a lock
+  on the original row, so two operators correcting the same fact at the same
+  moment cannot between them credit more than was charged.
+
+  A correction belongs to the **original's** period, not to the period it is
+  issued in: a September fact corrected in October changes September's invoice.
+  It carries the original's feature, plan attribution and dimensions for the
+  same reason, and it never reprices.
+
+  ## Options
+
+    * `:id` (**required**) the correction's own identity, with the same rules as
+      `record/4`'s. Repeating it is a duplicate, not a second credit, **even
+      when the original is by then fully corrected**.
+    * `:metadata` a map with string keys: the reason, a ticket reference, an
+      operator id.
+
+  `:dimensions` and `:occurred_at` are **refused**, not ignored. A correction
+  inherits both, and changing either means reversing the original and recording
+  a replacement, which is `replace/4`.
+
+  ## Return values
+
+    * `{:ok, event, :inserted}` the correction is committed, with its negative
+      totals delta and its export intent.
+    * `{:ok, event, :duplicate}` this correction id is already recorded with
+      this payload. Nothing happened a second time.
+    * `{:error, {:invalid, errors}}` including `[quantity: :exceeds_original]`
+      when the cumulative bound would be broken, and `[original: :is_correction]`
+      because corrections of corrections are not supported: correct the
+      original instead.
+    * `{:error, {:conflict, existing}}` this correction id is recorded with a
+      different payload. Choose another id.
+    * `{:error, {:not_found, :original}}`.
+    * `{:error, {:unavailable, reason}}` retry with the same id.
+    * `{:error, {:unsupported, :corrections}}`.
+
+  A refusal does **not** roll back a transaction of your own that wrapped the
+  call; a conflict does.
+
+  ## What the provider sees
+
+  Core records every correction and hands every one of them to the export seam
+  with a reason attached, including the ones it can already tell are not
+  deliverable (a buffered feature, an original whose period could not be
+  resolved). Nothing is dropped and nothing is marked settled that was not.
+  Whether a correction can still reach Stripe depends on the meter event
+  adjustment window, which Aurora Meter Pro decides and quarantines with a
+  reconciliation item when it cannot.
+  """
+  @spec correct(term(), String.t(), pos_integer(), keyword()) ::
+          {:ok, AuroraMeter.Event.t(), :inserted | :duplicate}
+          | {:error, {:invalid, [{atom(), atom()}]}}
+          | {:error, {:conflict, AuroraMeter.Event.t()}}
+          | {:error, {:not_found, :original}}
+          | {:error, {:unavailable, term()}}
+          | {:error, {:unsupported, :corrections}}
+  def correct(tenant, original_event_id, quantity, opts \\ []) do
+    Events.correct(tenant, original_event_id, quantity, opts)
+  end
+
+  @doc """
+  Fully reverses a recorded fact and records a replacement, in one transaction.
+
+  This is how a **dimension or a timestamp** is corrected. `correct/4` reduces a
+  quantity and inherits everything else; when what was wrong is the model name,
+  the region or the instant, the honest record is a full reversal plus a new
+  fact, and this writes both or neither.
+
+      AuroraMeter.replace(org, "req_1", %{quantity: 10, occurred_at: at,
+                                          dimensions: %{"model" => "opus"}},
+        id: "fix_1")
+      #=> {:ok, %{correction: %AuroraMeter.Event{}, replacement: %AuroraMeter.Event{}}, :inserted}
+
+  `attrs` takes `:quantity`, `:occurred_at`, `:dimensions` and `:metadata`, the
+  same keys `record/4` takes. `:feature` may be given only if it equals the
+  original's: a replacement restates the same commercial fact, it does not
+  become a different one.
+
+  ## The two ids
+
+  `:id` is the **correction's**. The replacement's is `id <> "~r"` unless you
+  pass `:replacement_id`. Deriving it is what makes the whole operation
+  idempotent under one caller id: a retry finds both rows and returns
+  `:duplicate` for the pair. Because the derived id must still fit 128 bytes,
+  `:id` is limited to 126 here, and a longer one is
+  `{:invalid, [id: :too_long_for_replacement]}`.
+
+  The correction's magnitude is whatever is left of the original:
+  `original.quantity` less the corrections already committed. An original that
+  is already fully corrected has nothing to reverse and returns
+  `{:invalid, [quantity: :already_fully_corrected]}`; record a new fact instead.
+
+  Both events produce an export intent, in the order correction then
+  replacement, so an exporter that must cancel before re-sending sees them that
+  way round.
+  """
+  @spec replace(term(), String.t(), map(), keyword()) ::
+          {:ok, %{correction: AuroraMeter.Event.t(), replacement: AuroraMeter.Event.t()},
+           :inserted | :duplicate}
+          | {:error, {:invalid, [{atom(), atom()}]}}
+          | {:error, {:conflict, AuroraMeter.Event.t()}}
+          | {:error, {:not_found, :original}}
+          | {:error, {:unavailable, term()}}
+          | {:error, {:unsupported, :corrections}}
+  def replace(tenant, original_event_id, attrs, opts \\ []) do
+    Events.replace(tenant, original_event_id, attrs, opts)
+  end
+
   @doc "Returns `tenant`'s usage of `feature` in the current period."
   @spec usage(term(), atom()) :: integer()
   def usage(tenant, feature) do

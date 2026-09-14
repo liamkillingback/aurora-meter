@@ -134,6 +134,62 @@ AuroraMeter.Events.total(org, :tokens, AuroraMeter.period(org).start)
 cluster. `Events.total/3` is what was committed. For a dashboard, use the first;
 for anything that has to agree with an invoice, use the second.
 
+## Correcting what you recorded
+
+A model returns a token count that turns out to be wrong. A customer is charged
+for a run they were promised free. Whatever the reason, the fix is never to edit
+the row: a recorded fact is what the invoice was built from, and a support
+conversation six months later is about what happened, not about what the table
+says now.
+
+`AuroraMeter.correct/4` appends a second fact that reduces the first.
+
+```elixir
+AuroraMeter.correct(org, "req_9", 420,
+  id: "credit_req_9",
+  metadata: %{"ticket" => "SUP-118", "operator" => "ana"}
+)
+#=> {:ok, %AuroraMeter.Event{kind: :correction, quantity: 420}, :inserted}
+
+AuroraMeter.Events.total(org, :tokens, AuroraMeter.period(org).start)
+#=> 1_000
+```
+
+The magnitude is the size of the **reduction**, always positive. Both rows stay
+in `AuroraMeter.Events.stream/1` for ever, and the correction carries the
+original's feature, period, plan attribution and dimensions, so a correction
+issued in October against a September fact changes September's invoice.
+
+Three rules are worth knowing before you build an operator tool on this.
+
+**Corrections are bounded.** The corrections of one original can never add up to
+more than the original. Two operators crediting the same request at the same
+moment cannot between them give back more than was charged: the second gets
+`{:error, {:invalid, [quantity: :exceeds_original]}}`.
+
+**The correction's `id:` is yours, and repeating it is a duplicate.** That holds
+even when the original is by then fully corrected, so a retry of a full reversal
+is safe rather than an error.
+
+**Changing a dimension or a time is `replace/4`, not `correct/4`.** Passing
+`dimensions:` or `occurred_at:` to `correct/4` is refused, because a correction
+inherits both:
+
+```elixir
+AuroraMeter.replace(org, "req_9", %{
+    quantity: 1_420,
+    occurred_at: finished_at,
+    dimensions: %{"model" => "opus"}
+  },
+  id: "fix_req_9"
+)
+#=> {:ok, %{correction: %AuroraMeter.Event{}, replacement: %AuroraMeter.Event{}}, :inserted}
+```
+
+That is one transaction containing two rows: a full reversal of `req_9` and a
+new fact under `fix_req_9~r`. Retry it under the same `id:` and both come back
+as duplicates.
+
 ## Moving an existing feature over
 
 If `:tokens` has been buffered in production, do not simply add the

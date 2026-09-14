@@ -668,6 +668,93 @@ defmodule AuroraMeter.ExamplesTest do
         assert AuroraMeter.usage(tenant, :tokens) == 500
       end)
     end
+
+    test "the correction recipe reduces the total and leaves both rows" do
+      tenant = unique_tenant()
+      at = AuroraMeter.Clock.now()
+
+      as_lumen(fn ->
+        assert {:ok, _event, :inserted} =
+                 AuroraMeter.record(tenant, :tokens, 1_420, id: "req_9", occurred_at: at)
+
+        assert {:ok, correction, :inserted} =
+                 AuroraMeter.correct(tenant, "req_9", 420,
+                   id: "credit_req_9",
+                   metadata: %{"ticket" => "SUP-118", "operator" => "ana"}
+                 )
+
+        assert correction.kind == :correction
+        assert correction.quantity == 420
+
+        period = AuroraMeter.period(tenant).start
+        assert AuroraMeter.Events.total(tenant, :tokens, period) == 1_000
+
+        # Both rows are still there, which is the whole of "immutable history".
+        ids = tenant |> stream_ids() |> Enum.sort()
+        assert ids == ["credit_req_9", "req_9"]
+
+        # The guide's three rules.
+        assert AuroraMeter.correct(tenant, "req_9", 1_500, id: "too-much") ==
+                 {:error, {:invalid, [quantity: :exceeds_original]}}
+
+        assert {:ok, _same, :duplicate} =
+                 AuroraMeter.correct(tenant, "req_9", 420,
+                   id: "credit_req_9",
+                   metadata: %{"ticket" => "SUP-118", "operator" => "ana"}
+                 )
+
+        assert {:error, {:invalid, errors}} =
+                 AuroraMeter.correct(tenant, "req_9", 1,
+                   id: "x",
+                   dimensions: %{"model" => "opus"}
+                 )
+
+        assert {:dimensions, :not_supported_on_correction} in errors
+      end)
+    end
+
+    test "the replace recipe writes two rows in one transaction" do
+      tenant = unique_tenant()
+      at = AuroraMeter.Clock.now()
+
+      as_lumen(fn ->
+        assert {:ok, _event, :inserted} =
+                 AuroraMeter.record(tenant, :tokens, 1_420,
+                   id: "req_9",
+                   occurred_at: at,
+                   dimensions: %{"model" => "sonnet"}
+                 )
+
+        assert {:ok, %{correction: correction, replacement: replacement}, :inserted} =
+                 AuroraMeter.replace(
+                   tenant,
+                   "req_9",
+                   %{quantity: 1_420, occurred_at: at, dimensions: %{"model" => "opus"}},
+                   id: "fix_req_9"
+                 )
+
+        assert correction.quantity == 1_420
+        assert replacement.event_id == "fix_req_9~r"
+        assert replacement.dimensions == %{"model" => "opus"}
+
+        period = AuroraMeter.period(tenant).start
+        assert AuroraMeter.Events.total(tenant, :tokens, period) == 1_420
+
+        assert {:ok, _pair, :duplicate} =
+                 AuroraMeter.replace(
+                   tenant,
+                   "req_9",
+                   %{quantity: 1_420, occurred_at: at, dimensions: %{"model" => "opus"}},
+                   id: "fix_req_9"
+                 )
+
+        assert length(stream_ids(tenant)) == 3
+      end)
+    end
+  end
+
+  defp stream_ids(tenant) do
+    [tenant: tenant] |> AuroraMeter.Events.stream() |> Enum.map(& &1.event_id)
   end
 
   # The guide's two configuration lines, in one region: one `with_config` per

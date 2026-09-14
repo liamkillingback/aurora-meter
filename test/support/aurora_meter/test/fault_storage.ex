@@ -168,6 +168,14 @@ defmodule AuroraMeter.Test.FaultStorage do
   end
 
   @impl AuroraMeter.Storage
+  def record_correction(entry, opts) do
+    Faults.check(:before_commit, %{callback: :record_correction, entry: entry})
+    result = Backend.record_correction(entry, opts)
+    Faults.check(:after_commit_before_ack, %{callback: :record_correction, result: result})
+    result
+  end
+
+  @impl AuroraMeter.Storage
   def load_event(tenant_key, event_id) do
     Faults.check(:before_commit, %{callback: :load_event, tenant_key: tenant_key})
     result = Backend.load_event(tenant_key, event_id)

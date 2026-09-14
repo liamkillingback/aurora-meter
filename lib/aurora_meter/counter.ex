@@ -66,6 +66,8 @@ defmodule AuroraMeter.Counter do
   `AuroraMeter.Events.stream/1`.
   """
 
+  require Logger
+
   alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Storage
@@ -241,16 +243,62 @@ defmodule AuroraMeter.Counter do
   #
   # Internal, and deliberately not public: hosts never touch ETS rows
   # (`api-change-map.md` section 5).
+  # A NEGATIVE delta is a correction (build unit 03e), and it is the one case
+  # this function has to do more than add. `:ets.update_counter/3` has no floor,
+  # so a node whose ETS row was seeded after the original was recorded elsewhere
+  # would show a negative advisory usage.
+  #
+  # The floor is the four-element form `{position, increment, threshold,
+  # set_value}`, which is decided inside the same atomic operation as the
+  # increment. A pre-read could not do it: two corrections of two different
+  # originals landing on one key each read a value that the other has not yet
+  # reduced, and the second one's subtraction takes the row negative and leaves
+  # it there. The decision to re-seat is then taken from the value the update
+  # RETURNS, which is the only reading that is certainly this update's own.
+  #
+  # Zero is the trigger rather than "the clamp fired", because the two are the
+  # same answer: a key that a correction has taken to zero is a key whose
+  # durable total is what it should be showing, and re-seating from that total
+  # is not merely non-negative but correct. The cost is one database read on a
+  # correction that reaches zero, which is rare and is not a hot path.
+  #
+  # `pending_gossip` takes the raw delta: it is a delta and not a count, and
+  # flooring it would tell every peer that a reduction did not happen.
   @doc false
-  @spec apply_projection(key(), pos_integer()) :: :ok | :cold
+  @spec apply_projection(key(), integer()) :: :ok | :cold
   def apply_projection(key, qty) do
-    if :ets.member(table(), key) do
-      :ets.update_counter(table(), key, [{@value, qty}, {@pending_gossip, qty}])
-      :ets.insert(Store.touched_table(), {key})
-      :ok
-    else
-      :cold
+    cond do
+      not :ets.member(table(), key) -> :cold
+      qty >= 0 -> add_projection(key, qty)
+      true -> subtract_projection(key, qty)
     end
+  end
+
+  defp add_projection(key, qty) do
+    :ets.update_counter(table(), key, [{@value, qty}, {@pending_gossip, qty}])
+    :ets.insert(Store.touched_table(), {key})
+    :ok
+  end
+
+  defp subtract_projection(key, qty) do
+    [value, _gossip] =
+      :ets.update_counter(table(), key, [{@value, qty, 0, 0}, {@pending_gossip, qty}])
+
+    :ets.insert(Store.touched_table(), {key})
+
+    if value == 0, do: reseat(key)
+
+    :ok
+  end
+
+  defp reseat(key) do
+    Logger.debug(fn ->
+      "AuroraMeter: a correction took the in-memory counter for #{inspect(key)} to zero, so it " <>
+        "was re-seated from the durable total. The durable total is authoritative either way " <>
+        "(AuroraMeter.Events.total/3)."
+    end)
+
+    rebase(key, stored_value(key) || 0, :gossip)
   end
 
   @doc """

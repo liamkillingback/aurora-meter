@@ -51,6 +51,14 @@ defmodule AuroraMeter.Events do
           | {:unavailable, term()}
           | {:unsupported, :durable_events}
 
+  @typedoc "Everything `AuroraMeter.correct/4` and `replace/4` can go wrong with."
+  @type correction_error ::
+          {:invalid, [{atom(), atom()}]}
+          | {:conflict, Event.t()}
+          | {:not_found, :original}
+          | {:unavailable, term()}
+          | {:unsupported, :corrections}
+
   @doc """
   Reads one recorded event by the identity its caller gave it.
 
@@ -203,6 +211,75 @@ defmodule AuroraMeter.Events do
   defp one_result({:error, {:conflict, _index, existing}}), do: {:error, {:conflict, existing}}
   defp one_result({:error, reason}), do: {:error, reason}
 
+  @doc false
+  @spec correct(term(), String.t(), integer(), keyword()) ::
+          {:ok, Event.t(), :inserted | :duplicate} | {:error, correction_error()}
+  def correct(tenant, original_event_id, quantity, opts) do
+    span(%{kind: :correction, feature: nil, batch_size: 1}, fn ->
+      with {:ok, request} <- build_correction(tenant, original_event_id, quantity, opts) do
+        request |> write_correction(opts) |> one_correction()
+      end
+    end)
+  end
+
+  defp one_correction({:ok, [{event, outcome}]}) do
+    effect = effects(event, outcome)
+
+    {{:ok, event, outcome}, %{count: event.quantity},
+     %{
+       result: outcome,
+       feature: event.feature,
+       projection: effect,
+       tenant_key: event.tenant_key,
+       durability: event.durability
+     }}
+  end
+
+  defp one_correction({:error, {:conflict, _index, existing}}),
+    do: {:error, {:conflict, existing}}
+
+  defp one_correction({:error, reason}), do: {:error, reason}
+
+  @doc false
+  @spec replace(term(), String.t(), map(), keyword()) ::
+          {:ok, %{correction: Event.t(), replacement: Event.t()}, :inserted | :duplicate}
+          | {:error, correction_error()}
+  def replace(tenant, original_event_id, attrs, opts) do
+    span(%{kind: :correction, feature: nil, batch_size: 2}, fn ->
+      with {:ok, request} <- build_replacement(tenant, original_event_id, attrs, opts) do
+        request |> write_correction(opts) |> replaced()
+      end
+    end)
+  end
+
+  defp replaced({:ok, [{correction, outcome}, {replacement, outcome}]}) do
+    effect = merge_effect(effects(correction, outcome), effects(replacement, outcome))
+
+    {{:ok, %{correction: correction, replacement: replacement}, outcome},
+     %{count: replacement.quantity + correction.quantity},
+     %{
+       result: outcome,
+       feature: replacement.feature,
+       projection: effect,
+       tenant_key: replacement.tenant_key,
+       durability: replacement.durability
+     }}
+  end
+
+  defp replaced({:error, {:conflict, _index, existing}}), do: {:error, {:conflict, existing}}
+  defp replaced({:error, reason}), do: {:error, reason}
+
+  # The replacement travels in the options rather than in the entry: the entry
+  # is the correction, and an adapter that supports corrections but not
+  # `replace/4` can refuse one option without having to understand a second
+  # shape of entry.
+  defp write_correction(request, opts) do
+    {replacement, entry} = Map.pop(request, :replacement)
+    storage = Keyword.put(storage_opts(opts), :replacement, replacement)
+
+    admit(fn -> Storage.record_correction(entry, storage) end)
+  end
+
   defp write(entries, opts) do
     admit(fn -> Storage.record_events(entries, storage_opts(opts)) end)
   end
@@ -313,6 +390,107 @@ defmodule AuroraMeter.Events do
     with :ok <- declared(tenant, feature, :record),
          {:ok, canonical} <- validate(tenant, feature, quantity, opts) do
       {:ok, attribute(tenant, canonical)}
+    end
+  end
+
+  # A correction states its own id, the id it reduces and a magnitude, and
+  # inherits everything else from the original inside the transaction that
+  # reads it under lock (L-03e-2). There is deliberately no feature policy check
+  # here: the feature is the original's, and it was checked when the original
+  # was recorded. Refusing to correct a fact because its feature was later
+  # removed from the plan would leave a customer over-billed with no way back.
+  #
+  # A non-integer magnitude becomes `nil` so that `:remaining`, which is
+  # `replace/4`'s internal magnitude, is refused here like any other non-integer
+  # rather than silently meaning "reverse the whole thing".
+  defp build_correction(tenant, original_event_id, quantity, opts) do
+    draft =
+      %{
+        tenant_key: tenant_key(tenant),
+        id: Keyword.get(opts, :id),
+        original_event_id: original_event_id,
+        quantity: if(is_integer(quantity), do: quantity, else: nil),
+        metadata: Keyword.get(opts, :metadata)
+      }
+      |> forbid(opts, :dimensions)
+      |> forbid(opts, :occurred_at)
+
+    case Canonical.validate_correction(draft) do
+      {:ok, request} -> {:ok, Map.put(request, :replacement, nil)}
+      {:error, errors} -> {:error, {:invalid, errors}}
+    end
+  end
+
+  defp forbid(draft, opts, key) do
+    case Keyword.get(opts, key) do
+      nil -> draft
+      value -> Map.put(draft, key, value)
+    end
+  end
+
+  # `replace/4` is a full reversal of the original plus one new record, in one
+  # transaction. The replacement's own feature is the original's, so the
+  # original is read once WITHOUT a lock to learn it: that read decides nothing
+  # financial, because the transaction re-reads the original under `FOR UPDATE`
+  # and refuses a replacement whose feature is not the one it finds. An event's
+  # feature never changes, so a stale answer here is not reachable either.
+  defp build_replacement(tenant, original_event_id, attrs, opts) do
+    with {:ok, replacement_id} <- replacement_ids(opts),
+         {:ok, correction} <- build_correction(tenant, original_event_id, 1, opts),
+         {:ok, original} <- Storage.load_event(tenant_key(tenant), original_event_id),
+         {:ok, feature} <- replacement_feature(original, attrs),
+         {:ok, entry} <- replacement_entry(tenant, feature, replacement_id, attrs, opts) do
+      {:ok, %{correction | quantity: :remaining, replacement: entry}}
+    else
+      {:error, :not_found} -> {:error, {:not_found, :original}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The replacement's id is derived from the correction's unless the caller
+  # overrides it, which is what makes the whole two-row operation idempotent
+  # under one caller id: a retry finds both rows and returns `:duplicate`. The
+  # derived id must still fit the column, so the caller's own id is two bytes
+  # shorter here than elsewhere, and is told so by name.
+  defp replacement_ids(opts) do
+    id = Keyword.get(opts, :id)
+    suffix = "~r"
+
+    cond do
+      Keyword.has_key?(opts, :replacement_id) -> {:ok, Keyword.get(opts, :replacement_id)}
+      not is_binary(id) -> {:ok, id}
+      byte_size(id) + byte_size(suffix) > Canonical.id_limit() -> {:error, too_long_for_replace()}
+      true -> {:ok, id <> suffix}
+    end
+  end
+
+  defp too_long_for_replace, do: {:invalid, [id: :too_long_for_replacement]}
+
+  defp replacement_feature(original, attrs) do
+    case Map.get(attrs, :feature) do
+      nil -> {:ok, original.feature}
+      same when same == original.feature -> {:ok, original.feature}
+      _other -> {:error, {:invalid, [feature: :differs_from_original]}}
+    end
+  end
+
+  defp replacement_entry(tenant, feature, replacement_id, attrs, opts) do
+    draft = %{
+      tenant_key: tenant_key(tenant),
+      feature: feature!(feature),
+      quantity: Map.get(attrs, :quantity),
+      id: replacement_id,
+      occurred_at: Map.get(attrs, :occurred_at),
+      dimensions: Map.get(attrs, :dimensions),
+      metadata: Map.get(attrs, :metadata),
+      kind: :usage,
+      original_event_id: nil,
+      future_tolerance: Keyword.get(opts, :future_tolerance) || Config.events_future_tolerance()
+    }
+
+    case Canonical.validate(draft) do
+      {:ok, canonical} -> {:ok, attribute(tenant, canonical)}
+      {:error, errors} -> {:error, {:invalid, errors}}
     end
   end
 
@@ -465,7 +643,7 @@ defmodule AuroraMeter.Events do
     if DateTime.compare(current, event.period_start) == :eq do
       Counter.apply_projection(
         {event.tenant_key, event.feature, event.period_start},
-        event.quantity
+        projection_delta(event)
       )
     end
 
@@ -482,6 +660,19 @@ defmodule AuroraMeter.Events do
       :projection_failed
   end
 
+  # The signed contribution one event makes to a total: a usage event adds its
+  # quantity, a correction subtracts its magnitude. The durable side of the
+  # same rule is in `AuroraMeter.Storage.Ecto`'s correction transaction, and a
+  # replay (03d) must apply it too, which is what makes `event_totals.quantity`
+  # for a key the sum of its usage events less the sum of its corrections
+  # (L-03e-3).
+  @spec projection_delta(Event.t()) :: integer()
+  defp projection_delta(%Event{kind: :correction, quantity: quantity}), do: -quantity
+  defp projection_delta(%Event{quantity: quantity}), do: quantity
+
+  # The magnitude published is POSITIVE and `kind` says what it means, so a
+  # consumer subtracts a `:correction` rather than adding a negative number it
+  # might not have thought to expect.
   defp publish(event) do
     Phoenix.PubSub.broadcast(
       Config.pubsub(),

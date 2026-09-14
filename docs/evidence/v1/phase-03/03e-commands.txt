@@ -1,0 +1,147 @@
+03e: immutable corrections. Every command, exit code, seed, UTC timestamp,
+toolchain and log path.
+
+TOOLCHAIN (identical for every row below)
+  Elixir 1.20.1, Erlang/OTP 29 (erts-17.0.1)
+  Ubuntu 24.04.4 LTS on WSL2, kernel 6.6.87.2-microsoft-standard-WSL2
+  PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1), port 5490, aurora_meter_test
+  core aurora_meter 0.5.0 @ b032aae (dirty), pro aurora_meter_pro 0.3.0 @ c8f10d0 (dirty)
+  core schema version 8, no DDL in this unit
+  every Mix command through tmp/v1/mixlane.sh, which flocks the package _build
+  (wave rule 1, open-findings.md X18), with DB_PORT=5490 and MIX_ENV=test
+
+Log paths are relative to /home/liamk/src/PhxTemplates.
+
+--------------------------------------------------------------------------------
+BASELINE, BEFORE ANY CHANGE
+--------------------------------------------------------------------------------
+2026-09-14T19:43:15Z  exit=0   mix test (core)
+  1011 passed (42 doctests, 12 properties, 957 tests), 3 excluded
+  finished 2026-09-14T19:46:24Z
+  log: tmp/v1/03e/logs/baseline-core-test.log
+  producer: tmp/v1/03e/baseline.sh
+
+--------------------------------------------------------------------------------
+MEASUREMENT: WHERE A CHECK CONSTRAINT APPLIES IN AN UPSERT
+--------------------------------------------------------------------------------
+2026-09-14T19:51:13Z  exit=0   mix run tmp/v1/03e/probes/probe_totals_check.exs
+  proposed -3 onto a row holding 10, result would be 7: REFUSED :check_violation
+  the same -3 as a plain UPDATE:                        ACCEPTED, value 7
+  an UPDATE that really would go negative (-100):       REFUSED
+  log: tmp/v1/03e/logs/probe-check-constraint.log
+  evidence: docs/evidence/v1/phase-03/03e-totals-check.md
+
+--------------------------------------------------------------------------------
+FIRST VERIFICATION TARGET: THE TWO STEP-ORDER TESTS, SINGLE CONNECTION
+--------------------------------------------------------------------------------
+2026-09-14T19:51:29Z  exit=2   mix test test/aurora_meter/correct_test.exs
+  33/34 passed; the failure was the test's own expectation about eligibility on a
+  buffered feature, corrected in the test
+  log: tmp/v1/03e/logs/step-order.log
+
+2026-09-14T19:52:23Z  exit=0   mix test correct_test.exs replace_test.exs
+  51 passed. Both step-order tests green on a single connection before any
+  concurrency work, which is the unit's stated first target.
+  log: tmp/v1/03e/logs/replace.log
+
+--------------------------------------------------------------------------------
+CONCURRENCY: TEN SEEDS
+--------------------------------------------------------------------------------
+producer: tmp/v1/03e/seeds.sh
+index:    tmp/v1/03e/logs/seeds.csv
+report:   docs/evidence/v1/phase-03/03e-bound.json (20 lines, 2 tests x 10 seeds)
+each run: AURORA_BOUND_REPORT set, AURORA_SEED set, mix test
+          test/aurora_meter/correct_concurrency_test.exs --seed N
+
+  seed 0  exit=0  2026-09-14T20:21:47Z -> 2026-09-14T20:21:50Z  6 passed  tmp/v1/03e/logs/seeds/seed-0.log
+  seed 1  exit=0  2026-09-14T20:21:50Z -> 2026-09-14T20:21:53Z  6 passed  tmp/v1/03e/logs/seeds/seed-1.log
+  seed 2  exit=0  2026-09-14T20:21:53Z -> 2026-09-14T20:21:56Z  6 passed  tmp/v1/03e/logs/seeds/seed-2.log
+  seed 3  exit=0  2026-09-14T20:21:56Z -> 2026-09-14T20:21:58Z  6 passed  tmp/v1/03e/logs/seeds/seed-3.log
+  seed 4  exit=0  2026-09-14T20:21:58Z -> 2026-09-14T20:22:01Z  6 passed  tmp/v1/03e/logs/seeds/seed-4.log
+  seed 5  exit=0  2026-09-14T20:22:01Z -> 2026-09-14T20:22:04Z  6 passed  tmp/v1/03e/logs/seeds/seed-5.log
+  seed 6  exit=0  2026-09-14T20:22:04Z -> 2026-09-14T20:22:06Z  6 passed  tmp/v1/03e/logs/seeds/seed-6.log
+  seed 7  exit=0  2026-09-14T20:22:06Z -> 2026-09-14T20:22:09Z  6 passed  tmp/v1/03e/logs/seeds/seed-7.log
+  seed 8  exit=0  2026-09-14T20:22:09Z -> 2026-09-14T20:22:12Z  6 passed  tmp/v1/03e/logs/seeds/seed-8.log
+  seed 9  exit=0  2026-09-14T20:22:12Z -> 2026-09-14T20:22:15Z  6 passed  tmp/v1/03e/logs/seeds/seed-9.log
+
+AN EARLIER TEN-SEED RUN, BEFORE THE X109 FIX, IS RECORDED RATHER THAN DISCARDED
+  2026-09-14T19:58Z  seed 7 exit=2, 5/6 passed. Totals row read quantity 13,
+  events 6 where the test expected 6 and 2, which is exactly a previous run's
+  four rows (10 + 10 - 4 - 9) plus this run's two (10 - 4). Cause: an
+  interruption test cannot guarantee its own teardown and
+  System.unique_integer/1 restarts from small values in every BEAM, so the next
+  run reuses the tenant key. Seed 7 alone then passed five times in a row
+  (tmp/v1/03e/logs/seed7-rerun-{1..5}.log), which is how the cause was found
+  rather than retried away. Fix: AuroraMeter.Test.Connections.sweep!/1 at suite
+  start in test/test_helper.exs, over the nine non-sandbox prefixes.
+
+--------------------------------------------------------------------------------
+NEGATIVE CONTROLS (open-findings.md X84), RESTORE ASSERTED BY SHA256 (X97)
+--------------------------------------------------------------------------------
+producer: tmp/v1/03e/negative-controls.sh + tmp/v1/03e/mutate.py
+summary:  tmp/v1/03e/logs/negative-controls-summary.txt
+logs:     tmp/v1/03e/logs/negative/<name>.log
+baseline sha256 ecto.ex    f7071b25d9a784d5177dc1c0f5efe50c35363fbfd4e4b949aa878538bad4dcd0
+baseline sha256 counter.ex 802bac9ef736ea8e26d88e0331cabc9bad7862c8d5ff57f96dc290eec7017de9
+
+  bound_before_duplicate  exit=2  34/35  fails: I09 a duplicate correction id is
+                                         idempotent even when the original is
+                                         already fully corrected
+  no_recheck              exit=2  5/6    fails: I09 12 concurrent submissions of
+                                         one correction identity
+  no_lock                 exit=2  4/6    fails: the bound test and the lock test
+  no_lock_widened         exit=2  4/6    same two, with the window held open 50 ms
+  no_floor                exit=2  34/35  fails: I09 a correction whose magnitude
+                                         exceeds this node's view re-seats it
+  widened_only  (POSITIVE) exit=0  6 passed  the 50 ms window alone breaks nothing
+  restored      (POSITIVE) exit=0  59 passed over the three files, seed 0
+
+--------------------------------------------------------------------------------
+UNCHANGED-SYMBOL COMPARISON (X67, X90, X108: by symbol, never by line number)
+--------------------------------------------------------------------------------
+2026-09-14T20:02Z  exit=0  python3 tmp/v1/03e/hotpath.py
+  71 symbols extracted from `git show HEAD:<file>` and from the working tree and
+  compared byte for byte: 27 on the record transaction, 14 on the canonical
+  tuple, 30 on the buffered hot path. ALL IDENTICAL.
+  `git diff --stat HEAD` over credits/, credits.ex, store.ex, flusher.ex,
+  broadcaster.ex, cluster.ex, migration.ex, migration/, schema/, events/backfill.ex,
+  events/gate.ex, period.ex, clock.ex, entitlements.ex: no change at all.
+  output: tmp/v1/03e/logs/03e-hotpath.json
+
+2026-09-14T20:02Z  exit=0  python3 tmp/v1/03e/hotpath.py --selftest
+  apply_totals/4 mutated with one comment line; the tool reported CHANGED and
+  printed the diff; the file was restored and the restore asserted by sha256.
+  log: tmp/v1/03e/logs/hotpath-selftest.log
+
+--------------------------------------------------------------------------------
+GATES
+--------------------------------------------------------------------------------
+2026-09-14T20:03:39Z  exit=16  mix check (core)
+  Credo: 1 warning, `length/1` on a list compared to 0 in correct_test.exs.
+  Fixed rather than skipped.
+
+2026-09-14T20:04Z     exit=0   mix check (core)
+  format --check-formatted: clean (only the files this unit changed were
+                            formatted; never a project-wide mix format)
+  compile --warnings-as-errors --force: clean
+  credo --strict: clean
+  dialyzer: Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+  test: 1084 passed (42 doctests, 12 properties, 1030 tests), 3 excluded
+  docs --warnings-as-errors: clean
+  log: tmp/v1/03e/logs/03e-core-check.log
+
+2026-09-14T20:07Z     exit=0   mix check (pro), PLT DELETED FIRST (X114)
+  priv/plts/dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt (7,708,382 bytes)
+  and its .hash were deleted before the run and rebuilt by it; the log records
+  the directory listing before and after.
+  dialyzer: Total errors: 1, Skipped: 1, Unnecessary Skips: 0 (pre-existing skip)
+  test: 420 passed (28 doctests, 392 tests)
+  log: tmp/v1/03e/logs/03e-pro-check.log
+  producer: tmp/v1/03e/pro.sh
+
+--------------------------------------------------------------------------------
+LEFTOVER SWEEP
+--------------------------------------------------------------------------------
+2026-09-14T19:59:55Z  exit=0  mix run tmp/v1/03e/probes/probe_leftovers.exs
+  corrconc, correct, replace, recordconc: 0 tenants with events, 0 with totals.
+  Run after the concurrency suites, so nothing this unit writes outlives its run.

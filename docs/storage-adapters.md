@@ -45,6 +45,9 @@ whether yours is ever called:
       def record_events(_entries, _opts), do: {:error, {:unsupported, :durable_events}}
 
       @impl AuroraMeter.Storage
+      def record_correction(_entry, _opts), do: {:error, {:unsupported, :corrections}}
+
+      @impl AuroraMeter.Storage
       def load_event(_tenant_key, _event_id), do: {:error, {:unsupported, :durable_events}}
 
       @impl AuroraMeter.Storage
@@ -117,6 +120,55 @@ conflicting row, so by the time the statement returns the row is either
 committed and visible or gone. It **is** reachable when something deletes the
 conflicting row between the insert and the read-back, which a retention prune
 racing a retry will do. Your storage may make it reachable in more ways.
+
+## If you can: what `record_correction/2` must do
+
+A correction is a new immutable row reducing the effective quantity of an
+existing event in the same tenant. No historical row is ever updated, and the
+cumulative magnitude of the corrections of one original may never exceed that
+original's quantity. Exceeding it means crediting a customer more than they
+were charged, so it is the one rule in this page that is about money rather
+than about consistency.
+
+The order of the steps is load bearing:
+
+1. Read the generation state, share-locked, as `record_events/2` does, so a
+   correction and a record never take these locks in different orders.
+2. **The duplicate check, before the bound check.** Look the correction id up
+   and, if it is held with an equal payload hash, return `:duplicate` and stop.
+3. Take an exclusive lock on the **original** row. Not on the totals row: the
+   bound is a property of one original, the totals row aggregates many
+   originals, and locking it would serialise every concurrent `record/4` for
+   that key as well.
+4. **Check the duplicate again, now under that lock.** A corrector that arrived
+   while an identical correction was still uncommitted saw nothing at step 2,
+   waited at step 3, and would otherwise meet the bound with no headroom left
+   and be told `exceeds_original` for a correction that is its own.
+5. Sum the existing corrections of that original, and refuse
+   `{:invalid, [quantity: :exceeds_original]}` when the new magnitude would not
+   fit. Under `READ COMMITTED` this statement takes a fresh snapshot after the
+   lock was granted, which is what makes the sum current; an implementation
+   written for repeatable-read semantics here is subtly wrong.
+6. Insert the correction, copying the original's feature, occurrence instant,
+   period, period source, plan attribution and dimensions, and resolve a
+   skipped insert exactly as `record_events/2` does.
+7. Apply the totals delta: `-quantity` on `quantity`, `+1` on `events`.
+8. Hand the export intent to the outbox, with a reason attached when you can
+   already tell it is not deliverable. Never drop a correction.
+
+Two further rules:
+
+**A refusal returns; only a conflict rolls back.** A bound that was exceeded
+wrote nothing, so there is nothing to undo, and calling `rollback` there would
+destroy a host transaction that wrapped the call along with its own writes.
+
+**If your storage has a non-negative constraint on the totals, check where it
+applies.** On PostgreSQL a `CHECK` is applied to the tuple an
+`INSERT ... ON CONFLICT DO UPDATE` proposes, before the conflict is resolved, so
+the upsert `record_events/2` uses cannot carry a negative delta even when the
+row it merges into stays positive. The Ecto adapter therefore ensures the row
+exists at zero and then issues an `UPDATE`, which keeps the constraint as a
+backstop on the value that results.
 
 ### Sorting, and why
 

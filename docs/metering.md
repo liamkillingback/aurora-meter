@@ -148,6 +148,71 @@ AuroraMeter.record(tenant, :tokens, 1_420,
 #=> {:ok, %AuroraMeter.Event{}, :inserted}
 ```
 
+### Correcting a recorded fact
+
+A recorded fact is never edited and never deleted. Correcting one means
+appending a second fact that reduces it, so the history still says what
+happened and an invoice can still be explained:
+
+```elixir
+AuroraMeter.correct(tenant, request_id, 3,
+  id: "credit_" <> request_id,
+  metadata: %{"ticket" => "SUP-118"}
+)
+#=> {:ok, %AuroraMeter.Event{kind: :correction, quantity: 3}, :inserted}
+```
+
+The quantity is the **magnitude of the reduction**, a positive integer. What
+the library guarantees about it:
+
+  * **The cumulative corrections of one original can never exceed it.** The
+    check is made while the original row is held under `SELECT ... FOR UPDATE`,
+    so two operators crediting the same fact at the same moment cannot between
+    them give back more than was charged. The loser is told
+    `{:error, {:invalid, [quantity: :exceeds_original]}}`.
+  * **A repeated correction id is a duplicate, not a second credit** (including
+    when the original is by then fully corrected).
+  * **A correction belongs to the original's period.** A September fact
+    corrected in October changes September's total, not October's. It carries
+    the original's feature, plan attribution and dimensions for the same
+    reason, and it never reprices.
+  * **A correction of a correction is refused.** Correct the original.
+
+`aurora_meter_event_totals.quantity` for a key is its usage events less its
+corrections, and `events` counts the rows of both kinds, so a key whose 10 was
+fully reversed reads `quantity: 0, events: 2`.
+
+To change a **dimension or a time**, reduce nothing and restate everything:
+
+```elixir
+AuroraMeter.replace(tenant, request_id, %{
+    quantity: 1_420,
+    occurred_at: finished_at,
+    dimensions: %{"model" => "opus"}
+  },
+  id: "fix_" <> request_id
+)
+#=> {:ok, %{correction: ..., replacement: ...}, :inserted}
+```
+
+That is one transaction holding a full reversal of the original and one new
+fact. The replacement's id is the correction's with `~r` appended, unless you
+pass `:replacement_id`, which is what makes a retry under one caller id
+idempotent for the pair. `correct/4` refuses `dimensions:` and `occurred_at:`
+rather than quietly ignoring them, because accepting either would be a second
+way to do this with weaker guarantees.
+
+A correction publishes `{:aurora_meter, :event, %{kind: :correction, quantity:
+q}}` on the tenant topic with a **positive** `q`: consumers subtract a
+`:correction` rather than adding a negative number they may not have expected.
+
+Corrections are free and are core's, in both editions. What is not core's is
+delivering one to a payment provider: Aurora Meter Pro decides whether a meter
+event can still be adjusted, and quarantines the ones that cannot with a
+reconciliation item rather than dropping them. Core hands every correction to
+the export seam with a reason attached, including the ones it can already tell
+are not deliverable, and never marks one settled that was not.
+
 ### The legacy durable track
 
 ```elixir

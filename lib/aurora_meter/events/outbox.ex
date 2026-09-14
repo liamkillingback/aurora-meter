@@ -39,16 +39,25 @@ defmodule AuroraMeter.Events.Outbox do
       buffered counter rather than from events (build unit 03c)
     * `{:ineligible, :attribution_unresolved}` when the period source could not
       place `occurred_at`, so the period on the row is an approximation
+    * `{:ineligible, :original_ineligible}` on a **correction** whose original
+      carried an unresolved attribution. The correction of an unattributed fact
+      cannot be attributed either, and the reason names which of the two rows is
+      the problem.
 
   Mapping, customer, mode, meter, cutover watermark and timestamp window are
   the implementation's decisions, taken at enqueue time from its own
   configuration.
+
+  A correction is **never dropped**. Core stages every one of them, with a
+  reason attached when core can already tell delivery is not possible, because
+  a correction that quietly disappears is a customer credited nothing and told
+  otherwise (I09).
   """
 
   alias AuroraMeter.Event
 
   @typedoc "Why core believes an event is not a candidate for delivery."
-  @type ineligibility :: :feature_buffered | :attribution_unresolved
+  @type ineligibility :: :feature_buffered | :attribution_unresolved | :original_ineligible
 
   @typedoc "One export intent."
   @type item :: %{

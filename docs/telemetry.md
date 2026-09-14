@@ -12,7 +12,7 @@ Aurora Meter emits `:telemetry` events you can attach to for metrics and logs.
 | `[:aurora_meter, :cluster, :apply]` | `%{count}` | `%{kind, origin}` — deltas or totals applied from another node |
 | `[:aurora_meter, :credits, kind]` | `%{amount, balance_after, available_after}` | `%{tenant_key, reference, category, duplicate, overrun}` — one per committed ledger entry; `kind` is `:grant`, `:hold`, `:settle`, `:release`, `:debit` or `:expire`. `duplicate: true` marks an idempotent grant replay (amount `0`), `overrun: true` a settlement above its hold |
 | `[:aurora_meter, :credits, :low_balance]` | `%{available, threshold}` | `%{tenant_key}` — the available balance crossed below the threshold (once per crossing) |
-| `[:aurora_meter, :record, :start]`, `[..., :stop]`, `[..., :exception]` | `%{duration, count}` on `:stop` | `%{result, kind, feature, batch_size, tenant_key, durability, projection}`: one span per `AuroraMeter.record/4` or `record_batch/2`, covering validation, admission, the transaction and the post-commit effects |
+| `[:aurora_meter, :record, :start]`, `[..., :stop]`, `[..., :exception]` | `%{duration, count}` on `:stop` | `%{result, kind, feature, batch_size, tenant_key, durability, projection}`: one span per `AuroraMeter.record/4`, `record_batch/2`, `correct/4` or `replace/4`, covering validation, admission, the transaction and the post-commit effects |
 
 `record` is a span rather than a flat event so that an OpenTelemetry bridge can
 open it before the database work starts and Ecto's own spans nest inside it.
@@ -21,6 +21,13 @@ Attach to `[:aurora_meter, :record, :stop]` for metrics: `result` is `:inserted`
 was updated (`:ok`), skipped because the counter was cold (`:cold`) or failed
 (`:projection_failed`). A failed projection never turns a committed event into
 an error; the durable total stays authoritative.
+
+`kind` is `:usage` or `:correction`, so corrections need no event of their own
+and every preset built on `[:aurora_meter, :record]` covers them. Split on it to
+see how much of the recorded quantity is credit: `count` is the magnitude, and
+for a `:correction` it is what was taken away. A `replace/4` is one span with
+`kind: :correction` and `batch_size: 2`, whose `count` is the reversal plus the
+replacement.
 
 `declared` is `false` when no plan declares the feature. It is metadata on
 `track` and `reserve` from 0.5.0, and it is a report rather than a refusal:

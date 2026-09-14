@@ -21,6 +21,28 @@ Application.put_env(:aurora_meter_test, :repo, AuroraMeter.TestRepo)
 
 Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 
+# Sweep the non-sandbox tenant prefixes before anything runs (build unit 03e,
+# `open-findings.md` X109).
+#
+# An interruption test cannot guarantee its own teardown by construction: the
+# module kills processes, and a test that exits rather than failing an assertion
+# can leave `on_exit` unable to take the connection its cleanup needs. That
+# would be harmless if tenant keys were unique for ever, but
+# `System.unique_integer/1` restarts from small values in every BEAM, so the
+# next run reuses the same key and inherits the rows. Measured: 03e's
+# correction concurrency file failed once at seed 7 with a totals row holding
+# `quantity: 13, events: 6` where it expected `6` and `2`, which is exactly a
+# previous run's `10 + 10 - 4 - 9` over four rows added to this run's
+# `10 - 4` over two.
+#
+# The sweep deletes ONLY what these prefixes name (X38: a prefix sweep that
+# reaches further deletes rows a concurrent run created), and it runs before
+# `ExUnit.start/0` so no test is racing it.
+AuroraMeter.Test.Connections.sweep!(~w(
+  concurrent corrconc flush_batch gate killt model projection recordconc
+  storagecase stmt
+))
+
 # The ONLY excluded tag in this repository, and it is excluded because the tests
 # that carry it assert the ABSENCE of the optional integrations: they are
 # meaningless, and would fail, on a build where phoenix_live_view, phoenix_html

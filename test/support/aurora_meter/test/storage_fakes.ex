@@ -25,6 +25,9 @@ defmodule AuroraMeter.Test.IncapableStorage do
   def record_events(_entries, _opts), do: {:error, {:unsupported, :durable_events}}
 
   @impl AuroraMeter.Storage
+  def record_correction(_entry, _opts), do: {:error, {:unsupported, :corrections}}
+
+  @impl AuroraMeter.Storage
   def load_event(_tenant_key, _event_id), do: {:error, {:unsupported, :durable_events}}
 
   @impl AuroraMeter.Storage
@@ -101,6 +104,9 @@ defmodule AuroraMeter.Test.UnresolvedStorage do
 
   @impl AuroraMeter.Storage
   def record_events(_entries, _opts), do: {:error, {:unavailable, :conflict_unresolved}}
+
+  @impl AuroraMeter.Storage
+  def record_correction(_entry, _opts), do: {:error, {:unavailable, :conflict_unresolved}}
 
   @impl AuroraMeter.Storage
   defdelegate load_event(tenant_key, event_id), to: Backend

@@ -367,6 +367,8 @@ the current behaviour for the phase 03 guarantee.
 - `AuroraMeter.RecordConcurrencyTest` / `test generations I06 a record transaction in flight blocks generation activation and completes against the generation it read`
 - `AuroraMeter.RecordProjectionTest` / `test a host's own transaction I06 an outer host transaction rollback leaves no event, no totals delta, no outbox item and no ETS delta`
 - `AuroraMeter.RecordProjectionTest` / `test a host's own transaction I06 an outer host transaction commit plus after_commit/1 hydrates ETS and publishes one message`
+- `AuroraMeter.CorrectConcurrencyTest` / `test process death I06 killing a corrector before commit leaves no row, no delta and no outbox item`
+- `AuroraMeter.CorrectConcurrencyTest` / `test process death I06 killing a corrector after commit before the reply leaves exactly one of each and the retry is a duplicate`
 - PLANNED (03d): `AuroraMeter.EventsReplayTest` / `test I06 restart and replay reproduce the same totals`
 
 **Evidence.** `docs/evidence/v1/phase-03/i06.md`
@@ -411,6 +413,8 @@ exist.
 - `AuroraMeter.RecordBatchTest` / `test I07 repeated ids with different payloads are rejected before any I/O`
 - `AuroraMeter.RecordBatchTest` / `test I07 a conflicting element rolls back every new row in the batch`
 - `AuroraMeter.RecordConcurrencyTest` / `test one identity, twelve connections I07 12 independent connections submitting one identity with two different payloads never produce two rows`
+- `AuroraMeter.CorrectTest` / `test identity I07 a correction id reused with a different magnitude conflicts`
+- `AuroraMeter.CorrectTest` / `test identity I07 a correction id reused with different metadata conflicts`
 - `AuroraMeter.RecordTest` / `property the canonical encoder, as a property I07 two different payloads never share an encoding, and key order never changes one`
 
 **Evidence.** `docs/evidence/v1/phase-03/i07.md`
@@ -483,25 +487,60 @@ test for them, because core has no `usage_reports` table to refuse against.
 
 ## I09 Corrections preserve immutable history and bounded net quantity
 
-**Guarantee.** Not guaranteed by the shipped code: there is no correction entry
-point on the facade and no correction record. Phase 03 adds one, after which a correction appends
-rather than mutates, concurrent partial corrections cannot exceed the original
-quantity, a full reversal refuses any further correction, a duplicate correction
-id is idempotent, and a correction after the provider's window opens a
-reconciliation item instead of silently diverging.
+**Guarantee.** `AuroraMeter.correct/4` appends a new immutable event that reduces
+an earlier one; no historical row is ever updated or deleted. The cumulative
+magnitude of the corrections of one original can never exceed that original's
+quantity, checked while the original row is held under `SELECT ... FOR UPDATE`,
+so concurrent correctors of one fact cannot between them credit more than was
+charged. A repeated correction id is a duplicate rather than a second credit,
+including when the original is by then fully corrected, because the duplicate
+check precedes the bound check both before and under the lock. A correction
+inherits the original's feature, period, period source, plan attribution and
+dimensions, so it changes the invoice the original was on. A correction of a
+correction is refused. Every correction is handed to the export seam with an
+explicit eligibility reason and none is dropped. `AuroraMeter.replace/4` writes
+a full reversal and a replacement in one transaction, idempotent under one
+caller id.
 
-**Prerequisites.** The phase 03 durable event path and its correction schema.
+**Prerequisites.** Core schema version 7 or later (`kind`, `original_event_id`,
+the pairing check constraint and the corrections partial index) and a storage
+adapter declaring the `:corrections` capability. The in-memory view of a
+corrected key is advisory as always; `AuroraMeter.Events.total/3` is
+authoritative.
 
-**Known limits.** The only correction available today is a negative `track/4`,
-which mutates the counter in place, leaves no record of what was corrected and is
-bounded by nothing. Hosts using it must keep their own audit trail.
+**Known limits.** Core records a correction it cannot know is deliverable.
+Whether a meter event can still be adjusted at a payment provider is Aurora
+Meter Pro's decision (build unit 04d), which quarantines the ones that cannot
+with a `manual_adjustment` reconciliation item; core's contribution is that the
+item always exists and carries a reason. The legacy negative `track/4` still
+exists for buffered features, mutates the counter in place and is bounded by
+nothing; hosts using it keep their own audit trail. Corrections of corrections
+are not supported in 1.0.
 
 **Tests.**
 
 - `AuroraMeter.ExamplesTest` / `test allowance-and-overage.md a negative track/3 corrects an overcount`
-- PLANNED (03e): `AuroraMeter.CorrectionsTest` / `test I09 concurrent partial corrections cannot exceed the original`
-- PLANNED (03e): `AuroraMeter.CorrectionsTest` / `test I09 a full reversal refuses a further correction`
-- PLANNED (03e): `AuroraMeter.CorrectionsTest` / `test I09 a duplicate correction id is idempotent`
+- `AuroraMeter.CorrectTest` / `test the cumulative bound I09 a correction reduces the projected total by its magnitude`
+- `AuroraMeter.CorrectTest` / `test the cumulative bound I09 cumulative corrections cannot exceed the original`
+- `AuroraMeter.CorrectTest` / `test the cumulative bound I09 a full reversal then a further correction is rejected`
+- `AuroraMeter.CorrectTest` / `test the cumulative bound I09 a duplicate correction id is idempotent`
+- `AuroraMeter.CorrectTest` / `test the cumulative bound I09 a duplicate correction id is idempotent even when the original is already fully corrected`
+- `AuroraMeter.CorrectTest` / `test identity I09 a correction to a correction is rejected`
+- `AuroraMeter.CorrectTest` / `test inside a host transaction I09 a refusal does not roll back the host's transaction`
+- `AuroraMeter.CorrectTest` / `test the in-memory projection I09 the ETS projection subtracts and never shows a negative value`
+- `AuroraMeter.CorrectTest` / `test the in-memory projection I09 a correction whose magnitude exceeds this node's view re-seats it from the durable total`
+- `AuroraMeter.CorrectTest` / `test replay arithmetic I09 recomputing every total from the event rows reproduces the projection exactly`
+- `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 12 concurrent partial corrections of one 10-unit original never exceed it`
+- `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 12 concurrent submissions of one correction identity produce one row, one delta and one outbox item`
+- `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 concurrent corrections of two different originals in one key both commit`
+- `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 the lock that serialises correctors is the one on the original row`
+
+The provider half of I09, "a correction after the provider window opens a
+reconciliation item instead of silently diverging", is Aurora Meter Pro's and is
+evidenced in Pro (build unit 04d). It is deliberately not a planned bullet here:
+core has no provider window and no reconciliation table to refuse against, so no
+core test could ever resolve one, and a bullet that can never be promoted is a
+guard that can never fire. **04d must read this paragraph.**
 
 **Evidence.** `docs/evidence/v1/phase-03/i09.md`
 

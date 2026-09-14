@@ -13,6 +13,8 @@ defmodule AuroraMeter.Storage.Ecto do
 
   import Ecto.Query
 
+  require Logger
+
   alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Events.Canonical
@@ -26,6 +28,10 @@ defmodule AuroraMeter.Storage.Ecto do
   @capabilities [:durable_events, :corrections, :projection_generations, :event_streaming]
 
   @projection_checkpoint "events_projection"
+
+  # The backstop for build unit 03e's cumulative bound. It can only fire if that
+  # bound is wrong, so the adapter names it rather than passing it through.
+  @totals_quantity_check "aurora_meter_event_totals_quantity_check"
 
   @event_columns [
     :id,
@@ -391,6 +397,31 @@ defmodule AuroraMeter.Storage.Ecto do
   end
 
   @impl AuroraMeter.Storage
+  def record_correction(entry, opts) do
+    timeout = Keyword.get(opts, :timeout) || Config.record_timeout()
+
+    outbox =
+      Keyword.get(opts, :outbox) || Config.events_outbox() || AuroraMeter.Events.Outbox.Noop
+
+    durability = if host_transaction?(), do: :conditional, else: :durable
+
+    request = Map.put(entry, :replacement, Keyword.get(opts, :replacement))
+
+    state = %{
+      repo: repo(),
+      request: request,
+      outbox: outbox,
+      timeout: timeout,
+      durability: durability
+    }
+
+    guarded(fn ->
+      state.repo.transaction(fn -> correction_transaction(state) end, timeout: timeout)
+    end)
+    |> unwrap_correction()
+  end
+
+  @impl AuroraMeter.Storage
   def load_event(tenant_key, event_id) do
     case repo().one(
            from(e in Event, where: e.tenant_key == ^tenant_key and e.event_id == ^event_id)
@@ -702,6 +733,440 @@ defmodule AuroraMeter.Storage.Ecto do
       :eligible
     end
   end
+
+  # -- the correction transaction (build unit 03e) ----------------------------
+
+  # Seven steps, and the ORDER IS THE DESIGN. Two orderings are wrong and both
+  # are financial defects; `docs/evidence/v1/phase-03/03e-step-order.md` names
+  # them, the observed failure of each, and the test that catches it.
+  #
+  #   1. share-lock the generation state, exactly as `record_events/2` does, so
+  #      a correction and a record never take these locks in different orders
+  #   2. the duplicate check, BEFORE the bound check
+  #   3. `FOR UPDATE` on the ORIGINAL: the serialisation point for every
+  #      corrector of this one fact, and of nothing else
+  #   3b. the duplicate check again, now under that lock
+  #   4. the cumulative sum and the bound (I09)
+  #   5. insert the correction (and, for `replace/4`, its replacement)
+  #   6. apply the totals deltas, NEGATIVE for a correction
+  #   7. hand the export intents to the outbox
+  #
+  # **Why step 2 precedes step 4.** A retry of a correction has its own
+  # committed row inside the cumulative sum, so a bound evaluated first refuses
+  # every retry with `exceeds_original`. Putting the duplicate check first is
+  # the only way `correct/4` is both bounded and idempotent.
+  #
+  # **Why step 3b exists, and it is not in the build document.** Step 2 runs
+  # before the lock, so a corrector that arrives while an identical correction
+  # is still uncommitted sees nothing there. It then waits at step 3, and by the
+  # time the lock is granted the other correction is committed and inside the
+  # sum: without this second check the caller is told `exceeds_original` for a
+  # correction that IS its own, which is the same defect the step order exists
+  # to prevent, seen under concurrency instead of in sequence. The negative
+  # control for it is
+  # `AuroraMeter.CorrectConcurrencyTest / test I09 12 concurrent submissions of
+  # one correction identity produce one row, one delta and one outbox item`.
+  #
+  # **Why the lock is on the original and not on the totals row.** The bound is
+  # a property of one original event; the totals row aggregates many events
+  # across many originals and is also written by every concurrent `record/4`
+  # for that key, which is the hot path. The original row serialises exactly the
+  # transactions that can violate I09 and nothing else.
+  #
+  # **Why `FOR UPDATE` and not a lease, a deadline or a timestamp comparison.**
+  # `open-findings.md` X100: the one clock every node shares is not monotonic,
+  # and steps backwards about 439 ms on a 32.5 second cadence on this hardware.
+  # A row lock is decided by Postgres, is released by COMMIT, ROLLBACK or the
+  # connection dying, and consults no clock at all, so there is nothing here for
+  # a backwards step to invert.
+  defp correction_transaction(state) do
+    state = Map.put(state, :generations, lock_generations(state.repo, state.timeout))
+
+    case read_event(state, state.request.event_id) do
+      nil -> lock_original(state)
+      row -> settle_duplicate(state, row, read_event(state, state.request.original_event_id))
+    end
+  end
+
+  # Step 3. `READ COMMITTED` is what makes this work: every statement after the
+  # lock is granted takes a fresh snapshot, so step 4's sum sees every
+  # correction committed by a corrector that held this lock before us. A reader
+  # who assumes repeatable-read semantics here would write a subtly wrong
+  # implementation, which is why it is said twice (`architecture-map.md` 4.2).
+  defp lock_original(state) do
+    row =
+      state.repo.one(
+        from(e in Event,
+          where:
+            e.tenant_key == ^state.request.tenant_key and
+              e.event_id == ^state.request.original_event_id,
+          lock: "FOR UPDATE"
+        ),
+        timeout: state.timeout
+      )
+
+    cond do
+      is_nil(row) -> {:refused, {:not_found, :original}}
+      row.kind == "correction" -> {:refused, {:invalid, [original: :is_correction]}}
+      true -> recheck_duplicate(state, row)
+    end
+  end
+
+  # Step 3b.
+  defp recheck_duplicate(state, original) do
+    case read_event(state, state.request.event_id) do
+      nil -> check_bound(state, original)
+      row -> settle_duplicate(state, row, original)
+    end
+  end
+
+  # Step 4. The partial index `aurora_meter_events_corrections_index` on
+  # `(tenant_key, original_event_id) where kind = 'correction'` serves it.
+  # `::bigint`, because `sum()` over a bigint column is `numeric` in Postgres
+  # and would arrive as a `Decimal`; the bound is integer arithmetic and must
+  # stay that way.
+  defp check_bound(state, original) do
+    corrected =
+      state.repo.one(
+        from(e in Event,
+          where:
+            e.tenant_key == ^state.request.tenant_key and
+              e.original_event_id == ^original.event_id and e.kind == "correction",
+          select: fragment("coalesce(sum(?), 0)::bigint", e.quantity)
+        ),
+        timeout: state.timeout
+      )
+
+    case magnitude(state.request.quantity, original.quantity, corrected) do
+      {:ok, quantity} -> insert_correction(state, original, quantity)
+      {:refused, _reason} = refusal -> refusal
+    end
+  end
+
+  defp magnitude(:remaining, original_quantity, corrected) do
+    case original_quantity - corrected do
+      0 -> {:refused, {:invalid, [quantity: :already_fully_corrected]}}
+      remaining -> {:ok, remaining}
+    end
+  end
+
+  defp magnitude(quantity, original_quantity, corrected) do
+    if corrected + quantity > original_quantity do
+      {:refused, {:invalid, [quantity: :exceeds_original]}}
+    else
+      {:ok, quantity}
+    end
+  end
+
+  # Steps 5, 6 and 7. The insert and the conflict resolution are
+  # `record_events/2`'s own `insert_events_returning/3` and `resolve/5`, called
+  # rather than copied: a correction is an event and inherits its identity
+  # rules, its duplicate and conflict resolution and its refusal to guess when
+  # the row is neither inserted nor visible (I06, I07).
+  defp insert_correction(state, original, quantity) do
+    entries = entries(state, original, quantity)
+    inserted = insert_events_returning(state.repo, entries, state.timeout)
+    resolved = state.repo |> resolve(entries, inserted, state.timeout, state.durability)
+
+    outcomes = resolved |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1))
+    mixed!(state, outcomes)
+
+    fresh = for {event, :inserted} <- outcomes, do: event
+
+    apply_correction_totals(state, fresh)
+    enqueue_corrections(state, fresh)
+
+    outcomes
+  end
+
+  # `replace/4` is two rows or none. A state where one of the two identities is
+  # already held and the other is not can only be reached by overriding
+  # `replacement_id:` differently across attempts, and there is no honest
+  # outcome for it: the caller asked for a pairing that does not exist.
+  defp mixed!(_state, [_one]), do: :ok
+
+  defp mixed!(_state, [{_correction, outcome}, {_replacement, outcome}]) when is_atom(outcome),
+    do: :ok
+
+  defp mixed!(state, outcomes) do
+    index = Enum.find_index(outcomes, fn {_event, outcome} -> outcome == :duplicate end)
+    {event, _outcome} = Enum.at(outcomes, index)
+    state.repo.rollback({:conflict, index, event})
+  end
+
+  defp entries(state, original, quantity) do
+    correction = correction_entry(state.request, original, quantity)
+
+    case state.request.replacement do
+      nil -> [correction]
+      replacement -> [correction, replacement(state, original, replacement)]
+    end
+  end
+
+  # L-03e-2: every field a correction inherits is copied here, inside the
+  # transaction that read the original under lock, so none of them can drift
+  # from it. `period_start` in particular: a September fact corrected in
+  # October belongs to September's invoice, not October's (decision D08).
+  defp correction_entry(request, original, quantity) do
+    %{
+      tenant_key: original.tenant_key,
+      event_id: request.event_id,
+      feature: original.feature,
+      quantity: quantity,
+      kind: "correction",
+      original_event_id: original.event_id,
+      occurred_at: original.occurred_at,
+      period_start: original.period_start,
+      period_source: original.period_source,
+      attribution: original.attribution,
+      dimensions: original.dimensions || %{},
+      metadata: request.metadata,
+      plan_id: original.plan_id,
+      plan_version: original.plan_version,
+      payload_hash: Canonical.correction_hash(original, quantity, request.metadata)
+    }
+  end
+
+  # The replacement restates the same commercial fact, so its feature is the
+  # original's. The facade resolved the period for the caller's new
+  # `occurred_at` and hashed the payload; all that is left is to refuse a
+  # feature that is not the original's, now that the original is in hand.
+  # `to_string/1`: the entry carries the feature atom the facade validated and
+  # the row carries the string the column holds, and comparing the two directly
+  # is a check that can only ever fail.
+  defp replacement(state, original, replacement) do
+    if to_string(replacement.feature) == original.feature do
+      replacement
+    else
+      state.repo.rollback({:invalid, [feature: :differs_from_original]})
+    end
+  end
+
+  # L-03e-3: the delta for a correction is `-quantity` on `quantity` and `+1` on
+  # `events`, so a key's projected quantity is its usage events less its
+  # corrections and its event count is the number of rows of both kinds. A
+  # replay (03d) uses the identical rule.
+  #
+  # Deliberately not `apply_totals/4`, and not the same statement either.
+  #
+  # `apply_totals/4` is `INSERT ... ON CONFLICT DO UPDATE SET quantity =
+  # quantity + EXCLUDED.quantity`, and a correction cannot use it. 03a put
+  # `CHECK (quantity >= 0)` on `aurora_meter_event_totals`, and **Postgres
+  # applies a CHECK to the tuple the INSERT proposes, before the conflict is
+  # resolved**: proposing `-3` against a row holding `10` is refused even though
+  # the row the UPDATE would leave holds `7`. Measured on PostgreSQL 16.13 in
+  # `docs/evidence/v1/phase-03/03e-totals-check.md`, which also shows the
+  # backstop surviving: the same `-3` as an UPDATE is accepted and a `-100` that
+  # really would go negative is still refused.
+  #
+  # So the delta is applied in two statements: make sure the row exists at zero,
+  # then move it. `DO NOTHING` on the first waits for a concurrent uncommitted
+  # insert of the same totals row exactly as `record_events/2`'s does (03b
+  # measured 1505 ms), which is row-level serialisation bounded by that
+  # transaction and not a lock this one holds across anything.
+  #
+  # NOTE FOR 03d: a **building** generation whose scan has not yet reached this
+  # key has no row, so the zero row this creates is what the correction's
+  # negative delta lands on, and the check would refuse it. No building
+  # generation exists until replay ships, and reconciling the dual write with
+  # the scan's absolute writes is replay's own design problem.
+  defp apply_correction_totals(_state, []), do: :ok
+
+  defp apply_correction_totals(state, events) do
+    events
+    |> Enum.group_by(&{&1.tenant_key, to_string(&1.feature), &1.period_start})
+    |> Enum.flat_map(fn {key, group} ->
+      quantity = Enum.reduce(group, 0, &(projection_delta(&1) + &2))
+      Enum.map(state.generations, &{key, &1, quantity, length(group)})
+    end)
+    |> Enum.sort_by(fn {{tenant, feature, period}, generation, _q, _n} ->
+      {tenant, feature, period, generation}
+    end)
+    |> Enum.each(&move_total(state, &1))
+
+    :ok
+  end
+
+  defp move_total(state, {{tenant_key, feature, period_start}, generation, quantity, count}) do
+    now = Clock.now()
+
+    state.repo.insert_all(
+      EventTotal,
+      [
+        %{
+          tenant_key: tenant_key,
+          feature: feature,
+          period_start: period_start,
+          generation: generation,
+          quantity: 0,
+          events: 0,
+          inserted_at: now,
+          updated_at: now
+        }
+      ],
+      on_conflict: :nothing,
+      conflict_target: [:tenant_key, :feature, :period_start, :generation],
+      timeout: state.timeout
+    )
+
+    state.repo.update_all(
+      from(t in EventTotal,
+        where:
+          t.tenant_key == ^tenant_key and t.feature == ^feature and
+            t.period_start == ^period_start and t.generation == ^generation
+      ),
+      [inc: [quantity: quantity, events: count], set: [updated_at: now]],
+      timeout: state.timeout
+    )
+
+    :ok
+  end
+
+  # The signed contribution one event makes to a total. The in-memory
+  # projection applies the same rule in `AuroraMeter.Events`, and a replay
+  # (03d) must apply it too.
+  defp projection_delta(%AuroraMeter.Event{kind: :correction, quantity: quantity}), do: -quantity
+  defp projection_delta(%AuroraMeter.Event{quantity: quantity}), do: quantity
+
+  # Core computes what core knows and never drops a correction. I09's provider
+  # half is "never treat a provider-ineligible correction as silently settled
+  # externally": the item is always staged, always with a reason attached, and
+  # Pro (04d) turns a reason into a quarantined item plus a reconciliation
+  # item rather than into a success or a silence.
+  defp enqueue_corrections(_state, []), do: :ok
+
+  defp enqueue_corrections(state, events) do
+    items = Enum.map(events, &%{event: &1, eligibility: correction_eligibility(&1)})
+
+    result =
+      try do
+        state.outbox.enqueue(items, %{repo: state.repo, timeout: state.timeout})
+      rescue
+        error -> {:error, {:raised, error.__struct__, Exception.message(error)}}
+      catch
+        :throw, value -> {:error, {:threw, value}}
+      end
+
+    case result do
+      :ok -> :ok
+      {:error, reason} -> state.repo.rollback({:unavailable, {:outbox, reason}})
+      other -> state.repo.rollback({:unavailable, {:outbox, {:unexpected_return, other}}})
+    end
+  end
+
+  # A correction inherits the original's `attribution`, so `:unresolved` on a
+  # correction row means the ORIGINAL could not be attributed. The correction of
+  # an unattributed fact cannot be attributed either, and it is named
+  # `:original_ineligible` so an operator reading the outbox is told which of
+  # the two rows is the problem.
+  #
+  # `kind` is matched before `attribution` on purpose. `replace/4` stages a
+  # replacement as well, and that one is a USAGE event whose attribution was
+  # resolved from the caller's own new `occurred_at`; an unresolved attribution
+  # there is its own problem and is named `:attribution_unresolved` like any
+  # other recorded event's.
+  defp correction_eligibility(%AuroraMeter.Event{kind: :correction, attribution: :unresolved}),
+    do: {:ineligible, :original_ineligible}
+
+  defp correction_eligibility(%AuroraMeter.Event{kind: :correction} = event) do
+    if Config.feature_source(event.feature) == :buffered do
+      {:ineligible, :feature_buffered}
+    else
+      :eligible
+    end
+  end
+
+  defp correction_eligibility(event), do: eligibility(event)
+
+  defp read_event(state, event_id) do
+    state.repo.one(
+      from(e in Event,
+        where: e.tenant_key == ^state.request.tenant_key and e.event_id == ^event_id
+      ),
+      timeout: state.timeout
+    )
+  end
+
+  # The duplicate and conflict decision, made with the ONE definition of "the
+  # same payload" this package has. The expected hash needs the original,
+  # because a correction's canonical tuple carries the original's feature,
+  # occurrence instant and dimensions; without one there is nothing to compare
+  # against and the honest answer is that the original is gone.
+  #
+  # `:remaining` takes the stored row's own quantity: `replace/4`'s caller never
+  # stated a magnitude, so a magnitude is not something their retry can conflict
+  # on. Their metadata still is.
+  defp settle_duplicate(_state, _row, nil), do: {:refused, {:not_found, :original}}
+
+  defp settle_duplicate(state, row, original) do
+    quantity = stated_quantity(state.request, row)
+    expected = Canonical.correction_hash(original, quantity, state.request.metadata)
+
+    if row.payload_hash == expected do
+      duplicate_outcomes(state, row)
+    else
+      state.repo.rollback({:conflict, 0, AuroraMeter.Event.from_row(row, state.durability)})
+    end
+  end
+
+  defp stated_quantity(%{quantity: :remaining}, row), do: row.quantity
+  defp stated_quantity(%{quantity: quantity}, _row), do: quantity
+
+  # A duplicate contributes no totals delta and no outbox item: the ones it is a
+  # duplicate of were staged when it first committed (I06).
+  defp duplicate_outcomes(state, row) do
+    correction = {AuroraMeter.Event.from_row(row, state.durability), :duplicate}
+
+    case state.request.replacement do
+      nil -> [correction]
+      replacement -> [correction, duplicate_replacement(state, row, replacement)]
+    end
+  end
+
+  # The correction identity is spent and the replacement it was spent on is not
+  # the one this caller is now naming. That is a conflict on the CORRECTION,
+  # which is the identity the caller can do something about, and not
+  # `:conflict_unresolved`: nothing was inserted and nothing is uncertain.
+  defp duplicate_replacement(state, correction, replacement) do
+    case read_event(state, replacement.event_id) do
+      %{payload_hash: hash} = row when hash == replacement.payload_hash ->
+        {AuroraMeter.Event.from_row(row, state.durability), :duplicate}
+
+      %{} = row ->
+        state.repo.rollback({:conflict, 1, AuroraMeter.Event.from_row(row, state.durability)})
+
+      nil ->
+        state.repo.rollback(
+          {:conflict, 0, AuroraMeter.Event.from_row(correction, state.durability)}
+        )
+    end
+  end
+
+  # A refusal RETURNS; only a conflict rolls back. `credits/ledger.ex`'s
+  # `transact_outcome/1` records why at length: `repo.rollback/1` inside a
+  # nested transaction marks the whole thing for rollback, savepoint or not, so
+  # a host that wrapped `correct/4` beside its own writes loses them to an
+  # answer that decided nothing. A bound that was exceeded wrote nothing; there
+  # is nothing to undo.
+  #
+  # The totals check constraint is the backstop for the bound, and it is
+  # translated rather than passed through: `quantity >= 0` firing on
+  # `aurora_meter_event_totals` means this unit's arithmetic is wrong, and an
+  # operator needs that sentence rather than an opaque storage error.
+  defp unwrap_correction({:ok, {:refused, reason}}), do: {:error, reason}
+  defp unwrap_correction({:ok, outcomes}) when is_list(outcomes), do: {:ok, outcomes}
+
+  defp unwrap_correction({:error, {:unavailable, {:constraint, @totals_quantity_check = name}}}) do
+    Logger.warning(
+      "AuroraMeter: a correction violated #{name}. The cumulative bound in " <>
+        "AuroraMeter.Storage.Ecto.record_correction/2 should have refused it first, so this is " <>
+        "a bug in that bound and not a caller error. The transaction rolled back."
+    )
+
+    {:error, {:invalid, [quantity: :exceeds_original]}}
+  end
+
+  defp unwrap_correction({:error, reason}), do: {:error, reason}
 
   # -- helpers ---------------------------------------------------------------
 

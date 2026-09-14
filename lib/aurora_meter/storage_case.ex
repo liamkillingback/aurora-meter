@@ -115,6 +115,34 @@ defmodule AuroraMeter.StorageCase do
         end
       end
 
+      describe "AuroraMeter.StorageCase: corrections" do
+        @describetag :storage_case
+
+        test "a correction reduces the original's total and is its own row", ctx do
+          AuroraMeter.StorageCase.assert_correction!(ctx)
+        end
+
+        test "a repeated correction id is a duplicate, with no second delta", ctx do
+          AuroraMeter.StorageCase.assert_correction_duplicate!(ctx)
+        end
+
+        test "a correction id reused with a different magnitude is a conflict", ctx do
+          AuroraMeter.StorageCase.assert_correction_conflict!(ctx)
+        end
+
+        test "cumulative corrections cannot exceed the original", ctx do
+          AuroraMeter.StorageCase.assert_correction_bound!(ctx)
+        end
+
+        test "a correction inherits the original's feature, period and occurrence", ctx do
+          AuroraMeter.StorageCase.assert_correction_inheritance!(ctx)
+        end
+
+        test "a correction of a missing original, and of a correction, are both refused", ctx do
+          AuroraMeter.StorageCase.assert_correction_refusals!(ctx)
+        end
+      end
+
       describe "AuroraMeter.StorageCase: streaming" do
         @describetag :storage_case
 
@@ -200,6 +228,11 @@ defmodule AuroraMeter.StorageCase do
 
       assert Storage.load_event_total(ctx.storage_tenant, :f, ctx.storage_period) ==
                {:error, {:unsupported, :durable_events}}
+    end
+
+    unless Storage.supports?(:corrections) do
+      assert Storage.record_correction(correction(ctx, "x", "y", 1), []) ==
+               {:error, {:unsupported, :corrections}}
     end
 
     unless Storage.supports?(:event_streaming) do
@@ -317,6 +350,111 @@ defmodule AuroraMeter.StorageCase do
   end
 
   @doc false
+  @spec assert_correction!(map()) :: :ok
+  def assert_correction!(ctx) do
+    corrections(fn ->
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "c-base", 10)], [])
+
+      assert {:ok, [{correction, :inserted}]} =
+               Storage.record_correction(correction(ctx, "c-fix", "c-base", 3), [])
+
+      assert correction.kind == :correction
+      assert correction.quantity == 3
+      assert correction.original_event_id == "c-base"
+
+      # The quantity is the usage less the correction; the count is the number
+      # of rows, of both kinds.
+      assert total(ctx) == %{quantity: 7, events: 2}
+    end)
+  end
+
+  @doc false
+  @spec assert_correction_duplicate!(map()) :: :ok
+  def assert_correction_duplicate!(ctx) do
+    corrections(fn ->
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "d-base", 10)], [])
+      request = correction(ctx, "d-fix", "d-base", 10)
+
+      assert {:ok, [{first, :inserted}]} = Storage.record_correction(request, [])
+
+      # The original is by now fully corrected, and the retry is still a
+      # duplicate rather than `exceeds_original`: the duplicate check precedes
+      # the bound check, and this is the assertion that pins it.
+      assert {:ok, [{second, :duplicate}]} = Storage.record_correction(request, [])
+
+      assert second.id == first.id
+      assert total(ctx) == %{quantity: 0, events: 2}
+    end)
+  end
+
+  @doc false
+  @spec assert_correction_conflict!(map()) :: :ok
+  def assert_correction_conflict!(ctx) do
+    corrections(fn ->
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "x-base", 10)], [])
+
+      assert {:ok, [{_c, :inserted}]} =
+               Storage.record_correction(correction(ctx, "x-fix", "x-base", 3), [])
+
+      assert {:error, {:conflict, 0, existing}} =
+               Storage.record_correction(correction(ctx, "x-fix", "x-base", 4), [])
+
+      assert existing.quantity == 3
+      assert total(ctx) == %{quantity: 7, events: 2}
+    end)
+  end
+
+  @doc false
+  @spec assert_correction_bound!(map()) :: :ok
+  def assert_correction_bound!(ctx) do
+    corrections(fn ->
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "b-base", 10)], [])
+
+      assert {:ok, [{_c, :inserted}]} =
+               Storage.record_correction(correction(ctx, "b-1", "b-base", 6), [])
+
+      assert Storage.record_correction(correction(ctx, "b-2", "b-base", 5), []) ==
+               {:error, {:invalid, [quantity: :exceeds_original]}}
+
+      assert total(ctx) == %{quantity: 4, events: 2}
+    end)
+  end
+
+  @doc false
+  @spec assert_correction_inheritance!(map()) :: :ok
+  def assert_correction_inheritance!(ctx) do
+    corrections(fn ->
+      assert {:ok, [{original, :inserted}]} =
+               Storage.record_events([entry(ctx, "i-base", 4)], [])
+
+      assert {:ok, [{correction, :inserted}]} =
+               Storage.record_correction(correction(ctx, "i-fix", "i-base", 1), [])
+
+      assert correction.feature == original.feature
+      assert correction.period_start == original.period_start
+      assert correction.period_source == original.period_source
+      assert correction.occurred_at == original.occurred_at
+    end)
+  end
+
+  @doc false
+  @spec assert_correction_refusals!(map()) :: :ok
+  def assert_correction_refusals!(ctx) do
+    corrections(fn ->
+      assert Storage.record_correction(correction(ctx, "r-fix", "r-nothing", 1), []) ==
+               {:error, {:not_found, :original}}
+
+      assert {:ok, [{_event, :inserted}]} = Storage.record_events([entry(ctx, "r-base", 5)], [])
+
+      assert {:ok, [{_c, :inserted}]} =
+               Storage.record_correction(correction(ctx, "r-1", "r-base", 1), [])
+
+      assert Storage.record_correction(correction(ctx, "r-2", "r-1", 1), []) ==
+               {:error, {:invalid, [original: :is_correction]}}
+    end)
+  end
+
+  @doc false
   @spec assert_streaming!(map()) :: :ok
   def assert_streaming!(ctx) do
     durable(:event_streaming, fn ->
@@ -412,6 +550,27 @@ defmodule AuroraMeter.StorageCase do
   end
 
   @doc """
+  One `t:AuroraMeter.Storage.correction_entry/0` for the suite.
+
+  There is no `payload_hash` here on purpose: a correction's canonical tuple
+  carries the original's feature, occurrence instant and dimensions, so only an
+  adapter that has read the original can compute it. An adapter that invents
+  its own definition of "the same correction" fails the duplicate and conflict
+  assertions above.
+  """
+  @spec correction(map(), String.t(), String.t(), pos_integer() | :remaining) ::
+          AuroraMeter.Storage.correction_entry()
+  def correction(context, event_id, original_event_id, quantity) do
+    %{
+      tenant_key: context.storage_tenant,
+      event_id: event_id,
+      original_event_id: original_event_id,
+      quantity: quantity,
+      metadata: %{}
+    }
+  end
+
+  @doc """
   The projection generation reads currently resolve to.
 
   The suite restores it after the generation test, because it is one row for
@@ -440,6 +599,8 @@ defmodule AuroraMeter.StorageCase do
 
     :ok
   end
+
+  defp corrections(fun), do: durable(:corrections, fun)
 
   defp total(ctx) do
     {:ok, total} =

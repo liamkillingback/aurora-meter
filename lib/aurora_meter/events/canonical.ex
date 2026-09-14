@@ -58,6 +58,28 @@ defmodule AuroraMeter.Events.Canonical do
   @typedoc "One validation failure inside a batch, with the element's index."
   @type indexed_error :: {non_neg_integer(), atom(), atom()}
 
+  @typedoc """
+  What `validate_correction/1` accepts.
+
+  A correction states three things and inherits the rest: its own caller id,
+  the id of the event it reduces, and the magnitude of the reduction. `:metadata`
+  is the reason, a ticket reference or an operator id. `:quantity` is
+  `:remaining` for `AuroraMeter.replace/4`, whose magnitude is not known until
+  the original is read under lock.
+
+  `:dimensions` and `:occurred_at` appear here only so that a caller who sends
+  one is told to use `AuroraMeter.replace/4` rather than silently ignored.
+  """
+  @type correction_draft :: %{
+          required(:tenant_key) => term(),
+          required(:id) => term(),
+          required(:original_event_id) => term(),
+          required(:quantity) => term(),
+          optional(:metadata) => term(),
+          optional(:dimensions) => term(),
+          optional(:occurred_at) => term()
+        }
+
   @typedoc "What `validate/1` accepts."
   @type draft :: %{
           required(:tenant_key) => term(),
@@ -133,6 +155,73 @@ defmodule AuroraMeter.Events.Canonical do
          :ok <- check_batch_bytes(validated) do
       collapse(validated)
     end
+  end
+
+  @doc """
+  Validates one correction draft and returns the part of it a correction states.
+
+  A correction is **not** a payload in its own right: its feature, its
+  occurrence instant and its dimensions are the original's, and they are not
+  known until the original row has been read. So this returns only what the
+  caller supplied, and `correction_hash/3` computes the hash afterwards, inside
+  the transaction that holds the original under lock.
+
+  Passing `:dimensions` or `:occurred_at` is refused rather than ignored:
+  changing either is what `AuroraMeter.replace/4` exists for, and accepting them
+  here would be a second way to do it with weaker guarantees.
+
+  ## Examples
+
+      iex> AuroraMeter.Events.Canonical.validate_correction(%{
+      ...>   tenant_key: "org_1", id: "c1", original_event_id: "e1", quantity: 0
+      ...> })
+      {:error, [quantity: :not_a_positive_integer]}
+
+  """
+  @spec validate_correction(correction_draft()) :: {:ok, map()} | {:error, [error()]}
+  def validate_correction(draft) when is_map(draft) do
+    case Enum.reverse(collect_correction_errors(draft)) do
+      [] ->
+        {:ok,
+         %{
+           tenant_key: draft.tenant_key,
+           event_id: draft.id,
+           original_event_id: draft.original_event_id,
+           quantity: draft.quantity,
+           metadata: Map.get(draft, :metadata) || %{}
+         }}
+
+      errors ->
+        {:error, errors}
+    end
+  end
+
+  @doc """
+  The sha256 of a correction's canonical payload.
+
+  It is the **same** tuple `payload_hash/1` computes for a usage event, with
+  the two fields a correction fills: `kind` is `"correction"` and
+  `original_event_id` names the fact being reduced. `feature`, `occurred_at`
+  and `dimensions` come from the original, which is why this takes the original
+  rather than a draft (`architecture-map.md` 4.2, and `open-findings.md` X110:
+  the encoding a shipped migration has already written is immutable, so a
+  correction reuses it and never re-encodes it).
+
+  `original` is any map carrying `:feature`, `:event_id`, `:occurred_at` and
+  `:dimensions`, which both a `t:AuroraMeter.Schema.Event.t/0` row and an
+  `t:AuroraMeter.Event.t/0` struct are.
+  """
+  @spec correction_hash(map(), pos_integer(), map()) :: binary()
+  def correction_hash(original, quantity, metadata) do
+    payload_hash(%{
+      feature: original.feature,
+      quantity: quantity,
+      occurred_at: original.occurred_at,
+      kind: :correction,
+      original_event_id: original.event_id,
+      dimensions: original.dimensions || %{},
+      metadata: metadata || %{}
+    })
   end
 
   @doc """
@@ -255,6 +344,46 @@ defmodule AuroraMeter.Events.Canonical do
     |> check_occurred_at(draft)
     |> check_dimensions(draft)
     |> check_metadata(draft)
+  end
+
+  defp collect_correction_errors(draft) do
+    []
+    |> check_tenant(draft)
+    |> check_correction_quantity(draft)
+    |> check_id(draft)
+    |> check_original(draft)
+    |> check_metadata(draft)
+    |> refuse_option(draft, :dimensions)
+    |> refuse_option(draft, :occurred_at)
+  end
+
+  # `:remaining` is `AuroraMeter.replace/4`'s magnitude and is resolved inside
+  # the transaction. It is not reachable from `AuroraMeter.correct/4`:
+  # `AuroraMeter.Events.correct/4` turns anything that is not an integer into
+  # `nil` before it gets here, so a caller who passes the atom is told
+  # `:not_a_positive_integer` like any other non-integer.
+  defp check_correction_quantity(errors, %{quantity: :remaining}), do: errors
+  defp check_correction_quantity(errors, draft), do: check_quantity(errors, draft)
+
+  defp check_original(errors, draft) do
+    case Map.get(draft, :original_event_id) do
+      nil -> [{:original, :missing} | errors]
+      id when not is_binary(id) -> [{:original, :not_a_binary} | errors]
+      "" -> [{:original, :empty} | errors]
+      id when byte_size(id) > @id_limit -> [{:original, :too_long} | errors]
+      _id -> errors
+    end
+  end
+
+  # Refused, not ignored. A caller who sends `dimensions:` to `correct/4` means
+  # to change them, and silently keeping the original's would record something
+  # the caller did not ask for under an identity they chose.
+  defp refuse_option(errors, draft, field) do
+    if Map.has_key?(draft, field) and not is_nil(Map.get(draft, field)) do
+      [{field, :not_supported_on_correction} | errors]
+    else
+      errors
+    end
   end
 
   defp check_tenant(errors, %{tenant_key: key}) when is_binary(key) and key != "", do: errors
