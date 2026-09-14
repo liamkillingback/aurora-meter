@@ -1,5 +1,8 @@
 defmodule AuroraMeter.Broadcaster do
   @moduledoc """
+  **Internal.** Not part of the supported API (see [API inventory](api.md)).
+  It may change in any release, including a patch.
+
   Fans live counter values out over `Phoenix.PubSub` on an interval, decoupled
   from the (slower) database flush, and ships this node's deltas to the other
   nodes.

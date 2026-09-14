@@ -1,0 +1,149 @@
+02a: API inventory, internal boundary and support policy (core, aurora_meter)
+Every command run for this unit, in order, with its exit code and the UTC time
+the lane recorded. Times are wall-clock UTC from `date -u` inside WSL.
+
+TOOLCHAIN
+  Elixir 1.20.1 (compiled with Erlang/OTP 29)
+  Erlang/OTP 29 [erts-17.0.1] [source] [64-bit] [smp:24:24] [jit:ns]
+  Ubuntu 24.04 under WSL2, Homebrew Elixir at /home/linuxbrew/.linuxbrew/bin
+  Postgres on DB_PORT=5490 (the package lane's database)
+
+TREE
+  aurora_meter HEAD          1434084fac0e7dc55ba4be73c28712ad985f4506  (0.4.0, schema 6)
+  mix.lock sha256            70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3
+  mix.lock after every run   70e0f2b8015a57f0a513263bd67753db6618afd3033145905629432736e609d3  (unchanged)
+  storefront HEAD            d9c0e6422e93583c599017f4f1d6f0e9bd4ae17f
+
+SEEDS
+  Every `mix test` here ran with ExUnit's default random seed except the
+  baseline, which used --seed 0. The inventory suite is order independent: it
+  reflects on compiled modules and reads files, and holds no shared state.
+  Seeds observed: 892481 (step 1), 84498 (step 4), 348702 (the headless leg).
+  The `mix check` runs used their own random seeds; each is in its log.
+
+LANE
+  Every Mix command went through tmp/v1/mixlane.sh, which holds an flock on the
+  package's _build (wave rule 1, open-findings.md X18). No two Mix workloads ran
+  at once.
+
+BASELINE (before any edit, with this unit's new test file held aside)
+  1. mix test --seed 0                                exit 0   14:22:19Z -> 14:25:00Z
+     765 passed (42 doctests, 10 properties, 713 tests), 3 excluded
+     log: tmp/v1/02a/core-baseline.log
+
+STEP 1  the inventory test with A03 and A04 only, before any edit
+  2. mix test test/aurora_meter/api_inventory_test.exs  exit 2   14:21:31Z -> 14:21:32Z
+     3/4 passed. A03 clean (no module lacks a moduledoc). A04 named 12 functions.
+     The list is docs/evidence/v1/phase-02/02a-spec-gaps.md.
+     log: tmp/v1/02a/core-step1.log
+
+  3. MIX_ENV=test mix run tmp/v1/02a_dump.exs           exit 0   14:21:48Z -> 14:21:49Z
+     A full reflection dump of the 56 lib modules: module docs, every public
+     entry, whether it carries @doc false and whether it carries a spec. This is
+     what docs/api.md was written from, function by function.
+     log: tmp/v1/02a/core-surface.txt
+
+STEP 4  A01, A02 and A05 implemented, docs/api.md written
+  4. mix test test/aurora_meter/api_inventory_test.exs  exit 0   14:29:57Z -> 14:29:58Z
+     16 passed
+     log: tmp/v1/02a/core-step4.log
+
+STEP 7  mix check
+  5. mix check                                         exit 1   14:30:15Z -> 14:30:16Z
+     `mix format --check-formatted` on the new test file. Expected: only the
+     files this unit changed were then formatted, never the project.
+     log: tmp/v1/02a/core-check1.log
+
+  6. mix format <the 8 files this unit changed>        exit 0   14:30:18Z
+     test/aurora_meter/api_inventory_test.exs mix.exs lib/aurora_meter/counter.ex
+     lib/aurora_meter/store.ex lib/aurora_meter/broadcaster.ex
+     lib/aurora_meter/cluster.ex lib/aurora_meter/storage/ecto.ex
+     lib/aurora_meter/live_view.ex
+
+  7. mix check                                         exit 0   14:30:20Z -> 14:33:08Z
+     781 passed. BUT `mix docs` printed 26 warnings, 25 of them new: references
+     to hidden modules from the Internal section, plus type references written
+     without the `t:` prefix and callback references without a module. The
+     acceptance criterion is "renders with no warning", so this is not done.
+     log: tmp/v1/02a/core-check2.log
+
+  8. mix docs --output /tmp/aurora_meter-02a-doc       exit 0   14:33:37Z -> 14:33:38Z
+     After fixing the type and callback references in docs/api.md and adding
+     skip_code_autolink_to to mix.exs: zero warnings, including the two that
+     were already there before this unit (docs/testing.md:267 and
+     test/support/aurora_meter/test/kill.ex:98).
+     log: tmp/v1/02a/core-docs1.log
+
+NEGATIVE CONTROLS  (each mutation applied to a byte copy, run, reverted)
+  9. tmp/v1/02a-negatives-core.sh                      14:33:41Z -> 14:33:59Z
+     N1 row for a missing function        exit 2, A01 names docs/api.md:40
+     N2 row for an internal module        exit 2, A02 names docs/api.md:40
+     N3 row for a @doc false function     exit 2, A02 names docs/api.md:40
+     N4 delete a listed function          exit 1 (COMPILER, not the guard: see below)
+     N5 remove a moduledoc                exit 2, A03 names AuroraMeter.Period
+     N6 remove a spec                     exit 2, A04 names Period.current!/2
+     N7 rename a telemetry event          exit 0 (FALSE GREEN: see below)
+     N8 mix.exs Internal group drift      exit 2, names the disagreement
+     restored, 16 passed
+     logs: tmp/v1/02a/negatives/*.log
+
+     N4 deleted AuroraMeter.version/0, whose callers then failed to compile
+     under warnings_as_errors, so the failure came from the compiler rather
+     than the guard. N7 replaced the first occurrence of the event name in
+     aurora_meter.ex, which is a mention in a @doc two lines above the emit, so
+     A05 still found the name and passed. N7 is a real gap in A05, not just a
+     bad control: A05 now strips heredocs and whole-line comments and requires a
+     telemetry literal to match an emit site.
+
+ 10. tmp/v1/02a-negatives-core2.sh                     14:34:22Z -> 14:34:38Z
+     N4 delete Schema.CreditTransaction.categories/0 (called from nowhere in
+        lib/, so the package still compiles)  exit 2, A01 names docs/api.md:245
+     N7 rename [:aurora_meter, :track] at the emit site
+                                              exit 2, A05 names the event
+     N9 document a PubSub tag nothing emits   exit 2, A05 names the tag
+     restored, 16 passed
+     logs: tmp/v1/02a/negatives/N4-*.log, N7-*.log, N9-*.log
+
+ 11. mix check                                         exit 0   14:34:43Z -> 14:37:29Z
+     781 passed, zero docs warnings, with the strengthened A05 in place.
+     log: tmp/v1/02a/core-check3.log
+
+HEADLESS LEG  (proves the optional-dep rows, matching the 01f headless job)
+ 12. AURORA_HEADLESS=1 MIX_ENV=test MIX_BUILD_PATH=<tmp> MIX_DEPS_PATH=<tmp>
+     mix deps.get; mix compile; mix test test/aurora_meter/api_inventory_test.exs --trace
+                                                       exit 0   14:47:50Z -> 14:47:53Z
+     Phoenix.Component loaded?: false
+     AuroraMeter.Components loaded?: false
+     16 passed
+     mix.lock before 70e0f2b8...  after 70e0f2b8...  (hashed both sides because
+     MIX_BUILD_PATH and MIX_DEPS_PATH do not redirect it, open-findings.md X57)
+     script: tmp/v1/02a-headless.sh
+     log:    tmp/v1/02a/core-headless-final.log
+
+ 13. mix check                                         exit 0   14:44:39Z -> 14:47:25Z
+     781 passed (42 doctests, 10 properties, 729 tests), 3 excluded
+     log: tmp/v1/02a/core-check-final.log
+
+FINAL STATE  (after the last documentation edits: the type and callback
+             references, the Reference block in README.md, and removing the em
+             dashes from the lines this unit added)
+ 14. mix check                                         exit 0   14:50:43Z -> 14:53:29Z
+     781 passed (42 doctests, 10 properties, 729 tests), 3 excluded
+     format, compile --warnings-as-errors --force, credo --strict, dialyzer,
+     test, docs: all clean. Zero docs warnings.
+     log: tmp/v1/02a/core-check-final2.log
+
+TEST COUNTS
+  before this unit  765 passed (42 doctests, 10 properties, 713 tests), 3 excluded
+  after this unit   781 passed (42 doctests, 10 properties, 729 tests), 3 excluded
+  delta             +16, all in test/aurora_meter/api_inventory_test.exs
+
+WHAT WAS NOT RUN
+  `mix test --only invariant:A01` and friends: this repository carries no
+  invariant tags at all, so such a command selects nothing and exits 1
+  (open-findings.md X70). The A-prefixed invariants are unit-local and live in
+  the test descriptions of one file, which is run by name above.
+
+  A bare `mix dialyzer`: it runs in :dev, where test/support is not compiled,
+  and reports a false success (open-findings.md X49). Dialyzer ran inside
+  `mix check`, which is preferred_envs :test.

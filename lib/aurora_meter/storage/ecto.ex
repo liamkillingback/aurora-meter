@@ -1,5 +1,8 @@
 defmodule AuroraMeter.Storage.Ecto do
   @moduledoc """
+  **Internal.** Not part of the supported API (see [API inventory](api.md)).
+  It may change in any release, including a patch.
+
   Default `AuroraMeter.Storage` adapter, backed by the host's Ecto repo
   (`AuroraMeter.Config.repo/0`). Counter and event writes use `insert_all` for
   throughput. Flushes add deltas in a transaction with a unique batch receipt,

@@ -416,6 +416,16 @@ See the [changelog](CHANGELOG.md) for everything else that changed.
 Every code block in those is executed by `test/aurora_meter/examples_test.exs`,
 so a guide that stops being true stops the suite.
 
+**Reference.** What is supported, and for how long:
+
+- [API inventory](docs/api.md): every supported function, behaviour, struct,
+  configuration key, telemetry event, PubSub message and Mix task, each with a
+  stability class. If it is not on that page, it is not supported, even where
+  the code happens to be public.
+- [Support policy](docs/support-policy.md): what SemVer covers here, how
+  schema changes work in 1.x, how long a deprecated API lives, and which
+  Elixir and Erlang/OTP pairs are tested.
+
 Guides: [Getting started](docs/getting-started.md) ·
 [Configuration](docs/configuration.md) · [Metering](docs/metering.md) ·
 [Entitlements](docs/entitlements.md) · [Plans](docs/plans.md) ·

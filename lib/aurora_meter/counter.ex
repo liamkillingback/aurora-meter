@@ -1,5 +1,8 @@
 defmodule AuroraMeter.Counter do
   @moduledoc """
+  **Internal.** Not part of the supported API (see [API inventory](api.md)).
+  It may change in any release, including a patch.
+
   The hot path: atomic ETS counter operations.
 
   Increments use a single `:ets.update_counter/3` call (lock-free,
@@ -176,10 +179,14 @@ defmodule AuroraMeter.Counter do
     end
   end
 
-  @doc """
-  Puts a taken flush delta back (the database write failed) and re-marks the
-  key dirty so the next flush retries it.
-  """
+  # Puts a taken flush delta back (the database write failed) and re-marks the
+  # key dirty so the next flush retries it.
+  #
+  # Dead code, and nothing in `lib/` calls it. Since 0.4.0 a failed flush keeps
+  # the immutable batch in ETS and retries the same batch, so there is no delta
+  # to put back. It is hidden here rather than deleted, because deleting it
+  # belongs to the build unit that owns this file.
+  @doc false
   @spec restore_pending(key(), integer()) :: :ok
   def restore_pending(key, delta) do
     if :ets.member(table(), key) do

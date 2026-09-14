@@ -1,5 +1,8 @@
 defmodule AuroraMeter.Store do
   @moduledoc """
+  **Internal.** Not part of the supported API (see [API inventory](api.md)).
+  It may change in any release, including a patch.
+
   Owns the ETS tables that back real-time metering.
 
   This process does nothing on the hot path — it merely creates and owns public,

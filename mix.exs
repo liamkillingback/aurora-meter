@@ -198,6 +198,8 @@ defmodule AuroraMeter.MixProject do
         "LICENSE",
         "NOTICE.md",
         "docs/getting-started.md",
+        "docs/api.md",
+        "docs/support-policy.md",
         "docs/correctness.md",
         "docs/examples/concepts.md",
         "docs/examples/team-saas.md",
@@ -223,13 +225,125 @@ defmodule AuroraMeter.MixProject do
         "docs/adr/0008-pending-quota-work.md"
       ],
       groups_for_extras: [
+        # Reference is matched before Guides on purpose: ExDoc takes the first
+        # group whose pattern matches, and the Guides pattern matches every
+        # top-level file under docs/.
+        Reference: ~r/docs\/(api|support-policy)\.md$/,
         Examples: ~r/docs\/examples\//,
         Guides: ~r/docs\/[^\/]+$/,
         ADRs: ~r/docs\/adr\//
       ],
+      groups_for_modules: groups_for_modules(),
+      # These modules carry `@moduledoc false` on purpose, so ExDoc renders no
+      # page for them and warns on every reference. docs/api.md still has to
+      # name them: its "Internal modules" section is the statement that they are
+      # not supported, and a boundary you cannot name is not a boundary. Listing
+      # them here says "do not try to link to this", which is exactly true, and
+      # keeps `mix docs` warning-free so a real broken reference still stands
+      # out. Keep it equal to the `@moduledoc false` members of the Internal
+      # group below.
+      skip_code_autolink_to: [
+        "AuroraMeter.BootChecks",
+        "AuroraMeter.Config.Schema",
+        "AuroraMeter.Credits.Ledger",
+        "AuroraMeter.Credits.Promotions",
+        "AuroraMeter.Credits.Series",
+        "AuroraMeter.Install.Templates",
+        "AuroraMeter.Migration.V1",
+        "AuroraMeter.Migration.V2",
+        "AuroraMeter.Migration.V3",
+        "AuroraMeter.Migration.V4",
+        "AuroraMeter.Migration.V5",
+        "AuroraMeter.Migration.V6",
+        "AuroraMeter.Schema.FlushReceipt",
+        "AuroraMeter.Supervisor"
+      ],
       source_ref: "v#{@version}",
       source_url: @source_url,
       formatters: ["html"]
+    ]
+  end
+
+  # The rendered form of the boundary in docs/api.md. The `Internal` list is the
+  # one that carries a promise (or rather, withdraws one), so
+  # test/aurora_meter/api_inventory_test.exs asserts it is byte-for-byte the
+  # same set as that test's own `@internal_modules`, which is in turn the
+  # "Internal modules" section of docs/api.md. A module with `@moduledoc false`
+  # renders no page at all; it is listed anyway so the three lists stay one list.
+  defp groups_for_modules do
+    [
+      "Core API": [
+        AuroraMeter,
+        AuroraMeter.Entitlements,
+        AuroraMeter.Credits,
+        AuroraMeter.Credits.Money,
+        AuroraMeter.Billing,
+        AuroraMeter.Config,
+        AuroraMeter.Plans,
+        AuroraMeter.Plan,
+        AuroraMeter.Subscriptions,
+        AuroraMeter.Flusher,
+        AuroraMeter.Migration,
+        AuroraMeter.LiveView,
+        AuroraMeter.Components
+      ],
+      Behaviours: [
+        AuroraMeter.Storage,
+        AuroraMeter.Billing.Provider,
+        AuroraMeter.Tenant,
+        AuroraMeter.Period,
+        AuroraMeter.Clock
+      ],
+      Implementations: [
+        AuroraMeter.Tenant.Default,
+        AuroraMeter.Period.Calendar,
+        AuroraMeter.Clock.System,
+        AuroraMeter.Billing.Noop
+      ],
+      Schemas: [
+        AuroraMeter.Schema.Counter,
+        AuroraMeter.Schema.History,
+        AuroraMeter.Schema.Event,
+        AuroraMeter.Schema.Subscription,
+        AuroraMeter.Schema.CreditBalance,
+        AuroraMeter.Schema.CreditTransaction
+      ],
+      Exceptions: [
+        AuroraMeter.UndeclaredFeatureError,
+        AuroraMeter.Period.InvalidPeriodError,
+        AuroraMeter.Credits.CurrencyMismatchError
+      ],
+      "Test helpers": [
+        AuroraMeter.Test,
+        AuroraMeter.Clock.Fixed
+      ],
+      "Mix tasks": [
+        Mix.Tasks.AuroraMeter.Bench,
+        Mix.Tasks.AuroraMeter.Features,
+        Mix.Tasks.AuroraMeter.Gen.Migration,
+        Mix.Tasks.AuroraMeter.Install
+      ],
+      Internal: [
+        AuroraMeter.BootChecks,
+        AuroraMeter.Broadcaster,
+        AuroraMeter.Cluster,
+        AuroraMeter.Config.Schema,
+        AuroraMeter.Counter,
+        AuroraMeter.Credits.Ledger,
+        AuroraMeter.Credits.Promotions,
+        AuroraMeter.Credits.Series,
+        AuroraMeter.Install.Templates,
+        AuroraMeter.Migration.V1,
+        AuroraMeter.Migration.V2,
+        AuroraMeter.Migration.V3,
+        AuroraMeter.Migration.V4,
+        AuroraMeter.Migration.V5,
+        AuroraMeter.Migration.V6,
+        AuroraMeter.Schema.FlushReceipt,
+        AuroraMeter.Storage.Ecto,
+        AuroraMeter.Store,
+        AuroraMeter.Supervisor
+      ]
     ]
   end
 
@@ -253,7 +367,13 @@ defmodule AuroraMeter.MixProject do
         # gate that asserts "this run changed nothing" cannot see it
         # (open-findings.md X21, X27). The gate is meant to leave the tree byte
         # identical; now it actually does.
-        "docs --output #{Path.join(System.tmp_dir!(), "aurora_meter-check-doc")}"
+        # --warnings-as-errors, because `mix docs` otherwise EXITS 0 on a broken
+        # reference and this step then gates nothing: build unit 02a measured
+        # `mix check` passing with 26 docs warnings (open-findings.md X82). A
+        # criterion enforced by a human reading a log is not enforced. Verified
+        # safe before it was added: both packages build docs with zero warnings
+        # under this flag today.
+        "docs --warnings-as-errors --output #{Path.join(System.tmp_dir!(), "aurora_meter-check-doc")}"
       ],
       # `check` keeps plain `test` so the local edit loop stays fast: cover
       # compiled modules run several times slower. CI runs `mix coverage` as its

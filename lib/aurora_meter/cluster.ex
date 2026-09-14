@@ -1,5 +1,8 @@
 defmodule AuroraMeter.Cluster do
   @moduledoc """
+  **Internal.** Not part of the supported API (see [API inventory](api.md)).
+  It may change in any release, including a patch.
+
   Keeps every node's counters converging on the same totals.
 
   Each node meters into its own ETS table. Two things make the cluster agree:
