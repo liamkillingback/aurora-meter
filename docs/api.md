@@ -111,27 +111,30 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 
 | Entry | Signature and return | Class | Since | Notes |
 |---|---|---|---|---|
-| `AuroraMeter.Credits.balance/1` | `(tenant) :: balance()` | stable | 0.4.0 | `%{balance, held, available, promotional, currency}`. |
+| `AuroraMeter.Credits.balance/1` | `(tenant) :: balance()` | stable | 0.4.0 | `%{balance, held, available, spendable, promotional, promotional_spendable, debt, expired, currency, low_balance_threshold}`. The last four arrived in 0.6.0 as additive keys; a legacy wallet reports `spendable == available`, `promotional_spendable == promotional`, `debt == 0` and `expired == 0`. |
 | `AuroraMeter.Credits.available/1` | `(tenant) :: integer()` | stable | 0.4.0 | `balance - held`. |
 | `AuroraMeter.Credits.sufficient?/2` | `(tenant, integer()) :: boolean()` | stable | 0.4.0 | Advisory, like `check/2`. |
-| `AuroraMeter.Credits.grant/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn()} \| {:error, Ecto.Changeset.t()}` | stable | 0.4.0 | Idempotent on `reference:`. Options `:reference`, `:category` (`:paid`, `:promotional`, `:adjustment`), `:expires_at`, `:metadata`. The error shape changes in 1.0: see section 4. |
-| `AuroraMeter.Credits.grant_with_status/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn(), :new \| :duplicate} \| {:error, Ecto.Changeset.t()}` | stable | 0.4.0 | Reports new or duplicate from inside the balance row's lock. |
+| `AuroraMeter.Credits.grant/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn()} \| {:error, :duplicate_reference \| Ecto.Changeset.t()}` | stable | 0.4.0 | Idempotent on `reference:`. Options `:reference`, `:category` (`:paid`, `:promotional`, `:adjustment`), `:expires_at`, `:metadata`, `:source`. From 0.6.0 a reference already held by **another** tenant answers `{:error, :duplicate_reference}` instead of a raw changeset; every other changeset error is unchanged. |
+| `AuroraMeter.Credits.grant_with_status/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn(), :new \| :duplicate} \| {:error, :duplicate_reference \| Ecto.Changeset.t()}` | stable | 0.4.0 | Reports new or duplicate from inside the balance row's lock. Same error change as `grant/3`. |
 | `AuroraMeter.Credits.hold/4` | `(tenant, pos_integer(), String.t(), keyword()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty option list. |
 | `AuroraMeter.Credits.settle/3` | `(String.t(), non_neg_integer(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Keyed by the hold's reference, not by tenant. Arity 2 exists through defaults. Option `:tenant` from 0.6.0 asserts the hold belongs to that tenant; without it the behaviour is exactly as before. |
 | `AuroraMeter.Credits.release/2` | `(String.t(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Arity 1 exists through defaults and is unchanged. Option `:tenant` from 0.6.0 asserts the hold belongs to that tenant and answers `{:error, :not_found}` when it does not. |
 | `AuroraMeter.Credits.debit/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty metadata map. |
-| `AuroraMeter.Credits.reverse/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :duplicate_reference}` | stable | 0.4.0 | Never refused for want of balance: the balance may go negative, which is the honest record of a debt. |
+| `AuroraMeter.Credits.reverse/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :duplicate_reference}` | stable | 0.4.0 | Never refused for want of balance: the balance may go negative, which is the honest record of a debt. From 0.6.0 the entry is `kind: :reverse` (it was `kind: :debit, category: :reversal`), so a reversal and a debit no longer share a reference namespace. Existing rows are unchanged and still read as reversals through `AuroraMeter.Schema.CreditTransaction.reversal?/1`. |
 | `AuroraMeter.Credits.with_credits/4` | `(tenant, pos_integer(), String.t(), (-> {:ok, result, non_neg_integer()} \| {:error, term()})) :: {:ok, result} \| {:error, :insufficient_credits \| :duplicate_reference \| term()}` | stable | 0.4.0 | Holds, runs, then settles or releases, including on a raise. |
 | `AuroraMeter.Credits.pending_holds/1` | `(keyword()) :: [txn()]` | stable | 0.4.0 | Options `:older_than`, `:reference_prefix`, `:limit`, and from 0.6.0 `:tenant` and `:after`. Ordered by `(inserted_at, id)` from 0.6.0, oldest first; before that by `inserted_at` alone, which could skip a same-microsecond row when paging. |
 | `AuroraMeter.Credits.reconcile_holds/1` | `(keyword()) :: {:ok, report()} \| {:error, term()}` | stable | 0.6.0 | Asks `:credits_hold_reconciler` about every hold older than `:older_than` and applies the answer. Options `:older_than` (required), `:limit`, `:tenant`, `:reference_prefix`, `:after`, `:reconciler`. Keeps every hold when nothing is configured. |
-| `AuroraMeter.Credits.history/2` | `(tenant, keyword()) :: [txn()]` | stable | 0.4.0 | Options `:limit` (50), `:kinds`. Holds and releases are hidden unless asked for. |
+| `AuroraMeter.Credits.history/2` | `(tenant, keyword()) :: [txn()]` | stable | 0.4.0 | Options `:limit` (50), `:kinds`, `:before`, and from 0.6.0 `:cursor`. Holds and releases are hidden unless asked for; `:reverse` joined the default kinds in 0.6.0, which is what keeps the default view unchanged in content. `:before` filters on `inserted_at` and may skip a same-microsecond row; `:cursor` pages on the ordering key and cannot skip or repeat one. Giving both raises `ArgumentError`. |
+| `AuroraMeter.Credits.cursor/1` | `(txn()) :: cursor()` | stable | 0.6.0 | The opaque `history/2` cursor for an entry. Do not compare, store or construct one. |
 | `AuroraMeter.Credits.spend_history/2` | `(tenant, keyword()) :: [money_point()]` | stable | 0.4.0 | Options `:days` (30) or `:from`/`:to`, `:bucket` (`:day` or `:month`), `:kinds`. Zero-filled, oldest first. |
 | `AuroraMeter.Credits.spend_total/2` | `(tenant, keyword()) :: money_total()` | stable | 0.4.0 | `%{spent, granted, net, from, to}`. |
-| `AuroraMeter.Credits.summary/1` | `(tenant) :: summary()` | stable | 0.4.0 | `daily_burn` and `runway_days` are `nil` when there is nothing honest to report. |
-| `AuroraMeter.Credits.set_low_balance_threshold/2` | `(tenant, integer() \| nil) :: {:ok, CreditBalance.t()}` | stable | 0.4.0 | Overrides `:credits_low_balance_threshold` for one tenant. |
+| `AuroraMeter.Credits.summary/1` | `(tenant) :: summary()` | stable | 0.4.0 | `daily_burn` and `runway_days` are `nil` when there is nothing honest to report. Gains `balance/1`'s four new keys in 0.6.0. `runway_days` is still derived from `available`. |
+| `AuroraMeter.Credits.set_low_balance_threshold/2` | `(tenant, integer() \| nil) :: {:ok, CreditBalance.t()}` | stable | 0.4.0 | Overrides `:credits_low_balance_threshold` for one tenant. From 0.6.0 it also recomputes the standing low-balance crossing under the row lock: lowering or clearing the threshold clears a crossing the wallet is no longer below. It never raises an alert by itself. |
 | `AuroraMeter.Credits.expire_due/1` | `(DateTime.t()) :: {:ok, non_neg_integer()}` | stable | 0.4.0 | Arity 0 exists and defaults to `AuroraMeter.Clock.db_now/0`, because it compares against a persisted `expires_at`. |
 | `AuroraMeter.Credits.subscribe/1` | `(tenant) :: :ok \| {:error, term()}` | stable | 0.4.0 | Subscribes the calling process to `topic/1`. |
 | `AuroraMeter.Credits.topic/1` | `(String.t()) :: String.t()` | stable | 0.4.0 | `"aurora_meter:credits:" <> tenant_key`. Takes a resolved key, not a tenant term. |
+| `AuroraMeter.Credits.after_commit/1` | `(keyword()) :: :ok` | stable | 0.6.0 | Runs the side effects of every ledger call this process made inside its own transaction. `discard: true` drops them, which is what the rollback branch calls. Arity 0 exists through defaults. A call that owns its transaction is unaffected. |
+| `AuroraMeter.Credits.deferred_effects?/0` | `() :: boolean()` | stable | 0.6.0 | Whether this process has effects waiting for `after_commit/1`. Assert `false` to prove no path forgot the call. |
 | `AuroraMeter.Credits.assert_currency!/0` | `() :: :ok` | stable | 0.5.0 | Raises `AuroraMeter.Credits.CurrencyMismatchError` when a stored balance row carries a currency other than `:credits_currency`. Skipped with one `:info` line when the repo or the tables are absent. |
 
 ### 1.5 `AuroraMeter.Credits.Money`
@@ -145,6 +148,8 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Credits.Money.from_decimal/1` | `(Decimal.t()) :: micro()` | stable | 0.4.0 | Requires `Decimal`, which arrives transitively with Ecto. |
 | `AuroraMeter.Credits.Money.format/2` | `(micro(), keyword()) :: String.t()` | stable | 0.4.0 | Option `:precision` (0 to 6). Arity 1 exists through defaults. |
 | `AuroraMeter.Credits.Money.format_compact/1` | `(micro()) :: String.t()` | stable | 0.4.0 | Never rounds a sub-cent amount away to `"$0.00"`. |
+| `AuroraMeter.Credits.Money.assert_range!/1` | `(term()) :: micro()` | stable | 0.6.0 | Raises `ArgumentError` for a non-integer or an amount beyond `max_micro/0`. Called by the six `AuroraMeter.Credits` write entry points before any database work. |
+| `AuroraMeter.Credits.Money.max_micro/0` | `() :: pos_integer()` | stable | 0.6.0 | `9_000_000_000_000_000`, three orders of magnitude below the `bigint` ceiling so that sums cannot overflow either. |
 
 ### 1.6 Plans
 
@@ -353,7 +358,26 @@ is a public function any scheduler can call. See
 | `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"40 3 * * *"`. Job arguments `only`, `batch_size`, `max_items`. Do not schedule it until every node has written a flush heartbeat. |
 | `AuroraMeter.Oban.ConfigError` | raised by `AuroraMeter.Oban.validate!/1` | optional-dep | 1.0.0 | Needs `oban`. Carries `:message` and `:problems`. |
 
-### 1.16 `AuroraMeter.Credits.LotMigration`
+### 1.16 `AuroraMeter.Credits.Lots`
+
+The public read side of credit lots: what a grant is worth now, what moved it,
+and which lots a payment funded. Read only, no locks, a snapshot. It is the only
+supported route to lot data from outside `AuroraMeter.Credits`. See
+[Credits](credits.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Credits.Lots.list/2` | `(tenant, keyword()) :: [lot()]` | stable | 0.6.0 | Options `:states` (default `[:open]`, `:all` for every state), `:categories`, `:limit` (100, capped at 500), `:order` (`:spend` default, `:granted_at`), `:cursor` (the previous page's last lot, or its id). Spend order is fixed by the engine and no option changes it. Arity 1 exists through defaults. |
+| `AuroraMeter.Credits.Lots.get/2` | `(tenant, Ecto.UUID.t() \| String.t()) :: lot() \| nil` | stable | 0.6.0 | By lot id or by the reference of the grant that created it, which is what support has. |
+| `AuroraMeter.Credits.Lots.allocations/2` | `(tenant, keyword()) :: [allocation()]` | stable | 0.6.0 | The movement trail, oldest first. Options `:lot_id`, `:transaction_id`, `:reference`, `:limit`, `:cursor`. Arity 1 exists through defaults. |
+| `AuroraMeter.Credits.Lots.for_source/2` | `(tenant, map()) :: [lot()]` | stable | 0.6.0 | The lots whose `source` matches every key given. `:payment_intent_id` and `:recurrence_key` only; any other key raises `ArgumentError` rather than matching everything. |
+
+A wallet that has not been cut over to lots has none, and every function here
+answers `[]` or `nil` for it.
+
+### 1.17 `AuroraMeter.Credits.LotMigration`
 
 The wallet migration onto credit lots (schema step S5). Shadow by default, one
 transaction per wallet, and it never cuts a wallet over unless the replay
@@ -519,6 +543,7 @@ never treated as Aurora Meter keys.
 | `:credits_low_balance_handler` | 1-arity function or `nil`, `nil` | stable | 0.4.0 | Called with `%{tenant_key, available, threshold}` after the crossing commits. |
 | `:credits_hold_reconciler` | module, `{module, function}`, 1-arity function or `nil`; `nil` | stable | 0.6.0 | How `AuroraMeter.Credits.reconcile_holds/1` decides about a stale hold. `nil` keeps every hold, so upgrading and configuring nothing cannot release money. |
 | `:credits_hold_reconciler_timeout` | positive integer, `5_000` | stable | 0.6.0 | Milliseconds one `decide/1` call may take before it is killed and the hold kept. |
+| `:credits_low_balance_handler_timeout` | positive integer, `5_000` | stable | 0.6.0 | Milliseconds one `:credits_low_balance_handler` call may take before it is killed. The ledger write stands either way: the handler runs in a supervised watcher, so it cannot fail, block, delay or crash the caller. The caller does not wait for it, so `[:aurora_meter, :credits, :low_balance]` arrives after the ledger call returns. |
 
 ## 6. Telemetry events
 
@@ -536,8 +561,8 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :flush, :error]` | `count` | `error` | stable | 0.3.0 | `[:aurora_meter, :flush, :error]` |
 | `[:aurora_meter, :broadcast]` | `count`, `deltas` | none | stable | 0.1.0 | `[:aurora_meter, :broadcast]` |
 | `[:aurora_meter, :cluster, :apply]` | `count` | `kind`, `origin` | stable | 0.3.0 | `[:aurora_meter, :cluster, :apply]` |
-| `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
-| `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
+| `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after`, `spendable_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun`, `deferred` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
+| `[:aurora_meter, :credits, :low_balance]` | `available`, `spendable`, `threshold` | `tenant_key`, `crossing_id`, `handler` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
 | `[:aurora_meter, :credits, :hold_reconciliation]` | `amount`, `age_seconds`, `duration` | `tenant_key`, `reference`, `decision`, `outcome` | stable | 0.6.0 | `[:aurora_meter, :credits, :hold_reconciliation]` |
 | `[:aurora_meter, :credits, :conservation_error]` | `balance_delta`, `held_delta`, `promotional_delta`, `expired_delta` | `tenant_key`, `operation`, `reference` | stable | 0.6.0 | `[:aurora_meter, :credits, :conservation_error]` |
 | `[:aurora_meter, :credits, :lot_migration]` | `wallets`, `migrated`, `blocked`, `deferred`, `rows`, `duration_ms` | `shadow`, `state` | stable | 0.6.0 | `[:aurora_meter, :credits, :lot_migration]` |
@@ -595,9 +620,9 @@ on the keys you need rather than on the whole map.
 | `{:aurora_meter, :deltas, node(), [{key, delta}]}` | `"aurora_meter:cluster"` | internal | 0.3.0 | `{:aurora_meter, :deltas, node(), deltas}` |
 | `{:aurora_meter, :totals, node(), [{key, total}]}` | `"aurora_meter:cluster"` | internal | 0.3.0 | `{:aurora_meter, :totals, node(), totals}` |
 | `{:aurora_meter, :subscription_changed, tenant_key}` | `"aurora_meter:subscriptions"` | internal | 0.2.0 | `{:aurora_meter, :subscription_changed, key}` |
-| `{:aurora_meter, :credits, %{tenant_key, balance, held, available}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :credits,` |
+| `{:aurora_meter, :credits, %{tenant_key, balance, held, available, spendable, debt, expired}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :credits,` |
 | `{:aurora_meter, :event, %{tenant_key, feature, event_id, quantity, period_start, kind}}` | `AuroraMeter.Broadcaster.topic/1` | stable | 1.0.0 | `{:aurora_meter, :event,` |
-| `{:aurora_meter, :low_balance, %{tenant_key, available, threshold}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :low_balance, event}` |
+| `{:aurora_meter, :low_balance, %{tenant_key, available, spendable, threshold, crossing_id}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :low_balance, event}` |
 
 The two cluster messages and the subscription invalidation are `internal`: they
 are how nodes talk to each other, not an API. Subscribe to the tenant topic and

@@ -5,6 +5,12 @@ defmodule AuroraMeter.Credits.Ledger do
   # (telemetry, PubSub, the low-balance hook), so a handler never observes a
   # balance that later rolled back.
   #
+  # "After it commits" means after the **outermost** transaction commits. A
+  # ledger call made inside a host's own transaction opens a savepoint, not a
+  # transaction, so its return says nothing about durability; those effects are
+  # queued on the calling process and run by
+  # `AuroraMeter.Credits.after_commit/1` (finding L18).
+  #
   # ADR: the ledger talks to the configured Ecto repo directly rather than
   # through the `AuroraMeter.Storage` behaviour. Storage abstracts *bulk,
   # idempotent* counter writes that a non-SQL adapter could reasonably
@@ -37,11 +43,17 @@ defmodule AuroraMeter.Credits.Ledger do
   @type expiry_report :: AuroraMeter.Credits.expiry_report()
 
   @typep outcome :: %{
-           txn: CreditTransaction.t(),
-           before: CreditBalance.t(),
-           after: CreditBalance.t(),
-           duplicate: boolean(),
-           overrun: boolean()
+           required(:txn) => CreditTransaction.t(),
+           required(:before) => CreditBalance.t(),
+           required(:after) => CreditBalance.t(),
+           required(:duplicate) => boolean(),
+           required(:overrun) => boolean(),
+           required(:spendable_after) => integer(),
+           # Added by `settle_outcome/2` inside the transaction and by
+           # `transact_outcome/1` after it, in that order, so the map a builder
+           # returns carries neither yet.
+           optional(:crossing) => {:alert, map()} | :none,
+           optional(:deferred) => boolean()
          }
 
   @doc "The PubSub topic for a tenant's credit updates."
@@ -102,7 +114,7 @@ defmodule AuroraMeter.Credits.Ledger do
     do: where(query, [t], t.inserted_at > ^at or (t.inserted_at == ^at and t.id > ^id))
 
   @spec grant(String.t(), pos_integer(), keyword()) ::
-          {:ok, CreditTransaction.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, CreditTransaction.t()} | {:error, :duplicate_reference | Ecto.Changeset.t()}
   def grant(tenant_key, amount, opts) do
     case grant_with_status(tenant_key, amount, opts) do
       {:ok, txn, _status} -> {:ok, txn}
@@ -112,7 +124,8 @@ defmodule AuroraMeter.Credits.Ledger do
 
   @doc false
   @spec grant_with_status(String.t(), pos_integer(), keyword()) ::
-          {:ok, CreditTransaction.t(), :new | :duplicate} | {:error, Ecto.Changeset.t()}
+          {:ok, CreditTransaction.t(), :new | :duplicate}
+          | {:error, :duplicate_reference | Ecto.Changeset.t()}
   def grant_with_status(tenant_key, amount, opts) do
     reference = Keyword.fetch!(opts, :reference)
     category = Keyword.get(opts, :category, :paid)
@@ -122,7 +135,7 @@ defmodule AuroraMeter.Credits.Ledger do
 
       case find(repo, tenant_key, :grant, reference) do
         %CreditTransaction{} = existing ->
-          %{txn: existing, before: row, after: row, duplicate: true, overrun: false}
+          duplicate_outcome(repo, row, existing)
 
         nil ->
           write_grant(repo, row, amount, category, opts)
@@ -131,8 +144,36 @@ defmodule AuroraMeter.Credits.Ledger do
     |> case do
       {:ok, %{txn: txn, duplicate: true}} -> {:ok, txn, :duplicate}
       {:ok, %{txn: txn}} -> {:ok, txn, :new}
-      {:error, reason} -> {:error, reason}
+      {:error, reason} -> {:error, grant_error(reason)}
     end
+  end
+
+  # **Only a reference collision becomes an atom; every other changeset stays a
+  # changeset** (finding L3). The in-transaction lookup above is scoped to this
+  # tenant, so a reference another tenant already used is invisible to it and
+  # the insert hits the global unique index on `(kind, reference)`. `hold/4` and
+  # `debit/4` have always answered that with `:duplicate_reference`; `grant/3`
+  # answered with a raw `%Ecto.Changeset{}`, which is a different shape for the
+  # same fact and is what a webhook handler then had to special case.
+  #
+  # The narrow test is deliberate. Mapping *every* changeset error the way
+  # `duplicate_reference_error/1` does would hide the one changeset a grant can
+  # genuinely produce for another reason: `validate_expiry/1` refuses an
+  # `:expires_at` on a non-promotional grant, and a caller needs to see that
+  # field and that message, not `:duplicate_reference`.
+  @spec grant_error(term()) :: term()
+  defp grant_error(%Ecto.Changeset{} = changeset) do
+    if duplicate_reference?(changeset), do: :duplicate_reference, else: changeset
+  end
+
+  defp grant_error(reason), do: reason
+
+  @spec duplicate_reference?(Ecto.Changeset.t()) :: boolean()
+  defp duplicate_reference?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn
+      {:reference, {_message, opts}} -> Keyword.get(opts, :constraint) == :unique
+      _other -> false
+    end)
   end
 
   @spec hold(String.t(), pos_integer(), String.t(), keyword()) ::
@@ -232,7 +273,7 @@ defmodule AuroraMeter.Credits.Ledger do
           refuse(:duplicate_reference)
 
         lots?(row) ->
-          debit_with_lots(repo, row, amount, reference, Map.new(metadata), category,
+          spend_with_lots(repo, row, amount, reference, Map.new(metadata), :debit, category,
             allow_negative: allow_negative?
           )
 
@@ -249,16 +290,92 @@ defmodule AuroraMeter.Credits.Ledger do
     |> duplicate_reference_error()
   end
 
+  @doc """
+  Takes `amount` back for money that has already left the payment provider.
+
+  Writes `kind: :reverse, category: :reversal` and is never refused for want of
+  balance. Two things follow from the kind, and both are the point of build unit
+  06c:
+
+    * the reference namespace is `:reverse`, so a host debit and a Pro reversal
+      that happen to share one reference string no longer collide and neither is
+      told `:duplicate_reference` for the other's write (finding L2). The unique
+      index is on `(kind, reference)`, so the separation is the database's, not
+      a convention.
+    * every reader that used to recognise a reversal by `category` still does,
+      because `category: :reversal` is kept. `Schema.CreditTransaction.reversal?/1`
+      is the single predicate that knows both shapes.
+  """
+  @spec reverse(String.t(), pos_integer(), String.t(), map(), keyword()) ::
+          {:ok, CreditTransaction.t()} | {:error, :duplicate_reference}
+  def reverse(tenant_key, amount, reference, metadata, opts \\ []) do
+    _ = opts
+
+    transact(fn repo ->
+      row = locked_row(repo, tenant_key)
+
+      cond do
+        find(repo, tenant_key, :reverse, reference) ->
+          refuse(:duplicate_reference)
+
+        lots?(row) ->
+          spend_with_lots(repo, row, amount, reference, Map.new(metadata), :reverse, :reversal,
+            allow_negative: true
+          )
+
+        true ->
+          apply_entry(repo, row, %{
+            kind: :reverse,
+            category: :reversal,
+            amount: -amount,
+            reference: reference,
+            metadata: Map.new(metadata)
+          })
+      end
+    end)
+    |> duplicate_reference_error()
+  end
+
   @spec set_low_balance_threshold(String.t(), integer() | nil) :: {:ok, CreditBalance.t()}
   def set_low_balance_threshold(tenant_key, threshold) do
     repo = Config.repo()
 
     repo.transaction(fn ->
-      repo
-      |> locked_row(tenant_key)
-      |> CreditBalance.changeset(%{low_balance_threshold: threshold})
-      |> repo.update!()
+      row = locked_row(repo, tenant_key)
+
+      updated =
+        row
+        |> CreditBalance.changeset(%{low_balance_threshold: threshold})
+        |> repo.update!()
+
+      restate_crossing(repo, updated, threshold)
     end)
+  end
+
+  # **A standing crossing is state, and moving the threshold changes what that
+  # state means.** Lower a threshold below where the wallet already sits and the
+  # wallet is no longer low; leave the flag set and the next genuine fall below
+  # the new line would find it already set and alert nobody. So the flag is
+  # recomputed here, under the same row lock every other decision about it is
+  # taken under.
+  #
+  # It only ever **clears**. Raising a threshold above a wallet's current
+  # spendable does not alert, deliberately: an alert says "this wallet has just
+  # crossed", and nothing about the wallet moved. The next write that leaves it
+  # below the new line finds no standing flag and alerts then.
+  @spec restate_crossing(module(), CreditBalance.t(), integer() | nil) :: CreditBalance.t()
+  defp restate_crossing(_repo, %CreditBalance{low_balance_crossing_id: nil} = row, _threshold),
+    do: row
+
+  defp restate_crossing(repo, row, threshold) do
+    effective = threshold || Config.credits_low_balance_threshold()
+
+    if is_nil(effective) or spendable_of(repo, row) >= effective do
+      write_crossing(repo, row, nil)
+      %{row | low_balance_crossing_id: nil}
+    else
+      row
+    end
   end
 
   @doc """
@@ -675,18 +792,41 @@ defmodule AuroraMeter.Credits.Ledger do
     # the outermost BEGIN). A host that wrapped a ledger call in its own
     # transaction — a settle beside the status flip it arms, say — lost its own
     # writes to a duplicate delivery, and its next statement failed too.
-    case repo.transaction(fn -> fun.(repo) end) do
+    # **Whether the side effects may run is decided here, before the work, and
+    # it is decided by whether the caller already had a transaction open**
+    # (finding L18). Inside one, `repo.transaction/1` opens a savepoint, and
+    # what its return means is "the savepoint was released", not "this is
+    # durable": the host can still roll the whole thing back. Telemetry, PubSub
+    # and the low-balance handler all describe money, and a handler that fires
+    # for a balance no reader will ever find is worse than one that fires late,
+    # so they are queued and `AuroraMeter.Credits.after_commit/1` runs them.
+    nested? = repo.in_transaction?()
+
+    case repo.transaction(fn -> settle_outcome(repo, fun.(repo)) end) do
       {:ok, {:refused, reason}} ->
         {:error, reason}
 
       {:ok, outcome} ->
-        emit(outcome)
+        outcome = Map.put(outcome, :deferred, nested?)
+        if nested?, do: defer(outcome), else: emit(outcome)
         {:ok, outcome}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  # Everything that must happen inside the ledger's own transaction after the
+  # entry is written: today, exactly the low-balance crossing decision. It is
+  # here rather than after the commit because the flag is the thing that makes
+  # one crossing produce one alert, and a flag written outside the transaction
+  # that moved the balance could survive a rollback of that balance.
+  @spec settle_outcome(module(), outcome() | {:refused, term()}) ::
+          outcome() | {:refused, term()}
+  defp settle_outcome(_repo, {:refused, _reason} = refusal), do: refusal
+
+  defp settle_outcome(repo, outcome),
+    do: Map.put(outcome, :crossing, decide_crossing(repo, outcome))
 
   # A refusal decided before anything was written. Returned rather than rolled
   # back, so an enclosing transaction of the caller's own survives it.
@@ -758,8 +898,42 @@ defmodule AuroraMeter.Credits.Ledger do
       )
       |> repo.update!()
 
-    %{txn: txn, before: row, after: updated, duplicate: false, overrun: false}
+    %{
+      txn: txn,
+      before: row,
+      after: updated,
+      duplicate: false,
+      overrun: false,
+      # Derived, not queried. On a legacy wallet spendable *is* `balance -
+      # held`, and both halves were just computed under the row lock, so
+      # re-reading them would be a round trip that could only agree.
+      spendable_after: balance_after - held_after
+    }
   end
+
+  # A second delivery of one payment: nothing moved. The outcome still carries a
+  # spendable figure, because telemetry reports one on every entry, and it is
+  # the only place that has to be read rather than derived. No crossing is
+  # evaluated from it at all (`decide_crossing/2` refuses a duplicate outright),
+  # which is the replay half of task 06.07: a redelivered webhook that produces
+  # no balance change cannot produce a second alert.
+  @spec duplicate_outcome(module(), CreditBalance.t(), CreditTransaction.t()) :: outcome()
+  defp duplicate_outcome(repo, row, existing) do
+    %{
+      txn: existing,
+      before: row,
+      after: row,
+      duplicate: true,
+      overrun: false,
+      spendable_after: spendable_of(repo, row)
+    }
+  end
+
+  @spec spendable_of(module(), CreditBalance.t()) :: integer()
+  defp spendable_of(_repo, %CreditBalance{lots_enabled_at: nil} = row),
+    do: row.balance - row.held
+
+  defp spendable_of(repo, %CreditBalance{} = row), do: lot_spendable(repo, row, lot_instant())
 
   @spec promotional_delta(non_neg_integer(), map()) :: integer()
   defp promotional_delta(promotional, %{kind: :grant, category: :promotional, amount: amount}),
@@ -797,6 +971,45 @@ defmodule AuroraMeter.Credits.Ledger do
       %CreditBalance{lots_enabled_at: nil} = row -> row.balance - row.held
       %CreditBalance{} = row -> lot_spendable(Config.repo(), row, Clock.db_now())
     end
+  end
+
+  @doc """
+  The two spendable figures `AuroraMeter.Credits.balance/1` reports beside the
+  stored ones, in one read.
+
+  On a legacy wallet they are the stored figures and **no query is issued at
+  all**: spendable is `balance - held` by definition there, and promotional
+  spendable is the `promotional` column. On a cut-over wallet both come from one
+  aggregate over the wallet's eligible lots, so `balance/1` costs one extra
+  round trip for a wallet that has lots and none for a wallet that has not.
+
+  `promotional_spendable` is not reduced by `debt`, and `spendable` is. They
+  cannot disagree in practice, because every incoming value repays debt out of
+  eligible availability first (LI-06a-5), so an outstanding debt implies no
+  eligible availability of any category and both figures are zero.
+  """
+  @spec figures(CreditBalance.t()) :: %{
+          spendable: integer(),
+          promotional_spendable: non_neg_integer()
+        }
+  def figures(%CreditBalance{lots_enabled_at: nil} = row),
+    do: %{spendable: row.balance - row.held, promotional_spendable: row.promotional}
+
+  def figures(%CreditBalance{} = row) do
+    %{rows: [[available, promotional]]} =
+      Config.repo().query!(
+        """
+        SELECT coalesce(sum(available), 0)::bigint,
+               coalesce(sum(available) FILTER (WHERE category = 'promotional'), 0)::bigint
+          FROM aurora_meter_credit_lots
+         WHERE tenant_key = $1
+           AND state = 'open'
+           AND (expires_at IS NULL OR expires_at > $2)
+        """,
+        [row.tenant_key, DateTime.truncate(Clock.db_now(), :second)]
+      )
+
+    %{spendable: available - row.debt, promotional_spendable: promotional}
   end
 
   # One aggregate rather than the whole book: this runs outside a transaction,
@@ -1026,7 +1239,15 @@ defmodule AuroraMeter.Credits.Ledger do
     end
   end
 
-  defp debit_with_lots(repo, row, amount, reference, metadata, category, opts) do
+  # One function for `:debit` and `:reverse`, because on a cut-over wallet they
+  # take the same planner request today. **That is not the end state**: finding
+  # X250 records that a reversal on a lot wallet must target the lots its
+  # payment funded (`{:reverse, payment_intent_id, ...}`), and 06e owns wiring
+  # it. It is not a live defect because no wallet is cut over: 06b's cutover
+  # gate refuses until `Credits.reverse_lot/4` exists. Sharing the function here
+  # changes nothing about that and makes the kind the only difference, which is
+  # what 06c is allowed to change.
+  defp spend_with_lots(repo, row, amount, reference, metadata, kind, category, opts) do
     now = lot_instant()
     book = Allocator.book(repo, row.tenant_key)
     allow_negative? = Keyword.fetch!(opts, :allow_negative)
@@ -1043,10 +1264,10 @@ defmodule AuroraMeter.Credits.Ledger do
           repo,
           row,
           book,
-          %{kind: :debit, category: category, reference: reference, metadata: metadata},
+          %{kind: kind, category: category, reference: reference, metadata: metadata},
           plan,
           now,
-          :debit
+          kind
         )
     end
   end
@@ -1138,7 +1359,19 @@ defmodule AuroraMeter.Credits.Ledger do
 
     applied = %{plan: plan, deltas: deltas, debt_after: debt_after}
     updated = Allocator.apply_plan(repo, row, txn, applied, now, operation)
-    %{txn: txn, before: row, after: updated, duplicate: false, overrun: false}
+
+    %{
+      txn: txn,
+      before: row,
+      after: updated,
+      duplicate: false,
+      overrun: false,
+      # `plan.book` is the book *after* the movements, and it includes a new
+      # grant's lot, so the planner already holds everything the figure needs.
+      # Asking the database again would be a second round trip inside the row
+      # lock for an answer the plan cannot disagree with.
+      spendable_after: Allocator.spendable(plan.book, debt_after, now)
+    }
   end
 
   defp stringify_source(source) when is_map(source) do
@@ -1194,11 +1427,130 @@ defmodule AuroraMeter.Credits.Ledger do
     row
   end
 
+  # -- the low-balance crossing (inside the transaction) -----------------------
+
+  # **The flag says "this crossing has been decided", not "this alert has been
+  # delivered"**, and it is written under the balance row lock in the same
+  # transaction as the balance it describes. Three consequences, all of them
+  # the point of task 06.07's "avoid duplicate threshold alerts on replay":
+  #
+  #   * a wallet that stays below its threshold for five more debits alerts
+  #     once, because the flag is already set when each of them evaluates;
+  #   * a redelivered webhook that produces a deduplicated ledger row moves
+  #     nothing and is refused evaluation outright;
+  #   * a write the host rolls back takes the flag with it, so the next write
+  #     decides the crossing afresh.
+  #
+  # A genuine second crossing (spendable returns to the threshold, then falls
+  # again) clears the flag on the way up and sets a new one, whose id is the
+  # transaction that caused it, on the way down.
+  #
+  # The trigger figure is **spendable**, not `balance - held`. On a cut-over
+  # wallet those differ by credit past its `expires_at` and by outstanding debt,
+  # and a tenant whose only remaining funds are on an expired lot is low on
+  # money whatever the balance column says.
+  @spec decide_crossing(module(), outcome()) :: {:alert, map()} | :none
+  defp decide_crossing(_repo, %{duplicate: true}), do: :none
+
+  defp decide_crossing(repo, %{after: row, txn: txn, spendable_after: spendable}) do
+    threshold = row.low_balance_threshold || Config.credits_low_balance_threshold()
+
+    case crossing_state(threshold, row.low_balance_crossing_id, spendable) do
+      :raise -> raise_crossing(repo, row, txn, spendable)
+      :clear -> clear_crossing(repo, row)
+      :hold -> :none
+    end
+  end
+
+  @spec crossing_state(integer() | nil, Ecto.UUID.t() | nil, integer()) ::
+          :raise | :clear | :hold
+  defp crossing_state(nil, nil, _spendable), do: :hold
+  defp crossing_state(nil, _standing, _spendable), do: :clear
+
+  defp crossing_state(threshold, nil, spendable) when spendable < threshold, do: :raise
+  defp crossing_state(threshold, nil, _spendable) when is_integer(threshold), do: :hold
+
+  defp crossing_state(threshold, _standing, spendable) when spendable >= threshold, do: :clear
+  defp crossing_state(_threshold, _standing, _spendable), do: :hold
+
+  @spec raise_crossing(module(), CreditBalance.t(), CreditTransaction.t(), integer()) ::
+          {:alert, map()}
+  defp raise_crossing(repo, row, txn, spendable) do
+    write_crossing(repo, row, txn.id)
+
+    {:alert,
+     %{
+       tenant_key: row.tenant_key,
+       # `available` is kept and keeps its meaning, because it is what every
+       # existing subscriber matches on. `spendable` is the figure the decision
+       # was actually taken from, and on a legacy wallet the two are equal.
+       available: row.balance - row.held,
+       spendable: spendable,
+       threshold: row.low_balance_threshold || Config.credits_low_balance_threshold(),
+       crossing_id: txn.id
+     }}
+  end
+
+  @spec clear_crossing(module(), CreditBalance.t()) :: :none
+  defp clear_crossing(repo, row) do
+    write_crossing(repo, row, nil)
+    :none
+  end
+
+  # `update_all` on the primary key rather than a changeset on the struct the
+  # caller is still holding: the row is already locked by this transaction, the
+  # only column moving is this one, and writing through the struct would make
+  # the caller's copy and the database disagree about every other column it has
+  # since changed.
+  @spec write_crossing(module(), CreditBalance.t(), Ecto.UUID.t() | nil) :: :ok
+  defp write_crossing(repo, row, crossing_id) do
+    {1, _} =
+      repo.update_all(
+        from(b in CreditBalance, where: b.id == ^row.id),
+        set: [low_balance_crossing_id: crossing_id]
+      )
+
+    :ok
+  end
+
+  # -- deferral (the process-bound queue) -------------------------------------
+
+  # The process dictionary, deliberately. Ecto's transaction scope is itself
+  # process bound, so the queue and the transaction it belongs to have exactly
+  # the same lifetime: a process that dies loses both, and there is no way for
+  # one to outlive the other and describe a transaction that is gone. A named
+  # table or an Agent would have to be told when the process died; this cannot
+  # be told wrong.
+  @deferred_key :aurora_meter_credits_deferred
+
+  @doc false
+  @spec defer(outcome()) :: :ok
+  def defer(outcome) do
+    Process.put(@deferred_key, deferred() ++ [outcome])
+    :ok
+  end
+
+  @doc false
+  @spec deferred() :: [outcome()]
+  def deferred, do: Process.get(@deferred_key, [])
+
+  @doc false
+  @spec drain(keyword()) :: :ok
+  def drain(opts) do
+    queued = deferred()
+    Process.delete(@deferred_key)
+
+    if Keyword.get(opts, :discard, false) do
+      :ok
+    else
+      Enum.each(queued, &emit/1)
+    end
+  end
+
   # -- post-commit side effects -----------------------------------------------
 
   @spec emit(outcome()) :: :ok
-  defp emit(%{txn: txn, before: before, after: after_row} = outcome) do
-    available_before = before.balance - before.held
+  defp emit(%{txn: txn, after: after_row} = outcome) do
     available_after = after_row.balance - after_row.held
 
     :telemetry.execute(
@@ -1206,14 +1558,16 @@ defmodule AuroraMeter.Credits.Ledger do
       %{
         amount: if(outcome.duplicate, do: 0, else: txn.amount),
         balance_after: after_row.balance,
-        available_after: available_after
+        available_after: available_after,
+        spendable_after: outcome.spendable_after
       },
       %{
         tenant_key: txn.tenant_key,
         reference: txn.reference,
         category: txn.category,
         duplicate: outcome.duplicate,
-        overrun: outcome.overrun
+        overrun: outcome.overrun,
+        deferred: Map.get(outcome, :deferred, false)
       }
     )
 
@@ -1226,42 +1580,131 @@ defmodule AuroraMeter.Credits.Ledger do
            tenant_key: txn.tenant_key,
            balance: after_row.balance,
            held: after_row.held,
-           available: available_after
+           available: available_after,
+           spendable: outcome.spendable_after,
+           debt: after_row.debt,
+           expired: after_row.expired
          }}
       )
     end
 
-    maybe_low_balance(after_row, available_before, available_after)
+    low_balance(outcome.crossing)
   end
 
-  # Fires once per crossing: only when the available balance was at or above
-  # the threshold before this entry and below it after, so a tenant sitting
-  # under the line does not get an alert on every debit.
-  @spec maybe_low_balance(CreditBalance.t(), integer(), integer()) :: :ok
-  defp maybe_low_balance(row, available_before, available_after) do
-    threshold = row.low_balance_threshold || Config.credits_low_balance_threshold()
+  @spec low_balance({:alert, map()} | :none) :: :ok
+  defp low_balance(:none), do: :ok
 
-    if threshold && available_before >= threshold && available_after < threshold do
-      event = %{tenant_key: row.tenant_key, available: available_after, threshold: threshold}
+  defp low_balance({:alert, event}) do
+    PubSub.broadcast(
+      Config.pubsub(),
+      topic(event.tenant_key),
+      {:aurora_meter, :low_balance, event}
+    )
 
-      :telemetry.execute(
-        [:aurora_meter, :credits, :low_balance],
-        %{available: available_after, threshold: threshold},
-        %{tenant_key: row.tenant_key}
-      )
+    deliver_alert(event, Config.credits_low_balance_handler())
+  end
 
-      PubSub.broadcast(
-        Config.pubsub(),
-        topic(row.tenant_key),
-        {:aurora_meter, :low_balance, event}
-      )
+  # **The writer does not wait for the handler, and it took a measurement to
+  # learn why that matters** (finding X269).
+  #
+  # The first implementation of this unit ran the handler in a task and then
+  # blocked the writer on `Task.yield/2` until it answered. That satisfies the
+  # contract on paper: a handler that raises or hangs cannot change the ledger
+  # call's outcome. What it also does is hold the **writer** still while the
+  # **handler** wants a database connection, and the writer may be holding one:
+  # `AuroraMeter.Pro.Lock.with_lock/2` wraps the payment paths in
+  # `Repo.checkout/1`, which pins a connection to the calling process for the
+  # length of the callback. The handler then needs a *second*, concurrent
+  # connection, and if the pool cannot spare one the two wait for each other
+  # until the checkout queue gives up. With a single connection, which is what
+  # `Ecto.Adapters.SQL.Sandbox` gives a test, it is a deadlock every time; with a
+  # real pool it is one more concurrent connection, and the same deadlock at
+  # exhaustion.
+  #
+  # So the wait moves into a supervised watcher of its own. The writer starts it
+  # and returns, releasing whatever it held; the watcher runs the handler under
+  # the same `async_nolink` plus `yield` plus `shutdown`, and emits the telemetry
+  # when it knows the outcome. Every guarantee is kept and one is strengthened:
+  # the handler cannot fail the write, cannot block it, and now cannot **delay**
+  # it either.
+  #
+  # Two consequences, both documented. `[:aurora_meter, :credits, :low_balance]`
+  # is asynchronous with respect to the ledger call's return, so a test waits for
+  # it rather than reading it back. And two crossings in quick succession may
+  # emit their events in either order, which is why each carries its own
+  # `crossing_id`.
+  #
+  # The **PubSub broadcast above stays synchronous**, deliberately: it is the
+  # ledger's own statement that a crossing happened, it needs no connection, and
+  # a caller that wants a deterministic count of crossings counts those.
+  @spec deliver_alert(map(), (map() -> term()) | nil) :: :ok
+  defp deliver_alert(event, nil), do: emit_low_balance(event, :none)
 
-      case Config.credits_low_balance_handler() do
-        nil -> :ok
-        handler when is_function(handler, 1) -> handler.(event)
-      end
+  defp deliver_alert(event, handler) when is_function(handler, 1) do
+    case Task.Supervisor.start_child(AuroraMeter.TaskSupervisor, fn ->
+           emit_low_balance(event, supervised_handler(handler, event))
+         end) do
+      {:ok, _pid} ->
+        :ok
+
+      other ->
+        # The supervisor is part of `AuroraMeter`'s own tree, so this is a host
+        # that has not started it. Say so once and carry on: the write is
+        # committed and the crossing is recorded either way.
+        warn_handler(event, "could not be started: #{inspect(other)}")
+        emit_low_balance(event, :exit)
     end
+  end
+
+  @spec emit_low_balance(map(), :ok | :none | :raised | :exit | :timeout) :: :ok
+  defp emit_low_balance(event, outcome) do
+    :telemetry.execute(
+      [:aurora_meter, :credits, :low_balance],
+      %{available: event.available, spendable: event.spendable, threshold: event.threshold},
+      %{tenant_key: event.tenant_key, crossing_id: event.crossing_id, handler: outcome}
+    )
 
     :ok
+  end
+
+  # `async_nolink` plus `yield` plus `shutdown`, which is the shape
+  # `Reconciliation.decide/3` established for the hold reconciler in 05b, run
+  # here inside the watcher rather than inside the writer. A host callback that
+  # raises must not turn a committed settle into an exception at the call site
+  # (finding L5), and one that never returns must be killable without the kill
+  # propagating anywhere.
+  @spec supervised_handler((map() -> term()), map()) :: :ok | :raised | :exit | :timeout
+  defp supervised_handler(handler, event) do
+    timeout = Config.credits_low_balance_handler_timeout()
+    task = Task.Supervisor.async_nolink(AuroraMeter.TaskSupervisor, fn -> handler.(event) end)
+
+    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      {:ok, _returned} ->
+        :ok
+
+      {:exit, {exception, stacktrace}} when is_exception(exception) and is_list(stacktrace) ->
+        warn_handler(event, "raised #{Exception.message(exception)}")
+        :raised
+
+      {:exit, reason} ->
+        warn_handler(event, "exited: #{inspect(reason)}")
+        :exit
+
+      # `Task.yield/2` answers `nil` on a timeout and `Task.shutdown/2` answers
+      # `nil` when the brutal kill got there first. Both are the same fact.
+      nil ->
+        warn_handler(event, "did not answer within #{timeout}ms and was killed")
+        :timeout
+    end
+  end
+
+  @spec warn_handler(map(), String.t()) :: :ok
+  defp warn_handler(event, detail) do
+    Logger.warning(
+      "AuroraMeter.Credits: the low-balance handler #{detail} for tenant " <>
+        "#{inspect(event.tenant_key)} (crossing #{inspect(event.crossing_id)}). The ledger " <>
+        "write stands and no alert was delivered; the crossing is already recorded, so no " <>
+        "later write will re-send it. See docs/credits.md, \"One alert per crossing\"."
+    )
   end
 end

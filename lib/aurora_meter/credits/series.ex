@@ -11,12 +11,23 @@ defmodule AuroraMeter.Credits.Series do
   # buckets is impossible to get subtly wrong the way an outer join on a
   # generated series is.
   #
-  # ADR: a `:reversal` — the debit a refund or chargeback writes — counts
-  # against `granted`, not as spend. It is money leaving the account that the
-  # tenant never used; reporting it as spend told a customer who had just been
-  # refunded that they had spent it, and inflated the burn rate the runway is
-  # derived from. `granted` can therefore go negative in a window whose refunds
-  # exceed its top-ups, and `net` stays the true balance delta.
+  # ADR: a reversal, which is what a refund or chargeback writes, counts against
+  # `granted`, not as spend. It is money leaving the account that the tenant
+  # never used; reporting it as spend told a customer who had just been refunded
+  # that they had spent it, and inflated the burn rate the runway is derived
+  # from. `granted` can therefore go negative in a window whose refunds exceed
+  # its top-ups, and `net` stays the true balance delta.
+  #
+  # **Every query here scores a reversal by its `category`, never by its
+  # `kind`, and that is what made schema version 9's new `:reverse` kind
+  # invisible to this module.** A reversal written before version 9 is
+  # `kind: :debit, category: :reversal`; one written after is
+  # `kind: :reverse, category: :reversal`. The `or t.category == :reversal`
+  # arm of each `where` admits both, the `spent` arm excludes both by the same
+  # `IS DISTINCT FROM 'reversal'` test, and the `granted` arm scores both. The
+  # output of this module is therefore byte identical across the change, which
+  # is the compatibility promise 06.03 makes for `spend_history/2` and
+  # `spend_total/2`.
   #
   # ADR: `:hold` and `:release` are excluded from every aggregate. They move
   # `held`, never `balance` — counting a hold would double-count the money its
@@ -36,6 +47,10 @@ defmodule AuroraMeter.Credits.Series do
   @spend_kinds [:settle, :debit, :expire]
   @grant_kinds [:grant]
   @excluded_kinds [:hold, :release]
+  # Scored against `granted`, exactly as a `debit` carrying `category:
+  # :reversal` always was, so passing it as a spend kind is the same mistake as
+  # passing `:grant`.
+  @reversal_kinds [:reverse]
 
   @typep point :: %{
            date: Date.t(),
@@ -76,7 +91,7 @@ defmodule AuroraMeter.Credits.Series do
 
     case Enum.filter(kinds, &(&1 in @excluded_kinds)) do
       [] ->
-        reject_grant(kinds)
+        kinds |> reject_grant() |> reject_reverse()
 
       bad ->
         raise ArgumentError,
@@ -95,6 +110,23 @@ defmodule AuroraMeter.Credits.Series do
       raise ArgumentError,
             ":kinds cannot include #{inspect(@grant_kinds)} — grants are reported separately, " <>
               "and counting one as spend scores it twice with opposite signs"
+    end
+
+    kinds
+  end
+
+  # The same mistake in the shape schema version 9 gave it. Before then a
+  # reversal was a `:debit` whose `category` was `:reversal`, and the `IS
+  # DISTINCT FROM 'reversal'` arm below already kept it out of `spent`; a caller
+  # who passed `kinds: [:debit]` got ordinary debits and no reversals. Now that
+  # a reversal has a kind of its own, passing that kind would score the money
+  # twice with opposite signs, so it is refused rather than silently ignored.
+  defp reject_reverse(kinds) do
+    if Enum.any?(kinds, &(&1 in @reversal_kinds)) do
+      raise ArgumentError,
+            ":kinds cannot include #{inspect(@reversal_kinds)}: a reversal is money handed " <>
+              "back, so it is reported against grants, and counting one as spend scores it " <>
+              "twice with opposite signs"
     end
 
     kinds

@@ -1151,10 +1151,24 @@ defmodule AuroraMeter.Credits.LotMigration do
 
   # -- one row ----------------------------------------------------------------
 
+  # **Both reversal shapes route here, and the fallthrough below is why that
+  # sentence is load bearing** (finding X266). A reversal written before schema
+  # version 9 is `kind: :debit, category: :reversal`; one written after build
+  # unit 06c is `kind: :reverse`. Rows already in the log cannot change, so the
+  # old clause is permanent; new rows carry the new kind, so the new clause is
+  # required. Without it every wallet that had ever taken a refund would fall
+  # through to `:unsupported_row`, which is **blocking**, and no test would have
+  # said so: the migration would simply have reached fewer wallets, on top of
+  # the two thirds X263 had just measured.
+  #
+  # `Schema.CreditTransaction.reversal?/1` is the predicate, and the two clauses
+  # below are the pattern-matching form of it; the guard version is used rather
+  # than the function so the dispatch stays one `case` in the BEAM.
   defp step(acc, %{kind: :grant} = row), do: grant(acc, row)
   defp step(acc, %{kind: :hold} = row), do: hold(acc, row)
   defp step(acc, %{kind: :settle} = row), do: close(acc, row, :settle)
   defp step(acc, %{kind: :release} = row), do: close(acc, row, :release)
+  defp step(acc, %{kind: :reverse} = row), do: reversal(acc, row)
   defp step(acc, %{kind: :debit, category: :reversal} = row), do: reversal(acc, row)
   defp step(acc, %{kind: :debit} = row), do: debit(acc, row)
   defp step(acc, %{kind: :expire} = row), do: expire(acc, row)

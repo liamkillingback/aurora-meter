@@ -662,6 +662,138 @@ defmodule AuroraMeter.CreditsTest do
     end
   end
 
+  # -- the compatibility surface (build unit 06c, V1 task 06.03) --------------
+  #
+  # Deliberately at module level rather than inside a `describe`: an invariant
+  # test's description has to start with its id (finding X196), and a `describe`
+  # prefixes it.
+
+  test "I10 a reverse and a debit may share one reference (L2)" do
+    # A host keys its charge by the order id and Pro keys the refund by the same
+    # order id. Until build unit 06c both landed in the `:debit` half of the
+    # `(kind, reference)` unique index, so the second was told
+    # `:duplicate_reference` for a write it had never made and the refund was
+    # silently not applied.
+    tenant = unique_tenant()
+    fund!(tenant, 10 * @dollar)
+
+    assert {:ok, debit} = Credits.debit(tenant, @dollar, "order:99")
+    assert {:ok, reversal} = Credits.reverse(tenant, 2 * @dollar, "order:99")
+
+    assert debit.kind == :debit
+    assert debit.reference == "order:99"
+    assert reversal.kind == :reverse
+    assert reversal.reference == "order:99"
+    assert reversal.category == :reversal
+    assert debit.id != reversal.id
+
+    assert Credits.balance(tenant).balance == 7 * @dollar
+
+    # Idempotency inside each namespace is unchanged, which is the half a
+    # "they no longer collide" change could quietly lose.
+    assert {:error, :duplicate_reference} = Credits.debit(tenant, @dollar, "order:99")
+    assert {:error, :duplicate_reference} = Credits.reverse(tenant, @dollar, "order:99")
+    assert Credits.balance(tenant).balance == 7 * @dollar
+  end
+
+  test "I10 a reversal written before V9 still reads as a reversal" do
+    # Rows already in the log keep `kind: :debit, category: :reversal` for ever.
+    # `reversal?/1` is the one predicate that knows both shapes, and the
+    # reporting that matters scores by `category`, so a legacy row reports
+    # exactly as a new one does.
+    tenant = unique_tenant()
+    fund!(tenant, 10 * @dollar)
+    {:ok, reversal} = Credits.reverse(tenant, 2 * @dollar, "refund:#{tenant}")
+
+    new_shape = Credits.spend_total(tenant, days: 1)
+
+    {1, _} =
+      TestRepo.update_all(
+        from(t in CreditTransaction, where: t.id == ^reversal.id),
+        set: [kind: :debit]
+      )
+
+    legacy = TestRepo.get!(CreditTransaction, reversal.id)
+    assert legacy.kind == :debit
+    assert legacy.category == :reversal
+    assert CreditTransaction.reversal?(legacy)
+    assert CreditTransaction.reversal?(reversal)
+
+    # A reversal scores against grants rather than as spend, in both shapes, so
+    # `spend_history/2` and `spend_total/2` are byte identical across the
+    # change. This is the assertion that fails if anything in `Series` had been
+    # switched from `category` to `kind`.
+    assert Credits.spend_total(tenant, days: 1) == new_shape
+    assert Credits.spend_total(tenant, days: 1).spent == 0
+    assert Credits.spend_total(tenant, days: 1).granted == 8 * @dollar
+  end
+
+  test "I10 a grant whose reference belongs to another tenant returns duplicate_reference (L3)" do
+    # The in-transaction lookup is scoped to this tenant, so a reference another
+    # tenant already used is invisible to it and the insert hits the **global**
+    # unique index. `hold/4` and `debit/4` have always answered that with
+    # `:duplicate_reference`; `grant/3` answered with a raw changeset, which is
+    # a different shape for the same fact.
+    first = unique_tenant()
+    second = unique_tenant()
+
+    assert {:ok, _} = Credits.grant(first, @dollar, reference: "shared:ref")
+
+    assert {:error, :duplicate_reference} =
+             Credits.grant(second, @dollar, reference: "shared:ref")
+
+    assert {:error, :duplicate_reference} =
+             Credits.grant_with_status(second, @dollar, reference: "shared:ref")
+
+    # Nothing was credited to the second tenant, and the first is untouched.
+    assert Credits.balance(second).balance == 0
+    assert Credits.balance(first).balance == @dollar
+
+    # Same tenant, same reference is still the original entry rather than an
+    # error: that is the idempotency contract and it is unchanged.
+    assert {:ok, _txn, :duplicate} =
+             Credits.grant_with_status(first, @dollar, reference: "shared:ref")
+  end
+
+  test "I10 a grant whose changeset fails for another reason still returns the changeset" do
+    # The mapping above is narrow on purpose. A grant can produce exactly one
+    # other changeset error, and a caller needs to see the field and the message
+    # rather than a `:duplicate_reference` that would send it looking for a
+    # collision that is not there.
+    tenant = unique_tenant()
+
+    assert {:error, %Ecto.Changeset{} = changeset} =
+             Credits.grant(tenant, @dollar,
+               reference: "paid-with-expiry:#{tenant}",
+               expires_at: ~U[2030-01-01 00:00:00Z]
+             )
+
+    assert {"only promotional grants expire", _} = changeset.errors[:expires_at]
+    assert Credits.balance(tenant).balance == 0
+  end
+
+  test "I10 spend_history rejects :reverse as a spend kind" do
+    tenant = unique_tenant()
+
+    assert_raise ArgumentError, ~r/reported against grants/, fn ->
+      Credits.spend_history(tenant, kinds: [:reverse])
+    end
+
+    assert_raise ArgumentError, ~r/reported against grants/, fn ->
+      Credits.spend_total(tenant, kinds: [:settle, :reverse])
+    end
+
+    # The message style matches the one `:grant` already used, and the two
+    # existing refusals are untouched.
+    assert_raise ArgumentError, ~r/scores it twice/, fn ->
+      Credits.spend_history(tenant, kinds: [:grant])
+    end
+
+    assert_raise ArgumentError, ~r/never spend/, fn ->
+      Credits.spend_history(tenant, kinds: [:hold])
+    end
+  end
+
   defp hold_for(reference), do: Ledger.fetch_hold(reference)
 
   defp entries(tenant, kind) do

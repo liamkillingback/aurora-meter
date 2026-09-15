@@ -126,7 +126,9 @@ defmodule AuroraMeter.Test.LedgerModel do
             holds: %{},
             # reference => %{seq, amount, remaining, expires_at, expired_at}
             grants: %{},
-            # {namespace, reference}; `:reverse` shares `:debit` (L2)
+            # {kind, reference}, mirroring the unique index on
+            # `(kind, reference)`. `:reverse` had its own namespace from build
+            # unit 06c on; before that it shared `:debit`'s, which was L2.
             refs: MapSet.new(),
             # Built by `lot_view/1`; the field exists for 06a's shape.
             lots: []
@@ -256,16 +258,20 @@ defmodule AuroraMeter.Test.LedgerModel do
     end
   end
 
-  # reverse: `Credits.reverse/4` delegates to `Ledger.debit/5` with
-  # `allow_negative: true, category: :reversal` (`credits.ex:329-335`), so it
-  # writes a `:debit` row and shares that reference namespace. That is finding
-  # L2, reproduced here rather than corrected.
+  # reverse: `Credits.reverse/4` writes `kind: :reverse, category: :reversal`,
+  # so it has a reference namespace of its own. Until build unit 06c it wrote a
+  # `:debit` row and shared that namespace, which was finding L2 and which this
+  # model reproduced deliberately; the model follows the contract, so it follows
+  # it here too. **The change is load bearing in both directions**: with the
+  # old `{:debit, reference}` line left in place the generated histories fail on
+  # the first history that debits and reverses under one reference, which is how
+  # the model reported the fix rather than the fix reporting the model.
   defp step(model, {:reverse, reference, amount}) do
-    if MapSet.member?(model.refs, {:debit, reference}) do
+    if MapSet.member?(model.refs, {:reverse, reference}) do
       {model, {:error, :duplicate_reference}}
     else
       entry = spend_entry(reference, amount, :reversal)
-      {model |> write(entry) |> register(:debit, reference), :ok}
+      {model |> write(entry) |> register(:reverse, reference), :ok}
     end
   end
 
@@ -519,7 +525,23 @@ defmodule AuroraMeter.Test.LedgerModel do
       available: model.balance - model.held,
       promotional: model.promotional,
       currency: model.currency,
-      low_balance_threshold: model.low_balance_threshold
+      low_balance_threshold: model.low_balance_threshold,
+      # This model is the **legacy** ledger's arithmetic, and
+      # `LedgerCommands.run/2` only ever drives a wallet that has not been cut
+      # over to lots. On such a wallet build unit 06c's four new figures have
+      # exactly these values by definition, so stating them here keeps
+      # `wallet_problems/2`'s exact-map comparison exact rather than relaxing it
+      # to a subset match. Relaxing it is what would have cost the oracle its
+      # teeth: a comparison that ignores unknown keys cannot notice a figure
+      # that starts coming back wrong.
+      #
+      # A cut-over wallet is compared by `lot_view/1` and the cross-oracle
+      # property instead, which is where `spendable`, `debt` and `expired` can
+      # differ from these.
+      spendable: model.balance - model.held,
+      promotional_spendable: model.promotional,
+      debt: 0,
+      expired: 0
     }
   end
 

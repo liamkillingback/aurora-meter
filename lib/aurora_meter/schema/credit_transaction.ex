@@ -18,9 +18,13 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   and gets `expired_at` when `AuroraMeter.Credits.expire_due/1` consumes it.
 
   `category` names where a grant's money came from (`:paid`, `:promotional`,
-  `:adjustment`) and, on a debit, marks `:reversal` — a refund or chargeback
+  `:adjustment`) and, on a reversal, marks `:reversal`, which is a refund or chargeback
   taking a paid grant back. A reversal never consumes promotional credit and is
   reported against grants rather than as spend.
+
+  A reversal is `kind: :reverse` from schema version 9 on, and was `kind:
+  :debit, category: :reversal` before it. Both shapes are permanent, because
+  the log is append only. Ask `reversal?/1` rather than matching on either.
 
   `seq` is the order. It is a Postgres identity column, assigned in commit
   order, and it is what every query that reconstructs what happened first sorts
@@ -117,6 +121,37 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   """
   @spec categories() :: [category()]
   def categories, do: @grant_categories
+
+  @doc """
+  Whether this entry is a reversal: a refund or a chargeback taking paid credit
+  back.
+
+  **Two row shapes mean it, and both are permanent.** From schema version 9 a
+  reversal is written with `kind: :reverse` and `category: :reversal`. Before
+  that it was written with `kind: :debit` and `category: :reversal`, and those
+  rows are in the append-only log for ever, so every reader has to accept both.
+  This is the one predicate that knows that; no other module may re-derive it,
+  because a second copy is the one that gets the older shape wrong.
+
+  ## Examples
+
+      iex> AuroraMeter.Schema.CreditTransaction.reversal?(%{kind: :reverse, category: :reversal})
+      true
+
+      iex> AuroraMeter.Schema.CreditTransaction.reversal?(%{kind: :debit, category: :reversal})
+      true
+
+      iex> AuroraMeter.Schema.CreditTransaction.reversal?(%{kind: :debit, category: nil})
+      false
+
+      iex> AuroraMeter.Schema.CreditTransaction.reversal?(%{kind: :grant, category: :paid})
+      false
+
+  """
+  @spec reversal?(t() | map()) :: boolean()
+  def reversal?(%{kind: :reverse}), do: true
+  def reversal?(%{category: :reversal}), do: true
+  def reversal?(entry) when is_map(entry), do: false
 
   @doc "Builds a changeset for a ledger entry."
   @spec changeset(t(), map()) :: Ecto.Changeset.t()

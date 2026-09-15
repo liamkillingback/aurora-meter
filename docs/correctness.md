@@ -619,21 +619,31 @@ Evidence path below names the proof that exists today; 06a's will be
 `docs/evidence/v1/phase-06/i10.md`. `expire_due/1` assumes at most one live
 promotional grant per tenant.
 
-"After the transaction commits" is true only of a ledger call that owns its
-transaction. Inside a host transaction the ledger's is nested, so what
-`transact_outcome/1` sees returning is a savepoint release; telemetry, PubSub and
-the low-balance handler all fire, and the host can still roll back afterwards,
-leaving a handler that saw a balance no reader will ever find (open finding L18).
-`AuroraMeter.CreditsConcurrencyTest` asserts that current behaviour so 06c has a
-before and after; 06c detects `in_transaction?/0` and defers the side effects.
+"After the transaction commits" means after the **outermost** transaction
+commits, and from build unit 06c that is enforced rather than assumed. A ledger
+call made inside a host's own transaction sees a savepoint release, not a commit,
+so its telemetry, PubSub and low-balance effects are queued on the calling
+process and run by `AuroraMeter.Credits.after_commit/1`; the rollback branch calls
+`after_commit(discard: true)` and nothing fires at all (finding L18, closed).
+
+The queue is process bound, which is where Ecto's transaction scope lives, so the
+two have the same lifetime and neither can outlive the other. The limit that
+follows is stated rather than hidden: a process that dies between the commit and
+the drain loses that round of effects. The money is committed and correct; one
+telemetry event, one PubSub message and possibly one low-balance alert are not
+delivered. `AuroraMeter.Credits.deferred_effects?/0` is how a host asserts in its
+own tests that no path forgot the call.
 
 Three further limits the generated histories exposed, each with a test that
 asserts today's behaviour so its fixing unit has a before and an after:
 
-- **L17**: no amount is range checked anywhere in `lib/`. A figure beyond `bigint`
-  is refused by Postgrex's encoder as a `DBConnection.EncodeError` before any
-  statement is sent, which is a driver message rather than an answer from the
-  ledger. 06c adds `Money.assert_range!/1` at the facade.
+- **L17**: closed by build unit 06c. `AuroraMeter.Credits.Money.assert_range!/1`
+  refuses an amount beyond 9e15 micro-dollars, and `grant/3`, `hold/4`,
+  `debit/4`, `reverse/4`, `settle/3` and `set_low_balance_threshold/2` all call it
+  before any database work, so the caller gets an `ArgumentError` naming the limit
+  rather than a `DBConnection.EncodeError` from the driver two layers down. The
+  limit is three orders of magnitude below the `bigint` ceiling because
+  `balance_after` and the conservation aggregate are sums of amounts.
 - **L19**: `expire_due/1` selects the due grant ids with no `order_by`
   (`ledger.ex:251-259`) while `expire_locked/3` clamps each grant by the wallet as
   it stands when its turn comes, so two grants due in one pass can expire
@@ -649,10 +659,12 @@ asserts today's behaviour so its fixing unit has a before and an after:
   and can then never finish. 06a must order by something the database controls
   rather than by a stamp.
 
-`expire_due/1`'s own doc (`credits.ex:619-621`) still says expiry assumes at most
-one live promotional grant, which contradicts `Promotions.consume/3`'s
-soonest-first attribution (`promotions.ex:48-61`). The model implements the code;
-the doc is wrong (finding L15, 06c).
+`expire_due/1`'s own documentation used to say expiry assumes at most one live
+promotional grant, which contradicted `AuroraMeter.Credits.Promotions`'s
+soonest-expiry-first attribution. The model implemented the code and the doc was
+wrong; build unit 06c corrected the doc (finding L15, closed). Several live
+promotional grants are supported, each grant's remainder is well defined, and the
+first to expire cannot reclaim credit a later one contributed.
 
 **Tests.**
 
@@ -662,7 +674,7 @@ the doc is wrong (finding L15, 06c).
 - `AuroraMeter.CreditsTest` / `test Money rounding modes and precision`
 - `AuroraMeter.CreditsTest` / `test history/2 is newest first, hides holds and releases by default, filters by kind and pages`
 - `AuroraMeter.CreditsConcurrencyTest` / `test I10 a refusal does not destroy the caller's own transaction`
-- `AuroraMeter.CreditsConcurrencyTest` / `test I10 a host transaction that rolls back undoes the ledger row although the side effects already fired (L18, fixed in 06c)`
+- `AuroraMeter.CreditsConcurrencyTest` / `test I10 a host transaction that rolls back emits nothing, because the side effects were deferred (L18)`
 - `AuroraMeter.CreditsModelTest` / `property generated histories I10 a generated history of grants, holds, settles, releases, debits and reversals matches the pure model`
 - `AuroraMeter.CreditsModelTest` / `property generated histories I10 a generated history including expiry matches the pure model`
 - `AuroraMeter.CreditsModelTest` / `property generated histories I10 balance equals the sum of every transaction amount after every step`
@@ -673,12 +685,15 @@ the doc is wrong (finding L15, 06c).
 - `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 to_cents rounds half away from zero at the boundaries`
 - `AuroraMeter.CreditsRegressionsTest` / `test every saved seed file parses and names an invariant`
 
-These four assert a defect rather than a guarantee, and each names the unit that
-replaces it. Read them as the "before" half of a change, not as something the
-ledger promises:
+The first three of the five below were the "before" halves of findings L17 and
+L18 and are now the "after" halves: build unit 06c added `Money.assert_range!/1`
+at the facade and deferred the side effects of a ledger call made inside a host
+transaction. The last two still assert a defect rather than a guarantee, and each
+names the unit that replaces it:
 
-- `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a grant at the bigint ceiling is refused by the database (L17, fixed in 06c)`
-- `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a reversal at the bigint floor is refused by the database (L17, fixed in 06c)`
+- `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a grant above the documented limit is refused at the facade, not by the driver (L17)`
+- `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a reversal above the documented limit is refused at the facade, not by the driver (L17)`
+- `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 the range guard refuses before any database work (L17)`
 - `AuroraMeter.CreditsModelTest` / `test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a)`
 - `AuroraMeter.CreditsModelTest` / `test the clock the ledger orders itself by I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq (L20, fixed in 06a)`
 - `AuroraMeter.Credits.AllocatorTest` / `test I10 the spend order is promotional, then earliest expiry, then oldest grant, then seq`
@@ -718,6 +733,35 @@ ledger promises:
 - `AuroraMeter.CreditsModelTest` / `test I10 the cross-oracle comparison can fail: a lot bucket moved by hand is caught`
 - `AuroraMeter.CreditsLotsConcurrencyTest` / `test I10 concurrent grants and debits on one wallet leave the projection exact`
 - `AuroraMeter.CreditsLotMigrationTest` / `test I10 the cutover stamps projection_checked_at, which only the conservation check writes`
+
+- `AuroraMeter.CreditsTest` / `test I10 a reverse and a debit may share one reference (L2)`
+- `AuroraMeter.CreditsTest` / `test I10 a reversal written before V9 still reads as a reversal`
+- `AuroraMeter.CreditsTest` / `test I10 a grant whose reference belongs to another tenant returns duplicate_reference (L3)`
+- `AuroraMeter.CreditsTest` / `test I10 a grant whose changeset fails for another reason still returns the changeset`
+- `AuroraMeter.CreditsTest` / `test I10 spend_history rejects :reverse as a spend kind`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.list returns lots in the documented spend order`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.list with states: :all includes exhausted, expired and reversed lots`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.get accepts a lot id and a grant reference`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.allocations reconstructs a settlement: consume then unreserve on the same lot`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.for_source returns exactly the lots funded by one payment intent`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.for_source with an unsupported key raises`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots.list paginates by cursor without skipping or repeating a lot`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 a wallet that has not been cut over has no lots to read`
+- `AuroraMeter.CreditsLotsApiTest` / `test I10 Lots refuses an option it does not understand rather than ignoring it`
+- `AuroraMeter.CreditsFiguresTest` / `test I10 a legacy wallet reports spendable equal to available, debt zero and expired zero`
+- `AuroraMeter.CreditsFiguresTest` / `test I10 balance stays signed and spendable is the figure the ledger refuses on`
+- `AuroraMeter.CreditsFiguresTest` / `test I10 Money.assert_range! refuses an amount above the documented limit before any write`
+- `AuroraMeter.CreditsFiguresTest` / `property I10 for any generated operation sequence, summary/1's figures agree with the lot tables`
+- `AuroraMeter.CreditsAfterCommitTest` / `test I10 a ledger call inside a host transaction emits nothing until after_commit is called`
+- `AuroraMeter.CreditsAfterCommitTest` / `test I10 a host transaction that rolls back and calls after_commit(discard: true) emits nothing`
+- `AuroraMeter.CreditsAfterCommitTest` / `test I10 after_commit runs the deferred effects in order`
+- `AuroraMeter.CreditsAfterCommitTest` / `test I10 deferred_effects? reports an undrained queue`
+- `AuroraMeter.CreditsAfterCommitTest` / `test I10 a ledger call that owns its transaction is unaffected`
+- `AuroraMeter.CreditsAfterCommitTest` / `test I10 a low-balance crossing inside a host transaction does not invoke the handler before commit`
+- `AuroraMeter.CreditsHistoryTest` / `test I10 history paginates by cursor across rows sharing one microsecond`
+- `AuroraMeter.CreditsHistoryTest` / `test I10 history with :before is documented as lossy and still works`
+- `AuroraMeter.CreditsHistoryTest` / `test I10 history includes reversals by default`
+- `AuroraMeter.CreditsHistoryTest` / `test I10 history rejects :before together with :cursor`
 
 **Evidence.** `docs/evidence/v1/phase-01/i10.md`
 
@@ -777,6 +821,18 @@ being closed twice".
 - `AuroraMeter.CreditsLotsConcurrencyTest` / `test I11 without the balance row lock the same fifty holds oversubscribe the wallet`
 - `AuroraMeter.CreditsLotsTest` / `test I11 every ledger write takes the balance row, then the transaction row, then the lots`
 - `AuroraMeter.CreditsLotsTest` / `test I11 settling one hold below its reservation leaves a second hold's reservation on the same lot intact`
+
+- `AuroraMeter.CreditsFiguresTest` / `test I11 summary reports spendable, held, expired, debt and promotional_spendable independently`
+- `AuroraMeter.CreditsFiguresTest` / `test I11 debt appears in debt and makes spendable zero`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 the low-balance handler fires once per crossing and not again while below the threshold`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a recovery above the threshold then a second crossing fires twice with different crossing ids`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a replayed reconciliation cycle that re-crosses the same threshold fires once`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a raising low-balance handler does not fail the ledger write`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a low-balance handler that never returns is shut down at the timeout and the write stands`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 the low-balance trigger uses spendable, not balance minus held`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 lowering the threshold below the current spendable clears the standing crossing`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 no threshold means no crossing, no alert and no flag`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a handler that needs a connection gets one while the writer holds a pinned one (X269)`
 
 **Evidence.** `docs/evidence/v1/phase-05/i11.md`
 
@@ -840,6 +896,8 @@ tests below are what say so.
 
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I12 a hold spanning a partial expiry replays without moving the money`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I12 a hold still open on an expiring lot is reported, and nothing moves`
+
+- `AuroraMeter.CreditsFiguresTest` / `test I12 expired value appears in expired and never in spendable`
 
 **Evidence.** `docs/evidence/v1/phase-06/i12.md`
 
@@ -1096,6 +1154,8 @@ Interrupt, resume and concurrency, on independent connections:
 The wallet migration's own run reports, fixture catalogue, blocked catalogue
 and lock durations are under `docs/evidence/v1/phase-06/`, named from the
 phase 11 evidence below.
+
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape (X266)`
 
 **Evidence.** `storefront:docs/evidence/v1/phase-11/i19.md`
 

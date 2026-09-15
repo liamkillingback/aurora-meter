@@ -141,7 +141,7 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
     assert holds |> Enum.map(& &1.held_after) |> Enum.sort() == Enum.map(1..25, &(&1 * 100_000))
   end
 
-  test "I10 a host transaction that rolls back undoes the ledger row although the side effects already fired (L18, fixed in 06c)",
+  test "I10 a host transaction that rolls back emits nothing, because the side effects were deferred (L18)",
        %{tenant: tenant} do
     handler = {__MODULE__, make_ref()}
 
@@ -159,18 +159,27 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
              TestRepo.transaction(fn ->
                assert {:ok, _txn} = Credits.grant(tenant, 1_000_000, reference: "l18:#{tenant}")
 
-               # L18: `transact_outcome/1` emits when its own `repo.transaction/1`
-               # returns, and inside a host transaction that return is a savepoint
-               # release, not a commit. Telemetry, PubSub and the low-balance
-               # handler have all already run at this point.
-               assert_received {:telemetry, [:aurora_meter, :credits, :grant],
-                                %{amount: 1_000_000}, _metadata}
+               # Before build unit 06c this line asserted the opposite.
+               # `transact_outcome/1` emitted when its own `repo.transaction/1`
+               # returned, and inside a host transaction that return is a
+               # savepoint release rather than a commit, so telemetry, PubSub
+               # and the low-balance handler had all already described a balance
+               # the host was about to throw away (finding L18).
+               refute_received {:telemetry, [:aurora_meter, :credits, :grant], _m, _meta}
+
+               # The queue is what holds them, and it is per process, so a host
+               # can assert it has not forgotten the drain.
+               assert Credits.deferred_effects?()
 
                TestRepo.rollback(:host_rolled_back)
              end)
 
-    # ...and the entry they described never existed. 06c defers the side effects
-    # to the outermost commit and flips this test.
+    # The rollback branch discards rather than drains: the writes are gone, so
+    # nothing may describe them.
+    assert :ok = Credits.after_commit(discard: true)
+    refute Credits.deferred_effects?()
+    refute_received {:telemetry, [:aurora_meter, :credits, :grant], _m, _meta}
+
     assert Credits.history(tenant, kinds: [:grant], limit: 10) == []
     assert Credits.available(tenant) == 0
   end

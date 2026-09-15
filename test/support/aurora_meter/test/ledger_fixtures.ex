@@ -352,9 +352,19 @@ defmodule AuroraMeter.Test.LedgerFixtures do
     })
   end
 
+  # **A grant whose category the fold has no rule for, and it has to be a
+  # category rather than a kind.** Until build unit 06c this fixture inserted a
+  # `kind: :reverse` row, which was then the one kind in
+  # `Schema.CreditTransaction.kinds/0` that `LotMigration.step/2` had no clause
+  # for. 06c made `Credits.reverse/4` write exactly that kind, so the fold
+  # gained a clause for it and the dispatcher became total over the seven kinds
+  # (finding X266). `:unsupported_row` is still reachable, and this is now the
+  # shape that reaches it: a `:grant` carrying the reversal category, which the
+  # schema admits and which no writer produces.
   def corrupt!(tenant, :unsupported_row, _opts) do
     insert_row!(tenant, %{
-      kind: :reverse,
+      kind: :grant,
+      category: :reversal,
       amount: 0,
       held_delta: 0,
       reference: ref(tenant, "unsupported")

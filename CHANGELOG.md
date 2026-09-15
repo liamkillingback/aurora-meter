@@ -157,7 +157,101 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
   registry is complete, are omitted from `cron_entries/1`, and cancel with
   `{:cancel, :not_implemented}` if run by hand.
 
+- **`AuroraMeter.Credits.Lots`**, the public read side of credit lots:
+  `list/2` (open lots in spend order by default, `states: :all` for every state,
+  `:categories`, `:limit`, `:order` and a keyset `:cursor`), `get/2` (by lot id
+  or by the grant's reference, which is what support has), `allocations/2` (the
+  movement trail, filtered by lot, transaction or reference) and `for_source/2`
+  (the lots a payment funded). Read only, no locks, a snapshot; a wallet that
+  has not been cut over to lots answers `[]` or `nil`. `for_source/2` accepts
+  `:payment_intent_id` and `:recurrence_key` only and raises `ArgumentError` for
+  any other key, because a matcher that ignored a key it did not understand
+  would match every lot and its caller is a refund path.
+- **`AuroraMeter.Credits.balance/1` and `summary/1` report four more figures**:
+  `spendable`, `promotional_spendable`, `debt` and `expired`. Additive keys, and
+  the existing six keep their meanings exactly. On a wallet that has not been cut
+  over to lots `spendable == available`, `promotional_spendable == promotional`,
+  and `debt` and `expired` are `0`, so a dashboard can render all of them without
+  asking which writer owns the wallet.
+- **`AuroraMeter.Credits.after_commit/1` and `deferred_effects?/0`.** A ledger
+  call made inside a host's own `Repo.transaction/1` sees a savepoint release
+  rather than a commit, so its telemetry, PubSub and low-balance effects are now
+  queued on the calling process and run by `after_commit/1`; the rollback branch
+  calls `after_commit(discard: true)` and nothing fires. A call that owns its
+  transaction is unaffected and needs neither function. At most once by design:
+  a process that dies between the commit and the drain loses that round of
+  effects, and the write is still committed and correct.
+- **`AuroraMeter.Credits.history/2` takes `:cursor`**, with
+  `AuroraMeter.Credits.cursor/1` producing one. It pages on the ledger's own
+  ordering key, so a walk returns every entry exactly once even when rows share a
+  microsecond. `:before` is kept, is a filter on `inserted_at` rather than a
+  cursor, and is documented as lossy for exactly that reason. Passing both raises
+  `ArgumentError`.
+- **`AuroraMeter.Credits.Money.assert_range!/1` and `max_micro/0`.** Amounts
+  beyond 9e15 micro-dollars (nine billion USD) are refused at the facade with an
+  `ArgumentError` naming the limit, before any database work, rather than
+  reaching Postgrex's encoder. The limit is three orders of magnitude below the
+  `bigint` ceiling because `balance_after` and the conservation aggregate are
+  sums of amounts.
+- **`AuroraMeter.Schema.CreditTransaction.reversal?/1`**, the single predicate
+  that recognises a reversal in either of its two permanent row shapes.
+- Configuration `:credits_low_balance_handler_timeout` (5,000 ms).
+
 ### Changed
+
+- **A reversal is written with `kind: :reverse`.** It was `kind: :debit,
+  category: :reversal`, which put a refund and an ordinary debit in one
+  reference namespace: the unique index is on `(kind, reference)`, so a host
+  debit and a refund keyed by the same order id collided and the second was told
+  `:duplicate_reference` for a write it had never made. They no longer collide.
+  The category is unchanged, rows written before this release keep their shape
+  for ever and still read as reversals through
+  `AuroraMeter.Schema.CreditTransaction.reversal?/1`, `spend_history/2` and
+  `spend_total/2` score by category and are unchanged, and `:reverse` joined
+  `history/2`'s default kinds so the default view still shows refunds. **If you
+  query the table directly for `kind = 'debit'` to find reversals, that query
+  now misses new ones**: use `kind = 'reverse' OR category = 'reversal'`.
+  `AuroraMeter.Credits.Series` rejects `:reverse` as a spend kind, with the
+  message style `:grant` already used.
+- **`AuroraMeter.Credits.grant/3` and `grant_with_status/3` answer
+  `{:error, :duplicate_reference}` for a reference that belongs to another
+  tenant**, instead of a raw `%Ecto.Changeset{}`. The in-transaction lookup is
+  scoped to one tenant, so a cross-tenant collision only surfaces at the global
+  unique index; `hold/4` and `debit/4` have always answered that way. Every
+  other changeset error is unchanged, deliberately: a grant can still return a
+  changeset for an `:expires_at` on a non-promotional category, and a caller
+  needs to see that field rather than a collision that is not there.
+- **The low-balance alert fires once per crossing, and the crossing is
+  persisted.** The trigger figure is now `spendable` rather than
+  `balance - held`, so a tenant whose only remaining funds sit on an expired lot
+  is correctly seen as low. The crossing's identity is written to the balance row
+  in the same transaction as the balance change, so five more debits below the
+  line alert once, a redelivered webhook that moves nothing is not evaluated at
+  all, a rolled-back write takes the crossing with it, and a recovery followed by
+  a second genuine fall alerts again with a different `crossing_id`.
+  `set_low_balance_threshold/2` recomputes the crossing under the row lock:
+  lowering or clearing the threshold clears one the wallet is no longer below,
+  and it never raises an alert by itself. The alert is **at most once**: the flag
+  means the crossing has been decided, not that the alert was delivered.
+- **The low-balance handler runs in a supervised watcher that the caller does
+  not wait for**, with `:credits_low_balance_handler_timeout`. A handler that
+  raises, exits or never returns is logged once and reported in the telemetry
+  event's `handler` metadata, and it cannot fail, block or **delay** the ledger
+  call. Not waiting is the point rather than an optimisation: a handler that
+  reads the database needs its own connection and the caller may be holding one,
+  so a caller that waited would wait for a handler waiting for it, until the
+  connection pool gave up. `[:aurora_meter, :credits, :low_balance]` is therefore
+  emitted after the ledger call returns, and carries `handler:`. The PubSub
+  broadcast is unchanged and is still sent synchronously by the writer, so a
+  consumer that wants an exact count of crossings counts those.
+- The credits PubSub payload gains `spendable`, `debt` and `expired`; the
+  low-balance payload gains `spendable` and `crossing_id`;
+  `[:aurora_meter, :credits, kind]` gains a `spendable_after` measurement and
+  `deferred` metadata. All additive.
+- `AuroraMeter.Credits.expire_due/1`'s documentation no longer claims expiry
+  assumes at most one live promotional grant. It never did: promotional spending
+  is attributed soonest expiry first, so each grant's remainder is well defined.
+  The sentence was wrong rather than the behaviour.
 
 - `AuroraMeter.Oban.CreditExpiry` and `AuroraMeter.Oban.HoldReconciliation` run
   bounded batches from a checkpointed cursor and **return the run's report**

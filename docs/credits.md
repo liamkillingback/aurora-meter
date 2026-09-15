@@ -33,18 +33,46 @@ Money.format_compact(15)                      # "$0.000015" (never rounds to "$0
 
 ```elixir
 AuroraMeter.Credits.balance(org)
-# %{balance: 20_000_000, held: 500_000, available: 19_500_000,
-#   promotional: 0, currency: "usd", low_balance_threshold: nil}
+# %{balance: 20_000_000, held: 500_000, available: 19_500_000, spendable: 19_500_000,
+#   promotional: 0, promotional_spendable: 0, debt: 0, expired: 0,
+#   currency: "usd", low_balance_threshold: nil}
 ```
 
 - `balance` is everything granted minus everything settled, debited or
   expired. It is signed: a settlement can exceed its hold.
 - `held` is the sum of pending holds. `available = balance - held` is what
-  `available/1` returns and what new holds are checked against.
+  `available/1` returns.
 - `promotional` is the part of the balance that came from promotional grants.
+- `spendable` is what a new hold or debit would actually be allowed to take,
+  and it is the figure `sufficient?/2` compares against.
+- `promotional_spendable` is the part of `spendable` that came from promotional
+  lots.
+- `debt` is executed cost the wallet could not fund. The next grant repays it
+  before creating availability, and nothing may spend while it is outstanding.
+- `expired` is value destroyed by expiry, kept apart from value spent.
 
-`sufficient?(org, amount)` is `available + overdraft_tolerance >= amount`, the
+`sufficient?(org, amount)` is `spendable + overdraft_tolerance >= amount`, the
 same test `hold/4` and `debit/4` apply under the row lock.
+
+### Four figures, not one signed integer
+
+Reserved, destroyed and owed value are three different things, and a reader
+given one number has to guess which happened. `available` and `spendable` differ
+on a wallet the lot engine owns by exactly two things:
+
+- credit past its `expires_at` is **not** spendable, even before the expiry
+  sweep reaches it. That is what makes expiry bookkeeping rather than a race.
+- `debt` is subtracted. A wallet that owes money cannot spend until a grant has
+  repaid it.
+
+`spendable` is not clamped at zero: it is the figure the ledger refuses on, and
+clamping it for display would make the reported number and the refusal disagree.
+
+On a wallet that has **not** been cut over to lots, which is every wallet until
+`mix aurora_meter.credits.migrate_lots` runs, `spendable == available`,
+`promotional_spendable == promotional`, and `debt` and `expired` are both `0`.
+So a dashboard can render all eight figures without asking which writer owns the
+wallet.
 
 ## Grants
 
@@ -82,6 +110,25 @@ places a negative debit did not belong: they do not consume promotional
 credit, and the money series counts them against `granted` rather than as
 spend, so a refund does not appear in a customer's spend chart or inflate the
 burn rate behind `runway_days`.
+
+### A reversal has its own kind, and its own reference namespace
+
+The entry is `kind: :reverse`. Until schema version 9 it was a `:debit` carrying
+the reversal category, and the unique index is on `(kind, reference)`, so a host
+debit referenced `"order:99"` and a refund referenced `"order:99"` collided:
+whichever arrived second was told `:duplicate_reference` for a write it had never
+made, and the refund was silently not applied. They no longer collide.
+
+**Rows written before the change keep `kind: :debit, category: :reversal` for
+ever**, because the log is append only, and every reader has to treat them as
+reversals. Ask `AuroraMeter.Schema.CreditTransaction.reversal?/1` rather than
+matching on either shape. The reporting functions score by `category`, so
+`spend_history/2` and `spend_total/2` are unchanged across the change, and
+`:reverse` is in `history/2`'s default kinds so the default view still shows
+refunds.
+
+If you query the table directly and look for `kind = 'debit'` to find reversals,
+that query now misses new ones. Use `kind = 'reverse' OR category = 'reversal'`.
 
 ## Hold, settle, release
 
@@ -266,13 +313,22 @@ removes `min(promotional balance, grant amount)`, never taking the balance
 below zero, writes an `:expire` entry referenced `"expire:<grant id>"` and
 stamps the grant's `expired_at` so it is never processed twice.
 
-**Limitation, on a wallet that has not been cut over to credit lots:** the
-balance keeps one `promotional` figure per tenant, not one per grant. With
-several live promotional grants, the first to expire can take credit a later
-grant contributed. If you issue overlapping promotions on such a wallet, make
-the later one paid or an adjustment, or expire the earlier one first.
+**Several live promotional grants are supported**, and promotional spending is
+attributed **soonest expiry first**, so each grant's remainder is well defined
+and the first to expire cannot reclaim credit a later one contributed. An
+earlier version of this page said expiry assumed at most one live promotional
+grant; the code never did, and the sentence was wrong rather than the behaviour.
 
-On a wallet the lot engine owns, that limitation is gone. Read on.
+**What is true on a wallet that has not been cut over to credit lots** is
+narrower and worth knowing: the balance row keeps one `promotional` figure per
+tenant rather than one per grant, and the attribution is reconstructed by
+replaying the wallet's entries. It is correct for the cases the tests cover, and
+it cannot say which grant a **hold** reserved, because the legacy figure has no
+place to record that. Value a hold had reserved on an already expired grant also
+becomes spendable again when the hold is released, until the next sweep.
+
+On a wallet the lot engine owns, each grant is its own lot with its own five
+quantities and both of those are gone. Read on.
 
 
 ## Credit lots
@@ -383,6 +439,51 @@ on the legacy writer. See [Upgrading to lots](upgrading-to-lots.md) for the
 procedure and what each refusal means.
 
 
+### Reading the lots
+
+`AuroraMeter.Credits.Lots` is the public read side, and it is how you answer
+"where did the money go" without reading the ledger table by hand.
+
+```elixir
+alias AuroraMeter.Credits.Lots
+
+Lots.list(org)                                     # open lots, in spend order
+Lots.list(org, states: :all)                       # including exhausted and reversed
+Lots.get(org, "stripe:pi_123")                     # by grant reference, or by lot id
+Lots.for_source(org, %{payment_intent_id: "pi_123"})
+Lots.allocations(org, lot_id: lot.id)              # what moved, oldest first
+```
+
+`list/2` returns lots in the order the next debit will consume them, so a reader
+sees what the next spend will take rather than merely what exists. The order is
+fixed by the engine and no option changes it: a caller that could choose it
+could choose which of two customers' money is spent first, which is not a
+display concern. `order: :granted_at` re-sorts the same lots for a human reading
+a history and changes nothing about what a debit does.
+
+An **allocation** records a movement between two buckets of one lot, with
+`from_bucket` and `to_bucket` as well as `kind`. The source matters: a `consume`
+can come out of `available` (a debit) or out of `reserved` (a settlement against
+its own hold), so folding a lot's allocations back into its five quantities needs
+both ends of each movement. A settlement of 1 USD against a 4 USD hold reads:
+
+```elixir
+Lots.allocations(org, reference: "job:42")
+# [%{kind: :reserve,   from_bucket: :available, to_bucket: :reserved, amount: 4_000_000, ...},
+#  %{kind: :consume,   from_bucket: :reserved,  to_bucket: :consumed, amount: 1_000_000, ...},
+#  %{kind: :unreserve, from_bucket: :reserved,  to_bucket: :available, amount: 3_000_000, ...}]
+```
+
+`for_source/2` matches the `source` map a grant was given, and in this release it
+understands `:payment_intent_id` and `:recurrence_key` only. Any other key raises
+`ArgumentError` rather than matching everything: its caller is a refund path, and
+"return every lot" is not a near miss.
+
+Everything here is read only, takes no lock and returns a snapshot. Never compute
+an amount to write from a figure read here; the only read that is consistent with
+a write is one made inside the transaction that writes, and the ledger makes its
+own under the balance row's lock. A wallet with no lots answers `[]` or `nil`.
+
 ## Money series
 
 Charting the ledger takes three reads, all of them keyed by the same tenant
@@ -488,13 +589,30 @@ carrying the class `aurora-spend-chart__bar--zero`, never a gap.
 
 ```elixir
 Credits.history(org)                                   # newest first, 50
-Credits.history(org, limit: 20, before: last.inserted_at)   # page
 Credits.history(org, kinds: [:hold, :release])         # bookkeeping entries
+
+page = Credits.history(org, limit: 20)                 # page...
+next = Credits.history(org, limit: 20, cursor: Credits.cursor(List.last(page)))
 ```
 
 Holds and releases are hidden by default: a customer-facing statement wants
-grants, settlements, debits and expiries. Every entry carries `balance_after`
-and `held_after`, so the log alone reproduces every balance.
+grants, settlements, debits, reversals and expiries. Every entry carries
+`balance_after` and `held_after`, so the log alone reproduces every balance.
+
+### Page with `:cursor`, filter with `:before`
+
+The list is ordered by the ledger's own identity column, not by `inserted_at`: a
+wall clock is not monotonic and steps backwards on an NTP correction, a leap
+second or a VM pause, so it orders nothing.
+
+`:cursor` pages on that ordering key, which is unique and total, so a cursor walk
+never skips an entry and never returns one twice, whatever the timestamps say.
+Take one from `Credits.cursor/1` and treat it as opaque.
+
+`:before` compares `inserted_at`. It is a **filter**, and it is exactly right for
+"what happened before lunchtime". It is not a cursor: two entries written in the
+same microsecond have no order under it, so a page boundary that lands between
+them skips one and repeats another. Passing both raises `ArgumentError`.
 
 ## Low balance
 
@@ -508,34 +626,96 @@ config :aurora_meter,
   credits_low_balance_handler: &MyApp.Billing.on_low_credits/1
 ```
 
-When an entry takes the available balance from at or above the threshold to
-below it — once per crossing, not on every debit while it stays low — Aurora
-Meter emits `[:aurora_meter, :credits, :low_balance]`, broadcasts
-`{:aurora_meter, :low_balance, %{tenant_key, available, threshold}}` on
-`Credits.topic/1`, and calls the handler with that map. The handler runs in
-the calling process after the transaction committed; keep it short (send a
-message, enqueue a job).
+When an entry takes the **spendable** balance below the threshold, Aurora Meter
+broadcasts
+`{:aurora_meter, :low_balance, %{tenant_key, available, spendable, threshold, crossing_id}}`
+on `Credits.topic/1`, calls the handler with that map, and emits
+`[:aurora_meter, :credits, :low_balance]` carrying how the handler ended.
+
+The trigger is `spendable` rather than `balance - held`, so a tenant whose only
+remaining funds sit on an expired lot is correctly seen as low.
+
+### One alert per crossing
+
+The crossing is written to the balance row, in the **same transaction** as the
+balance change that caused it, and it is what makes the alert exactly one:
+
+- a wallet that stays below its threshold for five more debits alerts once;
+- a redelivered webhook that produces a deduplicated ledger row moves nothing
+  and is not evaluated at all;
+- a write the host rolls back takes the crossing with it, so the next write
+  decides afresh;
+- recovering to or above the threshold clears it silently, and a second genuine
+  fall alerts again with a **different** `crossing_id`.
+
+`set_low_balance_threshold/2` recomputes it: lowering or clearing the threshold
+clears a crossing the wallet is no longer below, so the next genuine fall alerts.
+It never raises an alert by itself, because nothing about the wallet moved.
+
+The flag means "this crossing has been decided", not "this alert has been
+delivered", which makes the handler **at most once**. That is a deliberate
+trade: clearing the flag when a handler fails would re-alert on every subsequent
+write from a wallet whose handler is broken. To force a re-alert, lower and
+restore the threshold. A host that needs at-least-once subscribes to PubSub or
+polls `balance/1`.
+
+### The handler cannot fail your write
+
+It runs in a supervised task with a timeout
+(`:credits_low_balance_handler_timeout`, 5 s). A handler that raises, exits or
+never returns is logged once, reported in the telemetry event's `handler`
+metadata as `:raised`, `:exit` or `:timeout`, and **changes nothing** about the
+ledger call: the write is committed and the caller still gets `{:ok, txn}`.
+
+**The caller does not wait for it at all.** The ledger broadcasts the PubSub
+message, starts a watcher and returns; the watcher runs the handler, kills it at
+the timeout and emits the telemetry. So a slow handler cannot slow a write, and
+this matters beyond tidiness: a handler that reads the database needs its own
+connection, and the caller may be holding one. If the caller waited, the two
+would wait for each other until the connection pool gave up. Keep the handler
+short anyway (send a message, enqueue a job), but the reason is your pool rather
+than your latency.
+
+Two consequences for anything that observes it.
+`[:aurora_meter, :credits, :low_balance]` arrives **after** the ledger call has
+returned, so a test waits for it rather than reading it back, and two crossings
+in quick succession may emit their events in either order, which is why each
+carries its own `crossing_id`. The PubSub broadcast is **not** affected: it is
+sent synchronously by the writer, before the watcher starts, so a consumer that
+wants an exact count of crossings counts those.
 
 ## Live updates
 
 ```elixir
 AuroraMeter.Credits.subscribe(org)
 # after every ledger entry:
-{:aurora_meter, :credits, %{tenant_key: "org_42", balance: ..., held: ..., available: ...}}
+{:aurora_meter, :credits,
+ %{tenant_key: "org_42", balance: ..., held: ..., available: ...,
+   spendable: ..., debt: ..., expired: ...}}
 ```
+
+The payload carries the same figures `balance/1` reports, so a LiveView can
+render the new state without a second query. It may gain keys in a later
+release; match the ones you need rather than the whole map.
 
 ## Telemetry
 
 | Event | Measurements | Metadata |
 |---|---|---|
-| `[:aurora_meter, :credits, kind]` | `%{amount, balance_after, available_after}` | `%{tenant_key, reference, category, duplicate, overrun}` |
-| `[:aurora_meter, :credits, :low_balance]` | `%{available, threshold}` | `%{tenant_key}` |
+| `[:aurora_meter, :credits, kind]` | `%{amount, balance_after, available_after, spendable_after}` | `%{tenant_key, reference, category, duplicate, overrun, deferred}` |
+| `[:aurora_meter, :credits, :low_balance]` | `%{available, spendable, threshold}` | `%{tenant_key, crossing_id, handler}` |
 | `[:aurora_meter, :credits, :hold_reconciliation]` | `%{amount, age_seconds, duration}` | `%{tenant_key, reference, decision, outcome}` |
 
-`kind` is `:grant`, `:hold`, `:settle`, `:release`, `:debit` or `:expire`;
-`amount` is the signed delta the entry applied to the balance (`0` for holds,
-releases and idempotent grant replays, which set `duplicate: true`). Events
-fire after the transaction commits.
+`kind` is `:grant`, `:hold`, `:settle`, `:release`, `:debit`, `:reverse` or
+`:expire`; `amount` is the signed delta the entry applied to the balance (`0` for
+holds, releases and idempotent grant replays, which set `duplicate: true`).
+Events fire after the transaction commits, and `deferred: true` says the call
+was made inside a host transaction and the event waited for
+`Credits.after_commit/1`.
+
+`handler` on the low-balance event is `:ok`, `:none` (none configured),
+`:raised`, `:exit` or `:timeout`, so an operator can tell whether the alert was
+delivered.
 
 ## Configuration
 
@@ -544,7 +724,8 @@ fire after the transaction commits.
 | `:credits_currency` | `"usd"` | stamped on new balance rows |
 | `:credits_overdraft_tolerance` | `0` | µ$ a hold or debit may go below zero |
 | `:credits_low_balance_threshold` | `nil` | global threshold in µ$; a tenant's own overrides it |
-| `:credits_low_balance_handler` | `nil` | `fun/1` receiving `%{tenant_key, available, threshold}` |
+| `:credits_low_balance_handler` | `nil` | `fun/1` receiving `%{tenant_key, available, spendable, threshold, crossing_id}` |
+| `:credits_low_balance_handler_timeout` | `5_000` | ms one handler call may take before it is killed; the write stands either way |
 | `:credits_hold_reconciler` | `nil` | module, `{module, function}` or `fun/1` deciding about a stale hold; `nil` keeps every one |
 | `:credits_hold_reconciler_timeout` | `5_000` | ms one `decide/1` call may take before it is killed and the hold kept |
 
@@ -580,6 +761,36 @@ If you are testing this yourself, note that an `Ecto.Adapters.SQL.Sandbox`
 DataCase cannot see that class of bug: the sandbox holds a transaction of its
 own, so yours is nested inside it and an abort unwinds no further than its
 savepoint. The regression test for it is deliberately unsandboxed.
+
+**Call `Credits.after_commit/1` on the way out.** Inside your transaction the
+ledger's own is nested, so what its inner transaction returning means is that a
+savepoint was released, not that anything is durable. Telemetry, PubSub and the
+low-balance handler all describe money, and a handler that fires for a balance
+you then roll back is worse than one that fires a moment late, so they are queued
+on your process and this runs them:
+
+```elixir
+Repo.transaction(fn ->
+  {:ok, _txn} = AuroraMeter.Credits.settle("job:42", cost)
+  {:ok, _job} = MyApp.Jobs.mark_billed(job)
+end)
+|> case do
+  {:ok, result} -> AuroraMeter.Credits.after_commit(); {:ok, result}
+  {:error, reason} -> AuroraMeter.Credits.after_commit(discard: true); {:error, reason}
+end
+```
+
+`discard: true` drops the queue without running anything, which is what the
+rollback branch wants: the writes are gone, so the effects describing them must
+not fire. A ledger call that owns its transaction is unaffected and needs none of
+this.
+
+The queue lives in the calling process, which is exactly where Ecto's transaction
+scope lives, so the two have the same lifetime. A process that dies between the
+commit and the drain loses that round of effects: the money is committed and
+correct, and one telemetry event, one PubSub message and possibly one low-balance
+alert are not delivered. `Credits.deferred_effects?/0` answers whether anything
+is waiting, so your own tests can assert that no path forgot the call.
 
 ## Testing
 

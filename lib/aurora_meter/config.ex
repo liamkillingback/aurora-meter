@@ -154,8 +154,19 @@ defmodule AuroraMeter.Config do
               type: {:or, [{:fun, 1}, nil]},
               default: nil,
               doc:
-                "Called with `%{tenant_key, available, threshold}` after a low-balance " <>
-                  "crossing commits (a place to email or to auto-recharge)."
+                "Called with `%{tenant_key, available, spendable, threshold, crossing_id}` " <>
+                  "after a low-balance crossing commits (a place to email or to " <>
+                  "auto-recharge). It runs in a supervised watcher that the caller does not " <>
+                  "wait for, so it can neither fail nor delay the ledger call, and it takes " <>
+                  "its own database connection if it needs one."
+            ],
+            credits_low_balance_handler_timeout: [
+              type: :pos_integer,
+              default: 5_000,
+              doc:
+                "Milliseconds one `:credits_low_balance_handler` call may take before the " <>
+                  "ledger kills it. The write it followed stands either way: the handler runs " <>
+                  "in a supervised task, so it cannot fail, block or crash the caller."
             ],
             credits_hold_reconciler: [
               type: {:or, [:atom, {:fun, 1}, {:tuple, [:atom, :atom]}, nil]},
@@ -515,6 +526,19 @@ defmodule AuroraMeter.Config do
   @doc "The low-balance callback (`fun/1`), or `nil`."
   @spec credits_low_balance_handler() :: (map() -> term()) | nil
   def credits_low_balance_handler, do: get(:credits_low_balance_handler)
+
+  @doc """
+  Milliseconds one `:credits_low_balance_handler` call may take before it is
+  killed.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.credits_low_balance_handler_timeout()
+      5000
+
+  """
+  @spec credits_low_balance_handler_timeout() :: pos_integer()
+  def credits_low_balance_handler_timeout, do: get(:credits_low_balance_handler_timeout)
 
   @doc """
   How `AuroraMeter.Credits.reconcile_holds/1` decides about a stale hold.

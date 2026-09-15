@@ -30,6 +30,15 @@ defmodule AuroraMeter.Credits.Money do
   @micro_per_cent 10_000
   @micro_per_thousand_dollars 1_000_000_000
 
+  # 9e15 micro-dollars is 9 billion USD. The ledger's columns are `bigint`, so
+  # the hard ceiling is 9.22e18; this limit sits three orders of magnitude below
+  # it, and the headroom is the point rather than caution. `balance_after`, the
+  # conservation aggregate and the sum over a wallet's lots are all *sums* of
+  # amounts, so a limit close to the column's own would admit writes that are
+  # individually legal and whose total is not. A guard that only refuses the
+  # last straw is no guard.
+  @max_micro 9_000_000_000_000_000
+
   # The magnitude at which a value *rounds up to* one of each unit, so
   # `format_compact/1` never emits "$1000k": $999.95 is already "$1k".
   @compact_units [
@@ -55,6 +64,65 @@ defmodule AuroraMeter.Credits.Money do
   """
   @spec from_cents(integer()) :: micro()
   def from_cents(cents) when is_integer(cents), do: cents * @micro_per_cent
+
+  @doc """
+  Returns `amount` when it is an integer the ledger can hold, and raises
+  `ArgumentError` naming the limit when it is not.
+
+  The limit is #{@max_micro} micro-dollars either side of zero, which is nine
+  billion US dollars. `AuroraMeter.Credits`'s `grant/3`, `hold/4`, `debit/4`,
+  `reverse/4`, `settle/3` and `set_low_balance_threshold/2` all call it **before
+  any database work**, so an amount out of range is an `ArgumentError` from the
+  function the host called rather than a `DBConnection.EncodeError` from the
+  driver two layers down.
+
+  It is deliberately not called by `from_cents/1`, `to_cents/2` or
+  `from_decimal/1`: those are pure conversions, a host may legitimately convert
+  a figure it is not about to write, and changing them would change the meaning
+  of code that has nothing to do with the ledger.
+
+  ## Examples
+
+      iex> AuroraMeter.Credits.Money.assert_range!(20_000_000)
+      20_000_000
+
+      iex> AuroraMeter.Credits.Money.assert_range!(-20_000_000)
+      -20_000_000
+
+      iex> AuroraMeter.Credits.Money.assert_range!(9_000_000_000_000_001)
+      ** (ArgumentError) amount 9000000000000001 is outside the range AuroraMeter.Credits can hold: at most 9000000000000000 micro-dollars (9,000,000,000 USD) either side of zero
+
+      iex> AuroraMeter.Credits.Money.assert_range!(1.5)
+      ** (ArgumentError) amount must be an integer number of micro-dollars, got: 1.5
+
+  """
+  @spec assert_range!(term()) :: micro()
+  def assert_range!(amount)
+      when is_integer(amount) and amount >= -@max_micro and amount <= @max_micro,
+      do: amount
+
+  def assert_range!(amount) when is_integer(amount) do
+    raise ArgumentError,
+          "amount #{amount} is outside the range AuroraMeter.Credits can hold: at most " <>
+            "#{@max_micro} micro-dollars (9,000,000,000 USD) either side of zero"
+  end
+
+  def assert_range!(other) do
+    raise ArgumentError,
+          "amount must be an integer number of micro-dollars, got: #{inspect(other)}"
+  end
+
+  @doc """
+  The largest magnitude `assert_range!/1` admits.
+
+  ## Examples
+
+      iex> AuroraMeter.Credits.Money.max_micro()
+      9_000_000_000_000_000
+
+  """
+  @spec max_micro() :: pos_integer()
+  def max_micro, do: @max_micro
 
   @doc """
   Converts micro-dollars to whole cents, rounding with `:round` (default, half

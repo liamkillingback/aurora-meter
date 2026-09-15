@@ -29,7 +29,10 @@ defmodule AuroraMeter.CreditsModelTest do
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
   alias AuroraMeter.Schema.CreditTransaction
+  alias AuroraMeter.Test.Config
   alias AuroraMeter.Test.Connections
+  alias AuroraMeter.Test.FaultRepo
+  alias AuroraMeter.Test.Faults
   alias AuroraMeter.Test.LedgerCommands
   alias AuroraMeter.Test.LedgerModel
 
@@ -163,19 +166,25 @@ defmodule AuroraMeter.CreditsModelTest do
       assert length(model.entries) == 1
     end
 
-    test "model: a hold and a debit share no reference namespace, but a debit and a reversal do (L2)" do
+    test "model: a hold, a debit and a reversal each have their own reference namespace (L2)" do
       model = play([{:grant, "g1", @dollar, :paid, nil}])
 
       {model, held} = LedgerModel.apply(model, {:hold, "x", 100_000})
       {model, debited} = LedgerModel.apply(model, {:debit, "x", 100_000})
       {model, reversed} = LedgerModel.apply(model, {:reverse, "x", 1})
+      {model, again} = LedgerModel.apply(model, {:reverse, "x", 1})
 
       assert held == :ok
       assert debited == :ok
-      # credits.ex:329-335 sends reverse/4 through Ledger.debit/5, so it lands
-      # in the `:debit` half of the (kind, reference) index. Finding L2, 06c.
-      assert reversed == {:error, :duplicate_reference}
-      assert model.balance == 900_000
+      # Until build unit 06c this line read `{:error, :duplicate_reference}`:
+      # `reverse/4` went through `Ledger.debit/5` and landed in the `:debit`
+      # half of the `(kind, reference)` index, which was finding L2. It writes
+      # `kind: :reverse` now, so all three namespaces are separate.
+      assert reversed == :ok
+      # ...and idempotency inside the new namespace is unchanged, which is the
+      # half a "they no longer collide" change could quietly lose.
+      assert again == {:error, :duplicate_reference}
+      assert model.balance == 899_999
     end
 
     test "model: promotional is clamped to the balance and never negative" do
@@ -382,48 +391,79 @@ defmodule AuroraMeter.CreditsModelTest do
   end
 
   describe "integer bounds and rounding" do
-    test "I10 a grant at the bigint ceiling is refused by the database (L17, fixed in 06c)" do
-      # There is no overflow guard anywhere in `lib/` (finding L17): the value
-      # travels to Postgres and the driver refuses it. Recorded here so 06c can
-      # replace this behaviour with `Money.assert_range!/1` at the facade and
-      # flip the assertion to an ArgumentError with a readable message.
+    test "I10 a grant above the documented limit is refused at the facade, not by the driver (L17)" do
+      # **The before and after of finding L17, in one test.** Until build unit
+      # 06c nothing in `lib/` range checked an amount: the value travelled to
+      # Postgres and came back as a `DBConnection.EncodeError` from Postgrex's
+      # *encoder*, recorded on 2026-09-14 under Elixir 1.20.1 / OTP 29 /
+      # Postgres 16.13. `Money.assert_range!/1` now refuses it at the facade.
+      #
+      # The limit is three orders of magnitude below the column's own, which is
+      # why the ceiling grant below is refused as well: a figure a `bigint`
+      # could hold is still not a figure this ledger will accept, because
+      # `balance_after` and the conservation aggregate are sums of amounts.
       with_wallet(fn tenant ->
-        assert {:ok, _txn} = Credits.grant(tenant, @bigint_max, reference: tenant <> ":ceiling")
+        error =
+          catch_error(Credits.grant(tenant, @bigint_max, reference: tenant <> ":ceiling"))
 
-        error = catch_error(Credits.grant(tenant, 1, reference: tenant <> ":over"))
+        assert error.__struct__ == ArgumentError, inspect(error)
+        assert Exception.message(error) =~ "outside the range AuroraMeter.Credits can hold"
+        assert Exception.message(error) =~ "9000000000000000"
 
-        # Recorded on 2026-09-14, Elixir 1.20.1 / OTP 29 / Postgres 16.13: the
-        # refusal comes from Postgrex's *encoder*, before any statement is sent,
-        # so it is a DBConnection.EncodeError rather than a Postgres
-        # numeric_value_out_of_range. 06c replaces it with
-        # `Money.assert_range!/1` at the facade and this assertion flips to an
-        # ArgumentError naming the amount.
-        assert error.__struct__ == DBConnection.EncodeError, inspect(error)
+        # The largest amount the guard admits is admitted, so the test
+        # distinguishes "refuses too much" from "refuses everything" (X155).
+        assert {:ok, _txn} =
+                 Credits.grant(tenant, Money.max_micro(), reference: tenant <> ":at-limit")
 
-        assert Exception.message(error) =~
-                 "Postgrex expected an integer in -9223372036854775808..9223372036854775807"
-
-        # The wallet is untouched: the ledger's transaction rolled back.
-        assert Credits.balance(tenant).balance == @bigint_max
+        assert Credits.balance(tenant).balance == Money.max_micro()
       end)
     end
 
-    test "I10 a reversal at the bigint floor is refused by the database (L17, fixed in 06c)" do
-      # The mirror case. `reverse/4` never refuses for want of balance
-      # (`ledger.ex:222`), so nothing in the ledger stands between a refund and
-      # the column's lower bound either.
+    test "I10 a reversal above the documented limit is refused at the facade, not by the driver (L17)" do
+      # The mirror case. `reverse/4` never refuses for want of balance, so
+      # nothing in the ledger used to stand between a refund and the column's
+      # lower bound either; the same guard now does, and it is symmetric.
       with_wallet(fn tenant ->
-        assert {:ok, _txn} = Credits.reverse(tenant, @bigint_max, tenant <> ":floor")
-        assert Credits.balance(tenant).balance == -@bigint_max
+        error = catch_error(Credits.reverse(tenant, @bigint_max, tenant <> ":floor"))
 
-        error = catch_error(Credits.reverse(tenant, 2, tenant <> ":under"))
+        assert error.__struct__ == ArgumentError, inspect(error)
+        assert Exception.message(error) =~ "outside the range AuroraMeter.Credits can hold"
 
-        assert error.__struct__ == DBConnection.EncodeError, inspect(error)
+        assert {:ok, _txn} = Credits.reverse(tenant, Money.max_micro(), tenant <> ":at-limit")
+        assert Credits.balance(tenant).balance == -Money.max_micro()
+      end)
+    end
 
-        assert Exception.message(error) =~
-                 "Postgrex expected an integer in -9223372036854775808..9223372036854775807"
+    test "I10 the range guard refuses before any database work (L17)" do
+      # **The guard's claim is "before any I/O", so the way to test it is to
+      # make any I/O fatal.** 01b's fault repo raises on every statement it is
+      # armed for; an out-of-range amount must still come back as an
+      # `ArgumentError` from the facade, which it can only do by never reaching
+      # a statement.
+      #
+      # The second half is the control, and it is the half that makes the first
+      # mean anything (X125). An in-range grant on the same wallet with the same
+      # fault armed **does** hit the fault, so the wrapper is demonstrably on
+      # the call path rather than bypassed, and `assert_fired!/1` holds the
+      # harness rule that an armed fault is asserted to have fired.
+      with_wallet(fn tenant ->
+        Config.with_config([{:aurora_meter, :repo, FaultRepo}], fn ->
+          Faults.arm(:before_commit, :raise, when: fn _context -> true end)
 
-        assert Credits.balance(tenant).balance == -@bigint_max
+          error =
+            catch_error(Credits.grant(tenant, Money.max_micro() + 1, reference: tenant <> ":io"))
+
+          assert error.__struct__ == ArgumentError,
+                 "assert_range!/1 reached a statement: #{inspect(error)}"
+
+          assert Exception.message(error) =~ "outside the range AuroraMeter.Credits can hold"
+
+          assert_raise Faults.Injected, fn ->
+            Credits.grant(tenant, @dollar, reference: tenant <> ":io-control")
+          end
+
+          Faults.assert_fired!(:before_commit)
+        end)
       end)
     end
 

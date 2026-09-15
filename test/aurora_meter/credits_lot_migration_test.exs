@@ -121,6 +121,81 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     end
   end
 
+  test "I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape (X266)" do
+    # **The test finding X266 asks for, and it is two wallets rather than one
+    # because the two row shapes are permanent.**
+    #
+    # Build unit 06c gave a reversal its own `kind: :reverse`. `LotMigration`'s
+    # fold dispatches on `kind`, and anything it has no clause for is
+    # `:unsupported_row`, which is **blocking**. So the API change alone, with
+    # no other error, would have refused migration to every wallet that had ever
+    # taken a refund after the change, on top of the roughly two thirds reach
+    # X263 had just measured, and nothing in the suite would have said so:
+    # before this test no case asserted that a wallet containing a reversal
+    # migrates at all.
+    #
+    # The legacy half is not decoration. Rows written before the change keep
+    # `kind: :debit, category: :reversal` for ever, so a fold that handled only
+    # the new shape would break every wallet that has already taken a refund,
+    # which is the larger population by far.
+    allow_cutover!()
+
+    new_shape = unique_tenant("lotmig")
+    {:ok, _} = Credits.grant(new_shape, 5 * @dollar, reference: "pi_x266", source: %{})
+
+    {:ok, reversal} =
+      Credits.reverse(new_shape, 2 * @dollar, "refund:pi_x266:200", %{
+        "payment_intent_id" => "pi_x266"
+      })
+
+    assert reversal.kind == :reverse, "the row this test is about was not written"
+    assert reversal.category == :reversal
+
+    legacy = unique_tenant("lotmig")
+    {:ok, _} = Credits.grant(legacy, 5 * @dollar, reference: "pi_x266_legacy")
+
+    {:ok, _} =
+      Credits.reverse(legacy, 2 * @dollar, "refund:pi_x266_legacy:200", %{
+        "payment_intent_id" => "pi_x266_legacy"
+      })
+
+    # Rewritten to the pre-version-9 shape in place, which is exactly what is in
+    # the log of any installation that took a refund before upgrading.
+    {1, _} =
+      TestRepo.update_all(
+        from(t in CreditTransaction, where: t.tenant_key == ^legacy and t.kind == ^:reverse),
+        set: [kind: :debit]
+      )
+
+    assert TestRepo.one(
+             from(t in CreditTransaction,
+               where: t.tenant_key == ^legacy and t.kind == ^:debit,
+               select: t.category
+             )
+           ) == :reversal
+
+    for tenant <- [new_shape, legacy] do
+      before = figures(tenant)
+      summary = migrate(tenant)
+      report = only(summary)
+
+      assert report.state == :migrated, "#{tenant}: #{inspect(flags(report))}"
+      refute :unsupported_row in flags(report)
+      assert figures(tenant) == before, "#{tenant} moved the money"
+      assert identities(tenant) == before, "#{tenant} lots disagree with the row"
+
+      # The reversal actually reached a lot rather than being folded as a
+      # nothing: 3 USD left of 5 after a 2 USD refund, and the lot says which
+      # 2 USD went.
+      assert [lot] = lots(tenant)
+      assert lot.reversed == 2 * @dollar
+      assert lot.available == 3 * @dollar
+
+      assert Enum.any?(allocations(tenant), &(&1.kind == :reverse)),
+             "#{tenant}: no reverse allocation, so the fold treated the row as something else"
+    end
+  end
+
   test "I19 one lot per grant row, and every allocation names the ledger row that caused it" do
     allow_cutover!()
     tenant = wallet(:promotional_overlap)

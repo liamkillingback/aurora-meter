@@ -39,7 +39,8 @@ treated as Aurora Meter keys.
 | `:credits_currency` | string | — | `"usd"` — stamped on new credit balance rows ([credits](credits.md)) |
 | `:credits_overdraft_tolerance` | micro-dollars | — | `0` — how far below zero a hold or debit may take the available balance |
 | `:credits_low_balance_threshold` | micro-dollars or `nil` | — | `nil` — fire the low-balance event when the available balance drops below it; a tenant's own threshold overrides it |
-| `:credits_low_balance_handler` | `fun/1` or `nil` | — | `nil` — called with `%{tenant_key, available, threshold}` after a low-balance crossing commits |
+| `:credits_low_balance_handler` | `fun/1` or `nil` |  | `nil`. Called with `%{tenant_key, available, spendable, threshold, crossing_id}` after a low-balance crossing commits, in a supervised task, once per crossing |
+| `:credits_low_balance_handler_timeout` | positive integer |  | `5_000`. Milliseconds one handler call may take before it is killed. The caller never waits for it, so the write is neither failed nor delayed |
 
 ```elixir
 config :aurora_meter,

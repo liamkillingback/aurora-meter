@@ -41,9 +41,15 @@ defmodule AuroraMeter.Credits do
   Grants are `:paid` by default; a `:promotional` grant (a sign-up bonus, a
   goodwill top-up) is consumed before paid credit and may carry an
   `:expires_at`. `reverse/4` — a refund or chargeback — is exempt: it takes a
-  paid grant back and leaves the promotional figure alone. `expire_due/1` — run it from a scheduler — removes what is
-  left of expired grants, never taking the balance below zero. It assumes at
-  most one live promotional grant per tenant; see the credits guide.
+  paid grant back and leaves the promotional figure alone. `expire_due/1`, which
+  you run from a scheduler, removes what is left of expired grants, never taking
+  the balance below zero.
+
+  Several live promotional grants are supported, and were before this paragraph
+  said so. Spending is attributed **soonest expiry first**, so each grant's
+  remainder is well defined and the first grant to expire cannot reclaim credit
+  a later one contributed. On a wallet cut over to credit lots the same rule is
+  the lots' own spend order. See the credits guide.
 
   ## Storage and side effects
 
@@ -51,11 +57,18 @@ defmodule AuroraMeter.Credits do
   append inside one transaction), so it **requires the Ecto storage** and
   schema version 3 (`mix aurora_meter.gen.migration --from 3`). After each
   commit it emits `[:aurora_meter, :credits, kind]` telemetry, broadcasts
-  `{:aurora_meter, :credits, %{tenant_key, balance, held, available}}` on
-  `topic/1`, and when the available balance first crosses below the tenant's
-  (or the configured) low-balance threshold fires
-  `[:aurora_meter, :credits, :low_balance]`, broadcasts
-  `{:aurora_meter, :low_balance, ...}` and calls `:credits_low_balance_handler`.
+  `{:aurora_meter, :credits, %{tenant_key, balance, held, available, spendable,
+  debt, expired}}` on `topic/1`, and when the **spendable** balance first
+  crosses below the tenant's (or the configured) low-balance threshold fires
+  `{:aurora_meter, :low_balance, ...}`, calls `:credits_low_balance_handler`
+  once per crossing in a supervised watcher the caller does not wait for, and
+  emits `[:aurora_meter, :credits, :low_balance]` when that watcher knows how
+  the handler ended.
+
+  **"After each commit" means after the outermost one.** A ledger call made
+  inside a host's own `Repo.transaction/1` queues its effects instead of running
+  them, because what its inner transaction returning means there is a savepoint
+  release rather than a commit. `after_commit/1` runs them; see that function.
   """
 
   require Logger
@@ -64,6 +77,7 @@ defmodule AuroraMeter.Credits do
   alias AuroraMeter.Config
   alias AuroraMeter.Credits.CurrencyMismatchError
   alias AuroraMeter.Credits.Ledger
+  alias AuroraMeter.Credits.Money
   alias AuroraMeter.Credits.Reconciliation
   alias AuroraMeter.Credits.Series
   alias AuroraMeter.Period
@@ -120,12 +134,44 @@ defmodule AuroraMeter.Credits do
           cursor: {DateTime.t(), Ecto.UUID.t()} | nil
         }
 
-  @typedoc "A tenant's balance snapshot, in micro-dollars."
+  @typedoc """
+  A tenant's balance snapshot, in micro-dollars.
+
+  Six of the figures are the ones this map has always carried and none of them
+  changed meaning: `balance` is signed, `held` is the sum of pending holds,
+  `available` is `balance - held`, `promotional` is the promotional part of
+  `balance`.
+
+  Four are new, and they exist because after credit lots `balance - held` is no
+  longer the whole story:
+
+    * `spendable`: what a hold or a debit would actually be allowed to take,
+      and exactly the figure `sufficient?/2` compares against. It differs from
+      `available` on a cut-over wallet by two things: credit whose `expires_at`
+      has passed is excluded even before the sweep reaches it, and `debt` is
+      subtracted. It is **not** clamped at zero, because clamping it would make
+      the reported figure and the ledger's own refusal disagree.
+    * `debt`: executed cost the wallet could not fund. Recorded rather than
+      hidden; the next grant repays it before creating availability.
+    * `expired`: value destroyed by expiry, kept apart from value spent so a
+      reader is never left inferring which of the two happened.
+    * `promotional_spendable`: the part of `spendable` that came from
+      promotional lots.
+
+  On a wallet that has not been cut over to lots (`lots_enabled_at IS NULL`,
+  which is every wallet until `mix aurora_meter.credits.migrate_lots` runs)
+  `spendable == available`, `promotional_spendable == promotional`, and `debt`
+  and `expired` are both `0`.
+  """
   @type balance :: %{
           balance: integer(),
           held: non_neg_integer(),
           available: integer(),
+          spendable: integer(),
           promotional: non_neg_integer(),
+          promotional_spendable: non_neg_integer(),
+          debt: non_neg_integer(),
+          expired: non_neg_integer(),
           currency: String.t(),
           low_balance_threshold: integer() | nil
         }
@@ -160,8 +206,12 @@ defmodule AuroraMeter.Credits do
   @type summary :: %{
           balance: integer(),
           available: integer(),
+          spendable: integer(),
           held: non_neg_integer(),
           promotional: non_neg_integer(),
+          promotional_spendable: non_neg_integer(),
+          debt: non_neg_integer(),
+          expired: non_neg_integer(),
           currency: String.t(),
           spent_this_period: non_neg_integer(),
           granted_this_period: non_neg_integer(),
@@ -170,7 +220,17 @@ defmodule AuroraMeter.Credits do
           runway_days: non_neg_integer() | nil
         }
 
-  @default_history_kinds [:grant, :settle, :debit, :expire]
+  @typedoc """
+  An opaque `history/2` cursor. Get one from `cursor/1` and pass it back as
+  `:cursor`; it is the ledger's own ordering key and nothing else should be read
+  into it.
+  """
+  @opaque cursor :: integer()
+
+  # `:reverse` is here so that the default view is unchanged **in content** by
+  # schema version 9's new kind. Before it, a reversal was a `:debit` and
+  # appeared; naming the new kind is what keeps it appearing.
+  @default_history_kinds [:grant, :settle, :debit, :reverse, :expire]
 
   # The window `daily_burn` averages over. Long enough to survive a quiet
   # weekend, short enough that a change in usage shows up within a month.
@@ -180,10 +240,15 @@ defmodule AuroraMeter.Credits do
   Returns `tenant`'s balance snapshot; all zeros (and the configured currency)
   when the tenant has never been granted anything.
 
+  See `t:balance/0` for what each of the ten figures means, and in particular
+  for the difference between `available` and `spendable`.
+
   ## Examples
 
       iex> AuroraMeter.Credits.balance("never_funded_#{System.unique_integer([:positive])}")
-      %{balance: 0, held: 0, available: 0, promotional: 0, currency: "usd", low_balance_threshold: nil}
+      %{balance: 0, held: 0, available: 0, spendable: 0, promotional: 0,
+        promotional_spendable: 0, debt: 0, expired: 0, currency: "usd",
+        low_balance_threshold: nil}
 
   """
   @spec balance(term()) :: balance()
@@ -194,17 +259,27 @@ defmodule AuroraMeter.Credits do
           balance: 0,
           held: 0,
           available: 0,
+          spendable: 0,
           promotional: 0,
+          promotional_spendable: 0,
+          debt: 0,
+          expired: 0,
           currency: Config.credits_currency(),
           low_balance_threshold: nil
         }
 
       %CreditBalance{} = row ->
+        figures = Ledger.figures(row)
+
         %{
           balance: row.balance,
           held: row.held,
           available: row.balance - row.held,
+          spendable: figures.spendable,
           promotional: row.promotional,
+          promotional_spendable: figures.promotional_spendable,
+          debt: row.debt,
+          expired: row.expired,
           currency: row.currency,
           low_balance_threshold: row.low_balance_threshold
         }
@@ -282,8 +357,10 @@ defmodule AuroraMeter.Credits do
       {:ok, ^txn} = AuroraMeter.Credits.grant(org, 20_000_000, reference: "stripe:pi_123")
 
   """
-  @spec grant(term(), pos_integer(), keyword()) :: {:ok, txn()} | {:error, Ecto.Changeset.t()}
+  @spec grant(term(), pos_integer(), keyword()) ::
+          {:ok, txn()} | {:error, :duplicate_reference | Ecto.Changeset.t()}
   def grant(tenant, amount, opts) when is_integer(amount) and amount > 0 and is_list(opts) do
+    Money.assert_range!(amount)
     Ledger.grant(Tenant.to_key(tenant), amount, opts)
   end
 
@@ -296,9 +373,10 @@ defmodule AuroraMeter.Credits do
   decides whether the host announces the payment.
   """
   @spec grant_with_status(term(), pos_integer(), keyword()) ::
-          {:ok, txn(), :new | :duplicate} | {:error, Ecto.Changeset.t()}
+          {:ok, txn(), :new | :duplicate} | {:error, :duplicate_reference | Ecto.Changeset.t()}
   def grant_with_status(tenant, amount, opts)
       when is_integer(amount) and amount > 0 and is_list(opts) do
+    Money.assert_range!(amount)
     Ledger.grant_with_status(Tenant.to_key(tenant), amount, opts)
   end
 
@@ -322,6 +400,7 @@ defmodule AuroraMeter.Credits do
           {:ok, txn()} | {:error, :insufficient_credits | :duplicate_reference}
   def hold(tenant, amount, reference, opts \\ [])
       when is_integer(amount) and amount > 0 and is_binary(reference) do
+    Money.assert_range!(amount)
     Ledger.hold(Tenant.to_key(tenant), amount, reference, opts)
   end
 
@@ -356,6 +435,7 @@ defmodule AuroraMeter.Credits do
           {:ok, txn()} | {:error, :not_found | :already_settled}
   def settle(reference, actual_amount, opts \\ [])
       when is_binary(reference) and is_integer(actual_amount) and actual_amount >= 0 do
+    Money.assert_range!(actual_amount)
     Ledger.settle(reference, actual_amount, tenant_opt(opts))
   end
 
@@ -402,6 +482,7 @@ defmodule AuroraMeter.Credits do
           {:ok, txn()} | {:error, :insufficient_credits | :duplicate_reference}
   def debit(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
+    Money.assert_range!(amount)
     Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata)
   end
 
@@ -418,15 +499,28 @@ defmodule AuroraMeter.Credits do
   does not belong: it never consumes promotional credit (a refunded top-up
   must not quietly spend a sign-up bonus, leaving nothing to expire), and
   `spend_history/2` reports it against grants rather than as spend.
+
+  ## Its own kind, and its own reference namespace
+
+  The entry is written with `kind: :reverse`. Until schema version 9 it was a
+  `:debit` carrying the reversal category, which meant a reversal and an
+  ordinary debit shared one reference namespace: the unique index is on
+  `(kind, reference)`, so a host debit referenced `"order:99"` and a refund
+  referenced `"order:99"` collided, and whichever arrived second was told
+  `:duplicate_reference` for a write it had never made. They no longer collide.
+
+  Rows written before the change keep `kind: :debit, category: :reversal` for
+  ever, and every reader must treat them as reversals.
+  `AuroraMeter.Schema.CreditTransaction.reversal?/1` is the one predicate that
+  knows both shapes; `spend_history/2` and `spend_total/2` score by `category`,
+  so their output is unchanged across the change.
   """
   @spec reverse(term(), pos_integer(), String.t(), map()) ::
           {:ok, txn()} | {:error, :duplicate_reference}
   def reverse(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
-    Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata,
-      allow_negative: true,
-      category: :reversal
-    )
+    Money.assert_range!(amount)
+    Ledger.reverse(Tenant.to_key(tenant), amount, reference, metadata)
   end
 
   @doc """
@@ -667,11 +761,30 @@ defmodule AuroraMeter.Credits do
   Options:
 
     * `:limit` — default 50.
-    * `:before` — a `DateTime`; only entries inserted strictly before it (pass
-      the last entry's `inserted_at` to page).
+    * `:cursor`: page from here. Take it from `cursor/1` on the last entry of
+      the previous page; only entries strictly older than it are returned.
+    * `:before`: a `DateTime`; only entries whose `inserted_at` is strictly
+      before it. A **filter**, not a cursor: see below.
     * `:kinds` — which kinds to include; defaults to
       `#{inspect(@default_history_kinds)}`, i.e. holds and releases (the
       bookkeeping around a settlement) are hidden unless asked for.
+
+  `:before` and `:cursor` together raise `ArgumentError`. They answer different
+  questions and combining them silently would look like paging while filtering.
+
+  ## Paging, and why `:before` cannot do it
+
+  The list is ordered by the ledger's own ordering key, which is a Postgres
+  identity column and not a timestamp (findings L20, X213). `:before` compares
+  `inserted_at`, so paging with it compares a different column from the one that
+  ordered the page: **two entries written in the same microsecond have no order
+  under it, so one can be skipped and another repeated** (finding L8). It is
+  kept because it is the documented way to ask "what happened before lunchtime",
+  which is a filter and is exactly what it is good at.
+
+  `:cursor` pages on the ordering key itself, which is unique and total, so a
+  cursor walk returns every matching entry exactly once whatever the timestamps
+  say.
 
   ## Examples
 
@@ -679,6 +792,9 @@ defmodule AuroraMeter.Credits do
       #=> [%CreditTransaction{kind: :settle, ...}, %CreditTransaction{kind: :grant, ...}]
 
       AuroraMeter.Credits.history(org, kinds: [:hold, :release])
+
+      page = AuroraMeter.Credits.history(org, limit: 100)
+      next = AuroraMeter.Credits.history(org, limit: 100, cursor: AuroraMeter.Credits.cursor(List.last(page)))
 
   """
   @spec history(term(), keyword()) :: [txn()]
@@ -692,21 +808,56 @@ defmodule AuroraMeter.Credits do
         where: t.tenant_key == ^tenant_key and t.kind in ^kinds,
         # `seq` and not `inserted_at`: the ledger's account of its own order
         # cannot rest on a wall clock that steps backwards (L20, X59, X100).
-        # `:before` still filters on `inserted_at`, which is the documented
-        # option and is a filter rather than a keyset cursor; 06c owns the
-        # keyset form (L8).
         order_by: [desc: t.seq],
         limit: ^limit
       )
 
-    query =
-      case Keyword.get(opts, :before) do
-        nil -> query
-        %DateTime{} = before -> from(t in query, where: t.inserted_at < ^before)
-      end
-
-    Config.repo().all(query)
+    query
+    |> history_before(Keyword.get(opts, :before), Keyword.get(opts, :cursor))
+    |> history_cursor(Keyword.get(opts, :cursor))
+    |> Config.repo().all()
   end
+
+  @spec history_before(Ecto.Query.t(), DateTime.t() | nil, cursor() | nil) :: Ecto.Query.t()
+  defp history_before(query, nil, _cursor), do: query
+
+  defp history_before(_query, %DateTime{}, cursor) when not is_nil(cursor) do
+    raise ArgumentError,
+          "history/2 takes :before or :cursor, not both. :before filters on `inserted_at`, " <>
+            "which is a wall-clock stamp and orders nothing; :cursor pages on the ledger's " <>
+            "ordering key. Combining them would look like paging while filtering."
+  end
+
+  defp history_before(query, %DateTime{} = before, nil),
+    do: from(t in query, where: t.inserted_at < ^before)
+
+  @spec history_cursor(Ecto.Query.t(), cursor() | nil) :: Ecto.Query.t()
+  defp history_cursor(query, nil), do: query
+
+  defp history_cursor(query, seq) when is_integer(seq),
+    do: from(t in query, where: t.seq < ^seq)
+
+  defp history_cursor(_query, other) do
+    raise ArgumentError,
+          "history/2's :cursor must come from AuroraMeter.Credits.cursor/1, got: #{inspect(other)}"
+  end
+
+  @doc """
+  The `history/2` cursor for an entry: pass it back as `:cursor` to page from
+  just after it.
+
+  It is the ledger's ordering key and it is opaque. Do not compare two cursors,
+  store one across a release, or build one by hand; the only thing promised is
+  that `history/2` resumes exactly after the entry it came from.
+
+  ## Examples
+
+      page = AuroraMeter.Credits.history(org, limit: 100)
+      AuroraMeter.Credits.history(org, limit: 100, cursor: AuroraMeter.Credits.cursor(List.last(page)))
+
+  """
+  @spec cursor(txn()) :: cursor()
+  def cursor(%CreditTransaction{seq: seq}) when is_integer(seq), do: seq
 
   @doc """
   Returns `tenant`'s money movement as zero-filled buckets, oldest first.
@@ -785,11 +936,18 @@ defmodule AuroraMeter.Credits do
   ## Examples
 
       AuroraMeter.Credits.summary(org)
-      #=> %{balance: 19_580_000, available: 19_580_000, held: 0, promotional: 0,
+      #=> %{balance: 19_580_000, available: 19_580_000, spendable: 19_580_000, held: 0,
+      #=>   promotional: 0, promotional_spendable: 0, debt: 0, expired: 0,
       #=>   currency: "usd", spent_this_period: 420_000, granted_this_period: 20_000_000,
       #=>   period: %{start: ~U[2026-09-01 00:00:00Z], end: ~U[2026-10-01 00:00:00Z],
       #=>             source: :calendar},
       #=>   daily_burn: 14_000, runway_days: 1_398}
+
+  `runway_days` is still derived from `available` rather than from `spendable`,
+  deliberately: it is a published figure with a published meaning, and changing
+  what it divides would move every dashboard's number without anything saying
+  so. A host that wants the stricter runway divides `spendable` by `daily_burn`
+  itself.
 
   """
   @spec summary(term()) :: summary()
@@ -803,8 +961,12 @@ defmodule AuroraMeter.Credits do
     %{
       balance: snapshot.balance,
       available: snapshot.available,
+      spendable: snapshot.spendable,
       held: snapshot.held,
       promotional: snapshot.promotional,
+      promotional_spendable: snapshot.promotional_spendable,
+      debt: snapshot.debt,
+      expired: snapshot.expired,
       currency: snapshot.currency,
       spent_this_period: this_period.spent,
       granted_this_period: this_period.granted,
@@ -837,6 +999,11 @@ defmodule AuroraMeter.Credits do
   Sets (or with `nil` clears) `tenant`'s own low-balance threshold in
   micro-dollars, overriding `:credits_low_balance_threshold`.
 
+  A standing low-balance crossing is recomputed under the balance row's lock:
+  lowering the threshold below where the wallet already sits, or clearing it,
+  clears the crossing, so the next genuine fall below the new line alerts. It
+  never raises an alert by itself, because nothing about the wallet moved.
+
   ## Examples
 
       {:ok, row} = AuroraMeter.Credits.set_low_balance_threshold(org, 5_000_000)
@@ -847,6 +1014,7 @@ defmodule AuroraMeter.Credits do
   @spec set_low_balance_threshold(term(), integer() | nil) :: {:ok, CreditBalance.t()}
   def set_low_balance_threshold(tenant, threshold)
       when is_integer(threshold) or is_nil(threshold) do
+    if is_integer(threshold), do: Money.assert_range!(threshold)
     Ledger.set_low_balance_threshold(Tenant.to_key(tenant), threshold)
   end
 
@@ -858,9 +1026,14 @@ defmodule AuroraMeter.Credits do
   number of grants expired. Run it periodically (a `Quantum` job, an Oban
   cron, or a plain timer).
 
-  Assumes at most one live promotional grant per tenant: with several, the
-  balance's `promotional` part is their sum and the first to expire may take
-  credit a later grant contributed.
+  Several live promotional grants per tenant are supported. Promotional spending
+  is attributed **soonest expiry first** on a legacy wallet, and follows the
+  lots' own spend order on a cut-over one, so each grant's remainder is well
+  defined and expiring one never reclaims credit a later grant contributed.
+
+  The count is grants on a legacy wallet and lots on a cut-over one. They are
+  the same thing counted under two names: the migration writes one lot per
+  grant.
 
   ## Examples
 
@@ -911,10 +1084,84 @@ defmodule AuroraMeter.Credits do
   def expire_due(now, opts) when is_list(opts), do: Ledger.expire_due(now, opts)
 
   @doc """
+  Runs the side effects of every ledger call this process made inside its own
+  transaction, and empties the queue.
+
+  ## Why a host has to call it
+
+  A ledger call decides for itself whether its side effects may run, and it
+  decides by asking whether the caller already had a transaction open. When it
+  did, `Repo.transaction/1` opens a **savepoint**, not a transaction: the ledger
+  sees its own work return successfully and the host can still roll all of it
+  back. Telemetry, PubSub and the low-balance handler all describe money, and a
+  Pro auto top-up fired for a balance that never existed buys credit against a
+  payment the host abandoned. So inside a host transaction they are queued
+  rather than run, and this is what runs them.
+
+  A call that owns its transaction is unaffected: its effects fire on commit as
+  they always have, the queue stays empty, and a host that never wraps a ledger
+  call never needs this function.
+
+      Repo.transaction(fn ->
+        {:ok, _txn} = AuroraMeter.Credits.settle("job:42", cost)
+        {:ok, _job} = MyApp.Jobs.mark_billed(job)
+      end)
+      |> case do
+        {:ok, result} -> AuroraMeter.Credits.after_commit(); result
+        {:error, reason} -> AuroraMeter.Credits.after_commit(discard: true); {:error, reason}
+      end
+
+  Options:
+
+    * `:discard`: `true` drops the queue without running anything. This is what
+      the rollback branch calls: the writes are gone, so the effects describing
+      them must not fire.
+
+  ## What it is not
+
+  It is **not** durable. The queue lives in the calling process, which is
+  exactly where Ecto's transaction scope lives, so the two have the same
+  lifetime and neither can outlive the other. A process that dies between the
+  commit and this call loses the effects: the money is committed and correct,
+  and one round of telemetry, one PubSub message and possibly one low-balance
+  alert are not delivered. A host that needs those to be at-least-once
+  subscribes to PubSub or polls `balance/1` rather than relying on a callback.
+
+  `deferred_effects?/0` answers whether anything is queued, which is how a test
+  asserts that a code path has not forgotten this call.
+
+  ## Examples
+
+      iex> AuroraMeter.Credits.after_commit()
+      :ok
+
+  """
+  @spec after_commit(keyword()) :: :ok
+  def after_commit(opts \\ []) when is_list(opts), do: Ledger.drain(opts)
+
+  @doc """
+  Whether this process has ledger side effects waiting for `after_commit/1`.
+
+  True only between a ledger call made inside a host transaction and the
+  `after_commit/1` that drains it. Assert `false` after your transaction
+  handling to prove no path forgot the call.
+
+  ## Examples
+
+      iex> AuroraMeter.Credits.deferred_effects?()
+      false
+
+  """
+  @spec deferred_effects?() :: boolean()
+  def deferred_effects?, do: Ledger.deferred() != []
+
+  @doc """
   Subscribes the calling process to `tenant`'s credit updates:
-  `{:aurora_meter, :credits, %{tenant_key, balance, held, available}}` after
-  every ledger entry and `{:aurora_meter, :low_balance, %{tenant_key,
-  available, threshold}}` on a low-balance crossing.
+  `{:aurora_meter, :credits, %{tenant_key, balance, held, available, spendable,
+  debt, expired}}` after every ledger entry and `{:aurora_meter, :low_balance,
+  %{tenant_key, available, spendable, threshold, crossing_id}}` on a low-balance
+  crossing. Both payloads may gain keys in a later release, so match the ones
+  you need rather than the whole map.
 
   ## Examples
 
