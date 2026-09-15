@@ -234,6 +234,89 @@ defmodule AuroraMeter.CreditsTest do
 
       assert %{held: 0} = Credits.balance(tenant)
     end
+
+    test "I11 returns its result when the hold was settled by someone else" do
+      # L4. The success branch used to be `{:ok, _txn} = settle(reference,
+      # actual)`, which raises a MatchError the moment anything else closes the
+      # hold while the work runs. Nothing could, until this unit shipped a
+      # reconciler that can. The raise was then caught by the `catch` below it,
+      # which released again and re-raised, so the caller got a MatchError
+      # instead of its result and the executed work was never charged.
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      reference = "settled_by_other:#{tenant}"
+
+      assert {:ok, :done} =
+               Credits.with_credits(tenant, 500_000, reference, fn ->
+                 # Somebody else settles first: a reconciler's {:settle, n}
+                 # decision, or a duplicate delivery of the same job.
+                 {:ok, _} = Credits.settle(reference, 300_000)
+                 {:ok, :done, 300_000}
+               end)
+
+      assert %CreditTransaction{status: :settled, settled_amount: 300_000} = hold_for(reference)
+      assert length(entries(tenant, :settle)) == 1
+      assert %{balance: 700_000, held: 0} = Credits.balance(tenant)
+    end
+
+    test "I11 records the executed cost when the hold was released by someone else" do
+      # L4, the half that loses money. The reservation was handed back, but the
+      # work ran and cost something, so the cost is recorded as its own debit
+      # under `settle_missed:<reference>` rather than dropped.
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      reference = "released_by_other:#{tenant}"
+
+      assert {:ok, :done} =
+               Credits.with_credits(tenant, 500_000, reference, fn ->
+                 {:ok, _} = Credits.release(reference)
+                 {:ok, :done, 300_000}
+               end)
+
+      assert %CreditTransaction{status: :released} = hold_for(reference)
+      assert [] == entries(tenant, :settle)
+      assert [%CreditTransaction{amount: -300_000}] = entries(tenant, :debit)
+
+      assert %CreditTransaction{reference: "settle_missed:" <> ^reference} =
+               hd(entries(tenant, :debit))
+
+      assert %{balance: 700_000, held: 0} = Credits.balance(tenant)
+    end
+
+    test "writes nothing extra when the released hold's actual cost was zero" do
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      reference = "released_zero:#{tenant}"
+
+      assert {:ok, :done} =
+               Credits.with_credits(tenant, 500_000, reference, fn ->
+                 {:ok, _} = Credits.release(reference)
+                 {:ok, :done, 0}
+               end)
+
+      assert entries(tenant, :debit) == []
+      assert %{balance: 1_000_000, held: 0} = Credits.balance(tenant)
+    end
+
+    test "is idempotent for the settle_missed debit across a retry" do
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      reference = "retried:#{tenant}"
+
+      run = fn ->
+        Credits.with_credits(tenant, 500_000, reference, fn ->
+          {:ok, _} = Credits.release(reference)
+          {:ok, :done, 300_000}
+        end)
+      end
+
+      assert {:ok, :done} = run.()
+      # The second call is refused at the hold: the reference is already used.
+      assert {:error, :duplicate_reference} = run.()
+
+      assert length(entries(tenant, :debit)) == 1
+      assert %{balance: 700_000} = Credits.balance(tenant)
+    end
   end
 
   describe "history/2" do
@@ -580,4 +663,13 @@ defmodule AuroraMeter.CreditsTest do
   end
 
   defp hold_for(reference), do: Ledger.fetch_hold(reference)
+
+  defp entries(tenant, kind) do
+    TestRepo.all(
+      from(t in CreditTransaction,
+        where: t.tenant_key == ^tenant and t.kind == ^kind,
+        order_by: [asc: t.inserted_at]
+      )
+    )
+  end
 end

@@ -140,10 +140,108 @@ Credits.pending_holds(
 #=> [%CreditTransaction{kind: :hold, status: :pending, reference: "job:42", ...}]
 ```
 
-Oldest first. `:older_than` is a `DateTime` and is required; `:reference_prefix`
-narrows to one kind of work and `:limit` defaults to 200. Run it on a schedule,
-decide from your own records whether the work is still alive, and `release/1`
-the ones that are not. Pick references you can find again.
+Oldest first, ordered by `(inserted_at, id)` so a `:limit`ed page can be
+resumed with `:after` without skipping a hold that shares a microsecond with
+another. `:older_than` is a `DateTime` and is required; `:reference_prefix`
+narrows to one kind of work, `:tenant` to one customer, and `:limit` defaults to
+200. Pick references you can find again.
+
+### Recovering stale holds
+
+`pending_holds/1` lists them. `reconcile_holds/1` asks you about each one and
+applies your answer:
+
+```elixir
+defmodule MyApp.HoldPolicy do
+  @behaviour AuroraMeter.Credits.HoldReconciler
+
+  @impl true
+  def decide(%{reference: "job:" <> id}) do
+    # Your own records, not the clock.
+    case MyApp.Jobs.get(id) do
+      %{state: :running} -> :keep
+      %{state: :failed} -> :release
+      %{state: :done, cost_micro_usd: cost} -> {:settle, cost}
+      nil -> :release
+    end
+  end
+
+  def decide(_hold), do: :keep
+end
+
+# config/config.exs
+config :aurora_meter, credits_hold_reconciler: MyApp.HoldPolicy
+```
+
+Then, from a scheduler:
+
+```elixir
+Credits.reconcile_holds(older_than: DateTime.add(AuroraMeter.Clock.now(), -3600, :second))
+#=> {:ok, %{examined: 12, kept: 9, released: 2, settled: 1,
+#=>         already_closed: 0, failed: 0, cursor: nil}}
+```
+
+A module, a `{module, function}` pair or a one-argument function all work.
+`:cursor` comes back as `{inserted_at, id}` when the page was full, so a caller
+that pages passes it as `:after` on the next run.
+
+**Age is not evidence, and this is the whole point of the callback.** A job that
+legitimately runs for nine hours and a job whose process was killed nine hours
+ago are the same row. `age_seconds` is there for your log line; the decision has
+to come from something that actually knows whether the work is alive. Deciding
+from the age releases money that is about to be spent, and the settle that
+follows takes the balance negative.
+
+There is a mechanical reason as well. A hold's `inserted_at` is stamped by the
+node that took the hold, from a wall clock that is not monotonic and is not the
+clock the reconciler reads. The age is accurate to within whatever those two
+disagree by, which is fine for a metric and not fine for a decision about money.
+
+**Nothing here can release money by accident.** Every one of these keeps the
+hold:
+
+* no `:credits_hold_reconciler` configured, which is the default;
+* a callback that raises, exits or throws;
+* a callback that does not answer within `:credits_hold_reconciler_timeout`
+  (default 5000 ms), which is then killed;
+* a callback that returns anything other than `:keep`, `:release` or
+  `{:settle, n}` with `n` a non-negative integer.
+
+The callback runs in a task under `AuroraMeter.TaskSupervisor`, outside any
+transaction and while no ledger row is locked, so it cannot take the reconciler
+down with it, cannot hold a lock open and cannot be the reason a hold is stuck.
+Do not make a network call from it: the timeout is the only thing bounding it.
+It may also be called **more than once for one hold**, because two nodes running
+a sweep both list it, so make it side-effect free or idempotent.
+
+To see what a sweep would look at before configuring a policy, pass an explicit
+one that decides nothing:
+
+```elixir
+Credits.reconcile_holds(
+  older_than: DateTime.add(AuroraMeter.Clock.now(), -3600, :second),
+  tenant: one_customer,
+  reconciler: fn _hold -> :keep end
+)
+```
+
+### What happens when the race is lost
+
+A decision is advisory until it is applied. Between your callback returning and
+the ledger applying it, the hold's own worker may have finished. The application
+re-reads the hold's status under its row lock, so exactly one terminal
+transition happens and the reconciler reports `already_closed`. The same is true
+of two nodes sweeping at the same instant: one release row, one run reporting
+`released: 1`, and the other reporting that it lost.
+
+The other side of that race is a hold your reconciler released while
+`with_credits/4` was still running it. The work happened and it cost something,
+so the cost is recorded rather than lost: `with_credits/4` writes a debit
+referenced `settle_missed:<reference>`, which may take the balance negative,
+because the alternative is a ledger that quietly forgets a charge. It is
+idempotent on that reference. Telemetry carries both halves, so a policy that is
+releasing work which then completes is visible as a stream of
+`released_by_other` outcomes.
 
 ## Promotional credit and expiry
 
@@ -316,6 +414,7 @@ AuroraMeter.Credits.subscribe(org)
 |---|---|---|
 | `[:aurora_meter, :credits, kind]` | `%{amount, balance_after, available_after}` | `%{tenant_key, reference, category, duplicate, overrun}` |
 | `[:aurora_meter, :credits, :low_balance]` | `%{available, threshold}` | `%{tenant_key}` |
+| `[:aurora_meter, :credits, :hold_reconciliation]` | `%{amount, age_seconds, duration}` | `%{tenant_key, reference, decision, outcome}` |
 
 `kind` is `:grant`, `:hold`, `:settle`, `:release`, `:debit` or `:expire`;
 `amount` is the signed delta the entry applied to the balance (`0` for holds,
@@ -330,6 +429,8 @@ fire after the transaction commits.
 | `:credits_overdraft_tolerance` | `0` | µ$ a hold or debit may go below zero |
 | `:credits_low_balance_threshold` | `nil` | global threshold in µ$; a tenant's own overrides it |
 | `:credits_low_balance_handler` | `nil` | `fun/1` receiving `%{tenant_key, available, threshold}` |
+| `:credits_hold_reconciler` | `nil` | module, `{module, function}` or `fun/1` deciding about a stale hold; `nil` keeps every one |
+| `:credits_hold_reconciler_timeout` | `5_000` | ms one `decide/1` call may take before it is killed and the hold kept |
 
 ## Concurrency
 
@@ -338,7 +439,11 @@ Every write runs in one transaction: the tenant's balance row is locked with
 against that locked row, and the row is updated before commit. Twenty
 concurrent $0.10 holds against $1.00 admit exactly ten (there is a test that
 does exactly that). Two settlements of the same hold serialise on the hold
-row; the second sees `:already_settled`.
+row; the second sees `:already_settled`. A settle and a release of one hold
+serialise the same way, which is what makes a recovery sweep safe to run beside
+the work it is recovering, and safe to run on two nodes at once. There is no
+lease on a hold and no timestamp in that decision: it is the row lock and the
+status re-read inside it.
 
 ### Calling from inside your own transaction
 

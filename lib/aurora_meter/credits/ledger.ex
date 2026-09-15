@@ -53,27 +53,46 @@ defmodule AuroraMeter.Credits.Ledger do
     )
   end
 
+  # Ordered by `(inserted_at, id)` rather than `inserted_at` alone. Two holds
+  # written in the same microsecond have no order under the old key, so a
+  # `:limit`ed page could skip one and repeat another and a sweep that pages
+  # would never see the skipped hold at all. `id` breaks the tie; `:after`
+  # carries both halves so the next page resumes exactly where the last ended.
+  #
+  # `inserted_at` is still the wrong column to be ordering an account of the
+  # past by, because it comes from a wall clock (open finding L20). 06a moves
+  # every ordering here onto `seq`; this key is a strict improvement on the same
+  # column and the `:after` shape is what changes when it does.
   @spec pending_holds(keyword()) :: [CreditTransaction.t()]
   def pending_holds(opts) do
     cutoff = Keyword.fetch!(opts, :older_than)
     limit = Keyword.get(opts, :limit, 200)
-    prefix = Keyword.get(opts, :reference_prefix)
 
-    query =
-      from(t in CreditTransaction,
-        where: t.kind == ^:hold and t.status == ^:pending and t.inserted_at < ^cutoff,
-        order_by: [asc: t.inserted_at],
-        limit: ^limit
-      )
-
-    query =
-      case prefix do
-        nil -> query
-        prefix -> where(query, [t], like(t.reference, ^(prefix <> "%")))
-      end
-
-    Config.repo().all(query)
+    from(t in CreditTransaction,
+      where: t.kind == ^:hold and t.status == ^:pending and t.inserted_at < ^cutoff,
+      order_by: [asc: t.inserted_at, asc: t.id],
+      limit: ^limit
+    )
+    |> pending_holds_tenant(Keyword.get(opts, :tenant_key))
+    |> pending_holds_prefix(Keyword.get(opts, :reference_prefix))
+    |> pending_holds_after(Keyword.get(opts, :after))
+    |> Config.repo().all()
   end
+
+  defp pending_holds_tenant(query, nil), do: query
+
+  defp pending_holds_tenant(query, tenant_key),
+    do: where(query, [t], t.tenant_key == ^tenant_key)
+
+  defp pending_holds_prefix(query, nil), do: query
+
+  defp pending_holds_prefix(query, prefix),
+    do: where(query, [t], like(t.reference, ^(prefix <> "%")))
+
+  defp pending_holds_after(query, nil), do: query
+
+  defp pending_holds_after(query, {%DateTime{} = at, id}),
+    do: where(query, [t], t.inserted_at > ^at or (t.inserted_at == ^at and t.id > ^id))
 
   @spec grant(String.t(), pos_integer(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, Ecto.Changeset.t()}
@@ -146,8 +165,10 @@ defmodule AuroraMeter.Credits.Ledger do
   @spec settle(String.t(), non_neg_integer(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, :not_found | :already_settled}
   def settle(reference, actual, opts) do
+    expected = Keyword.get(opts, :tenant_key)
+
     transact(fn repo ->
-      case pending_hold(repo, reference) do
+      case pending_hold(repo, reference, expected) do
         {:error, reason} ->
           refuse(reason)
 
@@ -170,11 +191,13 @@ defmodule AuroraMeter.Credits.Ledger do
     end)
   end
 
-  @spec release(String.t()) ::
+  @spec release(String.t(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, :not_found | :already_settled}
-  def release(reference) do
+  def release(reference, opts \\ []) do
+    expected = Keyword.get(opts, :tenant_key)
+
     transact(fn repo ->
-      case pending_hold(repo, reference) do
+      case pending_hold(repo, reference, expected) do
         {:error, reason} ->
           refuse(reason)
 
@@ -502,9 +525,23 @@ defmodule AuroraMeter.Credits.Ledger do
 
   # Locks the hold row so two settles of the same reference serialise and the
   # second sees the first one's status.
-  @spec pending_hold(module(), String.t()) ::
+  #
+  # This lock and the status re-read inside it are what make a hold's terminal
+  # transition happen once. Not a timestamp, not a lease and not a duration: the
+  # decision "has this already been closed" is answered by a row the caller
+  # holds `FOR UPDATE`, so a second caller blocks until the first commits and
+  # then reads what it wrote. Two nodes whose clocks disagree by a minute get
+  # the same answer as one node.
+  #
+  # `expected` is the tenant key the caller believes the hold belongs to, or
+  # `nil` for "do not check". A mismatch is `{:error, :not_found}` rather than a
+  # new error atom: to a caller that named the wrong tenant, this hold does not
+  # exist, and the existing return contracts of `settle/3` and `release/1,2` are
+  # unchanged. It is checked inside the lock with everything else, so a rename
+  # cannot slip between the read and the write.
+  @spec pending_hold(module(), String.t(), String.t() | nil) ::
           {:ok, CreditTransaction.t()} | {:error, :not_found | :already_settled}
-  defp pending_hold(repo, reference) do
+  defp pending_hold(repo, reference, expected) do
     query =
       from(t in CreditTransaction,
         where: t.kind == ^:hold and t.reference == ^reference,
@@ -512,9 +549,17 @@ defmodule AuroraMeter.Credits.Ledger do
       )
 
     case repo.one(query) do
-      nil -> {:error, :not_found}
-      %CreditTransaction{status: :pending} = hold -> {:ok, hold}
-      %CreditTransaction{} -> {:error, :already_settled}
+      nil ->
+        {:error, :not_found}
+
+      %CreditTransaction{tenant_key: key} when is_binary(expected) and key != expected ->
+        {:error, :not_found}
+
+      %CreditTransaction{status: :pending} = hold ->
+        {:ok, hold}
+
+      %CreditTransaction{} ->
+        {:error, :already_settled}
     end
   end
 

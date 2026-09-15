@@ -38,6 +38,7 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Counter,
     AuroraMeter.Credits.Ledger,
     AuroraMeter.Credits.Promotions,
+    AuroraMeter.Credits.Reconciliation,
     AuroraMeter.Credits.Series,
     AuroraMeter.Events.Backfill,
     AuroraMeter.Events.Canonical,

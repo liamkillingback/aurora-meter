@@ -41,4 +41,87 @@ defmodule AuroraMeter.ConfigTest do
 
     assert_raise NimbleOptions.ValidationError, fn -> Config.validate!() end
   end
+
+  describe "credits_hold_reconciler" do
+    test "defaults to nil, which is what keeps every hold" do
+      assert Config.credits_hold_reconciler() == nil
+      assert Config.credits_hold_reconciler_timeout() == 5_000
+    end
+
+    test "accepts a module, a {module, function} pair and a one-argument function" do
+      for value <- [
+            AuroraMeter.ConfigTest.Reconciler,
+            {AuroraMeter.ConfigTest.Reconciler, :decide},
+            fn _hold -> :keep end,
+            nil
+          ] do
+        with_config(:credits_hold_reconciler, value, fn ->
+          assert is_list(Config.validate!())
+          assert Config.credits_hold_reconciler() == value
+        end)
+      end
+    end
+
+    test "refuses a module that does not implement the behaviour" do
+      with_config(:credits_hold_reconciler, AuroraMeter.ConfigTest, fn ->
+        message = assert_raise(ArgumentError, fn -> Config.validate!() end).message
+        assert message =~ "credits_hold_reconciler"
+        assert message =~ "decide/1"
+      end)
+    end
+
+    test "refuses a module that does not exist" do
+      with_config(:credits_hold_reconciler, AuroraMeter.NoSuchReconciler, fn ->
+        message = assert_raise(ArgumentError, fn -> Config.validate!() end).message
+        assert message =~ "could not be loaded"
+      end)
+    end
+
+    test "refuses a {module, function} pair whose function is not exported" do
+      with_config(:credits_hold_reconciler, {AuroraMeter.ConfigTest.Reconciler, :nope}, fn ->
+        message = assert_raise(ArgumentError, fn -> Config.validate!() end).message
+        assert message =~ "does not export nope/1"
+      end)
+    end
+
+    test "refuses a function of the wrong arity" do
+      with_config(:credits_hold_reconciler, fn _a, _b -> :keep end, fn ->
+        assert_raise NimbleOptions.ValidationError, fn -> Config.validate!() end
+      end)
+    end
+
+    test "refuses a timeout that is not a positive integer" do
+      for bad <- [0, -1, "5000", 5.0] do
+        with_config(:credits_hold_reconciler_timeout, bad, fn ->
+          assert_raise NimbleOptions.ValidationError, fn -> Config.validate!() end
+        end)
+      end
+    end
+  end
+
+  # This file predates `AuroraMeter.Test.Config` and mutates the environment
+  # directly in the tests above; the new cases keep the same shape rather than
+  # mixing two conventions inside one module, and every one of them restores
+  # what it found, including deleting a key that was absent.
+  defp with_config(key, value, fun) do
+    original = Application.fetch_env(:aurora_meter, key)
+    Application.put_env(:aurora_meter, key, value)
+
+    try do
+      fun.()
+    after
+      case original do
+        {:ok, previous} -> Application.put_env(:aurora_meter, key, previous)
+        :error -> Application.delete_env(:aurora_meter, key)
+      end
+    end
+  end
+end
+
+defmodule AuroraMeter.ConfigTest.Reconciler do
+  @moduledoc false
+  @behaviour AuroraMeter.Credits.HoldReconciler
+
+  @impl AuroraMeter.Credits.HoldReconciler
+  def decide(_hold), do: :keep
 end

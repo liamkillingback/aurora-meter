@@ -261,6 +261,7 @@ defmodule AuroraMeter.MixProject do
         "AuroraMeter.Config.Schema",
         "AuroraMeter.Credits.Ledger",
         "AuroraMeter.Credits.Promotions",
+        "AuroraMeter.Credits.Reconciliation",
         "AuroraMeter.Credits.Series",
         "AuroraMeter.Install.Templates",
         "AuroraMeter.Migration.V1",
@@ -322,6 +323,7 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Billing.Provider
       ],
       Behaviours: [
+        AuroraMeter.Credits.HoldReconciler,
         AuroraMeter.Events.Outbox,
         AuroraMeter.Tenant,
         AuroraMeter.Period,
@@ -366,6 +368,7 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Counter,
         AuroraMeter.Credits.Ledger,
         AuroraMeter.Credits.Promotions,
+        AuroraMeter.Credits.Reconciliation,
         AuroraMeter.Credits.Series,
         AuroraMeter.Events.Backfill,
         AuroraMeter.Events.Canonical,

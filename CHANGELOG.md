@@ -39,17 +39,81 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
   querying `AuroraMeter.Schema.Subscription` directly. `AuroraMeter.StorageCase`
   gained two cases for it: a page walked one row at a time may not repeat a
   row, skip one, or fail to end.
+- **Hold recovery: `AuroraMeter.Credits.reconcile_holds/1` and the
+  `AuroraMeter.Credits.HoldReconciler` behaviour.** A hold is taken before the
+  row that remembers it exists, so a process killed in between leaves money
+  reserved with nothing pointing at it. The ledger could already list those
+  holds; now it can close them, and the host says which. Configure
+  `:credits_hold_reconciler` as a module, a `{module, function}` pair or a
+  one-argument function returning `:keep`, `:release` or `{:settle, amount}`.
+  The callback runs in a task under the new `AuroraMeter.TaskSupervisor`,
+  outside any transaction and while no ledger row is locked, bounded by
+  `:credits_hold_reconciler_timeout` (default 5000 ms).
+
+  **Nothing about it can release money by accident.** The default is `nil`,
+  which keeps every hold, so upgrading and configuring nothing changes nothing.
+  A callback that raises, exits, throws, times out or returns something that is
+  not a decision keeps the hold. An old timestamp makes a hold a candidate to be
+  asked about, never a candidate to be released, and the documentation says so
+  in those words: age is not evidence that work was abandoned, and a hold's
+  `inserted_at` is stamped by a different node's wall clock in any case.
+
+  Decisions are applied through the existing `settle/3` and `release/1,2`, which
+  lock the hold row and re-read its status, so a reconciler racing the hold's own
+  worker produces exactly one terminal transition and the loser is reported as
+  `already_closed`. Two nodes sweeping at once are the same case. There is no
+  lease on a hold, deliberately: a lease is a duration, and a crashed reconciler
+  holding one would leave a hold nothing could recover.
+- Telemetry `[:aurora_meter, :credits, :hold_reconciliation]`, one event per hold
+  examined, carrying the reserved amount, the age, the callback's duration in
+  milliseconds, the decision and the outcome.
+- `:credits_hold_reconciler` and `:credits_hold_reconciler_timeout`
+  configuration keys. A module or `{module, function}` that cannot be loaded or
+  does not export `decide/1` fails at boot rather than at the moment a stale
+  hold is being decided.
+- `AuroraMeter.TaskSupervisor` in the supervision tree. It supervises nothing at
+  rest and exists so that a host callback the library invokes runs in a process
+  of its own.
 
 ### Changed
 
 - `AuroraMeter.Clock` gained `db_now/0`. Comparisons against a persisted
   timestamp now take the database's clock, because a node clock and a database
   stamp are two clocks and comparing them is what blocker B01 was.
+- `AuroraMeter.Credits.pending_holds/1` is ordered by `(inserted_at, id)` rather
+  than by `inserted_at` alone, and takes `:tenant` and `:after`. The old order
+  left two holds written in the same microsecond in no defined order, so a
+  `:limit`ed page could repeat one and skip another for ever. A caller that
+  relied on the previous order gets a deterministic one instead.
+- `AuroraMeter.Credits.settle/3` and `release/1,2` take `:tenant`. With it, a
+  hold belonging to any other tenant answers `{:error, :not_found}` and nothing
+  is written, which is the assertion a recovery tool needs when the reference
+  came from a listing rather than from the caller that took the hold. Without
+  it, behaviour is exactly as before.
+- `AuroraMeter.Credits.release/1` became `release/2` through a default argument.
+  No caller changes.
 - **`AuroraMeter.Storage` gained a required callback**, `list_subscriptions/2`.
   A custom adapter must add it. No third-party adapter is known to exist, and
   the alternative (an optional callback with a default that loads the whole
   table) would make the unbounded read the silent default for exactly the
   adapters nobody has reviewed.
+
+### Fixed
+
+- **`AuroraMeter.Credits.with_credits/4` no longer raises `MatchError` when its
+  hold was closed by someone else, and no longer loses the cost of work that
+  ran.** Its success branch asserted `{:ok, _txn} = settle(reference, actual)`.
+  Nothing could close a hold behind a running `with_credits/4` before this
+  release, so the match never failed; a reconciler that can release a hold makes
+  it possible, and the raise was caught by the clause below it, released the hold
+  a second time and re-raised, so the caller saw a `MatchError` instead of its
+  result and the executed work was never charged. Now: a hold already settled by
+  somebody else returns `{:ok, result}` with one `:settle` entry, and a hold
+  released by somebody else returns `{:ok, result}` and records the executed cost
+  as a debit referenced `settle_missed:<reference>`, idempotent on that reference
+  and permitted to take the balance negative, because pretending settlement was
+  not owed would hide a charge that really happened. A settle that fails for any
+  other reason is returned to the caller rather than swallowed.
 
 ### Notes
 

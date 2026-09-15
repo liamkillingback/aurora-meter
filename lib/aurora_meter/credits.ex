@@ -64,6 +64,7 @@ defmodule AuroraMeter.Credits do
   alias AuroraMeter.Config
   alias AuroraMeter.Credits.CurrencyMismatchError
   alias AuroraMeter.Credits.Ledger
+  alias AuroraMeter.Credits.Reconciliation
   alias AuroraMeter.Credits.Series
   alias AuroraMeter.Period
   alias AuroraMeter.Schema.CreditBalance
@@ -75,6 +76,27 @@ defmodule AuroraMeter.Credits do
 
   @typedoc "A ledger entry."
   @type txn :: CreditTransaction.t()
+
+  @typedoc """
+  What one `reconcile_holds/1` run examined and what it did.
+
+  `kept` counts every hold the run left exactly as it found it, whatever the
+  reason: the callback said `:keep`, it failed, it timed out, or none was
+  configured. The telemetry event carries the reason per hold.
+
+  `cursor` is `{inserted_at, id}` of the last hold examined when the page was
+  full, and `nil` when it was not, so a caller that pages knows whether more
+  work is waiting. The map may gain keys in a later release.
+  """
+  @type reconciliation_report :: %{
+          examined: non_neg_integer(),
+          kept: non_neg_integer(),
+          released: non_neg_integer(),
+          settled: non_neg_integer(),
+          already_closed: non_neg_integer(),
+          failed: non_neg_integer(),
+          cursor: {DateTime.t(), Ecto.UUID.t()} | nil
+        }
 
   @typedoc "A tenant's balance snapshot, in micro-dollars."
   @type balance :: %{
@@ -267,7 +289,17 @@ defmodule AuroraMeter.Credits do
 
   Returns `{:error, :not_found}` for an unknown reference and
   `{:error, :already_settled}` when the hold was settled or released before.
-  Options: `:metadata`.
+
+  Options:
+
+    * `:metadata` — stored on the settle entry.
+    * `:tenant` — assert the hold belongs to this tenant. A hold whose
+      `tenant_key` is anything else answers `{:error, :not_found}` and nothing
+      is written. Without it the reference alone identifies the hold, which is
+      what it has always done and is safe because `(kind, reference)` is unique
+      across the table. Pass it when the reference came from a listing rather
+      than from the caller that took the hold: it is the assertion that the row
+      being closed is the row that was read.
 
   ## Examples
 
@@ -280,11 +312,13 @@ defmodule AuroraMeter.Credits do
           {:ok, txn()} | {:error, :not_found | :already_settled}
   def settle(reference, actual_amount, opts \\ [])
       when is_binary(reference) and is_integer(actual_amount) and actual_amount >= 0 do
-    Ledger.settle(reference, actual_amount, opts)
+    Ledger.settle(reference, actual_amount, tenant_opt(opts))
   end
 
   @doc """
   Releases the hold under `reference` without charging anything.
+
+  Options: `:tenant`, exactly as `settle/3` documents it.
 
   ## Examples
 
@@ -293,8 +327,21 @@ defmodule AuroraMeter.Credits do
       #=> :release
 
   """
-  @spec release(String.t()) :: {:ok, txn()} | {:error, :not_found | :already_settled}
-  def release(reference) when is_binary(reference), do: Ledger.release(reference)
+  @spec release(String.t(), keyword()) :: {:ok, txn()} | {:error, :not_found | :already_settled}
+  def release(reference, opts \\ []) when is_binary(reference) and is_list(opts),
+    do: Ledger.release(reference, tenant_opt(opts))
+
+  # `:tenant` is the host's own term at the facade and a key at the ledger, the
+  # same translation every other function here makes. Absent stays absent: the
+  # ledger checks nothing when it is not told what to check, which is what keeps
+  # every existing caller's behaviour identical.
+  @spec tenant_opt(keyword()) :: keyword()
+  defp tenant_opt(opts) do
+    case Keyword.fetch(opts, :tenant) do
+      {:ok, tenant} -> Keyword.put(opts, :tenant_key, Tenant.to_key(tenant))
+      :error -> opts
+    end
+  end
 
   @doc """
   Debits `amount` micro-dollars from `tenant` in one step (no hold), with the
@@ -348,8 +395,22 @@ defmodule AuroraMeter.Credits do
   left pointing at it. Only the host can tell such a hold from one whose work
   is simply still running, so the ledger's part is to list them.
 
-  Options: `:older_than` (required, a `DateTime`), `:limit` (default 200) and
-  `:reference_prefix` to narrow to one kind of work.
+  `reconcile_holds/1` is the other half: this lists them, that asks the host
+  what to do about each one and applies the answer.
+
+  Options:
+
+    * `:older_than` — required, a `DateTime`. Build it from
+      `AuroraMeter.Clock.now/0`, which is the clock the hold's `inserted_at` was
+      stamped by.
+    * `:limit` — default 200.
+    * `:reference_prefix` — narrow to one kind of work; a prefix match.
+    * `:tenant` — only this tenant's holds.
+    * `:after` — a `{inserted_at, id}` pair from the last row of the previous
+      page. Results are ordered by `(inserted_at, id)`, so paging with this
+      returns every hold exactly once even when several were written in the same
+      microsecond. Ordering by `inserted_at` alone, which is what releases
+      before 0.6.0 did, could skip one and repeat another.
 
   ## Examples
 
@@ -360,7 +421,70 @@ defmodule AuroraMeter.Credits do
 
   """
   @spec pending_holds(keyword()) :: [txn()]
-  def pending_holds(opts), do: Ledger.pending_holds(opts)
+  def pending_holds(opts), do: Ledger.pending_holds(tenant_key_opt(opts))
+
+  @spec tenant_key_opt(keyword()) :: keyword()
+  defp tenant_key_opt(opts) do
+    case Keyword.fetch(opts, :tenant) do
+      {:ok, tenant} -> Keyword.put(opts, :tenant_key, Tenant.to_key(tenant))
+      :error -> opts
+    end
+  end
+
+  @doc """
+  Asks the configured `AuroraMeter.Credits.HoldReconciler` about every hold
+  older than `:older_than`, and applies what it says.
+
+  This is the recovery half of `pending_holds/1`. A hold is taken before the row
+  that remembers it exists, so a process killed in between leaves money reserved
+  with nothing left pointing at it; only the host can tell such a hold from one
+  whose work is still running, and this is how it says which.
+
+  Run it from a scheduler. It holds no state between holds, takes no global
+  lock, and two nodes running it at the same instant produce at most one
+  terminal transition per hold: the loser is told `:already_closed`.
+
+  **Nothing here releases money by itself.** With no `:credits_hold_reconciler`
+  configured every hold is kept. A callback that raises, hangs, exits or returns
+  something that is not a decision also keeps the hold. Age makes a hold a
+  candidate to be asked about, never a candidate to be released.
+
+  Options:
+
+    * `:older_than` — required, a `DateTime`. Omitting it raises `KeyError`.
+    * `:limit` — default 200, the most holds one run examines.
+    * `:tenant` — sweep one tenant.
+    * `:reference_prefix` — sweep one kind of work.
+    * `:after` — a cursor from a previous report, to page.
+    * `:reconciler` — use this instead of the configured one. A module, a
+      `{module, function}` pair or a one-argument function. Passing
+      `fn _ -> :keep end` is a dry run: it reports what a sweep would look at
+      and writes nothing.
+
+  The report is a map that may gain keys in a later release; match on the keys
+  you need rather than on the whole map. `:cursor` is `{inserted_at, id}` when
+  the page was full and `nil` when it was not, so a caller knows whether more
+  work is waiting. Every examined hold emits
+  `[:aurora_meter, :credits, :hold_reconciliation]`; see
+  [Telemetry](telemetry.md).
+
+  ## Examples
+
+      {:ok, report} =
+        AuroraMeter.Credits.reconcile_holds(
+          older_than: DateTime.add(AuroraMeter.Clock.now(), -3600, :second),
+          reconciler: fn
+            %{reference: "job:" <> id} -> MyApp.Jobs.decide(id)
+            _hold -> :keep
+          end
+        )
+
+      report.released
+      #=> 0
+
+  """
+  @spec reconcile_holds(keyword()) :: {:ok, reconciliation_report()} | {:error, term()}
+  def reconcile_holds(opts) when is_list(opts), do: Reconciliation.run(opts)
 
   @doc """
   Holds `estimate`, runs `fun`, and settles or releases depending on what it
@@ -394,27 +518,26 @@ defmodule AuroraMeter.Credits do
         when result: term()
   def with_credits(tenant, estimate, reference, fun) when is_function(fun, 0) do
     with {:ok, _hold} <- hold(tenant, estimate, reference) do
-      run_held(reference, fun)
+      run_held(Tenant.to_key(tenant), reference, fun)
     end
   end
 
-  @spec run_held(String.t(), (-> term())) :: {:ok, term()} | {:error, term()}
-  defp run_held(reference, fun) do
+  @spec run_held(String.t(), String.t(), (-> term())) :: {:ok, term()} | {:error, term()}
+  defp run_held(tenant_key, reference, fun) do
     case fun.() do
       {:ok, result, actual} when is_integer(actual) and actual >= 0 ->
-        {:ok, _txn} = settle(reference, actual)
-        {:ok, result}
+        settled(tenant_key, reference, actual, result)
 
       {:error, reason} ->
         # Do not assert on the release. A hold that was closed concurrently is
         # a benign outcome — the same one the `catch` below already treats as
         # such — and matching on {:ok, _} turned the caller's error into a
         # MatchError that buried it.
-        _ = release(reference)
+        _ = release(reference, tenant: tenant_key)
         {:error, reason}
 
       other ->
-        _ = release(reference)
+        _ = release(reference, tenant: tenant_key)
 
         raise ArgumentError,
               "with_credits/4 expects {:ok, result, actual_amount} or {:error, reason}, " <>
@@ -424,8 +547,74 @@ defmodule AuroraMeter.Credits do
     kind, reason ->
       # Best effort: the hold may already be closed if the error came from
       # settle/release themselves; the caller's error is the one to surface.
-      release(reference)
+      release(reference, tenant: tenant_key)
       :erlang.raise(kind, reason, __STACKTRACE__)
+  end
+
+  # The work ran. Charging for it is the only acceptable outcome, and until
+  # build unit 05b this line was `{:ok, _txn} = settle(reference, actual)`
+  # (open finding L4). Nothing could close a hold behind a running
+  # `with_credits/4` then, so the match never failed; `reconcile_holds/1` makes
+  # it possible, and the match would have raised a `MatchError` inside the
+  # caller's process, been caught below, released the hold a second time and
+  # re-raised. The caller would have seen a `MatchError` instead of its result
+  # and the executed cost would have been lost.
+  @spec settled(String.t(), String.t(), non_neg_integer(), term()) ::
+          {:ok, term()} | {:error, term()}
+  defp settled(tenant_key, reference, actual, result) do
+    case settle(reference, actual, tenant: tenant_key) do
+      {:ok, _txn} ->
+        {:ok, result}
+
+      {:error, reason} when reason in [:already_settled, :not_found] ->
+        closed_by_other(tenant_key, reference, actual, result)
+
+      # Not a concurrent close: a storage failure, say. The caller asked for the
+      # work to be charged and it was not, so it is told, rather than being
+      # handed an {:ok, result} whose cost silently vanished.
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @spec closed_by_other(String.t(), String.t(), non_neg_integer(), term()) :: {:ok, term()}
+  defp closed_by_other(tenant_key, reference, actual, result) do
+    hold = Ledger.fetch_hold(reference)
+    now = Clock.now()
+
+    case hold do
+      %CreditTransaction{status: :settled} ->
+        # Somebody already took the cost: a reconciler's {:settle, n} decision,
+        # or a duplicate delivery of this same job. One settle per hold is the
+        # contract, so this one stands and the caller gets its result.
+        Reconciliation.emit_external(hold, :settled_by_other, now)
+        {:ok, result}
+
+      _released_or_gone ->
+        # The reservation went back to the tenant and the work ran anyway. Never
+        # hide executed cost by pretending settlement was not owed: record it as
+        # its own debit, idempotent on its reference, and let the balance go
+        # negative if that is the truth.
+        if hold, do: Reconciliation.emit_external(hold, :released_by_other, now)
+        record_missed_settle(tenant_key, reference, actual)
+        {:ok, result}
+    end
+  end
+
+  @spec record_missed_settle(String.t(), String.t(), non_neg_integer()) :: :ok
+  defp record_missed_settle(_tenant_key, _reference, 0), do: :ok
+
+  defp record_missed_settle(tenant_key, reference, actual) do
+    _ =
+      Ledger.debit(
+        tenant_key,
+        actual,
+        "settle_missed:" <> reference,
+        %{"reason" => "hold_released_before_settle", "hold_reference" => reference},
+        allow_negative: true
+      )
+
+    :ok
   end
 
   @doc """

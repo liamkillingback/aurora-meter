@@ -689,6 +689,17 @@ The fifty-connection proof runs in two waves of twenty-five, because
 attempted against one wallet and the admitted count is asserted cumulatively; the
 arithmetic is in `docs/evidence/v1/phase-05/i11.md`.
 
+A hold's terminal transition is protected by application code and a row lock, and
+by nothing in the schema. `Ledger.pending_hold/3` locks the hold row `FOR UPDATE`
+and re-reads `status = 'pending'` inside that lock, which is what makes a settle
+and a release of one hold serialise. The `(kind, reference)` unique index refuses
+a second `:settle` row, but a `:settle` and a `:release` for one reference differ
+in `kind`, so the index permits both; there is no check constraint on
+`aurora_meter_credit_balances.held` either. Remove the lock or the status re-read
+and `held` goes negative with nothing to stop it. Both halves are asserted
+directly in `AuroraMeter.CreditsReconcileHoldsTest`, under "what stops a hold
+being closed twice".
+
 **Tests.**
 
 - `AuroraMeter.CreditsConcurrencyTest` / `test I11 twenty concurrent $0.10 holds against $1.00 admit exactly ten`
@@ -696,7 +707,12 @@ arithmetic is in `docs/evidence/v1/phase-05/i11.md`.
 - `AuroraMeter.CreditsConcurrencyTest` / `test I11 fifty independent connections holding against one hot wallet admit exactly the funded count`
 - `AuroraMeter.CreditsTest` / `test hold/4, settle/3, release/1 a hold is refused when the available balance does not cover it`
 - `AuroraMeter.CreditsTest` / `test with_credits/4 releases when the function raises, throws or exits, then propagates`
-- PLANNED (05b): `AuroraMeter.CreditsConcurrencyTest` / `test I11 a callback racing the reconciler produces one terminal transition`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I11 a reconciler release and a caller settle produce exactly one terminal transition`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I11 a with_credits caller whose hold the reconciler released records the executed cost`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance`
+- `AuroraMeter.CreditsTest` / `test with_credits/4 I11 returns its result when the hold was settled by someone else`
+- `AuroraMeter.CreditsTest` / `test with_credits/4 I11 records the executed cost when the hold was released by someone else`
 
 **Evidence.** `docs/evidence/v1/phase-05/i11.md`
 
@@ -730,6 +746,7 @@ after; 06a's lot model makes the released value expired rather than spendable.
 - `AuroraMeter.CreditsTest` / `test promotional credit I12 a grant expires only its own remainder`
 - `AuroraMeter.CreditsTest` / `test promotional credit I12 a new expiring grant cannot absorb spending that predates it`
 - `AuroraMeter.CreditsTest` / `test promotional credit I12 a release after the grant expired returns spendable credit (L1, fixed in 06a)`
+- `AuroraMeter.CreditsReconcileHoldsTest` / `test recovery beside expiry I12 a reconciler release on an expired grant returns spendable credit (L1, fixed in 06a)`
 - `AuroraMeter.CreditsTest` / `test promotional credit expire_due/1 expires only what is left, once, and never below zero`
 - `AuroraMeter.CreditsTest` / `test promotional credit a promotional grant landing on a negative balance first repays the debt`
 - PLANNED (06a): `AuroraMeter.CreditsLotTest` / `test I12 overlapping promotions each expire only their own remainder`
@@ -755,11 +772,24 @@ lease and checkpoint half of this invariant lives in Pro, whose workers run unde
 Oban, and in phase 05. Nothing here promises that two schedulers cannot run
 concurrently; it promises that the effect is the same if they do.
 
+`AuroraMeter.Credits.reconcile_holds/1` has no lease on a hold on purpose. A lease
+would let a crashed reconciler leave a hold nothing could reconcile until a second
+recovery mechanism cleared it, which trades a real problem for a worse one; and a
+lease is a duration, which on this hardware the shared clock cannot be trusted to
+order at a sub-second scale (`open-findings.md` X100). Mutual exclusion comes from
+the hold row's own `FOR UPDATE` and the status re-read inside it, so two nodes
+sweeping at the same instant produce one terminal transition and the loser is told
+`:already_closed`. A run killed between the host callback and the decision writes
+nothing and the next run asks again.
+
 **Tests.**
 
 - `AuroraMeter.CreditsTest` / `test promotional credit expire_due/1 expires only what is left, once, and never below zero`
 - `AuroraMeter.MeteringTest` / `test flush persists ETS values and repeated flushes are idempotent`
 - `AuroraMeter.CreditsTest` / `test grant/3 credits the balance and is idempotent per reference`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I16 two reconcilers on two connections release one hold once`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I16 killing the reconciler between the callback and the application leaves the hold pending`
+- `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I16 killing the reconciler after the application commits leaves exactly one terminal transition`
 - PLANNED (05c): `AuroraMeter.SchedulingTest` / `test I16 duplicate runs from two schedulers produce one effect`
 - PLANNED (05c): `AuroraMeter.SchedulingTest` / `test I16 a resumed operation restarts at its checkpoint after a kill`
 

@@ -130,6 +130,23 @@ defmodule AuroraMeter.Config do
               doc:
                 "Called with `%{tenant_key, available, threshold}` after a low-balance " <>
                   "crossing commits (a place to email or to auto-recharge)."
+            ],
+            credits_hold_reconciler: [
+              type: {:or, [:atom, {:fun, 1}, {:tuple, [:atom, :atom]}, nil]},
+              default: nil,
+              doc:
+                "How `AuroraMeter.Credits.reconcile_holds/1` decides what to do with a stale " <>
+                  "hold: a module implementing `AuroraMeter.Credits.HoldReconciler`, a " <>
+                  "`{module, function}` pair of arity 1, a one-argument function, or `nil`. " <>
+                  "`nil` is the default and means every hold is kept, so a host that upgrades " <>
+                  "and configures nothing cannot have money released on its behalf."
+            ],
+            credits_hold_reconciler_timeout: [
+              type: :pos_integer,
+              default: 5_000,
+              doc:
+                "Milliseconds one `decide/1` call may take before the reconciler kills it and " <>
+                  "keeps the hold."
             ]
           )
 
@@ -202,6 +219,7 @@ defmodule AuroraMeter.Config do
     |> Schema.validate!(env, @schema, mode)
     |> check_modules!()
     |> check_outbox!()
+    |> check_hold_reconciler!()
     |> check_plans!(mode)
     |> check_deprecations!()
     |> check_sources!()
@@ -425,6 +443,34 @@ defmodule AuroraMeter.Config do
   @spec credits_low_balance_handler() :: (map() -> term()) | nil
   def credits_low_balance_handler, do: get(:credits_low_balance_handler)
 
+  @doc """
+  How `AuroraMeter.Credits.reconcile_holds/1` decides about a stale hold.
+
+  `nil`, the default, means every hold is kept. That is the value a host that
+  has never heard of this key has, and it is why upgrading cannot release money.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.credits_hold_reconciler()
+      nil
+
+  """
+  @spec credits_hold_reconciler() ::
+          module() | {module(), atom()} | (map() -> term()) | nil
+  def credits_hold_reconciler, do: get(:credits_hold_reconciler)
+
+  @doc """
+  Milliseconds one `c:AuroraMeter.Credits.HoldReconciler.decide/1` call may take.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.credits_hold_reconciler_timeout()
+      5000
+
+  """
+  @spec credits_hold_reconciler_timeout() :: pos_integer()
+  def credits_hold_reconciler_timeout, do: get(:credits_hold_reconciler_timeout)
+
   @doc false
   @spec schema() :: NimbleOptions.t()
   def schema, do: @schema
@@ -467,6 +513,45 @@ defmodule AuroraMeter.Config do
           {:behaviour, AuroraMeter.Events.Outbox}
         )
 
+        opts
+    end
+  end
+
+  # `credits_hold_reconciler` is four shapes in one key, so it cannot join
+  # @module_contracts either: only two of the four are modules. Both of those
+  # are checked here, at boot, because the alternative is discovering a typo at
+  # the moment a stale hold is being decided, which is the worst moment this
+  # library has.
+  #
+  # A function value is not checked beyond its arity, which NimbleOptions has
+  # already done: there is nothing else to know about it before it is called.
+  @spec check_hold_reconciler!(keyword()) :: keyword()
+  defp check_hold_reconciler!(opts) do
+    case opts[:credits_hold_reconciler] do
+      nil ->
+        opts
+
+      {module, function} when is_atom(module) and is_atom(function) ->
+        Schema.ensure_exports!(
+          :aurora_meter,
+          :credits_hold_reconciler,
+          module,
+          {:exports, [{function, 1}], "a module exporting #{function}/1"}
+        )
+
+        opts
+
+      module when is_atom(module) ->
+        Schema.ensure_exports!(
+          :aurora_meter,
+          :credits_hold_reconciler,
+          module,
+          {:behaviour, AuroraMeter.Credits.HoldReconciler}
+        )
+
+        opts
+
+      _function ->
         opts
     end
   end

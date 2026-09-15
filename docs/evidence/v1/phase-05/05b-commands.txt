@@ -1,0 +1,171 @@
+05b: hold recovery callback and race safety
+Every command, its exit code, the UTC time it started, the toolchain and the log.
+
+TOOLCHAIN
+  Elixir       1.20.1 (compiled with Erlang/OTP 29)
+  Erlang/OTP   29 [erts-17.0.1] [64-bit] [smp:24:24] [jit:ns]
+  PostgreSQL   16.13 (Debian 16.13-1.pgdg13+1), container aurora-meter-pro-testdb, port 5490
+  Host         WSL Ubuntu-24.04
+  Core repo    product-workspaces/aurora_meter, branch aurorameter-v1
+  Core HEAD    668818bd8538f50b94ed93b13c6a2fe0227b7bb5 (unchanged: nothing was committed)
+  Pro repo     product-workspaces/aurora_meter_pro, branch aurorameter-v1
+  Lane         every Mix command through tmp/v1/mixlane.sh, which flocks per package _build (X18)
+  Logs         tmp/v1/05b-logs/ in the storefront working tree; the two named below are copied here
+
+SEEDS
+  The concurrency file was run under 0 1 7 13 42 101 1009 2026 31337 65535.
+  Everything else ran under ExUnit's own random seed, which each log records.
+
+
+A. BEFORE ANYTHING WAS WRITTEN (open-findings.md X147)
+
+A1  2026-09-15T05:18Z  exit 0
+    git log --oneline -12 -- lib/aurora_meter/credits.ex
+    git log --oneline -12 -- lib/aurora_meter/credits/ledger.ex
+    Last commit to either: 1434084 (02c, the clock seam). No unit had fixed L4.
+
+A2  2026-09-15T05:19Z  exit 0
+    sha256sum lib/aurora_meter/credits.ex
+    git show HEAD:lib/aurora_meter/credits.ex | sha256sum
+    Both: 4d0a64c211e88fe5db016ebc2722b3cdba0871e649d48c9fe9b70bed5090030d
+
+
+B. THE L4 BEFORE-RUN, AGAINST THE UNMODIFIED credits.ex
+
+B1  2026-09-15T05:19:24Z  exit 2   log: 05b-l4-before.log (tmp/v1/05b-logs/)
+    bash tmp/v1/mixlane.sh core env MIX_ENV=test \
+      mix test test/aurora_meter/credits_test.exs --trace --only describe:"with_credits/4"
+    Result: 5/9 passed, 57 excluded. Failed: 4 tests.
+    All four: ** (MatchError) no match of right hand side value: {:error, :already_settled}
+              at lib/aurora_meter/credits.ex:405: AuroraMeter.Credits.run_held/2
+    See 05b-l4-before-after.md.
+
+
+C. THE CLOCK PROBE (the finding in 05b-hold-recovery.md)
+
+C1  2026-09-15T05:24:26Z  exit 0
+    A throwaway test/aurora_meter/probe_test.exs, run and then deleted.
+    With AuroraMeter.Test.with_clock/2 frozen at ~U[2026-03-01 00:00:00.000000Z]:
+      Clock.now()            ~U[2026-03-01 00:00:00.000000Z]
+      hold row inserted_at   ~U[2026-09-15 05:24:27.875710Z]
+      days apart             198
+    And: an explicit inserted_at in an Ecto.Changeset.change/2 does survive the
+    insert, which is how the two timestamp-subject tests write their rows.
+
+
+D. THE L4 AFTER-RUN
+
+D1  2026-09-15T05:22:13Z  exit 0
+    bash tmp/v1/mixlane.sh core env MIX_ENV=test \
+      mix test test/aurora_meter/credits_test.exs --trace --only describe:"with_credits/4"
+    Result: 9 passed, 57 excluded.
+
+
+E. THE UNIT'S OWN FILES
+
+E1  2026-09-15T05:28:36Z  exit 0   log: 05b-reconcile.log
+    mix test test/aurora_meter/credits_reconcile_holds_test.exs --trace
+    Result: 29 passed.   (26 at the first green, 29 after the X125 controls and
+                          the I12 test were added)
+
+E2  2026-09-15T05:40:47Z  exit 0
+    mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --trace
+    Result: 7 passed.
+
+E3  2026-09-15T05:28:40Z  exit 0   log: 05b-credits.log
+    mix test test/aurora_meter/credits_test.exs test/aurora_meter/credits_concurrency_test.exs --trace
+    Result: 71 passed (31 doctests, 2 properties, 38 tests).
+    credits_concurrency_test.exs was not edited.
+
+E4  2026-09-15T05:40:56Z  exit 0
+    mix test test/aurora_meter/correctness_index_test.exs \
+             test/aurora_meter/api_inventory_test.exs \
+             test/aurora_meter/docs_claims_test.exs \
+             test/aurora_meter/evidence_writes_test.exs
+    Result: 43 passed.
+
+
+F. TEN SEEDS
+
+F1  2026-09-15T05:40:59Z to 05:41:15Z  exit 0   log: 05b-seeds.log (copied here)
+    bash tmp/v1/05b-seeds.sh
+    Seeds 0 1 7 13 42 101 1009 2026 31337 65535, 7 passed on every one.
+    AURORA_RACE_REPORT=1 printed the winner distribution for the twelve-pair race:
+      every seed: %{settled_by_caller: 12, released_by_reconciler: 0,
+                    settle_losers: 0, reconciler_already_closed: 12}
+    Reported, not hidden: see 05b-race-proofs.md, proof 1.
+
+
+G. THE CORE GATE
+
+G1  2026-09-15T05:28:34Z  exit 1   log: 05b-format.log
+    mix format --check-formatted     (two new test files were unformatted)
+
+G2  2026-09-15T05:32:12Z  exit 0
+    mix format <the thirteen files this unit touched, named explicitly>
+    Never a project-wide run.
+
+G3  2026-09-15T05:28:35Z  exit 0   log: 05b-compile.log
+    mix compile --warnings-as-errors --force
+
+G4  2026-09-15T05:28:42Z  exit 0   log: 05b-suite.log
+    mix test
+    Result: 1251 passed (49 doctests, 12 properties, 1190 tests), 3 excluded.
+    Baseline before this unit: 1204.
+
+G5  2026-09-15T05:48:49Z to 05:52:20Z  exit 0   log: 05b-core-check.log (copied here)
+    The committed log is this run, over the complete tree including the evidence
+    directory. An identical earlier run at 05:44:11Z was also exit 0.
+    bash tmp/v1/mixlane.sh core mix check      (X49, X156: mix check, not mix test,
+                                                and never a bare mix dialyzer)
+    format --check-formatted   ok
+    compile --warnings-as-errors --force   ok
+    credo --strict             2291 mods/funs, found no issues
+    dialyzer                   Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+    test                       Result: 1252 passed (49 doctests, 12 properties,
+                                       1191 tests), 3 excluded
+    docs --warnings-as-errors  ok
+    (1252 rather than 1251: the final run includes the seventh concurrency test,
+     added after G4 to cover the direction the ten-seed run showed was never
+     exercised.)
+
+G6  2026-09-15T05:44Z  exit 0
+    git status --short docs/evidence/
+    Empty. X135 did not recur: the suite rewrote no committed evidence file.
+    That was fixed in 668818b / e1a17a8, which gated the writers and added
+    test/aurora_meter/evidence_writes_test.exs.
+
+
+H. PRO
+
+H1  2026-09-15T05:41:20Z  exit 0   log: 05b-pro-check.log (tmp/v1/05b-logs/)
+    bash tmp/v1/05b-pro.sh
+    Deleted product-workspaces/aurora_meter_pro/priv/plts/*.plt and *.plt.hash
+    first (open-findings.md X114: a path dependency's beams changing does not
+    invalidate the consumer's PLT, and core's lib/ changed). The directory held
+    dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt (7,814,615 bytes) and its
+    hash; both were removed and rebuilt by the run.
+    bash tmp/v1/mixlane.sh pro mix check
+    Result: 863 passed (56 doctests, 807 tests). Pro was not edited.
+
+
+I. HYGIENE
+
+I1  Line endings (X157): every file this unit created or modified was counted
+    with `tr -cd '\r' | wc -c` (tmp/v1/05b-crlf.sh). Every source, test, doc and
+    evidence file: CR=0. The one exception is 05b-seeds.log, which carries 70 CRs
+    because it is captured `mix test --trace` output and ExUnit redraws its
+    progress line; those are inside lines, not line terminators, and
+    `mix format --check-formatted` never reads a .log.
+I2  Dashes: no em or en dash was added to any .ex file's code or comments. Four
+    places add one to prose, and all four match the file's existing structural
+    glyph: the option bullets in AuroraMeter.Credits' moduledoc (every existing
+    option bullet in that file uses it) and one row of docs/telemetry.md's event
+    table (every row uses it).
+I3  No `invariant:` tag was added (X70). The only default ExUnit exclusion is
+    still `:headless` (X133); test/test_helper.exs is untouched.
+I4  No evidence writer was added to the test suite, so
+    test/aurora_meter/evidence_writes_test.exs's allow-list is unchanged (X135,
+    X149). The one thing a test prints is the race distribution in the
+    concurrency file, gated on AURORA_RACE_REPORT, which writes no file.
+I5  Nothing was committed, pushed, tagged, published or deployed.

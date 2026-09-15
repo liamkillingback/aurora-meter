@@ -117,12 +117,13 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Credits.grant/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn()} \| {:error, Ecto.Changeset.t()}` | stable | 0.4.0 | Idempotent on `reference:`. Options `:reference`, `:category` (`:paid`, `:promotional`, `:adjustment`), `:expires_at`, `:metadata`. The error shape changes in 1.0: see section 4. |
 | `AuroraMeter.Credits.grant_with_status/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn(), :new \| :duplicate} \| {:error, Ecto.Changeset.t()}` | stable | 0.4.0 | Reports new or duplicate from inside the balance row's lock. |
 | `AuroraMeter.Credits.hold/4` | `(tenant, pos_integer(), String.t(), keyword()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty option list. |
-| `AuroraMeter.Credits.settle/3` | `(String.t(), non_neg_integer(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Keyed by the hold's reference, not by tenant. Arity 2 exists through defaults. |
-| `AuroraMeter.Credits.release/1` | `(String.t()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | |
+| `AuroraMeter.Credits.settle/3` | `(String.t(), non_neg_integer(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Keyed by the hold's reference, not by tenant. Arity 2 exists through defaults. Option `:tenant` from 0.6.0 asserts the hold belongs to that tenant; without it the behaviour is exactly as before. |
+| `AuroraMeter.Credits.release/2` | `(String.t(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Arity 1 exists through defaults and is unchanged. Option `:tenant` from 0.6.0 asserts the hold belongs to that tenant and answers `{:error, :not_found}` when it does not. |
 | `AuroraMeter.Credits.debit/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty metadata map. |
 | `AuroraMeter.Credits.reverse/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :duplicate_reference}` | stable | 0.4.0 | Never refused for want of balance: the balance may go negative, which is the honest record of a debt. |
 | `AuroraMeter.Credits.with_credits/4` | `(tenant, pos_integer(), String.t(), (-> {:ok, result, non_neg_integer()} \| {:error, term()})) :: {:ok, result} \| {:error, :insufficient_credits \| :duplicate_reference \| term()}` | stable | 0.4.0 | Holds, runs, then settles or releases, including on a raise. |
-| `AuroraMeter.Credits.pending_holds/1` | `(keyword()) :: [txn()]` | stable | 0.4.0 | Options `:older_than`, `:reference_prefix`, `:limit`. Oldest first. |
+| `AuroraMeter.Credits.pending_holds/1` | `(keyword()) :: [txn()]` | stable | 0.4.0 | Options `:older_than`, `:reference_prefix`, `:limit`, and from 0.6.0 `:tenant` and `:after`. Ordered by `(inserted_at, id)` from 0.6.0, oldest first; before that by `inserted_at` alone, which could skip a same-microsecond row when paging. |
+| `AuroraMeter.Credits.reconcile_holds/1` | `(keyword()) :: {:ok, report()} \| {:error, term()}` | stable | 0.6.0 | Asks `:credits_hold_reconciler` about every hold older than `:older_than` and applies the answer. Options `:older_than` (required), `:limit`, `:tenant`, `:reference_prefix`, `:after`, `:reconciler`. Keeps every hold when nothing is configured. |
 | `AuroraMeter.Credits.history/2` | `(tenant, keyword()) :: [txn()]` | stable | 0.4.0 | Options `:limit` (50), `:kinds`. Holds and releases are hidden unless asked for. |
 | `AuroraMeter.Credits.spend_history/2` | `(tenant, keyword()) :: [money_point()]` | stable | 0.4.0 | Options `:days` (30) or `:from`/`:to`, `:bucket` (`:day` or `:month`), `:kinds`. Zero-filled, oldest first. |
 | `AuroraMeter.Credits.spend_total/2` | `(tenant, keyword()) :: money_total()` | stable | 0.4.0 | `%{spent, granted, net, from, to}`. |
@@ -261,6 +262,8 @@ in section 2.
 | `AuroraMeter.Config.credits_overdraft_tolerance/0` | `() :: non_neg_integer()` | stable | 0.4.0 | |
 | `AuroraMeter.Config.credits_low_balance_threshold/0` | `() :: integer() \| nil` | stable | 0.4.0 | |
 | `AuroraMeter.Config.credits_low_balance_handler/0` | `() :: (map() -> term()) \| nil` | stable | 0.4.0 | |
+| `AuroraMeter.Config.credits_hold_reconciler/0` | `() :: module() \| {module(), atom()} \| (map() -> term()) \| nil` | stable | 0.6.0 | `nil` by default, which keeps every hold. |
+| `AuroraMeter.Config.credits_hold_reconciler_timeout/0` | `() :: pos_integer()` | stable | 0.6.0 | Milliseconds. |
 
 ### 1.11 Billing seam
 
@@ -314,6 +317,7 @@ them is a breaking change for implementers and does not happen during 1.x.
 | `AuroraMeter.Period` | `current/2` required, `containing/2` optional | stable | 0.1.0 | `containing/2` is optional from 0.5.0. |
 | `AuroraMeter.Clock` | `now/0`, `today/0`, `monotonic_ms/0`, `db_now/0` | stable | 0.5.0 | Four readings, all required. |
 | `AuroraMeter.Storage` | `upsert_counters/1`, `add_counters/1`, `upsert_history/1`, `add_history/1`, `flush_batch/3`, `load_counter/3`, `load_history/3`, `load_history_range/4`, `get_subscription/1`, `put_subscription/1`, `insert_events/1`, `stream_counters/1`, `capabilities/0`, `record_events/2`, `load_event/2`, `load_event_total/3`, `stream_events/2`, `write_projection_totals/2`, `activate_projection/1` | stable | 0.1.0 | 19 callbacks, none optional. The seven durable ones arrived in 1.0.0; an adapter that cannot do them declares nothing from `capabilities/0` and the dispatcher refuses the call on its behalf. See [Storage adapters](storage-adapters.md). |
+| `AuroraMeter.Credits.HoldReconciler` | `decide/1` | stable | 0.6.0 | What the host says about a hold that is still open long after its work should have finished. It may be called more than once for one hold, and anything that is not a decision means `:keep`. |
 | `AuroraMeter.Events.Outbox` | `enqueue/2` | stable | 1.0.0 | Called inside the transaction that records an event, so an export intent commits with the fact. Core ships no delivery; Aurora Meter Pro implements it. |
 | `AuroraMeter.Billing.Provider` | `create_checkout_session/2`, `billing_portal_url/2`, `sync_subscription/1`, `report_usage/1` | stable | 0.1.0 | Aurora Meter Pro implements it for Stripe. |
 
@@ -444,6 +448,8 @@ never treated as Aurora Meter keys.
 | `:credits_overdraft_tolerance` | non-negative integer, `0` | stable | 0.4.0 | Micro-dollars. |
 | `:credits_low_balance_threshold` | integer or `nil`, `nil` | stable | 0.4.0 | Micro-dollars. A balance row's own threshold overrides it. |
 | `:credits_low_balance_handler` | 1-arity function or `nil`, `nil` | stable | 0.4.0 | Called with `%{tenant_key, available, threshold}` after the crossing commits. |
+| `:credits_hold_reconciler` | module, `{module, function}`, 1-arity function or `nil`; `nil` | stable | 0.6.0 | How `AuroraMeter.Credits.reconcile_holds/1` decides about a stale hold. `nil` keeps every hold, so upgrading and configuring nothing cannot release money. |
+| `:credits_hold_reconciler_timeout` | positive integer, `5_000` | stable | 0.6.0 | Milliseconds one `decide/1` call may take before it is killed and the hold kept. |
 
 ## 6. Telemetry events
 
@@ -463,6 +469,7 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :cluster, :apply]` | `count` | `kind`, `origin` | stable | 0.3.0 | `[:aurora_meter, :cluster, :apply]` |
 | `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
+| `[:aurora_meter, :credits, :hold_reconciliation]` | `amount`, `age_seconds`, `duration` | `tenant_key`, `reference`, `decision`, `outcome` | stable | 0.6.0 | `[:aurora_meter, :credits, :hold_reconciliation]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 | `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |
@@ -637,6 +644,7 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Counter` | The ETS row layout and the reserve or commit protocol. Hosts never touch ETS rows. |
 | `AuroraMeter.Credits.Ledger` | The ledger implementation behind `AuroraMeter.Credits`. |
 | `AuroraMeter.Credits.Promotions` | Promotional-remainder arithmetic for expiry. |
+| `AuroraMeter.Credits.Reconciliation` | The run loop behind `AuroraMeter.Credits.reconcile_holds/1`: listing, the host callback and its timeout, applying the decision, telemetry. |
 | `AuroraMeter.Credits.Series` | The money series queries behind `spend_history/2` and `spend_total/2`. |
 | `AuroraMeter.Events.Backfill` | The implementation behind `mix aurora_meter.events.backfill`. Run the task. |
 | `AuroraMeter.Events.Canonical` | The canonical payload encoding behind `payload_hash` (ADR 0009), and the validation `AuroraMeter.record/4` runs before any I/O. |

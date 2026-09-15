@@ -20,6 +20,23 @@ defmodule AuroraMeter.SupervisorTest do
     assert is_pid(Process.whereis(AuroraMeter.Broadcaster))
   end
 
+  test "starts a task supervisor for host callbacks, which supervises nothing at rest" do
+    # `AuroraMeter.Credits.reconcile_holds/1` runs the host's `decide/1` under
+    # this supervisor with `async_nolink`, so a callback that raises cannot take
+    # the reconciler with it and one that hangs can be killed.
+    pid = Process.whereis(AuroraMeter.TaskSupervisor)
+    assert is_pid(pid)
+    assert Task.Supervisor.children(pid) == []
+
+    # And a task under it that raises leaves the caller alive. `async_nolink`,
+    # because `Task.async/1` links and the raise would take this process down.
+    capture_log(fn ->
+      task = Task.Supervisor.async_nolink(AuroraMeter.TaskSupervisor, fn -> raise "boom" end)
+      assert {:exit, {%RuntimeError{message: "boom"}, _stacktrace}} = Task.yield(task, 5_000)
+      assert Process.alive?(self())
+    end)
+  end
+
   test "BootChecks is the last child and leaves no process behind" do
     {:ok, {_flags, specs}} = AuroraMeter.Supervisor.init([])
 

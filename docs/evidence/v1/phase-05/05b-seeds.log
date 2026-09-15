@@ -1,0 +1,211 @@
+== seed 0  utc=2026-09-15T05:40:59Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 0 --trace
+Running ExUnit with seed: 0, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (161.4ms) [L#66]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (22.7ms) [L#161]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (28.6ms) [L#207]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (19.3ms) [L#262]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (235.7ms) [L#291]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (17.7ms) [L#325]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (19.3ms) [L#372]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:40:59Z finished=2026-09-15T05:41:01Z
+== seed 0 exit=0 ==
+== seed 1  utc=2026-09-15T05:41:01Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 1 --trace
+Running ExUnit with seed: 1, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (55.6ms) [L#325]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (28.3ms) [L#207]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (22.9ms) [L#372]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (21.1ms) [L#262]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (235.6ms) [L#291]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (20.4ms) [L#161]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (120.0ms) [L#66]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:01Z finished=2026-09-15T05:41:02Z
+== seed 1 exit=0 ==
+== seed 7  utc=2026-09-15T05:41:02Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 7 --trace
+Running ExUnit with seed: 7, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (62.0ms) [L#262]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (25.4ms) [L#372]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (30.1ms) [L#207]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (23.2ms) [L#161]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (236.9ms) [L#291]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (123.0ms) [L#66]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (18.8ms) [L#325]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:02Z finished=2026-09-15T05:41:04Z
+== seed 7 exit=0 ==
+== seed 13  utc=2026-09-15T05:41:04Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 13 --trace
+Running ExUnit with seed: 13, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (168.4ms) [L#66]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (237.9ms) [L#291]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (19.7ms) [L#262]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (19.1ms) [L#161]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (19.7ms) [L#325]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (26.1ms) [L#207]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (20.0ms) [L#372]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:04Z finished=2026-09-15T05:41:05Z
+== seed 13 exit=0 ==
+== seed 42  utc=2026-09-15T05:41:05Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 42 --trace
+Running ExUnit with seed: 42, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (62.0ms) [L#372]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (131.2ms) [L#66]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (246.7ms) [L#291]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (18.6ms) [L#161]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (18.5ms) [L#262]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (18.3ms) [L#325]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (26.0ms) [L#207]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:05Z finished=2026-09-15T05:41:07Z
+== seed 42 exit=0 ==
+== seed 101  utc=2026-09-15T05:41:07Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 101 --trace
+Running ExUnit with seed: 101, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (157.2ms) [L#66]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (238.4ms) [L#291]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (25.2ms) [L#262]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (26.1ms) [L#207]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (23.2ms) [L#372]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (19.1ms) [L#161]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (17.5ms) [L#325]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:07Z finished=2026-09-15T05:41:09Z
+== seed 101 exit=0 ==
+== seed 1009  utc=2026-09-15T05:41:09Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 1009 --trace
+Running ExUnit with seed: 1009, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (60.2ms) [L#262]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (31.3ms) [L#207]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (242.9ms) [L#291]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (22.0ms) [L#372]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (121.1ms) [L#66]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (17.2ms) [L#325]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (18.2ms) [L#161]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:09Z finished=2026-09-15T05:41:10Z
+== seed 1009 exit=0 ==
+== seed 2026  utc=2026-09-15T05:41:10Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 2026 --trace
+Running ExUnit with seed: 2026, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (286.2ms) [L#291]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (22.2ms) [L#262]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (19.5ms) [L#325]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (121.4ms) [L#66]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (28.2ms) [L#207]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (20.0ms) [L#161]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (19.8ms) [L#372]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:10Z finished=2026-09-15T05:41:12Z
+== seed 2026 exit=0 ==
+== seed 31337  utc=2026-09-15T05:41:12Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 31337 --trace
+Running ExUnit with seed: 31337, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (55.0ms) [L#161]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (24.2ms) [L#325]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (122.9ms) [L#66]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (234.7ms) [L#291]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (21.8ms) [L#262]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (17.4ms) [L#372]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (26.7ms) [L#207]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:12Z finished=2026-09-15T05:41:13Z
+== seed 31337 exit=0 ==
+== seed 65535  utc=2026-09-15T05:41:13Z ==
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test AURORA_RACE_REPORT=1 mix test test/aurora_meter/credits_reconcile_concurrency_test.exs --seed 65535 --trace
+Running ExUnit with seed: 65535, max_cases: 1
+Excluding tags: [:headless]
+
+
+AuroraMeter.CreditsReconcileConcurrencyTest [test/aurora_meter/credits_reconcile_concurrency_test.exs]
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition [L#66][05b race] %{settled_by_caller: 12, released_by_reconciler: 0, settle_losers: 0, reconciler_already_closed: 12}
+  * test I11 a reconciler release and a caller settle produce exactly one terminal transition (161.9ms) [L#66]
+  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance [L#291]  * test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance (244.6ms) [L#291]
+  * test I16 two reconcilers on two connections release one hold once [L#262]  * test I16 two reconcilers on two connections release one hold once (21.2ms) [L#262]
+  * test I16 killing the reconciler between the callback and the application leaves the hold pending [L#325]  * test I16 killing the reconciler between the callback and the application leaves the hold pending (19.2ms) [L#325]
+  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition [L#372]  * test I16 killing the reconciler after the application commits leaves exactly one terminal transition (22.2ms) [L#372]
+  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock [L#161]  * test I11 a reconciler decision applied after a concurrent settle is refused by the hold row lock (21.8ms) [L#161]
+  * test I11 a with_credits caller whose hold the reconciler released records the executed cost [L#207]  * test I11 a with_credits caller whose hold the reconciler released records the executed cost (25.6ms) [L#207]
+
+Finished in 0.7 seconds (0.00s async, 0.7s sync)
+
+Result: 7 passed
+[mixlane] core exit=0 started=2026-09-15T05:41:13Z finished=2026-09-15T05:41:15Z
+== seed 65535 exit=0 ==
+all seeds exit=0
