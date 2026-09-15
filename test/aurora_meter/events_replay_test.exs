@@ -859,24 +859,24 @@ defmodule AuroraMeter.EventsReplayTest do
     if System.get_env("AURORA_EVIDENCE") != "1" do
       :skipped
     else
-    File.mkdir_p!("docs/evidence/v1/phase-03")
+      File.mkdir_p!("docs/evidence/v1/phase-03")
 
-    File.write!("docs/evidence/v1/phase-03/03d-activation-atomicity.txt", """
-    L-03d-3: AuroraMeter.Events.total/3, read in a tight loop on an independent
-    non-sandbox connection, across one activation.
+      File.write!("docs/evidence/v1/phase-03/03d-activation-atomicity.txt", """
+      L-03d-3: AuroraMeter.Events.total/3, read in a tight loop on an independent
+      non-sandbox connection, across one activation.
 
-    Test: AuroraMeter.EventsReplayTest / test activation L-03d-3 a reader across
-    an activation sees exactly two values and never a partial sum
+      Test: AuroraMeter.EventsReplayTest / test activation L-03d-3 a reader across
+      an activation sees exactly two values and never a partial sum
 
-    old active generation (0) total: 1005  (5 recorded, 1000 planted on the row)
-    new active generation (1) total: 5     (the rebuild, which is the events)
+      old active generation (0) total: 1005  (5 recorded, 1000 planted on the row)
+      new active generation (1) total: 5     (the rebuild, which is the events)
 
-    reads: #{length(observed)}
-    distinct values, in the order first seen: #{inspect(distinct)}
+      reads: #{length(observed)}
+      distinct values, in the order first seen: #{inspect(distinct)}
 
-    Every read is one of the two. A partial sum is any other number, and the
-    assertion `distinct -- [1005, 5] == []` is what refuses one.
-    """)
+      Every read is one of the two. A partial sum is any other number, and the
+      assertion `distinct -- [1005, 5] == []` is what refuses one.
+      """)
     end
   end
 
