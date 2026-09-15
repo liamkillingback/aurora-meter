@@ -65,7 +65,10 @@ if Code.ensure_loaded?(Oban) do
     Aurora Meter 1.0 adds after this module: until those land, the worker exists
     (so a crontab written by hand cannot name a module that is missing), it is
     absent from `cron_entries/1`, and running it by hand cancels the job with
-    `{:cancel, :not_implemented}` rather than failing it repeatedly.
+    `{:cancel, :not_implemented}` rather than failing it repeatedly. One of the
+    two, `AuroraMeter.Oban.RecurringGrants`, has since had its operation land,
+    and it began appearing in `cron_entries/1` with no edit to the worker at
+    all, which is what the check is for.
     """
 
     alias AuroraMeter.Oban.ConfigError
@@ -141,6 +144,7 @@ if Code.ensure_loaded?(Oban) do
         [
           {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
           {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
+          {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
           {"40 3 * * *", AuroraMeter.Oban.Retention}
         ]
 
@@ -148,7 +152,11 @@ if Code.ensure_loaded?(Oban) do
         [{"*/30 * * * *", AuroraMeter.Oban.CreditExpiry}]
 
         iex> AuroraMeter.Oban.cron_entries(
-        ...>   exclude: [AuroraMeter.Oban.HoldReconciliation, AuroraMeter.Oban.Retention],
+        ...>   exclude: [
+        ...>     AuroraMeter.Oban.HoldReconciliation,
+        ...>     AuroraMeter.Oban.RecurringGrants,
+        ...>     AuroraMeter.Oban.Retention
+        ...>   ],
         ...>   schedules: %{credit_expiry: "0 4 * * *"}
         ...> )
         [{"0 4 * * *", AuroraMeter.Oban.CreditExpiry}]

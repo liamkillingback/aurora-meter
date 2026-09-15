@@ -50,7 +50,7 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 AuroraMeter.Test.Connections.sweep!(~w(
   concurrent corrconc flush_batch gate jobctl killt lotconc lotfault lotmig lotprop lots model
   obansched probe
-  projection reconcile recordconc replay replaybig storagecase stmt
+  projection recurconc reconcile recordconc replay replaybig storagecase stmt
 ))
 
 # The non-prefix half of the same sweep: the projection generation is

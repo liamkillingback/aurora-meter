@@ -179,6 +179,59 @@ defmodule AuroraMeter.Test.PeriodSources do
     end
   end
 
+  defmodule Stalled do
+    @moduledoc """
+    A correct `current/2` and a `containing/2` that never moves forward.
+
+    Every single call it makes is valid: the window it returns really does
+    contain the instant it was asked about, so `AuroraMeter.Period.containing/2`
+    accepts it. What it never does is advance, because its start is a fixed
+    floor and only its end grows. A walk that asked it for "the period after
+    this one" for ever would get the same answer for ever, which is the shape
+    build unit 06d detects by comparing consecutive starts rather than by
+    trusting the source.
+    """
+
+    @behaviour AuroraMeter.Period
+
+    alias AuroraMeter.Period.Calendar
+    alias AuroraMeter.Test.PeriodSources
+
+    @floor ~D[2026-01-01]
+
+    @impl AuroraMeter.Period
+    def current(tenant, instant), do: Calendar.current(tenant, instant)
+
+    @impl AuroraMeter.Period
+    def containing(_tenant, instant) do
+      next = instant |> DateTime.to_date() |> Date.end_of_month() |> Date.add(1)
+
+      %{start: PeriodSources.at(@floor), end: PeriodSources.at(next), source: :stalled}
+    end
+  end
+
+  defmodule RaisesForTenant do
+    @moduledoc """
+    The calendar month for every tenant except one whose key contains `"boom"`,
+    for which it raises. Build unit 06d needs a source that fails for **one**
+    tenant so a run can be shown to skip it and go on to the next, rather than
+    one that fails for all of them and proves only that the run stops.
+    """
+
+    @behaviour AuroraMeter.Period
+
+    alias AuroraMeter.Period.Calendar
+
+    @impl AuroraMeter.Period
+    def current(tenant, instant) do
+      if is_binary(tenant) and String.contains?(tenant, "boom") do
+        raise RuntimeError, "this period source cannot place #{tenant}"
+      end
+
+      Calendar.current(tenant, instant)
+    end
+  end
+
   defmodule NoNow do
     @moduledoc "A clock missing `now/0`, for the boot check."
     def today, do: Date.utc_today()

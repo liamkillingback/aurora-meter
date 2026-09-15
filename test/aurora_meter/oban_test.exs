@@ -27,17 +27,20 @@ if Code.ensure_loaded?(Oban) do
         assert Scheduler.cron_entries() == [
                  {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
                  {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
+                 {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
                  {"40 3 * * *", AuroraMeter.Oban.Retention}
                ]
       end
 
-      test "omits a worker whose operation module is not compiled into this build" do
-        # RecurringGrants is absent because its whole operation module is
-        # absent. The assertion names that reason rather than only the absence,
-        # so a renamed worker cannot make this pass for the wrong cause.
-        refute Code.ensure_loaded?(AuroraMeter.Credits.Recurrences)
-        refute Scheduler.available?({AuroraMeter.Credits.Recurrences, :run, 1})
-        refute AuroraMeter.Oban.RecurringGrants in scheduled_workers()
+      test "a worker whose operation module arrived is scheduled by that fact alone" do
+        # This was the "omits a worker whose operation module is absent" case
+        # until build unit 06d shipped `AuroraMeter.Credits.Recurrences`. The
+        # worker's own source did not change; the predicate did, which is what
+        # `AuroraMeter.Oban`'s availability rule promises. PlanTransitions below
+        # is still the absent half.
+        assert Code.ensure_loaded?(AuroraMeter.Credits.Recurrences)
+        assert Scheduler.available?({AuroraMeter.Credits.Recurrences, :run, 1})
+        assert AuroraMeter.Oban.RecurringGrants in scheduled_workers()
       end
 
       test "omits a worker whose operation module exists without the function" do
@@ -58,6 +61,7 @@ if Code.ensure_loaded?(Oban) do
         assert scheduled_workers() == [
                  AuroraMeter.Oban.CreditExpiry,
                  AuroraMeter.Oban.HoldReconciliation,
+                 AuroraMeter.Oban.RecurringGrants,
                  AuroraMeter.Oban.Retention
                ]
       end
@@ -85,17 +89,20 @@ if Code.ensure_loaded?(Oban) do
         assert Scheduler.cron_entries(exclude: [AuroraMeter.Oban.CreditExpiry]) ==
                  [
                    {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
+                   {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
                    {"40 3 * * *", AuroraMeter.Oban.Retention}
                  ]
 
-        assert Scheduler.cron_entries(exclude: [:hold_reconciliation, :retention]) ==
-                 [{"*/30 * * * *", AuroraMeter.Oban.CreditExpiry}]
+        assert Scheduler.cron_entries(
+                 exclude: [:hold_reconciliation, :retention, :recurring_grants]
+               ) == [{"*/30 * * * *", AuroraMeter.Oban.CreditExpiry}]
       end
 
       test "honours :schedules, including for a worker that has no default" do
         assert Scheduler.cron_entries(schedules: %{hold_reconciliation: "0 * * * *"}) == [
                  {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
                  {"0 * * * *", AuroraMeter.Oban.HoldReconciliation},
+                 {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
                  {"40 3 * * *", AuroraMeter.Oban.Retention}
                ]
 
@@ -293,7 +300,6 @@ if Code.ensure_loaded?(Oban) do
 
         assert unscheduled == [
                  AuroraMeter.Oban.EventsReplay,
-                 AuroraMeter.Oban.RecurringGrants,
                  AuroraMeter.Oban.PlanTransitions
                ]
 

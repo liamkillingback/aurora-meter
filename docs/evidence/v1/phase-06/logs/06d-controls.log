@@ -1,0 +1,142 @@
+=== 06d negative controls ===
+2026-09-15T19:35:03Z
+recurrences.ex sha256 before: 2802dd90f3cfdd570b6f2604eb132338864a3e39b1ebb85d490a68c9d8fdba5c
+
+--- control A: cap from the compiled plan, not the stored snapshot ---
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/credits_recurrences_test.exs --seed 0
+Compiling 1 file (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...................
+
+  1) test I18 a plan edited between two periods grants the new amount and keeps the old cap (AuroraMeter.CreditsRecurrencesTest)
+     test/aurora_meter/credits_recurrences_test.exs:493
+     Assertion with == failed
+     code:  assert summary.counts["rollover"] == @cap
+     left:  3000000
+     right: 1000000
+     stacktrace:
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:210: anonymous fn/2 in AuroraMeter.Test.with_clock/2
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:256: AuroraMeter.Test.serialise/1
+       test/aurora_meter/credits_recurrences_test.exs:502: anonymous fn/1 in AuroraMeter.CreditsRecurrencesTest."test I18 a plan edited between two periods grants the new amount and keeps the old cap"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/credits_recurrences_test.exs:501: (test)
+
+....
+05:35:05.760 [warning] AuroraMeter.Credits.Recurrences: the period source could not place "recurboom_79" for :monthly (:period_source_error). The tenant is skipped and the run continues; nothing is granted for it until the source is fixed. this period source cannot place recurboom_79
+......
+Finished in 1.1 seconds (0.00s async, 1.1s sync)
+
+Result: 29/30 passed (1/1 doctest, 28/29 tests)
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-15T19:35:03Z finished=2026-09-15T19:35:05Z
+control A test exit=2
+restored, sha256: 2802dd90f3cfdd570b6f2604eb132338864a3e39b1ebb85d490a68c9d8fdba5c
+
+--- control D: the build document's reference (no tenant in it) ---
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/credits_recurrences_test.exs --seed 0
+Compiling 1 file (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.
+
+  1) test I18 one run grants one lot per entitled tenant for the current period (AuroraMeter.CreditsRecurrencesTest)
+     test/aurora_meter/credits_recurrences_test.exs:60
+     Assertion with == failed
+     code:  assert grant.reference == "recurring:#{tenant}:monthly:allowance:1:2026-09-01T00:00:00Z"
+     left:  "recurring:monthly:allowance:1:2026-09-01T00:00:00Z"
+     right: "recurring:recur_15:monthly:allowance:1:2026-09-01T00:00:00Z"
+     stacktrace:
+       test/aurora_meter/credits_recurrences_test.exs:96: (test)
+
+
+05:35:07.395 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recur_5" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recur_5", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+
+  2) test I18 two tenants on one plan reach the same period without colliding (AuroraMeter.CreditsRecurrencesTest)
+     test/aurora_meter/credits_recurrences_test.exs:102
+     Assertion with == failed
+     code:  assert summary.counts["granted"] == 2
+     left:  1
+     right: 2
+     stacktrace:
+       test/aurora_meter/credits_recurrences_test.exs:113: anonymous fn/2 in AuroraMeter.CreditsRecurrencesTest."test I18 two tenants on one plan reach the same period without colliding"/1
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:210: anonymous fn/2 in AuroraMeter.Test.with_clock/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/credits_recurrences_test.exs:111: (test)
+
+..........
+05:35:07.636 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recur_78" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recur_78", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+
+  3) test I18 a rollover is unaffected by whether the expiry sweep or the recurrence ran first (AuroraMeter.CreditsRecurrencesTest)
+     test/aurora_meter/credits_recurrences_test.exs:332
+     Assertion with >= failed
+     code:  assert report.expired >= 2
+     left:  1
+     right: 2
+     stacktrace:
+       test/aurora_meter/credits_recurrences_test.exs:343: anonymous fn/2 in AuroraMeter.CreditsRecurrencesTest."test I18 a rollover is unaffected by whether the expiry sweep or the recurrence ran first"/1
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:210: anonymous fn/2 in AuroraMeter.Test.with_clock/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/credits_recurrences_test.exs:338: (test)
+
+..........
+05:35:08.018 [warning] AuroraMeter.Credits.Recurrences: the period source could not place "recurboom_719" for :monthly (:period_source_error). The tenant is skipped and the run continues; nothing is granted for it until the source is fixed. this period source cannot place recurboom_719
+..
+05:35:08.063 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recurscan_002" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recurscan_002", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+05:35:08.067 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recurscan_003" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recurscan_003", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+05:35:08.071 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recurscan_004" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recurscan_004", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+
+  4) test I16 the scan is bounded by limit and the next run continues from the cursor (AuroraMeter.CreditsRecurrencesTest)
+     test/aurora_meter/credits_recurrences_test.exs:646
+     Assertion with == failed
+     code:  assert first.counts["granted"] == 4
+     left:  1
+     right: 4
+     stacktrace:
+       test/aurora_meter/credits_recurrences_test.exs:656: (test)
+
+
+05:35:08.098 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recurscan_002" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recurscan_002", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+05:35:08.101 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recurscan_003" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recurscan_003", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+05:35:08.103 [warning] AuroraMeter.Credits.Recurrences: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z" failed for "recurscan_004" with #Ecto.Changeset<action: :insert, changes: %{metadata: %{"period_end" => "2026-10-01T00:00:00Z", "period_start" => "2026-09-01T00:00:00Z", "recurrence" => "monthly"}, reference: "recurring:monthly:allowance:1:2026-09-01T00:00:00Z", category: :promotional, kind: :grant, expires_at: ~U[2026-10-01 00:00:00Z], tenant_key: "recurscan_004", amount: 5000000, balance_after: 5000000, held_after: 0, held_delta: 0, promotional_after: 5000000}, errors: [reference: {"has already been used for this kind of transaction", [constraint: :unique, constraint_name: "aurora_meter_credit_transactions_kind_reference_index"]}], data: #AuroraMeter.Schema.CreditTransaction<>, valid?: false, ...>. Nothing was written for that period; the next run examines it again.
+
+
+  5) test I16 a run killed mid-tenant resumes and reaches the same state as an uninterrupted one (AuroraMeter.CreditsRecurrencesTest)
+     test/aurora_meter/credits_recurrences_test.exs:673
+     Assertion with == failed
+     code:  assert resumed.counts["granted"] == 3
+     left:  0
+     right: 3
+     stacktrace:
+       test/aurora_meter/credits_recurrences_test.exs:703: (test)
+
+..
+Finished in 1.1 seconds (0.00s async, 1.1s sync)
+
+Result: 25/30 passed (1/1 doctest, 24/29 tests)
+Failed: 5 tests
+[mixlane] core exit=2 started=2026-09-15T19:35:05Z finished=2026-09-15T19:35:08Z
+control D test exit=2
+restored, sha256: 2802dd90f3cfdd570b6f2604eb132338864a3e39b1ebb85d490a68c9d8fdba5c
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/credits_recurrences_test.exs --seed 0
+Compiling 1 file (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+........................
+05:35:10.259 [warning] AuroraMeter.Credits.Recurrences: the period source could not place "recurboom_11075" for :monthly (:period_source_error). The tenant is skipped and the run continues; nothing is granted for it until the source is fixed. this period source cannot place recurboom_11075
+......
+Finished in 1.2 seconds (0.00s async, 1.2s sync)
+
+Result: 30 passed (1 doctest, 29 tests)
+[mixlane] core exit=0 started=2026-09-15T19:35:08Z finished=2026-09-15T19:35:10Z
+after restore, test exit=0

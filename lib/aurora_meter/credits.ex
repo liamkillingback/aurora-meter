@@ -79,6 +79,7 @@ defmodule AuroraMeter.Credits do
   alias AuroraMeter.Credits.Ledger
   alias AuroraMeter.Credits.Money
   alias AuroraMeter.Credits.Reconciliation
+  alias AuroraMeter.Credits.Recurrences
   alias AuroraMeter.Credits.Series
   alias AuroraMeter.Period
   alias AuroraMeter.Schema.CreditBalance
@@ -361,6 +362,7 @@ defmodule AuroraMeter.Credits do
           {:ok, txn()} | {:error, :duplicate_reference | Ecto.Changeset.t()}
   def grant(tenant, amount, opts) when is_integer(amount) and amount > 0 and is_list(opts) do
     Money.assert_range!(amount)
+    assert_unreserved!(Keyword.get(opts, :reference), "grant/3")
     Ledger.grant(Tenant.to_key(tenant), amount, opts)
   end
 
@@ -377,6 +379,7 @@ defmodule AuroraMeter.Credits do
   def grant_with_status(tenant, amount, opts)
       when is_integer(amount) and amount > 0 and is_list(opts) do
     Money.assert_range!(amount)
+    assert_unreserved!(Keyword.get(opts, :reference), "grant_with_status/3")
     Ledger.grant_with_status(Tenant.to_key(tenant), amount, opts)
   end
 
@@ -401,6 +404,7 @@ defmodule AuroraMeter.Credits do
   def hold(tenant, amount, reference, opts \\ [])
       when is_integer(amount) and amount > 0 and is_binary(reference) do
     Money.assert_range!(amount)
+    assert_unreserved!(reference, "hold/4")
     Ledger.hold(Tenant.to_key(tenant), amount, reference, opts)
   end
 
@@ -483,6 +487,7 @@ defmodule AuroraMeter.Credits do
   def debit(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
     Money.assert_range!(amount)
+    assert_unreserved!(reference, "debit/4")
     Ledger.debit(Tenant.to_key(tenant), amount, reference, metadata)
   end
 
@@ -520,8 +525,32 @@ defmodule AuroraMeter.Credits do
   def reverse(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
     Money.assert_range!(amount)
+    assert_unreserved!(reference, "reverse/4")
     Ledger.reverse(Tenant.to_key(tenant), amount, reference, metadata)
   end
+
+  # **One reserved namespace, and only one.** `AuroraMeter.Credits.Recurrences`
+  # mints `"recurring:<tenant>:<name>:<plan>:<version>:<period>"` as the grant
+  # reference for a period, and the ledger's `(kind, reference)` index is what
+  # makes that period happen once. A host that granted under the same string
+  # would either be refused for a write it never made or, worse, make a period
+  # look already issued. Manual grants are **not** forced into a namespace of
+  # their own: `architecture-map.md` 7.5 reserves `recurring:` and nothing else.
+  @spec assert_unreserved!(term(), String.t()) :: :ok
+  defp assert_unreserved!(reference, function) when is_binary(reference) do
+    if String.starts_with?(reference, Recurrences.namespace()) do
+      raise ArgumentError,
+            "AuroraMeter.Credits.#{function}: references beginning " <>
+              "#{inspect(Recurrences.namespace())} are reserved by the recurring-grant " <>
+              "engine (AuroraMeter.Credits.Recurrences), which mints them per tenant, " <>
+              "entitlement, plan version and period. Got: #{inspect(reference)}. Use any " <>
+              "other string; manual grants are not namespaced."
+    end
+
+    :ok
+  end
+
+  defp assert_unreserved!(_reference, _function), do: :ok
 
   @doc """
   Holds that are still open and were taken before `:older_than`, oldest first.

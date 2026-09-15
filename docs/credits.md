@@ -484,6 +484,144 @@ an amount to write from a figure read here; the only read that is consistent wit
 a write is one made inside the transaction that writes, and the ledger makes its
 own under the balance row's lock. A wallet with no lots answers `[]` or `nil`.
 
+## Recurring allowances
+
+A plan can grant credit on a schedule. The policy is a plan property, declared
+with [`recurring_credits/2`](plans.md#recurring-credit-allowances), and a plan
+that declares none grants nothing: recurring grants are off by default.
+
+```elixir
+# from Oban, on the schedule cron_entries/0 returns
+{"7 * * * *", AuroraMeter.Oban.RecurringGrants}
+```
+
+```elixir
+# or from anything else, including iex
+AuroraMeter.Credits.Recurrences.run(limit: 5_000)
+```
+
+A run walks entitled subscriptions in keyset order, skips a tenant whose plan
+declares no allowance, and works out which periods each allowance still owes.
+Each period is its own transaction under the wallet's balance row lock, so a
+twelve-period catch-up is twelve short transactions and a concurrent debit
+interleaves between them.
+
+Size the run so it visits every entitled tenant at least once per period. The
+default limit of 500 tenants is a floor: hourly with `limit: 5_000` visits
+120,000 tenants a day.
+
+### One grant per period, however many schedulers run
+
+Aurora Meter does not assume your scheduler runs a job a single time. Two guards
+make a second run a no-op, and both are evaluated **inside the balance row's
+lock**:
+
+* `aurora_meter_credit_recurrences` is unique on `(tenant_key, key)`, and the
+  period's row is inserted `ON CONFLICT DO NOTHING`. No row back means another
+  node has this period.
+* the grant carries the period's own reference, and
+  `aurora_meter_credit_transactions` is unique on `(kind, reference)`.
+
+They are deliberately redundant because this is money. Neither is a lease and
+neither is a duration, so neither can be inverted by a clock that steps
+backwards.
+
+`recurring:` is the one **reserved reference prefix**. `grant/3`,
+`grant_with_status/3`, `hold/4`, `debit/4` and `reverse/4` raise `ArgumentError`
+for a caller-supplied reference beginning with it, because the engine mints its
+own there and a collision would make one of your manual grants look like a
+period that had already been issued. Nothing else is reserved: manual grants
+keep using any string.
+
+### What a period writes
+
+For a live period, with a rollover configured and the previous period's lot
+unspent:
+
+| Order | Row | Effect |
+|---|---|---|
+| 1 | `expire` | The previous period's lots give up whatever they still had available. |
+| 2 | `grant` | The period's allowance, as a lot expiring at the period end. |
+| 3 | `grant` | The carry, as a lot of its own, referenced `...:rollover` and expiring with the period it was carried into. |
+
+Each lot's `source` carries `recurrence_key`, `recurrence`, `plan_id` and
+`plan_version`, so a rolled-over micro-dollar is as auditable as any other:
+
+```elixir
+AuroraMeter.Credits.Lots.for_source(org, %{
+  recurrence_key: "recurring:monthly:pro:1:2026-09-01T00:00:00Z"
+})
+```
+
+### Rollover is capped and does not accumulate
+
+`rollover: n` carries at most `n` micro-dollars of one period's **unused**
+allowance into the next. Unused means what that period's lots did not spend,
+whether or not the expiry sweep has already destroyed it: `available + expired`
+is the same number either way, which is what makes the carry independent of
+whether the sweep or the engine reached the lot first.
+
+Two idle periods with a cap of 1,000,000 leave the third holding its own
+allowance plus 1,000,000, never 2,000,000. The cap applies to the previous
+period as a whole rather than to each of its lots, which is what stops it
+compounding.
+
+The cap is read from the previous period's **stored policy snapshot**, never
+from the compiled plan. Raising a plan's cap does not retroactively raise what
+an already-issued period may carry out of itself; the new cap governs the
+periods granted after the edit.
+
+### Catch-up after downtime
+
+A tenant whose job has not run for three periods gets those three periods in
+chronological order, each granted **and expired in the same transaction** and
+recorded `issued_and_expired`, then its live period. The history is complete and
+nothing that was owed months ago arrives spendable today. The rollover chain
+still runs, so the live period carries the capped remainder a timely run would
+have carried, and the only difference is that no spending happened in between.
+
+One run processes at most `:max_periods` periods per entitlement (12 by
+default). A run that stops there leaves the rest for the next one, which
+continues chronologically from where it stopped.
+
+**A tenant is never back-paid.** A tenant seen for the first time gets its
+current period only: Aurora Meter does not invent history it never recorded. A
+host adopting an allowance mid-period gets the whole of that period rather than
+a pro-rated part of it.
+
+### What is skipped, and why
+
+| Reason | When |
+|---|---|
+| `:no_subscription`, `:not_entitled` | No subscription, or a status outside `AuroraMeter.Schema.Subscription.entitled_statuses/0`. `past_due` is entitled; `canceled` is not. |
+| `:no_recurring_credits`, `:unknown_plan` | The plan declares no allowance, or names a plan this build does not have. |
+| `:lots_disabled` | The wallet is not on the lot engine. The allowance, the cap and the catch-up are all defined over lots, so a wallet the allocator does not own is skipped rather than granted through the legacy projection. See [Upgrading to lots](upgrading-to-lots.md). |
+| `:plan_changed` | The subscription changed plan between the scan and the lock. The re-read happens under the lock, so a tenant cancelled or moved a moment ago is not owed the old plan's allowance. |
+| `:period_source_error`, `:period_source_stalled` | A custom period source raised, or answered with a window that does not move forward. The tenant is skipped with a warning and the run continues to the next one. |
+
+### Watching it
+
+```elixir
+AuroraMeter.Credits.Recurrences.status(tenant: org)
+```
+
+```elixir
+AuroraMeter.Operations.pause("credits_recurrences:global")
+AuroraMeter.Operations.resume("credits_recurrences:global")
+```
+
+A paused run returns `%{paused: true}` and writes nothing; the pause is read
+before every batch. `run(dry_run: true)` reports what it would grant and writes
+nothing at all.
+
+Every period examined emits `[:aurora_meter, :credits, :recurrence]` with
+measurements `%{amount, rollover_amount}` and metadata `%{tenant_key, name,
+plan_id, plan_version, period_start, result, reason}`. `result` is `:granted`,
+`:issued_and_expired`, `:duplicate`, `:skipped` or `:failed`; on a duplicate,
+`reason` says whether the period was recognised from its own row
+(`:up_to_date`) or refused by the unique index inside the balance row's lock
+(`:conflict`), which is the only branch two schedulers racing take.
+
 ## Money series
 
 Charting the ledger takes three reads, all of them keyed by the same tenant

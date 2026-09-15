@@ -62,17 +62,29 @@ config :my_app, Oban,
 | `AuroraMeter.Oban.CreditExpiry` | `AuroraMeter.Credits.expire_due/1` | `*/30 * * * *` | 3 | Expires nothing and returns `{:ok, 0}`: the grant row's own `FOR UPDATE` re-read refuses a grant already carrying `expired_at`. |
 | `AuroraMeter.Oban.HoldReconciliation` | `AuroraMeter.Credits.reconcile_holds/1` | `*/15 * * * *` | 3 | Asks the host again and is refused by the hold row's `FOR UPDATE` re-read, which reports `already_closed`. |
 | `AuroraMeter.Oban.EventsReplay` | `AuroraMeter.Events.Replay.run/1` | operator run | 1 | Continues from the replay's own checkpoint, or refuses when one is already running. |
-| `AuroraMeter.Oban.RecurringGrants` | `AuroraMeter.Credits.Recurrences.run/1` | not in this release | 3 | Cancels with `{:cancel, :not_implemented}`. |
+| `AuroraMeter.Oban.RecurringGrants` | `AuroraMeter.Credits.Recurrences.run/1` | `7 * * * *` | 3 | Grants nothing: every period it visits is already recorded, recognised from the recurrence row or refused by `UNIQUE (tenant_key, key)` inside the wallet's balance row lock. |
 | `AuroraMeter.Oban.PlanTransitions` | `AuroraMeter.Subscriptions.apply_due_transitions/1` | not in this release | 3 | Cancels with `{:cancel, :not_implemented}`. |
 | `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | `40 3 * * *` | 3 | Deletes nothing the first run did not: a `DELETE` finds the rows gone. There is no cursor to go stale, because the scan advances by doing the work. |
 
-Two of the six wrap operations a later Aurora Meter 1.0 release adds. They ship
-now so that the registry an installer reads is complete and no host writes a
-module name that does not resolve. `cron_entries/1` omits them until their
-operation is compiled in, and starts returning them with no change to your
-configuration once it is. `AuroraMeter.Oban.EventsReplay` has no schedule for a
+One of the six wraps an operation a later Aurora Meter 1.0 release adds. It
+ships now so that the registry an installer reads is complete and no host writes
+a module name that does not resolve. `cron_entries/1` omits it until its
+operation is compiled in, and starts returning it with no change to your
+configuration once it is: that is exactly what happened to
+`AuroraMeter.Oban.RecurringGrants`, whose own source did not change when its
+operation arrived. `AuroraMeter.Oban.EventsReplay` has no schedule for a
 different reason: rebuilding a projection is a deliberate act, not something
 that should begin because a minute elapsed.
+
+`AuroraMeter.Oban.RecurringGrants` takes `%{"limit" => n}` (also `"batch"`,
+`"max_periods"` and `"tenant"`). The default limit of 500 tenants per run is a
+floor, not a recommendation: size it so one period's worth of hourly runs can
+visit every entitled tenant at least once.
+
+```elixir
+{Oban.Plugins.Cron,
+ crontab: [{"7 * * * *", AuroraMeter.Oban.RecurringGrants, args: %{"limit" => 5_000}}]}
+```
 
 All six declare the queue `:aurora_meter`, which is the queue Aurora Meter Pro's
 workers declare too. One queue, because they are the same kind of work and a

@@ -96,7 +96,8 @@ defmodule AuroraMeter.ApiInventoryTest do
     {AuroraMeter.Plans, :limit, 3, "plans DSL macro, as `plan/2`"},
     {AuroraMeter.Plans, :metered, 2, "plans DSL macro, as `plan/2`"},
     {AuroraMeter.Plans, :feature, 2, "plans DSL macro, as `plan/2`"},
-    {AuroraMeter.Plans, :counter, 1, "plans DSL macro, as `plan/2`"}
+    {AuroraMeter.Plans, :counter, 1, "plans DSL macro, as `plan/2`"},
+    {AuroraMeter.Plans, :recurring_credits, 2, "plans DSL macro, as `plan/2`"}
   ]
 
   setup_all do

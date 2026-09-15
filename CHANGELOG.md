@@ -13,6 +13,40 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 
 ### Added
 
+- **Recurring credit allowances, capped rollover and downtime catch-up.** A plan
+  declares the policy with `AuroraMeter.Plans.recurring_credits/2` (`:amount`,
+  `:category`, `:rollover`, `:expires`) and
+  `AuroraMeter.Credits.Recurrences.run/1` issues it: one grant per tenant,
+  entitlement, plan version and period, whatever the scheduler does. Two guards,
+  both evaluated inside the wallet's balance row lock, make a second run a
+  no-op: `aurora_meter_credit_recurrences` is unique on `(tenant_key, key)` and
+  the period row is inserted `ON CONFLICT DO NOTHING`, and the grant carries the
+  period's own reference into the ledger's `(kind, reference)` index. A run is
+  paused with `AuroraMeter.Operations.pause("credits_recurrences:global")`.
+  `AuroraMeter.Oban.RecurringGrants` now has an operation and appears in
+  `AuroraMeter.Oban.cron_entries/0` at `"7 * * * *"`, with no change to the
+  worker itself. See [Plans](plans.md) and [Credits](credits.md).
+- **Capped rollover.** `rollover: n` carries at most `n` micro-dollars of one
+  period's unused allowance into the next, as a lot of its own with its own
+  reference and allocation trail. It does not accumulate: two idle periods carry
+  the cap, not twice the cap. The cap comes from the previous period's stored
+  policy snapshot, so editing a plan cannot change what an already-issued period
+  may carry out of itself.
+- **Downtime catch-up.** Missed periods are processed in chronological order
+  with bounded work (`:max_periods`, 12 by default); a period that had already
+  ended when it was processed is granted and expired in the same transaction and
+  recorded `issued_and_expired`, so history is complete and nothing owed months
+  ago arrives spendable. A tenant is never back-paid for periods before its
+  first recurrence row.
+- `AuroraMeter.Schema.CreditRecurrence`, the readable row for one period of one
+  allowance, carrying the policy snapshot and the transaction it granted.
+- `%AuroraMeter.Plan{recurring_credits: [...]}`, a new struct field. It is not a
+  feature kind, so `t:AuroraMeter.Plan.feature_config/0` and every consumer of it
+  are untouched.
+- Telemetry `[:aurora_meter, :credits, :recurrence]`, with `amount` and
+  `rollover_amount` measurements and `tenant_key`, `name`, `plan_id`,
+  `plan_version`, `period_start`, `result` and `reason` metadata.
+
 - **`AuroraMeter.Retention`, and `AuroraMeter.Oban.Retention`.** A closed,
   compile-time allow list of what may be deleted, with an age predicate **and** a
   state predicate on every entry: `aurora_meter_flush_receipts` past
@@ -198,6 +232,15 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 - Configuration `:credits_low_balance_handler_timeout` (5,000 ms).
 
 ### Changed
+
+- **References beginning `recurring:` are reserved.**
+  `AuroraMeter.Credits.grant/3`, `grant_with_status/3`, `hold/4`, `debit/4` and
+  `reverse/4` raise `ArgumentError` for a caller-supplied reference with that
+  prefix, because the recurring-grant engine mints its own there and a collision
+  would make a manual grant look like a period that had already been issued.
+  Nothing else is reserved; manual grants keep using any string. The risk of an
+  existing host already using the prefix is small and real, which is why it is
+  named here.
 
 - **A reversal is written with `kind: :reverse`.** It was `kind: :debit,
   category: :reversal`, which put a refund and an ordinary debit in one

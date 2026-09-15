@@ -762,6 +762,7 @@ names the unit that replaces it:
 - `AuroraMeter.CreditsHistoryTest` / `test I10 history with :before is documented as lossy and still works`
 - `AuroraMeter.CreditsHistoryTest` / `test I10 history includes reversals by default`
 - `AuroraMeter.CreditsHistoryTest` / `test I10 history rejects :before together with :cursor`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I10 a recurring lot carries recurrence_key, plan_id and plan_version in its source`
 
 **Evidence.** `docs/evidence/v1/phase-01/i10.md`
 
@@ -980,7 +981,9 @@ nothing and the next run asks again.
 - `AuroraMeter.RetentionControlsTest` / `test I16 the retention worker resumes at its checkpoint after a kill`
 - `AuroraMeter.RetentionControlsTest` / `test I16 two retention jobs on independent connections delete every eligible row and none twice`
 - `AuroraMeter.RetentionControlsTest` / `test I16 the retention worker cancels nothing and reports a paused table`
-- PLANNED (06d): `AuroraMeter.ObanJobControlsTest` / `test I16 RecurringGrants resumes at its checkpoint after a kill`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I16 the scan is bounded by limit and the next run continues from the cursor`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I16 a run killed mid-tenant resumes and reaches the same state as an uninterrupted one`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I16 a paused run writes nothing and says it is paused`
 - PLANNED (07b): `AuroraMeter.ObanJobControlsTest` / `test I16 PlanTransitions resumes at its checkpoint after a kill`
 
 **Evidence.** `docs/evidence/v1/phase-05/i16.md`
@@ -1019,32 +1022,99 @@ phase 07.
 
 ## I18 Recurring grants occur once per entitlement period
 
-**Guarantee.** Not guaranteed by the shipped code: there is no recurrence
-scheduler. What exists today is the primitive the guarantee will be built on, an
-idempotency key on every grant, so a grant retried with the same reference returns
-the original entry instead of crediting twice. Phase 06 adds recurrences with a
-uniqueness key per entitlement period, after which downtime catch up grants
-chronologically and once per missed period, rollover is capped, two schedulers
-produce one grant, and a cancellation or a plan transition lands on the correct
-side of the boundary.
+**Guarantee.** For one tenant, one entitlement name, one plan id, one plan
+version and one period, at most one recurring grant exists, and at most one
+rollover lot derives from the period before it. Two guards make that true and
+both are evaluated inside the wallet's balance row lock:
+`aurora_meter_credit_recurrences` is `UNIQUE (tenant_key, key)` and the period's
+row is inserted `ON CONFLICT DO NOTHING`, and the grant carries the period's own
+reference into `aurora_meter_credit_transactions`, which is
+`UNIQUE (kind, reference)`. They are deliberately redundant because this is
+money. Neither is a lease and neither is a duration, so neither can be inverted
+by a clock that steps backwards.
 
-**Prerequisites.** The phase 06 recurrence schema and a host scheduler.
+Downtime catch-up processes missed periods in chronological order with bounded
+work, and a period that had already ended when it was processed is granted and
+expired in the same transaction, recorded `issued_and_expired`, so history is
+complete and nothing owed months ago arrives spendable today. Rollover carries at
+most the configured cap of one period's unused allowance into the next, as a new
+lot with its own reference, and does not accumulate: two idle periods carry the
+cap, not twice the cap. The cap is read from the previous period's **stored
+policy snapshot**, so editing a plan cannot change what an already-issued period
+may carry out of itself.
 
-**Known limits.** A host implementing recurring allowances today must supply its
-own period key in the grant reference. Nothing in the core computes the
-entitlement period for a grant, so nothing in the core can refuse a second grant
-for the same period under a different reference.
+**Prerequisites.** Core schema version 9, a plan declaring
+`AuroraMeter.Plans.recurring_credits/2`, a storage adapter implementing
+`c:AuroraMeter.Storage.list_subscriptions/2`, and a host scheduler (Oban's
+`AuroraMeter.Oban.RecurringGrants`, or any other caller of
+`AuroraMeter.Credits.Recurrences.run/1`).
+
+**Known limits.** The wallet must be on the lot engine: a wallet whose
+`lots_enabled_at` is null is skipped with `reason: :lots_disabled` rather than
+granted through the legacy projection, because the allowance, the cap and the
+catch-up are all defined over lots. A tenant is never back-paid for periods
+before its first recurrence row, and a host adopting an allowance mid-period
+gets the whole of that period rather than a pro-rated part. Until build unit 07a
+lands plan versions, every key carries the literal version `"1"`. A plan
+transition landing inside a period is build unit 07b's to order; this engine
+re-reads the subscription under the lock and refuses a tenant whose plan changed,
+rather than granting the old plan's allowance.
 
 **Tests.**
 
 - `AuroraMeter.CreditsTest` / `test grant/3 credits the balance and is idempotent per reference`
 - `AuroraMeter.CreditsTest` / `test grant/3 a duplicate grant reports duplicate: true in telemetry and does not broadcast`
-- PLANNED (06d): `AuroraMeter.RecurrencesTest` / `test I18 downtime catch up grants each missed period once, in order`
-- PLANNED (06d): `AuroraMeter.RecurrencesTest` / `test I18 rollover is capped at the configured maximum`
-- PLANNED (06d): `AuroraMeter.RecurrencesTest` / `test I18 two schedulers produce one grant`
-- PLANNED (06d): `AuroraMeter.RecurrencesTest` / `test I18 cancellation and transition land on the correct side of the boundary`
+- `AuroraMeter.PlansTest` / `test I18 recurring_credits stores name, amount, category, rollover and expires on the plan`
+- `AuroraMeter.PlansTest` / `test I18 a plan without recurring_credits has an empty list`
+- `AuroraMeter.PlansTest` / `test I18 declaration order is preserved and features are untouched`
+- `AuroraMeter.PlansTest` / `test I18 a duplicate entitlement name in one plan raises at compile time`
+- `AuroraMeter.PlansTest` / `test I18 a float amount raises at compile time`
+- `AuroraMeter.PlansTest` / `test I18 rollover greater than zero with expires: :never raises at compile time`
+- `AuroraMeter.PlansTest` / `test I18 an expiring allowance must be promotional, because only promotional grants expire`
+- `AuroraMeter.PlansTest` / `test I18 an unknown option, category or expiry raises at compile time`
+- `AuroraMeter.PlansTest` / `test I18 a name or plan id that cannot be read back out of a recurrence key raises`
+- `AuroraMeter.PlansTest` / `test I18 a never-expiring promotional allowance compiles and warns`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a tenant with no previous recurrence gets only the current period`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a tenant already granted for the current period is owed nothing`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 the walk from three months ago yields three periods in chronological order`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 the walk stops at max_periods and reports the remainder`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a weekly custom period source yields weekly periods`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a source exporting containing/2 is asked through it`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a period source that does not advance is detected and does not loop`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a period source that raises is reported rather than propagated`
+- `AuroraMeter.Credits.RecurrencesPeriodsTest` / `test I18 a source that cannot place a past instant is an error, not a guess`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 one run grants one lot per entitled tenant for the current period`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 two tenants on one plan reach the same period without colliding`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 running the job five times in one period produces one grant and four duplicates`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a cancelled subscription receives nothing and a past_due one receives its allowance`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a plan that declares no allowance grants nothing at all`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a wallet the allocator does not own is skipped and told why`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 the recurrence reference namespace is rejected for a manual grant`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 an unused allowance rolls over capped at the policy cap and expires the rest`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a tenant that spent most of its allowance carries only what was left`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a fully spent allowance rolls over nothing`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 rollover is not compounded: two idle periods carry at most the cap into the third`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a rollover is unaffected by whether the expiry sweep or the recurrence ran first`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a plan with no rollover carries nothing and expires the whole allowance`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 three missed periods are issued and expired in order and leave no fresh availability`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a historical period's grant, rollover and expiries chain exactly in one run`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a catch-up bounded by max_periods resumes chronologically on the next run`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a tenant seen for the first time is not back-paid`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a plan edited between two periods grants the new amount and keeps the old cap`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a run one microsecond before the boundary grants the old period, and at it the new`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a dry run reports what it would grant and writes nothing`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 status/1 reports the tenant's periods newest first`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a tenant whose period source raises is skipped and the run continues`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a subscription cancelled between the scan and the lock is refused under the lock`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a storage adapter without list_subscriptions is refused rather than silently idle`
+- `AuroraMeter.CreditsRecurrencesTest` / `test I18 a naive per-period reference double-grants, which is what the engine replaces`
+- `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 two schedulers against fifty tenants issue one grant and one rollover per period`
+- `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 a rendezvous that guarantees the race issues exactly one grant per period`
+- `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 the ledger's reference index refuses a second grant even with the recurrence guard bypassed`
+- `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 a per-run reference double-grants under the same rendezvous`
+- `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 a debit racing the recurrence leaves the carry computed from the committed availability`
 
-**Evidence.** `docs/evidence/v1/phase-06/i18.md`
+**Evidence.** `docs/evidence/v1/phase-06/i18-once-per-period.md`
 
 ## I19 All supported schema histories preserve commercial state
 

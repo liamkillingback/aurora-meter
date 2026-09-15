@@ -1,7 +1,7 @@
 defmodule AuroraMeter.Plan do
   @moduledoc """
-  A billing plan: an id, a monthly price (minor units / cents), and a map of
-  feature configurations.
+  A billing plan: an id, a monthly price (minor units / cents), a map of
+  feature configurations and any recurring credit allowances it grants.
 
   Feature configs:
 
@@ -12,6 +12,13 @@ defmodule AuroraMeter.Plan do
     * `{:feature, non_neg_integer}` — a plan-level value with no counter behind
       it (seats, retention days, projects): always entitled; read it with
       `AuroraMeter.feature_value/3`.
+
+  `recurring_credits` is a list of allowance declarations in declaration order,
+  each a map of `name`, `amount`, `category`, `rollover` and `expires`. It is
+  empty unless the plan declares `AuroraMeter.Plans.recurring_credits/2`, which
+  is what makes recurring grants off by default. `AuroraMeter.Credits.Recurrences`
+  is the engine that reads it; a new declaration kind was added here rather than
+  a new feature kind so every `feature_config/0` consumer is untouched.
   """
 
   @type feature_config ::
@@ -20,11 +27,26 @@ defmodule AuroraMeter.Plan do
           | {:counter}
           | {:feature, boolean() | non_neg_integer()}
 
+  @typedoc """
+  One recurring allowance, as `AuroraMeter.Plans.recurring_credits/2` declares it.
+
+  `expires` is `:period_end` (the lot expires when the period it was granted for
+  ends), `:never`, or `{:seconds, n}` counted from the grant.
+  """
+  @type recurring_credit :: %{
+          name: atom(),
+          amount: pos_integer(),
+          category: :promotional | :paid | :adjustment,
+          rollover: non_neg_integer(),
+          expires: :period_end | :never | {:seconds, pos_integer()}
+        }
+
   @type t :: %__MODULE__{
           id: atom(),
           price: non_neg_integer(),
-          features: %{optional(atom()) => feature_config()}
+          features: %{optional(atom()) => feature_config()},
+          recurring_credits: [recurring_credit()]
         }
 
-  defstruct id: nil, price: 0, features: %{}
+  defstruct id: nil, price: 0, features: %{}, recurring_credits: []
 end

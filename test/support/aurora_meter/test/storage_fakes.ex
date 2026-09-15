@@ -184,3 +184,67 @@ defmodule AuroraMeter.Test.UnresolvedStorage do
   @impl AuroraMeter.Storage
   defdelegate list_subscriptions(cursor, opts), to: Backend
 end
+
+defmodule AuroraMeter.Test.NoListingStorage do
+  @moduledoc """
+  An adapter written against an older `AuroraMeter.Storage` that has no
+  `c:AuroraMeter.Storage.list_subscriptions/2` (build unit 06d).
+
+  Every other callback is delegated. It exists so the one operation that cannot
+  work without the listing, the recurring-grant sweep, can be shown to say so
+  rather than to report a run in which it examined nothing. It deliberately does
+  **not** declare `@behaviour AuroraMeter.Storage`: declaring it and omitting a
+  callback is a compile warning, and `mix check` compiles with
+  `--warnings-as-errors`, so the fake could not exist in the shape it is meant
+  to model.
+  """
+
+  alias AuroraMeter.Storage.Ecto, as: Backend
+
+  @doc false
+  defdelegate capabilities(), to: Backend
+  @doc false
+  defdelegate record_events(entries, opts), to: Backend
+  @doc false
+  defdelegate record_correction(entry, opts), to: Backend
+  @doc false
+  defdelegate load_event(tenant_key, event_id), to: Backend
+  @doc false
+  defdelegate load_event_total(tenant_key, feature, period_start), to: Backend
+  @doc false
+  defdelegate stream_events(cursor, opts), to: Backend
+  @doc false
+  defdelegate write_projection_totals(generation, rows), to: Backend
+  @doc false
+  defdelegate activate_projection(generation), to: Backend
+  @doc false
+  defdelegate begin_projection_generation(), to: Backend
+  @doc false
+  defdelegate projection_state(), to: Backend
+  @doc false
+  defdelegate drain_projection_seed(seed, limit), to: Backend
+  @doc false
+  defdelegate upsert_counters(rows), to: Backend
+  @doc false
+  defdelegate add_counters(rows), to: Backend
+  @doc false
+  defdelegate flush_batch(id, counters, history), to: Backend
+  @doc false
+  defdelegate load_counter(tenant_key, feature, period_start), to: Backend
+  @doc false
+  defdelegate upsert_history(rows), to: Backend
+  @doc false
+  defdelegate add_history(rows), to: Backend
+  @doc false
+  defdelegate load_history(tenant_key, feature, date), to: Backend
+  @doc false
+  defdelegate load_history_range(tenant_key, feature, from, to), to: Backend
+  @doc false
+  defdelegate get_subscription(tenant_key), to: Backend
+  @doc false
+  defdelegate put_subscription(attrs), to: Backend
+  @doc false
+  defdelegate insert_events(rows), to: Backend
+  @doc false
+  defdelegate stream_counters(period_start), to: Backend
+end

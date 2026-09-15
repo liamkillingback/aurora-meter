@@ -218,15 +218,32 @@ if Code.ensure_loaded?(Oban) do
       end
     end
 
-    describe "the two workers whose operation is not in this release" do
-      test "RecurringGrants cancels with :not_implemented" do
-        refute Code.ensure_loaded?(AuroraMeter.Credits.Recurrences)
-        assert RecurringGrants.perform(job()) == {:cancel, :not_implemented}
-      end
-
+    describe "the worker whose operation is not in this release" do
       test "PlanTransitions cancels with :not_implemented" do
         refute function_exported?(AuroraMeter.Subscriptions, :apply_due_transitions, 1)
         assert PlanTransitions.perform(job()) == {:cancel, :not_implemented}
+      end
+    end
+
+    describe "RecurringGrants, whose operation arrived in build unit 06d" do
+      test "runs the sweep and maps its return, with no edit to the worker" do
+        assert Code.ensure_loaded?(AuroraMeter.Credits.Recurrences)
+
+        assert {:ok, %{counts: counts}} =
+                 RecurringGrants.perform(job(%{"limit" => 1, "batch" => 1}))
+
+        assert is_map(counts)
+      end
+
+      test "passes only the options the operation declares, and only those the job carries" do
+        # Args carry ids and scalars, never a policy and never an amount
+        # (`architecture-map.md` section 6). An unknown key is ignored rather
+        # than raising: a job that cannot be fixed by editing the crontab is a
+        # job that fails until somebody finds it.
+        assert {:ok, %{counts: %{"examined" => examined}}} =
+                 RecurringGrants.perform(job(%{"limit" => 1, "batch" => 1, "amount" => 999}))
+
+        assert examined <= 1
       end
     end
 

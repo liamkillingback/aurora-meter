@@ -33,9 +33,11 @@ defmodule AuroraMeter.Credits.Ledger do
   alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Credits.Allocator
+  alias AuroraMeter.Credits.Money
   alias AuroraMeter.Credits.Promotions
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
+  alias AuroraMeter.Schema.CreditRecurrence
   alias AuroraMeter.Schema.CreditTransaction
   alias Phoenix.PubSub
 
@@ -1380,6 +1382,287 @@ defmodule AuroraMeter.Credits.Ledger do
       {key, value} -> {key, value}
     end)
   end
+
+  # -- recurring grants (build unit 06d) --------------------------------------
+
+  @typedoc false
+  @type recurrence_request :: %{
+          key: String.t(),
+          reference: String.t(),
+          policy: map(),
+          policy_json: map(),
+          period: %{start: DateTime.t(), end: DateTime.t()},
+          historical?: boolean(),
+          previous: %{id: Ecto.UUID.t(), key: String.t(), rollover: non_neg_integer()} | nil,
+          source: map(),
+          metadata: map(),
+          gate: (module() -> :ok | {:skip, atom()})
+        }
+
+  @doc false
+  # One period of one recurring allowance, in one transaction.
+  #
+  # Everything a period does is here rather than in `Credits.Recurrences`
+  # because everything a period does is a ledger write, and the lock order
+  # (`architecture-map.md` 7.3: balance row, then transaction rows, then lots
+  # `ORDER BY id`) is this module's to keep. The engine decides *which* periods
+  # and *what* policy; this decides nothing except how to write it.
+  #
+  # Two clocks, and the split is the contract in `architecture-map.md` 3. The
+  # engine passes no instant: the period bounds it chose came from `Clock.now/0`
+  # (the question "what period is it" is a wall-clock question). Every decision
+  # taken here compares against a column this database stamped, so it takes
+  # `Clock.db_now/0`, which is what `lot_instant/0` already is.
+  #
+  # The ledger rows it can write, in order:
+  #
+  #   1. the previous period's lots expire (so the value about to be carried
+  #      cannot also stay spendable);
+  #   2. the period's allowance is granted;
+  #   3. the carried remainder is granted as a lot of its own;
+  #   4. for a historical period, both of those expire again immediately.
+  #
+  # The crossing decision runs once, on the last entry, because the whole
+  # transaction is one act and its last entry is the wallet's end state.
+  @spec recurrence(String.t(), recurrence_request()) ::
+          {:ok, map()} | {:error, term()}
+  def recurrence(tenant_key, request) do
+    repo = Config.repo()
+    nested? = repo.in_transaction?()
+
+    case repo.transaction(fn -> recurrence_locked(repo, tenant_key, request) end) do
+      {:ok, %{outcomes: outcomes} = report} ->
+        Enum.each(outcomes, &recurrence_effect(&1, nested?))
+        {:ok, Map.delete(report, :outcomes)}
+
+      {:error, {:skipped, reason}} ->
+        {:ok, %{result: :skipped, reason: reason}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp recurrence_effect(outcome, nested?) do
+    outcome = Map.put(outcome, :deferred, nested?)
+    if nested?, do: defer(outcome), else: emit(outcome)
+  end
+
+  defp recurrence_locked(repo, tenant_key, request) do
+    row = locked_row(repo, tenant_key)
+
+    # The allowance, the cap and the catch-up are all defined over lots, so a
+    # wallet the allocator does not own cannot be given one. Refused under the
+    # lock rather than from the scan's snapshot, for the same reason
+    # `expire_grant_locked/4` refuses there.
+    if lots?(row) do
+      recurrence_gate(repo, row, request)
+    else
+      repo.rollback({:skipped, :lots_disabled})
+    end
+  end
+
+  defp recurrence_gate(repo, row, request) do
+    case request.gate.(repo) do
+      :ok -> recurrence_write(repo, row, request)
+      {:skip, reason} -> repo.rollback({:skipped, reason})
+    end
+  end
+
+  defp recurrence_write(repo, row, request) do
+    now = lot_instant()
+
+    case insert_recurrence(repo, row.tenant_key, request, now) do
+      nil ->
+        repo.rollback({:skipped, :duplicate})
+
+      recurrence ->
+        previous = previous_lots(repo, row.tenant_key, request.previous)
+        carry = recurrence_carry(previous, request)
+
+        {row, outcomes} = expire_all(repo, row, Enum.map(previous, & &1.id), now, [])
+        {row, outcomes, grant} = recurrence_grant(repo, row, request, now, outcomes)
+        {row, outcomes, rollover} = recurrence_rollover(repo, row, request, carry, now, outcomes)
+        {row, outcomes} = recurrence_history(repo, row, request, [grant, rollover], now, outcomes)
+
+        recurrence = finish_recurrence(repo, recurrence, grant, rollover, request)
+
+        %{
+          result: recurrence.state,
+          recurrence: recurrence,
+          tenant_key: row.tenant_key,
+          amount: request.policy.amount,
+          rollover_amount: carry,
+          unused_before: unused(previous),
+          outcomes: recurrence_outcomes(Enum.reverse(outcomes), repo)
+        }
+    end
+  end
+
+  # The crossing is decided once, on the entry that left the wallet in the state
+  # it is now in. Deciding it on each entry in turn would write the flag from a
+  # row copy the next entry then invalidates, and would announce a crossing for
+  # an intermediate state no reader can ever observe: a historical period dips
+  # below its threshold between the grant and the expiry that undoes it.
+  defp recurrence_outcomes([], _repo), do: []
+
+  defp recurrence_outcomes(outcomes, repo) do
+    {leading, [last]} = Enum.split(outcomes, -1)
+    Enum.map(leading, &Map.put(&1, :crossing, :none)) ++ [settle_outcome(repo, last)]
+  end
+
+  defp insert_recurrence(repo, tenant_key, request, now) do
+    state = if request.historical?, do: :issued_and_expired, else: :granted
+
+    {_count, returned} =
+      repo.insert_all(
+        CreditRecurrence,
+        [
+          %{
+            id: Ecto.UUID.generate(),
+            tenant_key: tenant_key,
+            key: request.key,
+            policy: request.policy_json,
+            period_start: DateTime.truncate(request.period.start, :second),
+            state: state,
+            inserted_at: now
+          }
+        ],
+        on_conflict: :nothing,
+        conflict_target: [:tenant_key, :key],
+        returning: [:id, :key, :state, :period_start]
+      )
+
+    List.first(returned)
+  end
+
+  # Every lot the previous period produced, allowance and rollover alike, found
+  # by the recurrence key each carries in its `source`. The rollover is capped
+  # against the two together: taking it from the allowance lot alone would
+  # under-carry a period that spent its allowance and left its carry unspent,
+  # and taking it uncapped would compound. The cap is what stops compounding,
+  # not the choice of lots.
+  defp previous_lots(_repo, _tenant_key, nil), do: []
+
+  defp previous_lots(repo, tenant_key, %{key: key}) do
+    repo.all(
+      from(l in CreditLot,
+        where: l.tenant_key == ^tenant_key and fragment("?->>'recurrence_key'", l.source) == ^key,
+        order_by: [asc: l.seq],
+        lock: "FOR UPDATE"
+      )
+    )
+  end
+
+  # What the previous period did not spend, whether or not the expiry sweep has
+  # already destroyed it. `available + expired` is invariant under this lot's own
+  # expiry, which is what makes the carry the same number whichever of the sweep
+  # and this transaction reached the lot first: expiry only ever moves value from
+  # one of those two buckets to the other.
+  defp unused(lots), do: Enum.reduce(lots, 0, &(&1.available + &1.expired + &2))
+
+  defp recurrence_carry(_previous, %{previous: nil}), do: 0
+
+  defp recurrence_carry(previous, %{previous: %{rollover: cap}}), do: min(unused(previous), cap)
+
+  defp recurrence_grant(repo, row, request, now, outcomes) do
+    outcome =
+      write_lot_grant(repo, row, request.policy.amount, %{
+        category: request.policy.category,
+        reference: request.reference,
+        expires_at: expires_at(request.policy.expires, request.period, now),
+        metadata: request.metadata,
+        source: request.source
+      })
+
+    {outcome.after, [outcome | outcomes], outcome}
+  end
+
+  defp recurrence_rollover(_repo, row, _request, 0, _now, outcomes), do: {row, outcomes, nil}
+
+  defp recurrence_rollover(repo, row, request, carry, _now, outcomes) do
+    outcome =
+      write_lot_grant(repo, row, carry, %{
+        category: request.policy.category,
+        reference: request.reference <> ":rollover",
+        # A carried lot always expires with the period it was carried into,
+        # whatever the policy says about the allowance itself. It is last
+        # period's money, granted one more period to be spent in.
+        expires_at: request.period.end,
+        metadata: Map.put(request.metadata, "rollover", true),
+        source: Map.put(request.source, "rollover_from", request.previous.key)
+      })
+
+    {outcome.after, [outcome | outcomes], outcome}
+  end
+
+  # A period that had already ended when it was processed. The allowance is
+  # real history, so it is written; it was never spendable, so it is destroyed
+  # in the same transaction. `v1-release.md` 10.1: expired historical grants
+  # enter ledger history as issued and expired rather than appearing as fresh
+  # available funds.
+  defp recurrence_history(_repo, row, %{historical?: false}, _grants, _now, outcomes),
+    do: {row, outcomes}
+
+  defp recurrence_history(repo, row, _request, grants, now, outcomes) do
+    ids =
+      grants
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&lot_of(repo, &1.txn.id))
+      |> Enum.reject(&is_nil/1)
+
+    expire_all(repo, row, ids, now, outcomes)
+  end
+
+  defp expire_all(_repo, row, [], _now, outcomes), do: {row, outcomes}
+
+  defp expire_all(repo, row, [id | rest], now, outcomes) do
+    case expire_lot_locked(repo, row, id, now) do
+      # `:already_expired` (the sweep got here first, or a historical grant that
+      # repaid its whole value into debt) and `:held` (a hold still reserves it,
+      # and I12 turns that into `expired` when it is released) are both answers
+      # rather than failures. Neither leaves value that this period may carry:
+      # `unused/1` counted it before either could move it.
+      {:refused, _reason} -> expire_all(repo, row, rest, now, outcomes)
+      outcome -> expire_all(repo, outcome.after, rest, now, [outcome | outcomes])
+    end
+  end
+
+  defp lot_of(repo, transaction_id) do
+    repo.one(from(l in CreditLot, where: l.grant_transaction_id == ^transaction_id, select: l.id))
+  end
+
+  defp write_lot_grant(repo, row, amount, attrs) do
+    Money.assert_range!(amount)
+
+    source = Map.get(attrs, :source, %{})
+    attrs = attrs |> Map.delete(:source) |> Map.merge(%{kind: :grant, amount: amount})
+
+    grant_with_lots(repo, row, attrs, source)
+  end
+
+  defp expires_at(:never, _period, _now), do: nil
+  defp expires_at(:period_end, period, _now), do: period.end
+  defp expires_at({:seconds, seconds}, _period, now), do: DateTime.add(now, seconds, :second)
+
+  # `rollover_from_id` names the recurrence a carry really came from, so it is
+  # written only when one did. A period that carried nothing has no source to
+  # name, and naming one anyway would make an audit read "this period's funds
+  # came from that period" of a period that contributed nothing.
+  defp finish_recurrence(repo, recurrence, grant, rollover, request) do
+    changes = [granted_transaction_id: grant.txn.id] ++ rollover_from(rollover, request)
+
+    {1, [updated]} =
+      repo.update_all(
+        from(r in CreditRecurrence, where: r.id == ^recurrence.id, select: r),
+        set: changes
+      )
+
+    updated
+  end
+
+  defp rollover_from(nil, _request), do: []
+  defp rollover_from(_outcome, %{previous: %{id: id}}), do: [rollover_from_id: id]
 
   @doc """
   Hands `tenant_key`'s wallet to the allocator.

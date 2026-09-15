@@ -168,6 +168,7 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Plans.metered/2` | DSL macro | stable | 0.1.0 | Options `:included`, `:unit_price`. Integer `unit_price` is the supported form; a float warns at boot from 0.5.0. |
 | `AuroraMeter.Plans.feature/2` | DSL macro | stable | 0.1.0 | Boolean or non-negative integer value. |
 | `AuroraMeter.Plans.counter/1` | DSL macro | stable | 0.4.0 | Measured, never blocked, never billed. `quota/2` reports `limit`, `included` and `percent` as `nil`. |
+| `AuroraMeter.Plans.recurring_credits/2` | DSL macro | stable | 0.6.0 | Options `:amount` (required, positive integer micro-dollars), `:category` (`:promotional`), `:rollover` (`0`), `:expires` (`:period_end`). Read by `AuroraMeter.Credits.Recurrences`. |
 
 ### 1.7 Periods and the clock
 
@@ -296,6 +297,8 @@ in section 2.
 | `AuroraMeter.Schema.CreditTransaction.changeset/2` | `(CreditTransaction.t(), map()) :: Ecto.Changeset.t()` | stable | 0.4.0 | |
 | `AuroraMeter.Schema.CreditTransaction.kinds/0` | `() :: [kind()]` | stable | 0.4.0 | |
 | `AuroraMeter.Schema.CreditTransaction.categories/0` | `() :: [category()]` | stable | 0.4.0 | |
+| `AuroraMeter.Schema.CreditRecurrence.changeset/2` | `(CreditRecurrence.t(), map()) :: Ecto.Changeset.t()` | stable | 0.6.0 | The engine is the only writer; the struct is public so support tooling can read a period back. |
+| `AuroraMeter.Schema.CreditRecurrence.states/0` | `() :: [state()]` | stable | 0.6.0 | `[:granted, :issued_and_expired]`. |
 
 ### 1.13 HEEx components (optional dependency)
 
@@ -353,8 +356,8 @@ is a public function any scheduler can call. See
 | `AuroraMeter.Oban.CreditExpiry` | `AuroraMeter.Credits.expire_due/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"*/30 * * * *"`. |
 | `AuroraMeter.Oban.HoldReconciliation` | `AuroraMeter.Credits.reconcile_holds/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"*/15 * * * *"`. Job arguments `older_than_seconds`, `limit`, `reference_prefix`, `tenant`. |
 | `AuroraMeter.Oban.EventsReplay` | `AuroraMeter.Events.Replay.run/1` | optional-dep | 1.0.0 | Needs `oban`. No schedule: a projection rebuild is an operator action, and `cron_entries/1` never returns it. |
-| `AuroraMeter.Oban.RecurringGrants` | recurring credit grants | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; the worker cancels with `{:cancel, :not_implemented}` and `cron_entries/1` omits it. |
-| `AuroraMeter.Oban.PlanTransitions` | due plan changes | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; same behaviour as `AuroraMeter.Oban.RecurringGrants`. |
+| `AuroraMeter.Oban.RecurringGrants` | `AuroraMeter.Credits.Recurrences.run/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"7 * * * *"`. Job arguments `limit`, `batch`, `max_periods`, `tenant`. |
+| `AuroraMeter.Oban.PlanTransitions` | due plan changes | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; the worker cancels with `{:cancel, :not_implemented}` and `cron_entries/1` omits it. |
 | `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"40 3 * * *"`. Job arguments `only`, `batch_size`, `max_items`. Do not schedule it until every node has written a flush heartbeat. |
 | `AuroraMeter.Oban.ConfigError` | raised by `AuroraMeter.Oban.validate!/1` | optional-dep | 1.0.0 | Needs `oban`. Carries `:message` and `:problems`. |
 
@@ -393,6 +396,25 @@ reproduces that wallet's `balance`, `held` and `promotional` exactly. See
 | `AuroraMeter.Credits.LotMigration.checkpoint_name/1` | `(String.t()) :: String.t()` | stable | 0.6.0 | `"lot_migration:<tenant_key>"`, or `"lot_migration:sha256-<digest>"` when the key is not a legal `AuroraMeter.Operations` name. |
 | `AuroraMeter.Credits.LotMigration.cutover_blocked/0` | `() :: map() \| nil` | stable | 0.6.0 | Non-nil while a real cutover is refused, carrying the finding and the reason. |
 | `AuroraMeter.Credits.LotMigration.replay/2` | `([CreditTransaction.t()], String.t()) :: {:ok, map()} \| {:blocked, [map()]}` | stable | 0.6.0 | The pure fold: no repo, no clock, no configuration. |
+
+### 1.18 `AuroraMeter.Credits.Recurrences`
+
+Recurring credit allowances: one grant per tenant, entitlement, plan version and
+period, with a capped rollover and a bounded catch-up after downtime. The policy
+is a plan property (`AuroraMeter.Plans.recurring_credits/2`); a plan that
+declares none grants nothing. Pause it with
+`AuroraMeter.Operations.pause("credits_recurrences:global")`. See
+[Credits](credits.md) and [Plans](plans.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Credits.Recurrences.run/1` | `(keyword()) :: {:ok, summary()} \| {:error, term()}` | stable | 0.6.0 | Options `:limit` (500), `:batch` (50), `:max_periods` (12), `:tenant`, `:now`, `:dry_run`. Arity 0 exists through defaults. A wallet not on the lot engine is skipped with `reason: :lots_disabled`. |
+| `AuroraMeter.Credits.Recurrences.status/1` | `(keyword()) :: status()` | stable | 0.6.0 | The checkpoint, the pause flag, and a tenant's recurrence rows newest first. Options `:tenant`, `:limit`. Arity 0 exists through defaults. |
+| `AuroraMeter.Credits.Recurrences.periods/4` | `(tenant, DateTime.t() \| nil, DateTime.t(), pos_integer()) :: {:ok, [period()], :complete \| :truncated \| :up_to_date} \| {:error, term()}` | stable | 0.6.0 | The period walk on its own, over the configured period source. No database. |
+| `AuroraMeter.Credits.Recurrences.namespace/0` | `() :: String.t()` | stable | 0.6.0 | `"recurring:"`, the one reserved reference prefix. |
+| `AuroraMeter.Credits.Recurrences.operation/0` | `() :: String.t()` | stable | 0.6.0 | `"credits_recurrences:global"`, the `AuroraMeter.Operations` name. |
 
 ## 2. Behaviours and their callbacks
 
@@ -435,7 +457,7 @@ copied.
 
 | Entry | Shape | Class | Since | Notes |
 |---|---|---|---|---|
-| `AuroraMeter.Plan` | `%Plan{id, price, features}` | stable | 0.1.0 | Built by the DSL. `feature_config/0` is the per-feature union. |
+| `AuroraMeter.Plan` | `%Plan{id, price, features, recurring_credits}` | stable | 0.1.0 | Built by the DSL. `feature_config/0` is the per-feature union; `recurring_credit/0` is one allowance declaration, and the list is empty unless the plan declares `AuroraMeter.Plans.recurring_credits/2`. |
 | `AuroraMeter.Schema.Counter` | `aurora_meter_counters` row | stable | 0.1.0 | |
 | `AuroraMeter.Schema.History` | `aurora_meter_history` row | stable | 0.2.0 | |
 | `AuroraMeter.Schema.Event` | `aurora_meter_events` row | stable | 0.1.0 | The Ecto schema. Its `inserted_at` field is exposed as `recorded_at` on `AuroraMeter.Event`. |
@@ -566,6 +588,7 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :credits, :hold_reconciliation]` | `amount`, `age_seconds`, `duration` | `tenant_key`, `reference`, `decision`, `outcome` | stable | 0.6.0 | `[:aurora_meter, :credits, :hold_reconciliation]` |
 | `[:aurora_meter, :credits, :conservation_error]` | `balance_delta`, `held_delta`, `promotional_delta`, `expired_delta` | `tenant_key`, `operation`, `reference` | stable | 0.6.0 | `[:aurora_meter, :credits, :conservation_error]` |
 | `[:aurora_meter, :credits, :lot_migration]` | `wallets`, `migrated`, `blocked`, `deferred`, `rows`, `duration_ms` | `shadow`, `state` | stable | 0.6.0 | `[:aurora_meter, :credits, :lot_migration]` |
+| `[:aurora_meter, :credits, :recurrence]` | `amount`, `rollover_amount` | `tenant_key`, `name`, `plan_id`, `plan_version`, `period_start`, `result`, `reason` | stable | 0.6.0 | `[:aurora_meter, :credits, :recurrence]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 | `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |

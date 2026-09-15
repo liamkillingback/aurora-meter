@@ -30,6 +30,7 @@ defmodule AuroraMeter.Plans do
           price 0
           counter :requests
           feature :api_access, true
+          recurring_credits :monthly_allowance, amount: 5_000_000, rollover: 1_000_000
         end
       end
 
@@ -39,11 +40,28 @@ defmodule AuroraMeter.Plans do
 
   alias AuroraMeter.Plan
 
+  # The entitlement name and the plan id both become part of a recurrence key,
+  # and a key is parsed by splitting on `:`. Validated where the string is
+  # invented rather than where it is read (`open-findings.md` X272).
+  @name_format ~r/^[a-z][a-z0-9_]*$/
+
+  @recurring_keys [:amount, :category, :rollover, :expires]
+
+  @categories [:promotional, :paid, :adjustment]
+
   @doc false
   defmacro __using__(_opts) do
     quote do
       import AuroraMeter.Plans,
-        only: [plan: 2, price: 1, limit: 3, metered: 2, counter: 1, feature: 2]
+        only: [
+          plan: 2,
+          price: 1,
+          limit: 3,
+          metered: 2,
+          counter: 1,
+          feature: 2,
+          recurring_credits: 2
+        ]
 
       Module.register_attribute(__MODULE__, :aurora_plans, accumulate: true)
       @before_compile AuroraMeter.Plans
@@ -78,6 +96,8 @@ defmodule AuroraMeter.Plans do
     quote do
       Module.delete_attribute(__MODULE__, :aurora_features)
       Module.register_attribute(__MODULE__, :aurora_features, accumulate: true)
+      Module.delete_attribute(__MODULE__, :aurora_recurring_credits)
+      Module.register_attribute(__MODULE__, :aurora_recurring_credits, accumulate: true)
       Module.put_attribute(__MODULE__, :aurora_price, 0)
 
       unquote(block)
@@ -85,7 +105,8 @@ defmodule AuroraMeter.Plans do
       @aurora_plans AuroraMeter.Plans.__build__(
                       unquote(id),
                       Module.get_attribute(__MODULE__, :aurora_price),
-                      Module.get_attribute(__MODULE__, :aurora_features)
+                      Module.get_attribute(__MODULE__, :aurora_features),
+                      Module.get_attribute(__MODULE__, :aurora_recurring_credits)
                     )
     end
   end
@@ -157,15 +178,70 @@ defmodule AuroraMeter.Plans do
     end
   end
 
+  @doc """
+  Declares a recurring credit allowance: `recurring_credits :monthly, amount: 5_000_000`.
+
+  The allowance is granted once per tenant, entitlement, plan version and
+  billing period by `AuroraMeter.Credits.Recurrences.run/1`. A plan that does
+  not declare one grants nothing, which is what "recurring grants default to
+  disabled" means.
+
+  Options:
+
+    * `:amount` — required, a positive **integer** of micro-dollars. A float is
+      an error rather than a warning: this is new API and money is an integer.
+    * `:category` — `:promotional` (default), `:paid` or `:adjustment`.
+    * `:rollover` — a non-negative integer cap in micro-dollars, `0` (default)
+      for no rollover. At most this much of one period's **unused** allowance is
+      carried into the next period, as a new lot with its own reference. It does
+      not accumulate: two idle periods carry the cap, not twice the cap.
+    * `:expires` — `:period_end` (default), `:never` or `{:seconds, n}`.
+
+  Three combinations are refused at compile time, each because the ledger or the
+  arithmetic cannot honour it:
+
+    * `rollover > 0` with anything but `expires: :period_end`. A rollover is
+      defined as what the previous period's lot did not spend before it expired,
+      so a lot that outlives the period boundary would be carried and still be
+      spendable, and the tenant would hold the same micro-dollar twice.
+    * an expiry on a non-promotional allowance. Only promotional grants expire
+      (`AuroraMeter.Schema.CreditTransaction` refuses an `:expires_at` on any
+      other category), which is also `v1-release.md` 10.1's rule that paid
+      top-ups do not expire unless their own contract says so.
+    * a name or a plan id that is not lower snake case. Both become part of the
+      recurrence key, which is read by splitting on `:`.
+
+  `expires: :never` on a promotional allowance is allowed and warned: a
+  never-expiring monthly promotion accumulates for ever.
+  """
+  defmacro recurring_credits(name, opts) do
+    quote do
+      Module.put_attribute(
+        __MODULE__,
+        :aurora_recurring_credits,
+        {unquote(name), unquote(opts)}
+      )
+    end
+  end
+
   @doc false
-  @spec __build__(atom(), non_neg_integer(), [{atom(), Plan.feature_config()}]) ::
-          {atom(), Plan.t()}
-  def __build__(id, price, features_rev) do
+  @spec __build__(atom(), non_neg_integer(), [{atom(), Plan.feature_config()}], [
+          {atom(), keyword()}
+        ]) :: {atom(), Plan.t()}
+  def __build__(id, price, features_rev, recurring_rev) do
     features = Enum.reverse(features_rev)
     validate_no_duplicates!(id, features)
     Enum.each(features, &validate_feature!(id, &1))
     validate_price!(id, price)
-    {id, %Plan{id: id, price: price, features: Map.new(features)}}
+    recurring = build_recurring!(id, Enum.reverse(recurring_rev || []))
+
+    {id,
+     %Plan{
+       id: id,
+       price: price,
+       features: Map.new(features),
+       recurring_credits: recurring
+     }}
   end
 
   @doc "Returns all plans as `%{id => Plan.t()}` from the configured plans module."
@@ -284,4 +360,202 @@ defmodule AuroraMeter.Plans do
 
   defp validate_price!(id, price),
     do: raise(ArgumentError, "plan #{inspect(id)} has invalid price: #{inspect(price)}")
+
+  # -- recurring credits ------------------------------------------------------
+
+  @spec build_recurring!(atom(), [{atom(), keyword()}]) :: [Plan.recurring_credit()]
+  defp build_recurring!(_id, []), do: []
+
+  defp build_recurring!(id, declarations) do
+    validate_plan_name!(id)
+    names = Enum.map(declarations, &elem(&1, 0))
+    dups = names -- Enum.uniq(names)
+
+    if dups != [] do
+      raise ArgumentError,
+            "plan #{inspect(id)} declares duplicate recurring_credits name(s): #{inspect(dups)}"
+    end
+
+    Enum.map(declarations, &build_recurring_credit!(id, &1))
+  end
+
+  defp build_recurring_credit!(id, {name, opts}) when is_list(opts) do
+    validate_entitlement_name!(id, name)
+    validate_keys!(id, name, opts)
+
+    credit = %{
+      name: name,
+      amount: fetch_amount!(id, name, opts),
+      category: fetch_category!(id, name, opts),
+      rollover: fetch_rollover!(id, name, opts),
+      expires: fetch_expires!(id, name, opts)
+    }
+
+    validate_combination!(id, credit)
+    credit
+  end
+
+  defp build_recurring_credit!(id, {name, opts}) do
+    raise ArgumentError,
+          recurring_error(id, name, "takes a keyword list of options, got: #{inspect(opts)}")
+  end
+
+  defp validate_plan_name!(id) when is_atom(id) do
+    if Regex.match?(@name_format, Atom.to_string(id)) do
+      :ok
+    else
+      raise ArgumentError,
+            "plan #{inspect(id)} declares recurring_credits, so its id becomes part of a " <>
+              "recurrence key (\"recurring:<tenant>:<name>:<plan>:<version>:<period>\") and " <>
+              "must be lower snake case, matching #{inspect(@name_format)}. A key is read by " <>
+              "splitting on \":\", so an id carrying one cannot be read back."
+    end
+  end
+
+  defp validate_entitlement_name!(id, name) when is_atom(name) and not is_nil(name) do
+    if Regex.match?(@name_format, Atom.to_string(name)) do
+      :ok
+    else
+      raise ArgumentError,
+            recurring_error(
+              id,
+              name,
+              "must be lower snake case, matching #{inspect(@name_format)}: the name becomes " <>
+                "part of the recurrence key and a key is read by splitting on \":\""
+            )
+    end
+  end
+
+  defp validate_entitlement_name!(id, name),
+    do: raise(ArgumentError, recurring_error(id, name, "must be an atom"))
+
+  defp validate_keys!(id, name, opts) do
+    case Keyword.keys(opts) -- @recurring_keys do
+      [] ->
+        :ok
+
+      unknown ->
+        raise ArgumentError,
+              recurring_error(
+                id,
+                name,
+                "has unknown option(s) #{inspect(unknown)}; the options are " <>
+                  "#{inspect(@recurring_keys)}"
+              )
+    end
+  end
+
+  defp fetch_amount!(id, name, opts) do
+    case Keyword.fetch(opts, :amount) do
+      {:ok, amount} when is_integer(amount) and amount > 0 ->
+        amount
+
+      {:ok, other} ->
+        raise ArgumentError,
+              recurring_error(
+                id,
+                name,
+                ":amount must be a positive integer of micro-dollars, got: #{inspect(other)}"
+              )
+
+      :error ->
+        raise ArgumentError, recurring_error(id, name, "needs an :amount")
+    end
+  end
+
+  defp fetch_category!(id, name, opts) do
+    case Keyword.get(opts, :category, :promotional) do
+      category when category in @categories ->
+        category
+
+      other ->
+        raise ArgumentError,
+              recurring_error(
+                id,
+                name,
+                ":category must be one of #{inspect(@categories)}, got: #{inspect(other)}"
+              )
+    end
+  end
+
+  defp fetch_rollover!(id, name, opts) do
+    case Keyword.get(opts, :rollover, 0) do
+      rollover when is_integer(rollover) and rollover >= 0 ->
+        rollover
+
+      other ->
+        raise ArgumentError,
+              recurring_error(
+                id,
+                name,
+                ":rollover must be a non-negative integer of micro-dollars, got: " <>
+                  inspect(other)
+              )
+    end
+  end
+
+  defp fetch_expires!(id, name, opts) do
+    case Keyword.get(opts, :expires, :period_end) do
+      expires when expires in [:period_end, :never] ->
+        expires
+
+      {:seconds, seconds} when is_integer(seconds) and seconds > 0 ->
+        {:seconds, seconds}
+
+      other ->
+        raise ArgumentError,
+              recurring_error(
+                id,
+                name,
+                ":expires must be :period_end, :never or {:seconds, n}, got: #{inspect(other)}"
+              )
+    end
+  end
+
+  defp validate_combination!(id, %{rollover: rollover, expires: expires, name: name})
+       when rollover > 0 and expires != :period_end do
+    raise ArgumentError,
+          recurring_error(
+            id,
+            name,
+            "declares rollover: #{rollover} with expires: #{inspect(expires)}. A rollover is " <>
+              "what the previous period's lot did not spend before it expired, so it is " <>
+              "defined only when the lot expires at the period boundary. With any other " <>
+              "expiry the carried value would still be spendable on the old lot as well as " <>
+              "granted again on the new one."
+          )
+  end
+
+  defp validate_combination!(id, %{category: category, expires: expires, name: name})
+       when category != :promotional and expires != :never do
+    raise ArgumentError,
+          recurring_error(
+            id,
+            name,
+            "declares category: #{inspect(category)} with expires: #{inspect(expires)}. Only " <>
+              "promotional grants expire: AuroraMeter.Schema.CreditTransaction refuses an " <>
+              "`expires_at` on any other category, and v1-release.md 10.1 says paid top-ups " <>
+              "do not expire unless their own contract says so. Use expires: :never."
+          )
+  end
+
+  defp validate_combination!(id, %{category: :promotional, expires: :never, name: name}) do
+    IO.warn(
+      recurring_error(
+        id,
+        name,
+        "is a promotional allowance that never expires, so every period's grant stays " <>
+          "spendable for ever and the tenant accumulates them. That is legal and is almost " <>
+          "always a mistake; use expires: :period_end, or category: :paid if the money is " <>
+          "really theirs to keep."
+      )
+    )
+
+    :ok
+  end
+
+  defp validate_combination!(_id, _credit), do: :ok
+
+  defp recurring_error(id, name, detail),
+    do: "plan #{inspect(id)}: recurring_credits #{inspect(name)} #{detail}"
 end

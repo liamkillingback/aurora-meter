@@ -33,6 +33,7 @@ defmodule AuroraMeter.Test.Connections do
   alias AuroraMeter.Schema.CreditAllocation
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
+  alias AuroraMeter.Schema.CreditRecurrence
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Schema.Event
   alias AuroraMeter.Schema.EventTotal
@@ -49,6 +50,7 @@ defmodule AuroraMeter.Test.Connections do
   @tables [
     CreditAllocation,
     CreditLot,
+    CreditRecurrence,
     Counter,
     CreditBalance,
     CreditTransaction,
@@ -57,6 +59,13 @@ defmodule AuroraMeter.Test.Connections do
     History,
     Subscription
   ]
+
+  # `aurora_meter_credit_recurrences.rollover_from_id` points at another row of
+  # the same table `ON DELETE RESTRICT`, and RESTRICT is checked as each row goes
+  # rather than at the end of the statement, so one `DELETE` over a chain of
+  # periods can be refused by a row the same statement is about to remove. The
+  # link is cut first; it carries no value the cleanup needs.
+  @unlink [{CreditRecurrence, :rollover_from_id}]
 
   @tenantless [AuroraMeter.Schema.FlushReceipt]
 
@@ -143,6 +152,15 @@ defmodule AuroraMeter.Test.Connections do
     length = String.length(prefix)
 
     try do
+      for {schema, field} <- @unlink do
+        repo().update_all(
+          from(row in schema,
+            where: fragment("left(?, ?) = ?", row.tenant_key, ^length, ^prefix)
+          ),
+          set: [{field, nil}]
+        )
+      end
+
       for schema <- @tables do
         repo().delete_all(
           from(row in schema, where: fragment("left(?, ?) = ?", row.tenant_key, ^length, ^prefix))
