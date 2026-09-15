@@ -41,6 +41,13 @@ defmodule AuroraMeter.Test.Kill do
   @poll 1
   @supervisor AuroraMeter.Supervisor
 
+  # How long a started worker waits for the caller's go-ahead before giving up
+  # (finding X260). It is generous because the only thing that can delay the
+  # message is the caller being descheduled between `start_child` and `send`,
+  # and it exists so that a worker whose caller died becomes a named exit rather
+  # than a process sitting in a `receive` for the life of the suite.
+  @ready_timeout 30_000
+
   @doc """
   Runs `fun` in a supervised task and waits for it to die or return.
 
@@ -203,15 +210,42 @@ defmodule AuroraMeter.Test.Kill do
   # monitor and reply message keep the :DOWN reason exactly as the VM reported
   # it, where Task.await would translate it into a caller exit and lose the
   # distinction this module exists to make.
+  #
+  # **The worker waits for a go-ahead, and that is finding X260's fix.** This
+  # used to start the child and then call `Process.monitor/1`, which is a
+  # monitor established **after** the process could already have died: a worker
+  # armed with `:exit_kill_self` can be gone before the monitor exists, and
+  # `Process.monitor/1` on a dead pid delivers `{:DOWN, ref, :process, pid,
+  # :noproc}` immediately. `killed!/3` then raised naming `:noproc`, the one
+  # thing that did not happen, and the harness's own self-test failed. Seen
+  # once at seed 7 in 06b's four-seed sweep of the whole core suite.
+  #
+  # **It cannot be fixed by tolerating the error**, which is what the sibling
+  # race in `exporter_case_test.exs`'s teardown needed: there the caller only
+  # wanted the process gone, so "it is already gone" is an acceptable answer.
+  # Here the **reason** is the entire subject, and once the monitor is late the
+  # real reason is unrecoverable: `:noproc` is all the VM will ever say. So the
+  # monitor has to be established before the worker can die, and the only way to
+  # arrange that with `start_child` is to make the worker ask permission first.
+  #
+  # The cost is one message in each direction on a path that then waits for a
+  # process to die, and `@ready_timeout` keeps a worker that never starts from
+  # becoming a hang: it becomes a named failure instead.
   defp await(supervisor, fun, point, timeout) do
     parent = self()
 
     {:ok, pid} =
       Task.Supervisor.start_child(supervisor, fn ->
-        send(parent, {:aurora_kill_result, self(), fun.()})
+        receive do
+          {:aurora_kill_go, ^parent} ->
+            send(parent, {:aurora_kill_result, self(), fun.()})
+        after
+          @ready_timeout -> exit(:aurora_kill_never_released)
+        end
       end)
 
     reference = Process.monitor(pid)
+    send(pid, {:aurora_kill_go, parent})
 
     try do
       receive do

@@ -13,6 +13,28 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 
 ### Added
 
+- **`AuroraMeter.Credits.reverse_lot/4` and `AuroraMeter.Credits.restore_lot/4`**,
+  the source-scoped refund pair. `reverse_lot/4` takes credit back off the lots
+  one payment funded, in the order `available`, `consumed` (which raises `debt`),
+  `reserved`, and **never touches a promotional lot**, whatever order it sorts in
+  and however late it was granted; `restore_lot/4` puts it back on the same lots
+  for a failed or cancelled refund and a won dispute. Both take a required
+  `:source` (`%{payment_intent_id: ...}` in this release), `:metadata` and
+  `:allow_partial` (default `false`, which refuses above the cap and writes
+  nothing). `reverse/4` stays wallet wide for a host with no payment provenance
+  and the documentation says which to use. See [Credits](credits.md).
+- `AuroraMeter.Credits.history/2` takes `:reference_prefix`, for a host that
+  mints references in namespaces of its own and needs to total one of them. It
+  filters the ledger's **reference namespace**, which is the host's naming, and
+  is never a substitute for provenance: which grant a spend came out of is a
+  question for `AuroraMeter.Credits.Lots`.
+- **The wallet cutover is no longer refused.**
+  `AuroraMeter.Credits.LotMigration.cutover_blocked/0` asked whether a lot-aware
+  refund path existed, because turning a wallet on without one would have
+  exposed it to a refund that consumed promotional credit. `reverse_lot/4` is
+  that path, so the check answers `nil` and `mix aurora_meter.credits.migrate_lots
+  --no-shadow` will cut a wallet over. A host that takes refunds must route them
+  through `reverse_lot/4` before it does.
 - **Recurring credit allowances, capped rollover and downtime catch-up.** A plan
   declares the policy with `AuroraMeter.Plans.recurring_credits/2` (`:amount`,
   `:category`, `:rollover`, `:expires`) and

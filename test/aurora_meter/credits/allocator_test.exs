@@ -204,7 +204,7 @@ defmodule AuroraMeter.Credits.AllocatorTest do
     funded = %{funded | consumed: 5 * @dollar, source: %{"payment_intent_id" => "pi_1"}}
     promo = lot(:promotional, 2, amount: 4 * @dollar)
 
-    {:ok, plan} = Allocator.plan([funded, promo], {:reverse, "pi_1", 9 * @dollar, @now})
+    {:ok, plan} = Allocator.plan([funded, promo], {:reverse, "pi_1", 9 * @dollar, @now, 0})
 
     assert kind_total(plan, funded.id, :reverse) == 9 * @dollar
     assert bucket(plan, funded.id, :available) == 0
@@ -218,7 +218,46 @@ defmodule AuroraMeter.Credits.AllocatorTest do
     # A paid reversal never touches a promotional lot, whatever order it sorts
     # in: the promotion did not come from that payment.
     assert bucket(plan, promo.id, :available) == 4 * @dollar
-    assert {:error, :no_matching_lot} = Allocator.plan([promo], {:reverse, "pi_1", 1, @now})
+    assert {:error, :no_matching_lot} = Allocator.plan([promo], {:reverse, "pi_1", 1, @now, 0})
+  end
+
+  test "X262 the debt a reversal creates is repaid out of paid availability and never promotional" do
+    # The finding: `{:reverse, ...}` did not carry the debt and so could not
+    # repay it, leaving `debt > 0` beside availability other lots held, which
+    # LI-06a-5 forbids and which makes `{:hold, ...}` refuse a hold the legacy
+    # ledger accepted.
+    #
+    # And the boundary the fix must not cross. `architecture-map.md` 7.2:
+    # "promotional lots are never touched by a paid reversal". Repaying out of
+    # `eligible/2` would take the promotional lot first, because that is what
+    # spend order does, and erase exactly the credit G06 bullet 5 protects.
+    spent = %{
+      lot(:paid, 1, amount: 10 * @dollar, source: %{"payment_intent_id" => "pi_1"})
+      | available: 0,
+        consumed: 10 * @dollar
+    }
+
+    other = lot(:paid, 2, amount: 6 * @dollar)
+    promo = lot(:promotional, 3, amount: 4 * @dollar)
+
+    {:ok, plan} = Allocator.plan([spent, other, promo], {:reverse, "pi_1", 10 * @dollar, @now, 0})
+
+    # Ten reversed off the funded lot, ten of debt created, six of it repaid
+    # out of the OTHER PAID lot, and four left because nothing else may pay it.
+    assert kind_total(plan, spent.id, :reverse) == 10 * @dollar
+    assert plan.debt_delta == 4 * @dollar
+    assert bucket(plan, other.id, :available) == 0
+    assert bucket(plan, other.id, :consumed) == 6 * @dollar
+
+    # The promotional lot is untouched, and no movement names it at all.
+    assert bucket(plan, promo.id, :available) == 4 * @dollar
+    refute Enum.any?(plan.movements, &(&1.lot_id == promo.id))
+
+    # The negative control for the exclusion: with only a promotional lot
+    # beside the debt, the debt stays rather than eating the promotion.
+    {:ok, promo_only} = Allocator.plan([spent, promo], {:reverse, "pi_1", 10 * @dollar, @now, 0})
+    assert promo_only.debt_delta == 10 * @dollar
+    assert bucket(promo_only, promo.id, :available) == 4 * @dollar
   end
 
   test "I10 restore is capped by the lot's reversed amount and repays debt first" do
@@ -239,11 +278,18 @@ defmodule AuroraMeter.Credits.AllocatorTest do
     assert bucket(plan, lot.id, :consumed) == 2 * @dollar
   end
 
+  # **`:reverse` and `:restore` are in the generated requests from 06e.** 06a
+  # could not put them here honestly: nothing called them, the lots carried no
+  # `source`, and a property over a request no caller can reach proves the
+  # planner is self-consistent and nothing else. `Credits.reverse_lot/4` reaches
+  # them now (finding X250), and the X262 repayment makes a reversal's plan
+  # carry movements on lots the reversal itself never names, which is exactly
+  # the shape a conservation property is for.
   property "I10 every planned movement conserves: each lot's five buckets still sum to its amount" do
     check all(
             book <- book_generator(),
             amount <- StreamData.integer(1..(20 * @dollar)),
-            request <- StreamData.member_of([:debit, :hold])
+            request <- StreamData.member_of([:debit, :hold, :reverse, :restore])
           ) do
       tolerance = 0
 
@@ -251,10 +297,12 @@ defmodule AuroraMeter.Credits.AllocatorTest do
         case request do
           :debit -> Allocator.plan(book, {:debit, amount, @now, true, tolerance, 0})
           :hold -> Allocator.plan(book, {:hold, amount, @now, 0})
+          :reverse -> Allocator.plan(book, {:reverse, "pi_1", amount, @now, 0})
+          :restore -> Allocator.plan(book, {:restore, "pi_1", amount, @now, 0})
         end
 
       case plan do
-        {:error, :insufficient_credits} ->
+        {:error, reason} when reason in [:insufficient_credits, :no_matching_lot] ->
           :ok
 
         {:ok, plan} ->
@@ -274,9 +322,30 @@ defmodule AuroraMeter.Credits.AllocatorTest do
           before = Allocator.projection(book, 0)
           after_plan = Allocator.projection(plan.book, plan.debt_delta)
 
+          moved = fn kind ->
+            plan.movements
+            |> Enum.filter(&(&1.kind == kind))
+            |> Enum.map(& &1.amount)
+            |> Enum.sum()
+          end
+
           case request do
-            :debit -> assert after_plan.balance == before.balance - amount
-            :hold -> assert after_plan.balance == before.balance
+            :debit ->
+              assert after_plan.balance == before.balance - amount
+
+            :hold ->
+              assert after_plan.balance == before.balance
+
+            # A reversal is capped by what its own lots hold, so the balance
+            # falls by what it actually reversed and not by what was asked for.
+            # The repayment X262 added is balance neutral by construction
+            # (`available` to `consumed` while debt falls by the same), which is
+            # what this arm asserts as well as the cap.
+            :reverse ->
+              assert after_plan.balance == before.balance - moved.(:reverse)
+
+            :restore ->
+              assert after_plan.balance == before.balance + moved.(:restore)
           end
       end
     end
@@ -340,12 +409,21 @@ defmodule AuroraMeter.Credits.AllocatorTest do
     for item <- list, rest <- permutations(list -- [item]), do: [item | rest]
   end
 
+  # **The generated lots carry history and provenance from 06e.** Before, every
+  # generated lot was wholly `available` and carried no `source`, so a `:reverse`
+  # would have found no lot and a `:restore` nothing to give back: the property
+  # would have been green over two requests that never moved anything (the shape
+  # X211 and X155 are about). The two percentages put value into `consumed` and
+  # `reversed`, and half the purchased lots carry the payment the generated
+  # requests name, so a reversal has something to find and something to miss.
   defp book_generator do
     StreamData.list_of(
       StreamData.tuple({
         StreamData.member_of([:paid, :promotional, :adjustment]),
         StreamData.integer(1..(5 * @dollar)),
-        StreamData.member_of([nil, @oct, @nov, ~U[2026-09-01 00:00:00Z]])
+        StreamData.member_of([nil, @oct, @nov, ~U[2026-09-01 00:00:00Z]]),
+        StreamData.integer(0..100),
+        StreamData.integer(0..100)
       }),
       min_length: 1,
       max_length: 6
@@ -353,9 +431,25 @@ defmodule AuroraMeter.Credits.AllocatorTest do
     |> StreamData.map(fn specs ->
       specs
       |> Enum.with_index(1)
-      |> Enum.map(fn {{category, amount, expires_at}, index} ->
-        lot(category, index, amount: amount, expires_at: expires_at)
+      |> Enum.map(fn {{category, amount, expires_at, spent, given_back}, index} ->
+        consumed = div(amount * spent, 100)
+        reversed = div((amount - consumed) * given_back, 100)
+
+        %{
+          lot(category, index,
+            amount: amount,
+            expires_at: expires_at,
+            source: source_for(category, index)
+          )
+          | available: amount - consumed - reversed,
+            consumed: consumed,
+            reversed: reversed
+        }
       end)
     end)
   end
+
+  defp source_for(:promotional, _index), do: %{}
+  defp source_for(_category, index) when rem(index, 2) == 1, do: %{"payment_intent_id" => "pi_1"}
+  defp source_for(_category, index), do: %{"payment_intent_id" => "pi_#{index}"}
 end

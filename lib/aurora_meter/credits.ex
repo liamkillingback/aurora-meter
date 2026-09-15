@@ -341,7 +341,7 @@ defmodule AuroraMeter.Credits do
       again.
     * `:category` — `:paid` (default), `:promotional` or `:adjustment`.
     * `:expires_at` — `DateTime`; promotional grants only.
-    * `:metadata` — a map stored on the entry.
+    * `:metadata`: a map stored on the entry.
     * `:source`: a map naming where the money came from, stored on the credit
       lot this grant creates. Ignored on a wallet that has not been cut over to
       lots. The keys Aurora Meter reads are `"payment_intent_id"` (what a refund
@@ -419,7 +419,7 @@ defmodule AuroraMeter.Credits do
 
   Options:
 
-    * `:metadata` — stored on the settle entry.
+    * `:metadata`: stored on the settle entry.
     * `:tenant` — assert the hold belongs to this tenant. A hold whose
       `tenant_key` is anything else answers `{:error, :not_found}` and nothing
       is written. Without it the reference alone identifies the hold, which is
@@ -529,6 +529,130 @@ defmodule AuroraMeter.Credits do
     Ledger.reverse(Tenant.to_key(tenant), amount, reference, metadata)
   end
 
+  @doc """
+  Takes `amount` back off **the lots one payment funded**, and nothing else.
+
+  The source-scoped reversal. Where `reverse/4` debits the wallet in spend
+  order, this one selects the tenant's lots whose `source.payment_intent_id`
+  matches `opts[:source]`, in spend order, and drains them `available`, then
+  `consumed`, then `reserved`:
+
+    * `available` first, so a refund destroys as little as possible;
+    * `consumed` next, which is money already spent and therefore raises
+      `debt` by the same amount;
+    * `reserved` last, because an open hold is work the host believes is still
+      running.
+
+  **A promotional lot is never touched**, whatever order it sorts in and
+  however late it was granted. A promotion did not come from that payment and
+  cannot be handed back to it, which is the rule `v1-release.md` 10.1 states
+  and the one a wallet-wide reversal breaks.
+
+  Options:
+
+    * `:source`: **required**, a map. This release matches on
+      `payment_intent_id` and nothing else; any other shape raises
+      `ArgumentError`, because a `source` the matcher does not understand would
+      match every lot and a refund against every lot is not a near miss.
+    * `:metadata`: a map stored on the entry.
+    * `:allow_partial`: default `false`. An amount above what the payment's
+      lots can still give back is refused with `{:error, :exceeds_source}` and
+      **nothing is written**. With `true`, the cap is reversed and the
+      difference is recorded as `"shortfall"` in the entry's metadata. A caller
+      that has already capped against the provider's own numbers should pass
+      `false`, so the error is a bug signal rather than a control-flow path.
+
+  Returns `{:error, :no_matching_lots}` when the tenant has no lot carrying
+  that payment: a wallet that has not been cut over to lots, or one migrated
+  before the provenance could be derived. Take the money back with `reverse/4`
+  in that case; it is what the wallet-wide path is for.
+
+  Idempotent on `reference`, in the `:reverse` kind's own namespace, exactly as
+  `reverse/4` is.
+
+  ## Examples
+
+      AuroraMeter.Credits.reverse_lot(org, 10_000_000, "refund:pi_123:1000",
+        source: %{payment_intent_id: "pi_123"})
+
+  """
+  @spec reverse_lot(term(), pos_integer(), String.t(), keyword()) ::
+          {:ok, txn()} | {:error, :duplicate_reference | :no_matching_lots | :exceeds_source}
+  def reverse_lot(tenant, amount, reference, opts)
+      when is_integer(amount) and amount > 0 and is_binary(reference) and is_list(opts) do
+    Money.assert_range!(amount)
+    assert_unreserved!(reference, "reverse_lot/4")
+
+    Ledger.reverse_lot(
+      Tenant.to_key(tenant),
+      amount,
+      reference,
+      payment_intent!(opts, "reverse_lot/4"),
+      opts
+    )
+  end
+
+  @doc """
+  Puts `amount` back onto the lots one payment funded, out of what an earlier
+  reversal took off them.
+
+  The inverse of `reverse_lot/4`, for a refund that failed or was cancelled and
+  for a dispute that was won. It moves `reversed` back to `available` on the
+  same lots and then applies the ledger's standard rule that incoming value
+  repays outstanding debt before any of it becomes spendable.
+
+  Capped by `SUM(lot.reversed)` over those lots, so a restoration can never
+  hand back more than the reversal took. Options are `:source` (required,
+  matched exactly as `reverse_lot/4` matches it), `:metadata` and
+  `:allow_partial` (default `false`, refusing with `{:error, :exceeds_reversed}`
+  and writing nothing).
+
+  The entry is written as `kind: :grant, category: :adjustment`, so it reads as
+  credit arriving in `history/2` and in `spend_history/2`, which is what it is.
+  Idempotent on `reference` in the grant namespace.
+  """
+  @spec restore_lot(term(), pos_integer(), String.t(), keyword()) ::
+          {:ok, txn()} | {:error, :duplicate_reference | :no_matching_lots | :exceeds_reversed}
+  def restore_lot(tenant, amount, reference, opts)
+      when is_integer(amount) and amount > 0 and is_binary(reference) and is_list(opts) do
+    Money.assert_range!(amount)
+    assert_unreserved!(reference, "restore_lot/4")
+
+    Ledger.restore_lot(
+      Tenant.to_key(tenant),
+      amount,
+      reference,
+      payment_intent!(opts, "restore_lot/4"),
+      opts
+    )
+  end
+
+  # The same refusal `Credits.Lots.for_source/2` makes, for the same reason and
+  # in the same words: a key the matcher does not understand would match every
+  # lot. Here it is stricter still, because the allocator scopes a reversal by
+  # `payment_intent_id` alone, so accepting a second key would silently widen
+  # what a refund may take.
+  @spec payment_intent!(keyword(), String.t()) :: String.t()
+  defp payment_intent!(opts, function) do
+    source = Keyword.get(opts, :source)
+
+    normalised =
+      if is_map(source), do: Map.new(source, fn {key, value} -> {to_string(key), value} end)
+
+    case normalised do
+      %{"payment_intent_id" => id} = map when is_binary(id) and map_size(map) == 1 ->
+        id
+
+      _other ->
+        raise ArgumentError,
+              "AuroraMeter.Credits.#{function}: :source is required and this release scopes a " <>
+                "reversal by the payment alone, so it must be exactly " <>
+                "%{payment_intent_id: \"...\"}. Got: #{inspect(source)}. A source key the " <>
+                "matcher does not understand would match every lot, and a refund against " <>
+                "every lot is not a near miss."
+    end
+  end
+
   # **One reserved namespace, and only one.** `AuroraMeter.Credits.Recurrences`
   # mints `"recurring:<tenant>:<name>:<plan>:<version>:<period>"` as the grant
   # reference for a period, and the ledger's `(kind, reference)` index is what
@@ -571,7 +695,7 @@ defmodule AuroraMeter.Credits do
       `AuroraMeter.Clock.now/0`, which is the clock the hold's `inserted_at` was
       stamped by.
     * `:limit` — default 200.
-    * `:reference_prefix` — narrow to one kind of work; a prefix match.
+    * `:reference_prefix`: narrow to one kind of work; a prefix match.
     * `:tenant` — only this tenant's holds.
     * `:after` — a `{inserted_at, id}` pair from the last row of the previous
       page. Results are ordered by `(inserted_at, id)`, so paging with this
@@ -621,7 +745,7 @@ defmodule AuroraMeter.Credits do
     * `:older_than` — required, a `DateTime`. Omitting it raises `KeyError`.
     * `:limit` — default 200, the most holds one run examines.
     * `:tenant` — sweep one tenant.
-    * `:reference_prefix` — sweep one kind of work.
+    * `:reference_prefix`: sweep one kind of work.
     * `:after` — a cursor from a previous report, to page.
     * `:reconciler` — use this instead of the configured one. A module, a
       `{module, function}` pair or a one-argument function. Passing
@@ -797,6 +921,13 @@ defmodule AuroraMeter.Credits do
     * `:kinds` — which kinds to include; defaults to
       `#{inspect(@default_history_kinds)}`, i.e. holds and releases (the
       bookkeeping around a settlement) are hidden unless asked for.
+    * `:reference_prefix`: only entries whose `reference` begins with this
+      string. For a host that mints references in namespaces of its own
+      (`"refund:<payment>:"`, `"reinstated:<payment>:<dispute>:"`) and needs to
+      total one of them. It is a filter on the ledger's **reference
+      namespace**, which is the host's own naming, and never a substitute for
+      provenance: which grant a spend came out of is a question for
+      `AuroraMeter.Credits.Lots`, not for a string prefix.
 
   `:before` and `:cursor` together raise `ArgumentError`. They answer different
   questions and combining them silently would look like paging while filtering.
@@ -844,7 +975,21 @@ defmodule AuroraMeter.Credits do
     query
     |> history_before(Keyword.get(opts, :before), Keyword.get(opts, :cursor))
     |> history_cursor(Keyword.get(opts, :cursor))
+    |> history_prefix(Keyword.get(opts, :reference_prefix))
     |> Config.repo().all()
+  end
+
+  @spec history_prefix(Ecto.Query.t(), String.t() | nil) :: Ecto.Query.t()
+  defp history_prefix(query, nil), do: query
+
+  defp history_prefix(query, prefix) when is_binary(prefix) and prefix != "",
+    do: from(t in query, where: fragment("starts_with(?, ?)", t.reference, ^prefix))
+
+  defp history_prefix(_query, prefix) do
+    raise ArgumentError,
+          "history/2's :reference_prefix must be a non-empty string, got: #{inspect(prefix)}. " <>
+            "An empty prefix matches every entry, which is what omitting the option does and " <>
+            "is never what a caller filtering on a reference namespace meant."
   end
 
   @spec history_before(Ecto.Query.t(), DateTime.t() | nil, cursor() | nil) :: Ecto.Query.t()

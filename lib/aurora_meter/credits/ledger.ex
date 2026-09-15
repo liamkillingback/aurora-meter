@@ -338,6 +338,165 @@ defmodule AuroraMeter.Credits.Ledger do
     |> duplicate_reference_error()
   end
 
+  @doc """
+  Takes `amount` back off the lots one payment funded.
+
+  The source-scoped sibling of `reverse/5`. Build unit 06e, and the function
+  whose existence opens `AuroraMeter.Credits.LotMigration`'s cutover gate.
+  """
+  @spec reverse_lot(String.t(), pos_integer(), String.t(), String.t(), keyword()) ::
+          {:ok, CreditTransaction.t()}
+          | {:error, :duplicate_reference | :no_matching_lots | :exceeds_source}
+  def reverse_lot(tenant_key, amount, reference, payment_intent_id, opts) do
+    partial? = Keyword.get(opts, :allow_partial, false)
+    metadata = Map.new(Keyword.get(opts, :metadata, %{}))
+
+    transact(fn repo ->
+      row = locked_row(repo, tenant_key)
+
+      cond do
+        find(repo, tenant_key, :reverse, reference) ->
+          refuse(:duplicate_reference)
+
+        # A wallet the allocator does not own has no lots at all, so there is
+        # nothing scoped to reverse against. The caller falls back to the
+        # wallet-wide `reverse/5`, which is what the money needs and what
+        # 06e's legacy-fallback path does.
+        not lots?(row) ->
+          refuse(:no_matching_lots)
+
+        true ->
+          reverse_lot_locked(repo, row, amount, reference, payment_intent_id, metadata, partial?)
+      end
+    end)
+    |> duplicate_reference_error()
+  end
+
+  defp reverse_lot_locked(repo, row, amount, reference, intent_id, metadata, partial?) do
+    now = lot_instant()
+    book = Allocator.book(repo, row.tenant_key)
+
+    case Allocator.plan(book, {:reverse, intent_id, amount, now, row.debt}) do
+      {:error, :no_matching_lot} ->
+        refuse(:no_matching_lots)
+
+      {:ok, plan} ->
+        # **Counted from the movements, not taken from the planner's word for
+        # it.** `to: :reversed` is the only thing that is the reversal; the
+        # plan also carries the `consume` movements that repay the debt the
+        # reversal created (X262), and counting those would report a shortfall
+        # as met.
+        taken = moved_to(plan, :reversed)
+        shortfall = amount - taken
+
+        cond do
+          taken == 0 ->
+            refuse(:exceeds_source)
+
+          shortfall > 0 and not partial? ->
+            refuse(:exceeds_source)
+
+          true ->
+            write_lot_entry(
+              repo,
+              row,
+              book,
+              %{
+                kind: :reverse,
+                category: :reversal,
+                reference: reference,
+                metadata: shortfall_metadata(metadata, shortfall)
+              },
+              plan,
+              now,
+              :reverse
+            )
+        end
+    end
+  end
+
+  @doc """
+  Puts `amount` back onto the lots one payment funded, out of what an earlier
+  reversal took. Build unit 06e.
+  """
+  @spec restore_lot(String.t(), pos_integer(), String.t(), String.t(), keyword()) ::
+          {:ok, CreditTransaction.t()}
+          | {:error, :duplicate_reference | :no_matching_lots | :exceeds_reversed}
+  def restore_lot(tenant_key, amount, reference, payment_intent_id, opts) do
+    partial? = Keyword.get(opts, :allow_partial, false)
+    metadata = Map.new(Keyword.get(opts, :metadata, %{}))
+
+    transact(fn repo ->
+      row = locked_row(repo, tenant_key)
+
+      cond do
+        find(repo, tenant_key, :grant, reference) ->
+          refuse(:duplicate_reference)
+
+        not lots?(row) ->
+          refuse(:no_matching_lots)
+
+        true ->
+          restore_lot_locked(repo, row, amount, reference, payment_intent_id, metadata, partial?)
+      end
+    end)
+    |> duplicate_reference_error()
+  end
+
+  defp restore_lot_locked(repo, row, amount, reference, intent_id, metadata, partial?) do
+    now = lot_instant()
+    book = Allocator.book(repo, row.tenant_key)
+
+    case Allocator.plan(book, {:restore, intent_id, amount, now, row.debt}) do
+      {:error, :no_matching_lot} ->
+        refuse(:no_matching_lots)
+
+      {:ok, plan} ->
+        given_back = moved_to(plan, :available)
+        shortfall = amount - given_back
+
+        cond do
+          given_back == 0 ->
+            refuse(:exceeds_reversed)
+
+          shortfall > 0 and not partial? ->
+            refuse(:exceeds_reversed)
+
+          true ->
+            write_lot_entry(
+              repo,
+              row,
+              book,
+              %{
+                kind: :grant,
+                category: :adjustment,
+                reference: reference,
+                metadata: shortfall_metadata(metadata, shortfall)
+              },
+              plan,
+              now,
+              :restore
+            )
+        end
+    end
+  end
+
+  # `:reverse` and `:restore` are the only two kinds that name their bucket,
+  # which is what makes this readable from the movements rather than from a
+  # field the planner would have to be trusted for.
+  defp moved_to(plan, bucket) do
+    kind = if bucket == :reversed, do: :reverse, else: :restore
+
+    plan.movements
+    |> Enum.filter(&(&1.to == bucket and &1.kind == kind))
+    |> Enum.reduce(0, &(&1.amount + &2))
+  end
+
+  defp shortfall_metadata(metadata, 0), do: metadata
+
+  defp shortfall_metadata(metadata, shortfall),
+    do: Map.put(metadata, "shortfall", shortfall)
+
   @spec set_low_balance_threshold(String.t(), integer() | nil) :: {:ok, CreditBalance.t()}
   def set_low_balance_threshold(tenant_key, threshold) do
     repo = Config.repo()
@@ -1241,14 +1400,17 @@ defmodule AuroraMeter.Credits.Ledger do
     end
   end
 
-  # One function for `:debit` and `:reverse`, because on a cut-over wallet they
-  # take the same planner request today. **That is not the end state**: finding
-  # X250 records that a reversal on a lot wallet must target the lots its
-  # payment funded (`{:reverse, payment_intent_id, ...}`), and 06e owns wiring
-  # it. It is not a live defect because no wallet is cut over: 06b's cutover
-  # gate refuses until `Credits.reverse_lot/4` exists. Sharing the function here
-  # changes nothing about that and makes the kind the only difference, which is
-  # what 06c is allowed to change.
+  # One function for `:debit` and the **wallet-wide** `:reverse`, because on a
+  # cut-over wallet they take the same planner request: both drain eligible
+  # lots in spend order.
+  #
+  # The source-scoped reversal is `reverse_lot/5`, which is a different request
+  # (`{:reverse, payment_intent_id, ...}`) and a different function. Both are
+  # public and the choice is the caller's: a host with payment provenance calls
+  # `Credits.reverse_lot/4` and gets the lots that payment funded; a host
+  # without it calls `Credits.reverse/4` and gets spend order, which takes
+  # promotional credit first. Finding X250 is why the cutover gate waited for
+  # the first of those to exist; it is not why the second still does.
   defp spend_with_lots(repo, row, amount, reference, metadata, kind, category, opts) do
     now = lot_instant()
     book = Allocator.book(repo, row.tenant_key)

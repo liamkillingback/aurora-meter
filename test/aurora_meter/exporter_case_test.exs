@@ -249,11 +249,66 @@ defmodule AuroraMeter.ExporterCase.JournalScript do
     subject_ref |> Journal.deliveries_for() |> Enum.map(& &1.item.payload)
   end
 
-  @doc "Stops a journal started by a setup, if it is still alive."
+  @doc """
+  Stops a journal started by a setup, tolerating one that has already gone.
+
+  **A teardown must not assert something it does not mean to assert.** This was
+  `if Process.alive?(pid), do: Agent.stop(pid), else: :ok`, which is
+  check-then-act, and the gap between the check and the call is reachable:
+
+    * the journal is started with `start_link/1`, so it is **linked to the test
+      process**;
+    * `on_exit` callbacks run in `ExUnit.OnExitHandler`, a different process,
+      **after** the test process has exited;
+    * so the link is already tearing the journal down when the callback runs.
+      `Process.alive?/1` can answer `true` and the `Agent.stop/1` a few
+      microseconds later exit `:noproc`, which ExUnit reports as the **test**
+      failing, in a teardown that had nothing to say about the test.
+
+  It only appears under full-suite load, because that is when the two are slow
+  enough to interleave. Seen once in build unit 06e's `mix check`
+  (`AuroraMeter.ExporterCaseSelfTest` / `test coverage reporting the suite names
+  every area it could not script`), never in five fixed-seed runs of the file on
+  its own.
+
+  **Catching the exit is the fix rather than widening the window**, because
+  there is no window: nothing can die between a call and its own failure. What
+  is still asserted is that there was a process to stop at all, which is the
+  `is_pid/1` guard: a teardown handed `nil` still fails, as it should.
+
+  The same shape is `open-findings.md` X260, in `AuroraMeter.Test.Kill`, and it
+  needs a different fix there for a reason worth knowing: X260 loses the exit
+  **reason**, which cannot be recovered after the fact, so its monitor has to be
+  established before the worker can die rather than its error tolerated.
+  """
   @spec stop(pid()) :: :ok
-  def stop(pid) do
-    if Process.alive?(pid), do: Agent.stop(pid), else: :ok
+  def stop(pid) when is_pid(pid) do
+    Agent.stop(pid)
+  catch
+    :exit, reason -> if gone?(reason), do: :ok, else: exit(reason)
   end
+
+  # **"The journal is no longer there", in the shapes the VM actually states it
+  # in**, both of which were measured rather than guessed
+  # (`tmp/v1/06e-teardown-race.exs`, 5,000 rounds a run):
+  #
+  #   {:noproc, {GenServer, :stop, [pid, :normal, :infinity]}}
+  #     the stop never reached a process at all;
+  #
+  #   {{:shutdown, {:sys, :terminate, [pid, :normal, :infinity]}},
+  #    {GenServer, :stop, [pid, :normal, :infinity]}}
+  #     the stop reached it while the link's `:shutdown` was already tearing it
+  #     down, so `:gen.stop/3` reports the exit reason it observed rather than
+  #     the one it asked for.
+  #
+  # The second is the one a first draft of this fix missed, because it catches
+  # `:shutdown` as a **tuple** and not as an atom. Nothing else is tolerated: a
+  # journal that times out, or that crashes on the way down, still fails the
+  # teardown, which is what a teardown is for.
+  defp gone?({reason, {GenServer, :stop, _args}}), do: gone?(reason)
+  defp gone?({:shutdown, {:sys, :terminate, _args}}), do: true
+  defp gone?(reason) when reason in [:noproc, :normal, :shutdown], do: true
+  defp gone?(_reason), do: false
 end
 
 defmodule AuroraMeter.ExporterCaseJournalTest do

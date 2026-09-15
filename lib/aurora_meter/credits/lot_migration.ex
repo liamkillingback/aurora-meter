@@ -49,16 +49,25 @@ defmodule AuroraMeter.Credits.LotMigration do
   provider and sends no mail. With `shadow: true`, which is the default, the
   only rows it writes at all are checkpoint rows.
 
-  ## Cutting a wallet over is currently refused
+  ## Cutting a wallet over
 
-  `AuroraMeter.Credits.reverse/4` does not take the lot path yet, so a paid
-  refund on a cut-over wallet would consume promotional lots in spend order and
-  write nothing into `reversed`. Nothing is exposed while no wallet is cut
-  over, and this is the only code that would change that, so `shadow: false` is
-  refused until the lot-aware refund path exists. Shadow runs, reports and
-  reconciliation are unaffected: the whole proof can be taken today and the
-  switch thrown later. `cutover_blocked/0` says whether the refusal is in
-  force.
+  A real cutover was refused while there was no lot-aware refund path: a paid
+  refund on a cut-over wallet would have gone through `reverse/4`, consumed
+  promotional lots in spend order and written nothing into `reversed`
+  (`open-findings.md` X250). `AuroraMeter.Credits.reverse_lot/4` is that path
+  and is the gate's own condition, so from the release that carries it
+  `shadow: false` is permitted and `cutover_blocked/0` answers `nil`.
+
+  A host that still wants the refusal keeps `shadow: true`, which remains the
+  default: `allow_cutover: true` has to be asked for explicitly on every run
+  that writes.
+
+  **What a host owes before cutting a wallet over is now its own refund
+  path**, not this module. A wallet on the allocator must take refunds through
+  `reverse_lot/4` with the payment's `source`; one that keeps calling
+  `reverse/4` on a cut-over wallet gets a wallet-wide reversal in spend order,
+  which is the hazard above with the gate removed rather than the hazard
+  fixed.
 
   ## Ordering
 
@@ -249,11 +258,12 @@ defmodule AuroraMeter.Credits.LotMigration do
   @doc """
   Whether a real cutover is refused, and why. `nil` when it is permitted.
 
-  See the module documentation: `AuroraMeter.Credits.reverse/4` does not take
-  the lot path yet, so turning a wallet on would expose it to a refund that
-  consumes promotional credit. The check is behavioural rather than a version
-  number: it asks whether the lot-aware refund path exists, so it opens itself
-  when that path ships and nothing else can open it.
+  See the module documentation. The check is behavioural rather than a version
+  number: it asks whether the lot-aware refund path
+  (`AuroraMeter.Credits.reverse_lot/4`) exists, so it opened itself when that
+  path shipped in build unit 06e and nothing else could have opened it. It
+  answers `nil` from that release on, and the clause below is kept so a node
+  running an older core still refuses rather than silently cutting wallets over.
   """
   @spec cutover_blocked() :: %{finding: String.t(), reason: String.t()} | nil
   def cutover_blocked do
@@ -1304,8 +1314,13 @@ defmodule AuroraMeter.Credits.LotMigration do
     end
   end
 
+  # `acc.debt` is passed because the planner's `{:reverse, ...}` now repays the
+  # debt it creates out of the wallet's remaining non-promotional availability
+  # (finding X262). The fold has to hand it the same debt it hands every other
+  # request, or the replay would compute a different book from the runtime for
+  # the same history.
   defp reverse_against(acc, row, intent, amount) do
-    case Allocator.plan(acc.book, {:reverse, intent, amount, @legacy_now}) do
+    case Allocator.plan(acc.book, {:reverse, intent, amount, @legacy_now, acc.debt}) do
       {:ok, plan} ->
         check_reversal(acc, row, intent, amount, plan)
 
@@ -1315,8 +1330,19 @@ defmodule AuroraMeter.Credits.LotMigration do
     end
   end
 
+  # **`to == :reversed`, not every movement** (X262). Since the planner repays
+  # the debt a reversal creates, a plan can carry `consume` movements that are
+  # not part of the reversal at all. Summing every movement would let a
+  # repayment of X hide a reversal that fell X short of the row, which is
+  # exactly the shortfall `reversal_exceeds_lots` exists to catch: a legacy row
+  # that took back more than its lots can account for is a wallet whose
+  # provenance the fold must not invent.
   defp check_reversal(acc, row, intent, amount, plan) do
-    moved = plan.movements |> Enum.map(& &1.amount) |> Enum.sum()
+    moved =
+      plan.movements
+      |> Enum.filter(&(&1.to == :reversed))
+      |> Enum.map(& &1.amount)
+      |> Enum.sum()
 
     cond do
       moved < amount ->

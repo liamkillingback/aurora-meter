@@ -717,6 +717,16 @@ names the unit that replaces it:
 - `AuroraMeter.CreditsLotsTest` / `test I10 enable_lots! refuses a wallet that has a ledger row rather than cutting it over`
 - `AuroraMeter.CreditsLotsTest` / `test I10 the balance row refuses a negative held, which nothing enforced before version 9`
 - `AuroraMeter.CreditsLotsTest` / `test I10 a grant's :source lands on the lot, which is how a refund finds the payment`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 reverse_lot takes only the lots matching the source`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 reverse_lot above the cap returns exceeds_source and writes nothing`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 reverse_lot of a spent lot raises debt by the unrecoverable amount`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 restore_lot is capped by the lots' reversed total`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 restore_lot repays outstanding debt before any of it becomes spendable`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 reverse_lot and restore_lot are idempotent on the reference`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 reverse_lot with no matching lots returns no_matching_lots`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 reverse_lot writes one reverse allocation per lot touched`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 the :source option is validated rather than widened`
+- `AuroraMeter.CreditsLotReversalTest` / `test I10 a reversal that reaches a reservation takes it last and leaves held consistent`
 - `AuroraMeter.CreditsLotsTest` / `property I10 a generated history on a lot wallet reconstructs the balance row, the debt, the held amount and every lot's allocations`
 - `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed before the ledger row is inserted leaves the wallet untouched`
 - `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed after the ledger row and before the allocations leaves the wallet untouched`

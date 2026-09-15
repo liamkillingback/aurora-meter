@@ -130,6 +130,69 @@ refunds.
 If you query the table directly and look for `kind = 'debit'` to find reversals,
 that query now misses new ones. Use `kind = 'reverse' OR category = 'reversal'`.
 
+### Reversing the payment's own credit
+
+`reverse/4` is wallet wide: it drains eligible lots in spend order, and spend
+order is promotional first. That is the right answer for a host with no payment
+provenance and the wrong one for a host that has it, because a refunded top-up
+would eat a sign-up bonus that had nothing to do with it.
+
+A host that stamps `:source` on its grants uses the source-scoped pair instead:
+
+```elixir
+Credits.grant(org, 25_000_000,
+  reference: "pi_123",
+  category: :paid,
+  source: %{payment_intent_id: "pi_123"}
+)
+
+Credits.reverse_lot(org, 10_000_000, "refund:pi_123:1000",
+  source: %{payment_intent_id: "pi_123"}
+)
+
+Credits.restore_lot(org, 10_000_000, "restore:pi_123:1000",
+  source: %{payment_intent_id: "pi_123"}
+)
+```
+
+`reverse_lot/4` selects the tenant's lots whose `source.payment_intent_id`
+matches, in spend order, and drains them **`available`, then `consumed`, then
+`reserved`**:
+
+  * `available` first, so the refund destroys as little as possible;
+  * `consumed` next, which is money already spent, so `debt` rises by the same
+    amount: the balance falls, and the wallet owes it;
+  * `reserved` last, because an open hold is work the host believes is still
+    running. Taking it also lowers `held`, and the hold that lost its
+    reservation creates its own debt when it settles.
+
+**A promotional lot is never touched, whatever order it sorts in and however
+late it was granted.** Nor is the debt a reversal creates repaid out of one:
+the repayment takes only non-promotional availability, so a payment's refund can
+never erase a promotion. That is the whole point of the pair, and it is the rule
+`AuroraMeter.Credits.Lots` exists to make checkable afterwards.
+
+`restore_lot/4` is the inverse, for a refund that failed or was cancelled and
+for a dispute that was won. It moves `reversed` back to `available` on the same
+lots and then applies the ledger's ordinary rule that incoming value repays
+outstanding debt before any of it becomes spendable.
+
+Both are capped by the payment's own lots: `reverse_lot/4` by what those lots
+can still give back, `restore_lot/4` by `SUM(lot.reversed)`. Above the cap they
+answer `{:error, :exceeds_source}` and `{:error, :exceeds_reversed}` and write
+**nothing**, unless you pass `allow_partial: true`, which takes the cap and
+records the difference as `"shortfall"` in the entry's metadata. Both are
+idempotent on the reference, in their own kind's namespace.
+
+A payment with no lots answers `{:error, :no_matching_lots}`: a wallet that has
+not been cut over to lots, or one migrated before the provenance could be
+derived. Take the money back with `reverse/4` in that case, which is what the
+wallet-wide path is for, and mark the entry so the fallback is visible.
+
+`:source` is matched on `payment_intent_id` alone in this release, and anything
+else raises `ArgumentError`: a source key the matcher did not understand would
+match every lot, and a refund against every lot is not a near miss.
+
 ## Hold, settle, release
 
 Most metered work has an estimate up front and a real cost afterwards. A hold

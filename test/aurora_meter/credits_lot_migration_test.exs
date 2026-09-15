@@ -12,11 +12,14 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
 
   ## The cutover door
 
-  `AuroraMeter.Credits.LotMigration` refuses a real cutover while
-  `AuroraMeter.Credits.reverse/4` has no lot path (`open-findings.md` X250).
-  The refusal is asserted in its own test. Every other test that needs a wallet
-  actually turned on opens the maintainer door, which lives under the harness's
-  own OTP application and which the library's configuration never reads.
+  `AuroraMeter.Credits.LotMigration` refused a real cutover while there was no
+  lot-aware refund path (`open-findings.md` X250). Build unit 06e defines
+  `AuroraMeter.Credits.reverse_lot/4`, which is the gate's own condition, so
+  the door is open and one test asserts that it is and that a wallet really
+  goes through it. Every other test here still opens the maintainer door, which
+  lives under the harness's own OTP application and which the library's
+  configuration never reads, because those tests are about the replay rather
+  than about the gate.
   """
   use AuroraMeter.DataCase, async: false
 
@@ -549,21 +552,61 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     refute Operations.paused?(LotMigration.checkpoint_name(tenant))
   end
 
-  test "X250 a real cutover is refused while the lot-aware refund path is unwired" do
-    tenant = wallet(:paid_only)
+  test "X250 the cutover gate is open, and a wallet really cuts over through the production route" do
+    # **The half nothing asserted.** 06b's gate is
+    # `function_exported?(AuroraMeter.Credits, :reverse_lot, 4)`, and until 06e
+    # the suite only ever proved it was shut. A stub `reverse_lot/4` would have
+    # opened it and every test would still have passed, which is why the
+    # opening is asserted here beside a refund that has to behave.
+    #
+    # No maintainer door: `allow_cutover!/0` is deliberately not called, so
+    # this is the production route that was refused before this unit.
+    assert LotMigration.cutover_blocked() == nil
+    assert function_exported?(Credits, :reverse_lot, 4)
 
-    refute LotMigration.cutover_blocked() == nil
-    assert %{finding: "X250"} = LotMigration.cutover_blocked()
+    # A legacy wallet carrying the reference shape a real Stripe top-up leaves
+    # behind, because that is what the fold derives `source.payment_intent_id`
+    # from and the refund below has to be able to find its own payment.
+    tenant = unique_tenant("lotmig")
+    intent = "pi_#{System.unique_integer([:positive])}"
+    {:ok, _} = Credits.grant(tenant, 10 * @dollar, reference: intent)
+    {:ok, _} = Credits.debit(tenant, 6 * @dollar, "job_#{intent}")
+    before = figures(tenant)
 
-    assert {:error, {:cutover_blocked, %{finding: "X250"}}} =
-             LotMigration.run(tenant: tenant, shadow: false, allow_cutover: true)
+    {:ok, summary} = LotMigration.run(tenant: tenant, shadow: false, allow_cutover: true)
+    report = hd(summary.reports)
 
-    assert {:error, :cutover_not_requested} = LotMigration.run(tenant: tenant, shadow: false)
+    assert report.state == :migrated
+    assert row(tenant).lots_enabled_at
+    assert figures(tenant) == before
+    assert Checkpoints.get(LotMigration.checkpoint_name(tenant))
 
-    # Nothing was read and nothing was written.
-    assert lots(tenant) == []
-    assert is_nil(row(tenant).lots_enabled_at)
-    assert is_nil(Checkpoints.get(LotMigration.checkpoint_name(tenant)))
+    # The wallet is now on the allocator, which is what the gate was guarding,
+    # so the hazard X250 named has to be gone rather than merely unreachable.
+    # The promotion arrives after the payment and after the spend, exactly as
+    # `v1-release.md` 10.1 describes it.
+    {:ok, _promo} =
+      Credits.grant(tenant, 4 * @dollar,
+        reference: "promo_after_#{intent}",
+        category: :promotional
+      )
+
+    {:ok, _txn} =
+      Credits.reverse_lot(tenant, 10 * @dollar, "refund:#{intent}:1000",
+        source: %{payment_intent_id: intent}
+      )
+
+    by_reference = Map.new(lots(tenant), &{&1.reference, &1})
+
+    assert by_reference[intent].reversed == 10 * @dollar
+    assert by_reference["promo_after_#{intent}"].available == 4 * @dollar
+    assert by_reference["promo_after_#{intent}"].consumed == 0
+    assert row(tenant).debt == 6 * @dollar
+
+    # And the refusal the gate leaves behind: a real cutover still needs to be
+    # asked for.
+    assert {:error, :cutover_not_requested} =
+             LotMigration.run(tenant: wallet(:paid_only), shadow: false)
   end
 
   test "X221 a tenant key that is not a legal operation name still gets a checkpoint" do
@@ -703,9 +746,14 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     assert MigrateLots.report({:ok, %{summary | blocked: 0}}) == :ok
 
     # And a refused cutover is not a success either: the operator asked for
-    # something and did not get it.
+    # something and did not get it. The reason is written out here rather than
+    # read from `cutover_blocked/0`, which answers `nil` from 06e on: the task
+    # has to keep reporting a refusal it can still be handed (a future gate, or
+    # an older node), and a test that fed it today's `nil` would assert nothing.
     assert_raise Mix.Error, ~r/X250/, fn ->
-      MigrateLots.report({:error, {:cutover_blocked, LotMigration.cutover_blocked()}})
+      MigrateLots.report(
+        {:error, {:cutover_blocked, %{finding: "X250", reason: "the lot-aware refund path"}}}
+      )
     end
 
     assert_raise Mix.Error, ~r/no cutover was requested/, fn ->

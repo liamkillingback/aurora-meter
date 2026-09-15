@@ -261,27 +261,58 @@ defmodule AuroraMeter.Credits.Allocator do
   # `available` first so the refund destroys as little as possible, `consumed`
   # next (which is what raises debt), `reserved` last because an open hold is
   # work the host believes is still running.
-  def plan(book, {:reverse, payment_intent_id, amount, _now}) do
+  #
+  # **The request carries the debt, and the debt a reversal creates is repaid
+  # out of the wallet's remaining NON-promotional availability** (finding X262).
+  # Without the repayment the book ends with `debt > 0` beside availability
+  # other lots still hold, which LI-06a-5 forbids and which makes `{:hold, ...}`
+  # refuse a hold the legacy ledger accepted. Every other operation that moves
+  # value already repays; `:reverse` was the one request tuple that did not even
+  # carry the debt.
+  #
+  # **Why non-promotional only, and it is not an optimisation.**
+  # `architecture-map.md` 7.2 says "promotional lots are never touched by a paid
+  # reversal", and `v1-release.md` 10.1 says "promotional lots cannot absorb a
+  # paid refund simply because they were created later". Repaying out of
+  # `eligible/2` would take the promotional lots first, because promotional is
+  # what spend order takes first, so the refund would erase exactly the credit
+  # G06 bullet 5 protects. The balance delta is identical either way (the
+  # projection subtracts debt, so moving X from `available` to `consumed` while
+  # debt falls by X is balance neutral); what differs is whether a promotion
+  # survives the refund, and it must.
+  #
+  # Where the only availability left is promotional, the debt stays and
+  # LI-06a-5 is false for that wallet until the next incoming value repays it.
+  # That is the deliberate cost of the sentence above, it is recorded in the
+  # 06e evidence, and it is why `{:hold, ...}`'s blanket refusal on `debt > 0`
+  # is conservative rather than wrong there: `spendable/3` is negative in every
+  # shape reachable that way except one where availability is promotional and
+  # exceeds the debt.
+  def plan(book, {:reverse, payment_intent_id, amount, now, debt_before}) do
     targets = funded_by(book, payment_intent_id)
 
     if targets == [] do
       {:error, :no_matching_lot}
     else
+      ids = Enum.map(targets, & &1.id)
+
       {book, movements, _left} =
         Enum.reduce([:available, :consumed, :reserved], {book, [], amount}, fn
           _bucket, {book, moves, 0} ->
             {book, moves, 0}
 
           bucket, {book, moves, left} ->
-            ids = Enum.map(targets, & &1.id)
             {new_moves, unmet} = take(book, left, ids, bucket, :reversed, :reverse)
             {apply_movements(book, new_moves), moves ++ new_moves, unmet}
         end)
 
-      debt_delta =
+      created =
         movements
         |> Enum.filter(&(&1.from == :consumed))
         |> Enum.reduce(0, &(&1.amount + &2))
+
+      {book, movements, debt_delta} =
+        repay_from_purchased(book, movements, created, debt_before, now)
 
       {:ok,
        %{
@@ -388,6 +419,33 @@ defmodule AuroraMeter.Credits.Allocator do
       repaid = Enum.reduce(repayments, 0, &(&1.amount + &2))
       {apply_movements(book, repayments), movements ++ repayments, debt_delta - repaid}
     end
+  end
+
+  # `repay_debt/5`'s sibling for a reversal: the same repayment, over the
+  # wallet's non-promotional eligible lots only. See the `{:reverse, ...}`
+  # clause for why the exclusion is the contract rather than a preference.
+  defp repay_from_purchased(book, movements, debt_delta, debt_before, now) do
+    debt = debt_before + debt_delta
+
+    if debt <= 0 do
+      {book, movements, debt_delta}
+    else
+      {repayments, _unmet} =
+        take(book, debt, purchased_eligible(book, now), :available, :consumed, :consume)
+
+      repaid = Enum.reduce(repayments, 0, &(&1.amount + &2))
+      {apply_movements(book, repayments), movements ++ repayments, debt_delta - repaid}
+    end
+  end
+
+  # `eligible/2` less the promotional lots, in the same spend order.
+  defp purchased_eligible(book, now) do
+    promotional =
+      for lot <- book, lot.category == :promotional, into: MapSet.new(), do: lot.id
+
+    book
+    |> eligible(now)
+    |> Enum.reject(&MapSet.member?(promotional, &1))
   end
 
   defp plan_of(book, movements, debt_delta) do

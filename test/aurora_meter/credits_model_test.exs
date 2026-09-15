@@ -643,11 +643,25 @@ defmodule AuroraMeter.CreditsModelTest do
   #
   # `:reverse` is dropped. With it in, **every** history diverged on three of
   # seven fixed seeds and the run compared nothing at all, which the teardown
-  # below correctly turned into a failure: `Credits.reverse/4` still takes the
-  # plain debit path, so it disagrees with 01e's view of a lot reversal on the
-  # first command that reaches it and the lockstep ends there. Dropping it
-  # leaves a legal history (a reversal only removes value). 06e wires
-  # `reverse_lot/4` and this filter comes out with it (finding X250).
+  # below correctly turned into a failure: `Credits.reverse/4` takes the plain
+  # debit path, so it disagrees with 01e's view of a lot reversal on the first
+  # command that reaches it and the lockstep ends there. Dropping it leaves a
+  # legal history (a reversal only removes value).
+  #
+  # **06e did not take this filter out, and X250 said it would.** The
+  # correction is worth reading rather than quietly leaving the filter in
+  # place. 06e adds `Credits.reverse_lot/4`, a *second* function scoped to a
+  # payment's own lots, and deliberately leaves `Credits.reverse/4` wallet wide
+  # for hosts with no payment provenance. So the command this generator issues
+  # still takes the spend-order path and still disagrees with a model that
+  # reverses paid lots only; what changed is that the disagreement is now a
+  # documented difference between two public functions rather than a missing
+  # implementation. Comparing the model against the lot-scoped path would need
+  # the generator to mint payment ids, the model's grants to carry a `source`
+  # and `reverse_from/3` to scope by it. That is real work on 01e's oracle, it
+  # is recorded as its own finding in 06e's report, and inventing it here
+  # inside 06e would make the oracle agree with the implementation by
+  # construction, which is the one thing a second implementation must not do.
   #
   # `expiry: false` for a subtler reason, and it is the one worth reading.
   # 06a's deliberate compatibility change is that a lot past its `expires_at`
@@ -875,12 +889,14 @@ defmodule AuroraMeter.CreditsModelTest do
   defp scoped(tenant, reference), do: tenant <> ":" <> reference
 
   # `:reverse` is compared for nothing, and the reason is a real gap rather than
-  # a convenience. `Credits.reverse/4` still calls `debit/5` with
+  # a convenience. `Credits.reverse/4` calls `debit/5` with
   # `allow_negative: true`, so on a cut-over wallet it consumes eligible lots in
   # spend order, **promotional first**, and writes nothing into `reversed`.
-  # 01e's view models the design instead: paid lots only, scoped to the payment,
-  # buckets in the order available, consumed, reserved. Wiring `reverse_lot/4`
-  # is 06e's, and until it lands the two cannot be compared. Recorded as X250.
+  # 01e's view models the lot design instead: paid lots only, buckets in the
+  # order available, consumed, reserved. From 06e the lot design is reachable,
+  # but through `Credits.reverse_lot/4` and not through this command, and the
+  # wallet-wide function keeps its behaviour on purpose. See the note on
+  # `comparable_history/0`. Recorded as X250 and corrected in 06e's report.
   defp classify({:reverse, _reference, _amount}, _expected, _actual), do: :reverse_not_wired
 
   # `expire_due/1` returns a count across **every** tenant in the database, so
