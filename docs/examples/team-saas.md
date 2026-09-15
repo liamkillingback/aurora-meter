@@ -67,6 +67,9 @@ count of users:
 
 ```elixir
 defmodule Bramble.Members do
+  import Ecto.Query
+  alias Bramble.{Member, Repo}
+
   def can_invite?(org) do
     allowed = AuroraMeter.feature_value(org, :seats, 1)
     used = Repo.aggregate(from(m in Member, where: m.org_id == ^org.id), :count)

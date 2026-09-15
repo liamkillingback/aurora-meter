@@ -1,0 +1,108 @@
+05e (operational guide, task 05.07) - core commands, in order
+=============================================================
+
+Core SHA at authoring : 0a4bd0bef56cc0628485bc864e2043862a6a2214
+Pro SHA at authoring  : 44ef949553e796ea86ecc7e360759f29deadf0f7
+Elixir                : 1.20.1 (compiled with Erlang/OTP 29)
+Erlang/OTP            : 29 [erts-17.0.1] [jit:ns]
+Database              : PostgreSQL on the lane port, DB_PORT=5490
+Lane                  : every Mix command through tmp/v1/mixlane.sh core
+
+All paths are relative to /home/liamk/src/PhxTemplates.
+
+
+1. bash tmp/v1/mixlane.sh core mix test test/aurora_meter/doc_examples_test.exs --trace
+   exit 1  first attempt, and NOT the harness: a stale _build/test failed to
+           compile lib/mix/tasks/aurora_meter.install.ex under
+           --warnings-as-errors with three "module is not available or is yet to
+           be defined" warnings for AuroraMeter.Oban and AuroraMeter.Install.Oban.
+           Recorded as finding X234.
+
+2. bash tmp/v1/05e-core-recompile.sh
+   (MIX_ENV=test mix deps.compile oban; mix compile --force)
+   exit 0  "Compiling 91 files (.ex) / Generated aurora_meter app / compile exit=0"
+
+3. bash tmp/v1/mixlane.sh core mix test test/aurora_meter/doc_examples_test.exs --trace
+   exit 2  3 of 7 passed. Four real findings on the first run of the new harness:
+             - docs/exporters.md:33 AuroraMeter.Exporter.Item.t  (a type, not a
+               function: layer 3 needed a typespec check)
+             - six AuroraMeter.Pro.* module names in core's examples (the
+               core/Pro boundary, now an inverted exemption)
+             - docs/examples/team-saas.md:68 Bramble.Members does not compile
+               (from/2 with no import Ecto.Query) -> finding X231
+             - docs/operations.md had 0 blocks, not yet written
+
+4. bash tmp/v1/mixlane.sh core mix test test/aurora_meter/doc_examples_test.exs --trace
+   exit 2  7 of 8 passed; only the not-yet-written docs/operations.md count
+
+5. bash tmp/v1/mixlane.sh core mix test \
+     test/aurora_meter/doc_examples_test.exs \
+     test/aurora_meter/docs_claims_test.exs \
+     test/aurora_meter/api_inventory_test.exs
+   exit 0  36 passed, seed 954475
+
+6. bash tmp/v1/mixlane.sh core bash tmp/v1/05e-core-control-run.sh
+   exit 0  the deliberate-failure control, four breaks, one per layer.
+           Log: docs/evidence/v1/phase-05/05e-core-control.log
+           sha256 before and after: 91df8bd0eb858f13ccff367685a1279d7b208a7
+                                    79b121cfccc4fd3510f1e8a11
+           "RESTORED: identical", then 8 of 8 passing on the restored file.
+
+           An earlier invocation of the same control was piped to head, which
+           closed the pipe and killed it between its last edit and its restore.
+           Finding X235. The runner above writes to a file and pipes nothing.
+
+7. bash tmp/v1/mixlane.sh core mix docs
+   exit 0  no warnings
+
+8. bash tmp/v1/mixlane.sh core bash tmp/v1/05e-core.sh   (mix docs, then mix check)
+   run A   docs exit 0; check exit 2. One failure, and it was the file the
+           interrupted control of step 6 had left broken (docs/operations.md:220,
+           "missing terminator: )"). Restored, hash compared, re-run.
+   run B   docs exit 0; check exit 2. One failure, AuroraMeter.ClusterTest /
+           "test when the database write commits and then reports failure a node
+           that has heard gossip retries its batch without duplicating usage":
+           load_counter returned nil, expected 6. The same run logged a sandbox
+           ownership timeout (120000ms) in another suite. Finding X238.
+   run C   docs exit 0; check exit 0. 1407 passed (57 doctests, 12 properties,
+           1338 tests), 4 excluded.
+   run D   docs exit 0; check exit 0. 1407 passed. Run after the last core edit
+           (the two examples pages), so this is the run the evidence logs hold.
+
+   Logs: docs/evidence/v1/phase-05/05e-core-docs.log
+         docs/evidence/v1/phase-05/05e-core-check.log
+
+9. bash tmp/v1/mixlane.sh core mix test test/aurora_meter/cluster_test.exs --seed 0
+   exit 0  17 passed. The X238 test alone, to establish it is not deterministic.
+
+10. bash tmp/v1/05e-claims-scan.sh     (greps only; no Mix, no lane)
+    exit 0  Output: pro:docs/evidence/v1/phase-05/05e-claims-scan.log
+            Sections 5, 6, 7, 9 and 10 report no hits. Section 2 has one hit,
+            which is the sentence explaining which schedule is right.
+
+11. bash tmp/v1/mixlane.sh core bash tmp/v1/05e-core-control-run.sh
+    exit 0  The control again, extended to SEVEN breaks after three structural
+            tests were added (look-then-act, the core and Pro boundary, and the
+            hourly crontab). Every break exited 2 and named the file and the
+            fragment; sha256 identical before and after; 12 of 12 on the
+            restored file.
+            Log: docs/evidence/v1/phase-05/05e-core-control.log
+
+12. bash tmp/v1/mixlane.sh core bash tmp/v1/05e-core-final.sh
+    (the claims verification, mix format on the two changed files, mix docs,
+     mix check)
+    exit 0  claims verify: 45 pairs, 43 local, all 43 resolved, 2 deferred to
+                           Pro's run of the same script
+            mix format:    mix.exs and test/aurora_meter/doc_examples_test.exs
+                           only, never project-wide
+            mix docs:      exit 0, no warnings
+            mix check:     exit 0, 1411 passed (57 doctests, 12 properties,
+                           1342 tests), 4 excluded
+
+    Logs: docs/evidence/v1/phase-05/05e-core-claims-verify.log
+          docs/evidence/v1/phase-05/05e-core-docs.log
+          docs/evidence/v1/phase-05/05e-core-check.log
+
+
+Never run: git commit, git push, any tag, any publish, any deploy, any Docker
+command, any Stripe command. config/secrets.exs was not opened.

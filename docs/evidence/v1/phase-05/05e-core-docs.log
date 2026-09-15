@@ -1,0 +1,3 @@
+Generating docs...
+View html docs at "doc/index.html"
+mix docs exit=0

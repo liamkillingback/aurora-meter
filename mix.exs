@@ -224,6 +224,7 @@ defmodule AuroraMeter.MixProject do
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
+        "docs/operations.md",
         "docs/retention.md",
         "docs/operations/scheduler.md",
         "docs/operations/replay.md",

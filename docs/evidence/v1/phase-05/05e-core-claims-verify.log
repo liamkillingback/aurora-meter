@@ -1,0 +1,6 @@
+claims file: docs/evidence/v1/phase-05/05e-claims.md
+pairs found: 45 (43 local, 2 other repo)
+  (not checked here, other repository) AuroraMeter.Pro.RestartTest / test I16 a forced race on one tenant shows how often Oban's unique loses it
+  (not checked here, other repository) AuroraMeter.Pro.RestartTest / test I16 two sequential AutoTopUpSweeper runs enqueue exactly one job per tenant
+every local pair resolves to a real test
+verify exit=0

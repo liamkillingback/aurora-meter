@@ -1,0 +1,131 @@
+== sha256 before: 91df8bd0eb858f13ccff367685a1279d7b208a779b121cfccc4fd3510f1e8a11  docs/operations.md
+
+=== CONTROL 1 (layer 3, a renamed function) ===
+  1) test the guides every AuroraMeter function a block calls is exported (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:201
+     guides call functions that do not exist:
+       docs/operations.md:112 AuroraMeter.Credits.pending_hold
+       docs/operations.md:396 AuroraMeter.Credits.pending_hold
+     code: assert missing == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:212: (test)
+
+  2) test the guides every mutation example in the operations guide follows a read-only one (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:254
+     a mutation is shown before anything that looks at what it is about to change. Every section that acts on state shows the look first:
+       ## 3. Recovering stale holds: reconcile_holds( with no read-only block before it
+     code: assert offenders == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:264: (test)
+
+   exit=2
+
+=== CONTROL 2 (layer 2, a module that does not exist) ===
+  1) test the guides every AuroraMeter module a block names exists (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:154
+     guides name modules that do not exist:
+       docs/operations.md:212 AuroraMeter.Oprations
+       docs/operations.md:396 AuroraMeter.Oprations
+     code: assert missing == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:164: (test)
+
+   exit=2
+
+=== CONTROL 3 (layer 4, a self-contained block that does not compile) ===
+  1) test the guides every elixir block parses (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:144
+     elixir blocks that are not Elixir:
+       docs/operations.md:122 mismatched delimiter found on nofile:18:1:
+         error: unexpected reserved word: end
+         │
+      17 │   def decide(
+         │             └ unclosed delimiter
+      18 │ end
+         │ └ mismatched closing delimiter (expected ")")
+         │
+         └─ nofile:18:1
+     code: assert failures == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:150: (test)
+
+  2) test the guides every self-contained block compiles (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:217
+     self-contained blocks that do not compile:
+       docs/operations.md:122 mismatched delimiter found on docs/operations.md:122:18:1:
+         error: unexpected reserved word: end
+         │
+      17 │   def decide(
+         │             └ unclosed delimiter
+      18 │ end
+         │ └ mismatched closing delimiter (expected ")")
+         │
+         └─ docs/operations.md:122:18:1
+     code: assert failures == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:228: (test)
+
+   exit=2
+
+=== CONTROL 4 (layer 1, a block that is not Elixir) ===
+  1) test the guides every elixir block parses (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:144
+     elixir blocks that are not Elixir:
+       docs/operations.md:220 token missing on nofile:2:54:
+         error: missing terminator: )
+         │
+       1 │ AuroraMeter.Operations.pause(("credit_expiry:global")
+         │                             └ unclosed delimiter
+       2 │ AuroraMeter.Operations.resume("credit_expiry:global")
+         │                                                      └ missing closing delimiter (expected ")")
+         │
+         └─ nofile:2:54
+     code: assert failures == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:150: (test)
+
+   exit=2
+
+=== CONTROL 5 (structure: a mutation with no look before it) ===
+  1) test the guides every mutation example in the operations guide follows a read-only one (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:254
+     a mutation is shown before anything that looks at what it is about to change. Every section that acts on state shows the look first:
+       ## 7. Retention: Retention.prune( with no read-only block before it
+       ## 7. Retention: forget_node( with no read-only block before it
+     code: assert offenders == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:264: (test)
+
+   exit=2
+
+=== CONTROL 6 (the core and Pro boundary: a Pro table in core's runbook) ===
+  1) test the guides the core operations guide names no Pro module, table or configuration key (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:282
+     docs/operations.md names something only Aurora Meter Pro has. Core's runbook has to be complete on its own terms:
+       aurora_meter_outbox_items
+     code: assert leaks == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:299: (test)
+
+   exit=2
+
+=== CONTROL 7 (P12: an hourly crontab entry on a published page) ===
+  1) test the guides no published page schedules anything hourly, which is what P12 was about (AuroraMeter.DocExamplesTest)
+     test/aurora_meter/doc_examples_test.exs:309
+     these pages carry the hourly crontab expression P12 was about:
+       docs/operations.md
+     code: assert hourly == [],
+     stacktrace:
+       test/aurora_meter/doc_examples_test.exs:316: (test)
+
+   exit=2
+
+== sha256 after:  91df8bd0eb858f13ccff367685a1279d7b208a779b121cfccc4fd3510f1e8a11  docs/operations.md
+RESTORED: identical
+
+=== the restored guide passes ===
+
+............
+Finished in 0.8 seconds (0.00s async, 0.8s sync)
+
+Result: 12 passed

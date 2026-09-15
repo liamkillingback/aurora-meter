@@ -220,7 +220,8 @@ config :aurora_meter_pro,
 config :inkwell, Oban,
   queues: [aurora_meter: 5],
   plugins: [{Oban.Plugins.Cron, crontab: [
-    {"0 * * * *", AuroraMeter.Pro.UsageReporter}
+    {"*/5 * * * *", AuroraMeter.Pro.UsageReporter},
+    {"*/5 * * * *", AuroraMeter.Pro.Outbox.Deliverer}
   ]}]
 ```
 

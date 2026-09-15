@@ -214,6 +214,11 @@ Do not make a network call from it: the timeout is the only thing bounding it.
 It may also be called **more than once for one hold**, because two nodes running
 a sweep both list it, so make it side-effect free or idempotent.
 
+This section is the contract: what the callback may return, what keeps a hold,
+and what happens when the decision races the work. The runbook that uses it,
+including how often to sweep and what to alert on, is section 3 of
+[Operations](operations.md).
+
 To see what a sweep would look at before configuring a policy, pass an explicit
 one that decides nothing:
 

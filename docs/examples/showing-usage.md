@@ -216,13 +216,13 @@ price of 1,500 µ$ with `format/2` and your pricing page says it is free.
 ## 6. Exports (Pro)
 
 ```elixir
-AuroraMeter.Pro.Export.usage_csv(org, days: 90)
+AuroraMeter.Pro.Export.usage_csv(org, bucket_kind: "month")
 AuroraMeter.Pro.Export.daily_csv(org, :generations, days: 30)
 ```
 
 ```elixir
 def export(conn, _params) do
-  csv = AuroraMeter.Pro.Export.usage_csv(conn.assigns.current_org, days: 90)
+  csv = AuroraMeter.Pro.Export.usage_csv(conn.assigns.current_org, bucket_kind: "month")
 
   conn
   |> put_resp_content_type("text/csv")
@@ -230,6 +230,11 @@ def export(conn, _params) do
   |> send_resp(200, csv)
 end
 ```
+
+`usage_csv/2` reads `:bucket_kind`, which is `"month"` or `"day"`, and nothing
+else: it exports every bucket of that kind. A `:days` option is accepted and
+discarded, so a window has to come from `daily_csv/3`, whose options are handed
+to `AuroraMeter.history/3`.
 
 ## 7. Your own metrics
 

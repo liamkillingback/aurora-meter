@@ -16,6 +16,8 @@ Aurora Meter emits `:telemetry` events you can attach to for metrics and logs.
 | `[:aurora_meter, :record, :start]`, `[..., :stop]`, `[..., :exception]` | `%{duration, count}` on `:stop` | `%{result, kind, feature, batch_size, tenant_key, durability, projection}`: one span per `AuroraMeter.record/4`, `record_batch/2`, `correct/4` or `replace/4`, covering validation, admission, the transaction and the post-commit effects |
 | `[:aurora_meter, :replay, :batch]` | `%{scanned, keys, duration}` | `%{generation, cursor, phase}` — one per committed batch of `AuroraMeter.Events.Replay.run/1`; `phase` is `:scan` and `cursor` is the `seq` an interrupted run resumes from |
 | `[:aurora_meter, :replay, :phase]` | `%{duration}` | `%{generation, phase}` plus `seeded` and `resumed` on `:announce`, `drained` on `:drain`, `differences` on `:compare` and `:activate` |
+| `[:aurora_meter, :operations, :batch]` | `%{items, duration_ms}` | `%{name, result}` - one per committed batch of any operation that runs through `AuroraMeter.Operations.run_batches/3`; `name` is the operation name (`"credit_expiry:global"`) and `result` says how the batch ended |
+| `[:aurora_meter, :retention, :prune]` | `%{deleted, duration}` | `%{table, blocked}` - one per table `AuroraMeter.Retention.prune/1` examined; `blocked: true` means it was refused, and the reason is in the return value rather than in the event |
 
 `record` is a span rather than a flat event so that an OpenTelemetry bridge can
 open it before the database work starts and Ecto's own spans nest inside it.
