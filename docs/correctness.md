@@ -772,6 +772,15 @@ lease and checkpoint half of this invariant lives in Pro, whose workers run unde
 Oban, and in phase 05. Nothing here promises that two schedulers cannot run
 concurrently; it promises that the effect is the same if they do.
 
+The optional `AuroraMeter.Oban.*` workers add nothing to this. Each `perform/1`
+is one call to an operation and a mapping of its result; the worker opens no
+transaction, takes no lock and holds no state between runs, so two nodes running
+one worker is the same case as two callers of the operation. The `unique` option
+each worker declares is defence in depth: removing it on a copy of the expiry
+worker leaves the duplicate-run result unchanged, which is what
+`AuroraMeter.ObanConcurrencyTest` measures and records rather than claiming a
+pass for a layer nothing tested.
+
 `AuroraMeter.Credits.reconcile_holds/1` has no lease on a hold on purpose. A lease
 would let a crashed reconciler leave a hold nothing could reconcile until a second
 recovery mechanism cleared it, which trades a real problem for a worse one; and a
@@ -790,6 +799,10 @@ nothing and the next run asks again.
 - `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I16 two reconcilers on two connections release one hold once`
 - `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I16 killing the reconciler between the callback and the application leaves the hold pending`
 - `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I16 killing the reconciler after the application commits leaves exactly one terminal transition`
+- `AuroraMeter.Oban.WorkersTest` / `test I16 a second CreditExpiry run for the same tick expires nothing and adds no ledger row`
+- `AuroraMeter.ObanConcurrencyTest` / `test I16 two CreditExpiry runs on independent connections expire each grant once`
+- `AuroraMeter.ObanConcurrencyTest` / `test I16 the CreditExpiry run that loses the grant row lock expires nothing`
+- `AuroraMeter.ObanConcurrencyTest` / `test I16 the same is true with Oban's uniqueness removed, so uniqueness is not what answers`
 - PLANNED (05c): `AuroraMeter.SchedulingTest` / `test I16 duplicate runs from two schedulers produce one effect`
 - PLANNED (05c): `AuroraMeter.SchedulingTest` / `test I16 a resumed operation restarts at its checkpoint after a kill`
 
@@ -902,11 +915,16 @@ the storefront together.
 
 ## I20 Optional integrations remain optional and tenant-safe
 
-**Guarantee.** Phoenix LiveView, Phoenix HTML and Igniter are declared optional in
-`mix.exs`, and the metering, entitlement and credit paths do not reference them.
-Two pieces of code do, and each is compiled behind a guard rather than assumed:
+**Guarantee.** Phoenix LiveView, Phoenix HTML, Igniter and Oban are declared
+optional in `mix.exs`, and the metering, entitlement and credit paths do not
+reference them. Three pieces of code do, and each is compiled behind a guard
+rather than assumed:
 `lib/aurora_meter/components.ex` opens with `if Code.ensure_loaded?(Phoenix.Component) do`,
-so on a build without LiveView the components module simply is not defined; and
+so on a build without LiveView the components module simply is not defined;
+`lib/aurora_meter/oban.ex` and every file under `lib/aurora_meter/oban/` open
+with `if Code.ensure_loaded?(Oban) do`, so on a build without Oban there is no
+`AuroraMeter.Oban` namespace and every operation those workers wrap is still a
+public function any scheduler can call; and
 `mix aurora_meter.install` is defined either way, falling back from the Igniter
 one-step installer to a plain Mix task that generates the migration and prints
 the remaining steps. On a build with no optional dependency present, the facade,
@@ -946,6 +964,8 @@ CI leg fails by design until 09b settles it.
 - `AuroraMeter.OptionalIntegrationsTest` / `test I20 the optional integrations are present exactly when they were not switched off`
 - `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.Components is compiled exactly when Phoenix.Component is available`
 - `AuroraMeter.OptionalIntegrationsTest` / `test I20 the install task exists either way, with or without Igniter`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 the AuroraMeter.Oban namespace is compiled exactly when Oban is available`
+- `AuroraMeter.HeadlessTest` / `test I20 the AuroraMeter.Oban namespace is absent without Oban`
 - `AuroraMeter.HeadlessTest` / `test I20 Components are not compiled without Phoenix.Component`
 - `AuroraMeter.HeadlessTest` / `test I20 the installer prints steps instead of raising without Igniter`
 - `AuroraMeter.HeadlessTest` / `test I20 the facade, credits and migrations work with no optional dependency present`

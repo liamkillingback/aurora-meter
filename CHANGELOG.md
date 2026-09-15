@@ -74,6 +74,34 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 - `AuroraMeter.TaskSupervisor` in the supervision tree. It supervises nothing at
   rest and exists so that a host callback the library invokes runs in a process
   of its own.
+- **Optional Oban workers: the `AuroraMeter.Oban` namespace.**
+  `AuroraMeter.Oban.CreditExpiry`, `.HoldReconciliation`, `.EventsReplay`,
+  `.RecurringGrants` and `.PlanTransitions`, each a `perform/1` that calls one
+  public operation and maps its result. `AuroraMeter.Oban.cron_entries/1`
+  returns the recommended crontab and `AuroraMeter.Oban.validate!/1` refuses a
+  host Oban configuration that cannot run them, raising
+  `AuroraMeter.Oban.ConfigError` with every problem in one message: a missing or
+  zero-limit `:aurora_meter` queue, a `:repo` that is not Aurora Meter's, a
+  crontab naming a worker twice or naming both the core expiry worker and the
+  deprecated `AuroraMeter.Pro.Credits.Expirer`, an unresolvable cron timezone,
+  and `:testing` left on outside the test environment.
+
+  `oban` is declared **optional**, so it forces no version on a host and the
+  whole namespace is compiled behind `if Code.ensure_loaded?(Oban)`: without
+  Oban there is no `AuroraMeter.Oban` and every operation those workers wrap is
+  still a public function any scheduler can call. `docs/operations/scheduler.md`
+  is the map, including the direct-call recipe for a host with no Oban.
+
+  No worker opens a transaction, takes a lock or reads a clock to decide
+  anything. Running one twice, or on two nodes at once, produces one effect
+  because the operation it calls re-reads the row it is about to change under
+  that row's own lock. The `unique` option each worker declares is defence in
+  depth: a copy of the expiry worker with it removed produces the same result
+  under a forced race.
+
+  Two of the five wrap operations a later 1.0 release adds. They ship now so the
+  registry is complete, are omitted from `cron_entries/1`, and cancel with
+  `{:cancel, :not_implemented}` if run by hand.
 
 ### Changed
 

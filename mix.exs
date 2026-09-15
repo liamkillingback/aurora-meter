@@ -118,7 +118,7 @@ defmodule AuroraMeter.MixProject do
   end
 
   # `optional: true` affects CONSUMERS, not this project: a plain `mix deps.get`
-  # here fetches and compiles all three, so the flag alone cannot produce a
+  # here fetches and compiles all four, so the flag alone cannot produce a
   # headless build of Aurora Meter itself. AURORA_HEADLESS=1 removes them, which
   # is what lets the `headless` CI leg prove decision D03 and invariant I20: a
   # host with none of them present compiles, installs and runs.
@@ -136,7 +136,13 @@ defmodule AuroraMeter.MixProject do
         {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true},
         # Optional: powers the one-step `mix aurora_meter.install`. Hosts without
         # it get the print-the-steps fallback.
-        {:igniter, "~> 0.8", optional: true}
+        {:igniter, "~> 0.8", optional: true},
+        # Optional: powers the `AuroraMeter.Oban.*` workers. Every operation they
+        # wrap is public and directly callable, so a host with another scheduler
+        # (or none) loses nothing, and the whole namespace is compiled behind
+        # `if Code.ensure_loaded?(Oban)`. The floor is the one Aurora Meter Pro
+        # already declares, so no existing Pro host is asked to move.
+        {:oban, "~> 2.17", optional: true}
       ]
     end
   end
@@ -218,6 +224,7 @@ defmodule AuroraMeter.MixProject do
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
+        "docs/operations/scheduler.md",
         "docs/operations/replay.md",
         "docs/testing.md",
         "docs/clustering.md",
@@ -257,6 +264,15 @@ defmodule AuroraMeter.MixProject do
       # out. Keep it equal to the `@moduledoc false` members of the Internal
       # group below.
       skip_code_autolink_to: [
+        # Not a `@moduledoc false` module: a function that does not exist yet.
+        # `AuroraMeter.Oban.PlanTransitions` documents the operation it will
+        # call, and the scheduler map names it in the worker table, because a
+        # host reading either needs to know what the worker is for. ExDoc can
+        # resolve the module and not the function, so it warns. Build unit 07b
+        # lands `apply_due_transitions/1` and removes this line.
+        # `AuroraMeter.Credits.Recurrences.run/1` needs no entry: ExDoc does not
+        # try to link a function on a module it has never heard of.
+        "AuroraMeter.Subscriptions.apply_due_transitions/1",
         "AuroraMeter.BootChecks",
         "AuroraMeter.Config.Schema",
         "AuroraMeter.Credits.Ledger",
@@ -336,6 +352,17 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Clock.System,
         AuroraMeter.Billing.Noop
       ],
+      # Compiled only when Oban is installed, which is why the group can be
+      # empty on a headless build. ExDoc ignores a group whose members are all
+      # absent, so the docs build is the same either way.
+      Scheduling: [
+        AuroraMeter.Oban,
+        AuroraMeter.Oban.CreditExpiry,
+        AuroraMeter.Oban.HoldReconciliation,
+        AuroraMeter.Oban.EventsReplay,
+        AuroraMeter.Oban.RecurringGrants,
+        AuroraMeter.Oban.PlanTransitions
+      ],
       Schemas: [
         AuroraMeter.Schema.Counter,
         AuroraMeter.Schema.History,
@@ -348,7 +375,8 @@ defmodule AuroraMeter.MixProject do
       Exceptions: [
         AuroraMeter.UndeclaredFeatureError,
         AuroraMeter.Period.InvalidPeriodError,
-        AuroraMeter.Credits.CurrencyMismatchError
+        AuroraMeter.Credits.CurrencyMismatchError,
+        AuroraMeter.Oban.ConfigError
       ],
       "Test helpers": [
         AuroraMeter.Test,

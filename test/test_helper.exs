@@ -48,8 +48,8 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 # does exactly that, so those two rows made every `compare: :require_match`
 # assertion fail. A probe script that commits rows needs a prefix in this list.
 AuroraMeter.Test.Connections.sweep!(~w(
-  concurrent corrconc flush_batch gate killt model probe projection recordconc
-  replay storagecase stmt
+  concurrent corrconc flush_batch gate killt model obansched probe projection
+  reconcile recordconc replay replaybig storagecase stmt
 ))
 
 # The non-prefix half of the same sweep: the projection generation is

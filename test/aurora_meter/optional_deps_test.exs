@@ -1,7 +1,7 @@
 defmodule AuroraMeter.OptionalIntegrationsTest do
   @moduledoc """
-  Invariant I20, decision D03: the Phoenix, LiveView and Igniter integrations are
-  optional, and the library is usable without them.
+  Invariant I20, decision D03: the Phoenix, LiveView, Igniter and Oban
+  integrations are optional, and the library is usable without them.
 
   This module carries no tag, so it runs on every CI leg, and it asserts BOTH
   directions from one place: on an ordinary build the optional modules must be
@@ -14,7 +14,7 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
   defp headless?, do: System.get_env("AURORA_HEADLESS") == "1"
 
   test "I20 the optional integrations are present exactly when they were not switched off" do
-    for module <- [Phoenix.Component, Phoenix.HTML, Igniter] do
+    for module <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban] do
       assert Code.ensure_loaded?(module) == not headless?(),
              "#{inspect(module)} loaded?=#{Code.ensure_loaded?(module)} with " <>
                "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))}. " <>
@@ -29,6 +29,26 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
     # headless build possible at all.
     assert Code.ensure_loaded?(AuroraMeter.Components) ==
              Code.ensure_loaded?(Phoenix.Component)
+  end
+
+  test "I20 the AuroraMeter.Oban namespace is compiled exactly when Oban is available" do
+    # lib/aurora_meter/oban.ex and every file under lib/aurora_meter/oban/ open
+    # with `if Code.ensure_loaded?(Oban) do`, the same shape components.ex uses.
+    # The workers are asserted one by one: the umbrella compiling says nothing
+    # about a worker file whose guard was left off.
+    for module <- [
+          AuroraMeter.Oban,
+          AuroraMeter.Oban.ConfigError,
+          AuroraMeter.Oban.CreditExpiry,
+          AuroraMeter.Oban.HoldReconciliation,
+          AuroraMeter.Oban.EventsReplay,
+          AuroraMeter.Oban.RecurringGrants,
+          AuroraMeter.Oban.PlanTransitions
+        ] do
+      assert Code.ensure_loaded?(module) == Code.ensure_loaded?(Oban),
+             "#{inspect(module)} loaded?=#{Code.ensure_loaded?(module)} with Oban " <>
+               "loaded?=#{Code.ensure_loaded?(Oban)}"
+    end
   end
 
   test "I20 the install task exists either way, with or without Igniter" do
@@ -67,6 +87,18 @@ defmodule AuroraMeter.HeadlessTest do
   test "I20 Components are not compiled without Phoenix.Component" do
     refute Code.ensure_loaded?(Phoenix.Component)
     refute Code.ensure_loaded?(AuroraMeter.Components)
+  end
+
+  test "I20 the AuroraMeter.Oban namespace is absent without Oban" do
+    refute Code.ensure_loaded?(Oban)
+    refute Code.ensure_loaded?(AuroraMeter.Oban)
+    refute Code.ensure_loaded?(AuroraMeter.Oban.CreditExpiry)
+    refute Code.ensure_loaded?(AuroraMeter.Oban.HoldReconciliation)
+
+    # And the operations the workers wrap are still here, which is the whole
+    # claim: a host with another scheduler loses the wrappers, not the work.
+    assert function_exported?(Credits, :expire_due, 1)
+    assert function_exported?(Credits, :reconcile_holds, 1)
   end
 
   test "I20 the installer prints steps instead of raising without Igniter" do

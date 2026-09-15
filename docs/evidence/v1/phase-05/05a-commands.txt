@@ -1,0 +1,158 @@
+05a: every command run, in order, with its exit code and its log.
+
+Toolchain, identical for every line below:
+  Elixir 1.20.1
+  Erlang/OTP 29 (erts-17.0.1)
+  Ubuntu 24.04 under WSL2
+  Postgres 16.13, container aurora-meter-pro-testdb, DB_PORT=5490
+  core  SHA 8fa7128b5f6b5b6e1197ea11e811bd692c5cdd50 (aurorameter-v1)
+  pro   SHA 80306baa4896af3a9b2dc83ef93ed7b13a59d025 (aurorameter-v1)
+  store SHA 730fea4963cf09b0396dac8197fb2a8f8074fbd1 (aurorameter-v1)
+
+Every Mix command went through tmp/v1/mixlane.sh, which serialises Mix against
+one package _build (wave rule 1, open-findings.md X18). No two Mix workloads ran
+at once.
+
+Logs live beside this file. The tmp/v1 originals are listed as "source".
+
+--------------------------------------------------------------------------------
+1. Baseline, before any 05a change
+--------------------------------------------------------------------------------
+2026-09-15T06:02:01Z  bash tmp/v1/mixlane.sh core mix test --seed 0
+  exit 0   seed 0
+  Result: 1252 passed (49 doctests, 12 properties, 1191 tests), 3 excluded
+  source: tmp/v1/05a-logs/baseline-core.log
+
+--------------------------------------------------------------------------------
+2. Core: the optional dependency
+--------------------------------------------------------------------------------
+2026-09-15T06:08:07Z  bash tmp/v1/mixlane.sh core mix deps.get
+  exit 0   oban 2.24.1 fetched; mix.lock gains exactly one line
+2026-09-15T06:08:10Z  bash tmp/v1/mixlane.sh core mix compile --warnings-as-errors --force
+  exit 0
+  source: tmp/v1/05a-logs/core-compile.log
+
+--------------------------------------------------------------------------------
+3. Core: the new tests, and formatting only the files this unit changed
+--------------------------------------------------------------------------------
+2026-09-15T06:12:54Z  bash tmp/v1/mixlane.sh core mix format <12 changed files>
+  exit 0   (never a project-wide run)
+2026-09-15T06:12:54Z  bash tmp/v1/mixlane.sh core mix test \
+                        test/aurora_meter/oban_test.exs \
+                        test/aurora_meter/oban/workers_test.exs \
+                        test/aurora_meter/oban_concurrency_test.exs \
+                        test/aurora_meter/optional_deps_test.exs --seed 0 --trace
+  exit 2   seed 0   FIRST RUN, recorded because it failed and why matters:
+           2 failures, both "only 0 of 2 runs reached the grant row lock before
+           the deadline". The rendezvous counted ungranted locks in pg_locks
+           filtered by `database`, and a backend queued behind a row lock waits
+           on the holder's transactionid, which carries no database. Replaced
+           with pg_stat_activity wait_event_type = 'Lock'.
+2026-09-15T06:13:43Z  same command, after the fix
+  exit 0   seed 0
+  Result: 54 passed (4 doctests, 50 tests), 4 excluded
+  source: tmp/v1/05a-logs/core-new-tests.log
+
+--------------------------------------------------------------------------------
+4. Core: the race distribution over ten seeds (X182)
+--------------------------------------------------------------------------------
+2026-09-15T06:14:16Z to 06:14:28Z
+  for seed in 0 1 7 13 42 101 777 1234 20260915 999999:
+    AURORA_RACE_REPORT=1 bash tmp/v1/mixlane.sh core mix test \
+      test/aurora_meter/oban_concurrency_test.exs --seed $seed
+  exit 0 for every seed, "Result: 3 passed" each time
+  Unassisted race:  10 of 10 seeds were [12, 0] or [0, 12]. The contended
+                    branch ran ZERO times without a rendezvous.
+  Forced race:      20 of 20 runs (two workers x ten seeds) reported
+                    waiters: 2, winner: 1, loser: 0, expiries: 1.
+  log: 05a-race-distribution.log
+
+--------------------------------------------------------------------------------
+5. Core gate
+--------------------------------------------------------------------------------
+2026-09-15T06:15:09Z  bash tmp/v1/mixlane.sh core mix check
+  exit 1   FIRST RUN, recorded: format, compile, credo, dialyzer and all 1303
+           tests passed; `mix docs --warnings-as-errors` refused two references
+           to AuroraMeter.Subscriptions.apply_due_transitions/1, a function 07b
+           adds to a module that already exists. Added one entry to mix.exs
+           skip_code_autolink_to with the reason and the unit that removes it.
+2026-09-15T06:19:36Z  bash tmp/v1/mixlane.sh core mix check
+  exit 0
+  Result: 1303 passed (53 doctests, 12 properties, 1238 tests), 4 excluded
+2026-09-15T06:37:57Z  bash tmp/v1/mixlane.sh core mix check   (after the
+                        scheduler.md snippet was made parseable for Pro's
+                        doc-example check, and after the headless build)
+  exit 0
+  Result: 1303 passed (53 doctests, 12 properties, 1238 tests), 4 excluded
+2026-09-15T06:44:27Z  bash tmp/v1/mixlane.sh core mix check   (FINAL, after
+                        three option bullets in oban.ex lost their em dashes)
+  exit 0, finished 06:48:04Z
+  Result: 1303 passed (53 doctests, 12 properties, 1238 tests), 4 excluded
+  log: 05a-core-check.log  (this run)
+
+--------------------------------------------------------------------------------
+6. Core headless: D12 and I20
+--------------------------------------------------------------------------------
+2026-09-15T06:27:50Z  rm -rf _build/test/lib/{aurora_meter,oban}
+                      AURORA_HEADLESS=1 bash tmp/v1/mixlane.sh core mix deps
+  exit 0   oban, phoenix_live_view, phoenix_html and igniter absent from deps/0
+2026-09-15T06:27:51Z  AURORA_HEADLESS=1 ... mix compile --warnings-as-errors --force
+  exit 0
+2026-09-15T06:27:52Z  AURORA_HEADLESS=1 ... mix run -e '<eight refutes, four asserts>'
+  exit 0   printed: headless ok
+           false = Code.ensure_loaded?(Oban)
+           false for AuroraMeter.Oban, .ConfigError and all five workers
+           true  for Credits.expire_due/1, Credits.reconcile_holds/1,
+                 Events.Replay.run/1
+  FIRST RUN of this step exited 1: function_exported?/3 answers false for a
+  module that is compiled and not yet loaded, so Code.ensure_loaded?/1 had to
+  come first. Same trap AuroraMeter.HeadlessTest already records.
+2026-09-15T06:27:53Z  AURORA_HEADLESS=1 ... mix test --include headless --seed 0
+  exit 0   seed 0
+  Result: 1244 passed (49 doctests, 12 properties, 1183 tests)
+  log: 05a-headless.log
+
+--------------------------------------------------------------------------------
+7. Core packaging
+--------------------------------------------------------------------------------
+2026-09-15T06:41:44Z  bash tmp/v1/mixlane.sh core mix deps.unlock --check-unused
+  exit 0
+2026-09-15T06:41:44Z  bash tmp/v1/mixlane.sh core mix hex.build
+  exit 0   the package lists lib/aurora_meter/oban.ex and all five worker files
+           and declares "oban ~> 2.17 (optional)". The .tar was deleted after
+           the check: nothing is published from this unit (decision D13).
+  log: 05a-core-package.log
+
+--------------------------------------------------------------------------------
+8. Pro gate
+--------------------------------------------------------------------------------
+Before every Pro run: rm -rf priv/plts AND rm -rf _build/test/lib/aurora_meter.
+open-findings.md X114: a path dependency's beams changing does not invalidate the
+consumer's Dialyzer PLT, and core has just grown a namespace, so a kept PLT would
+be reporting on a core that no longer exists.
+
+2026-09-15T06:33:58Z  bash tmp/v1/mixlane.sh pro mix check
+  exit 1   mix format --check-formatted refused one line of the new
+           scheduler_map_test.exs. Formatted the four changed Pro files only.
+2026-09-15T06:34:05Z  bash tmp/v1/mixlane.sh pro mix check
+  exit 8   credo --strict: "Avoid apply/2 and apply/3 when the number of
+           arguments is known", expirer.ex. Replaced apply(worker, :perform,
+           [job]) with worker.perform(job), which is still a runtime dispatch
+           through a variable and still carries no compile-time reference to a
+           module a staged-upgrade core may not have.
+2026-09-15T06:34:17Z  bash tmp/v1/mixlane.sh pro mix check
+  exit 2   one failure: AuroraMeter.Pro.DocExamplesTest, "every elixir block
+           parses". The new Pro scheduler map carried a bare
+           `crontab: ... ++ pro_entries` fragment. Made it a whole config call
+           in both packages' maps.
+2026-09-15T06:36:00Z  bash tmp/v1/mixlane.sh pro mix check
+  exit 0
+  Result: 874 passed (55 doctests, 819 tests)
+  log: 05a-pro-check.log  (in the Pro repository's evidence directory)
+
+--------------------------------------------------------------------------------
+Not run, and why
+--------------------------------------------------------------------------------
+No Stripe call of any kind, real or sandbox. This unit touches no provider path.
+No git commit, no tag, no publish, no deploy (decision D13).
+No project-wide mix format in either package.

@@ -304,6 +304,32 @@ everything else in this inventory works headless.
 | `AuroraMeter.Components.spend_chart/1` | HEEx component | optional-dep | 0.4.0 | Needs `phoenix_live_view` and `phoenix_html`. |
 | `AuroraMeter.Components.credit_summary/1` | HEEx component | optional-dep | 0.4.0 | Needs `phoenix_live_view` and `phoenix_html`. |
 
+### 1.14 Oban workers (optional dependency)
+
+Compiled only when `Oban` is loaded. Without it the whole `AuroraMeter.Oban`
+namespace is absent, which is not an error: every operation these workers wrap
+is a public function any scheduler can call. See
+[the scheduler map](scheduler.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Oban.queue/0` | `() :: atom()` | optional-dep | 1.0.0 | Needs `oban`. The queue every Aurora Meter worker declares, core and Pro alike. |
+| `AuroraMeter.Oban.cron_entries/1` | `(keyword()) :: [{String.t(), module()}]` | optional-dep | 1.0.0 | Needs `oban`. The recommended crontab, filtered to the workers this build can run. Options `:include`, `:exclude`, `:schedules`. |
+| `AuroraMeter.Oban.validate!/1` | `(keyword()) :: :ok` | optional-dep | 1.0.0 | Needs `oban`. Raises `AuroraMeter.Oban.ConfigError` listing every problem in the host's Oban configuration. Options `:config` or `:otp_app` with `:name`, plus `:queue` and `:env`. |
+
+<!-- inventory:modules -->
+
+| Entry | Operation it wraps | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Oban.CreditExpiry` | `AuroraMeter.Credits.expire_due/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"*/30 * * * *"`. |
+| `AuroraMeter.Oban.HoldReconciliation` | `AuroraMeter.Credits.reconcile_holds/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"*/15 * * * *"`. Job arguments `older_than_seconds`, `limit`, `reference_prefix`, `tenant`. |
+| `AuroraMeter.Oban.EventsReplay` | `AuroraMeter.Events.Replay.run/1` | optional-dep | 1.0.0 | Needs `oban`. No schedule: a projection rebuild is an operator action, and `cron_entries/1` never returns it. |
+| `AuroraMeter.Oban.RecurringGrants` | recurring credit grants | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; the worker cancels with `{:cancel, :not_implemented}` and `cron_entries/1` omits it. |
+| `AuroraMeter.Oban.PlanTransitions` | due plan changes | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; same behaviour as `AuroraMeter.Oban.RecurringGrants`. |
+| `AuroraMeter.Oban.ConfigError` | raised by `AuroraMeter.Oban.validate!/1` | optional-dep | 1.0.0 | Needs `oban`. Carries `:message` and `:problems`. |
+
 ## 2. Behaviours and their callbacks
 
 A host or an extension implements these. Adding a required callback to one of

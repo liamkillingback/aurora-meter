@@ -1,0 +1,125 @@
+2026-09-15T06:41:43Z
+/home/liamk/src/PhxTemplates/tmp/v1/05a-core-package.sh: line 10: elixir: command not found
+[mixlane] core: DB_PORT=5490 mix deps.unlock --check-unused
+[mixlane] core exit=0 started=2026-09-15T06:41:43Z finished=2026-09-15T06:41:44Z
+deps.unlock --check-unused exit=0
+[mixlane] core: DB_PORT=5490 mix hex.build
+Building aurora_meter 0.5.0
+  Dependencies:
+    ecto_sql ~> 3.10 (app: ecto_sql)
+    postgrex >= 0.0.0 (app: postgrex)
+    phoenix_pubsub ~> 2.1 (app: phoenix_pubsub)
+    telemetry ~> 1.2 (app: telemetry)
+    nimble_options ~> 1.1 (app: nimble_options)
+    jason ~> 1.4 (app: jason)
+    phoenix_live_view ~> 0.20 or ~> 1.0 (app: phoenix_live_view) (optional)
+    phoenix_html ~> 3.3 or ~> 4.0 (app: phoenix_html) (optional)
+    igniter ~> 0.8 (app: igniter) (optional)
+    oban ~> 2.17 (app: oban) (optional)
+  App: aurora_meter
+  Name: aurora_meter
+  Files:
+    lib
+    lib/mix
+    lib/mix/tasks
+    lib/mix/tasks/aurora_meter.features.ex
+    lib/mix/tasks/aurora_meter.events.backfill.ex
+    lib/mix/tasks/aurora_meter.gen.migration.ex
+    lib/mix/tasks/aurora_meter.install.ex
+    lib/mix/tasks/aurora_meter.bench.ex
+    lib/aurora_meter.ex
+    lib/aurora_meter
+    lib/aurora_meter/config
+    lib/aurora_meter/config/schema.ex
+    lib/aurora_meter/storage_case.ex
+    lib/aurora_meter/cluster.ex
+    lib/aurora_meter/clock.ex
+    lib/aurora_meter/storage.ex
+    lib/aurora_meter/oban
+    lib/aurora_meter/oban/recurring_grants.ex
+    lib/aurora_meter/oban/credit_expiry.ex
+    lib/aurora_meter/oban/hold_reconciliation.ex
+    lib/aurora_meter/oban/plan_transitions.ex
+    lib/aurora_meter/oban/events_replay.ex
+    lib/aurora_meter/plans.ex
+    lib/aurora_meter/oban.ex
+    lib/aurora_meter/migration.ex
+    lib/aurora_meter/billing
+    lib/aurora_meter/billing/noop.ex
+    lib/aurora_meter/billing/provider.ex
+    lib/aurora_meter/plan.ex
+    lib/aurora_meter/flusher.ex
+    lib/aurora_meter/store.ex
+    lib/aurora_meter/entitlements.ex
+    lib/aurora_meter/supervisor.ex
+    lib/aurora_meter/boot_checks.ex
+    lib/aurora_meter/live_view.ex
+    lib/aurora_meter/subscriptions.ex
+    lib/aurora_meter/checkpoints.ex
+    lib/aurora_meter/exporter_case.ex
+    lib/aurora_meter/schema
+    lib/aurora_meter/schema/flush_receipt.ex
+    lib/aurora_meter/schema/credit_transaction.ex
+    lib/aurora_meter/schema/event_total.ex
+    lib/aurora_meter/schema/subscription.ex
+    lib/aurora_meter/schema/history.ex
+    lib/aurora_meter/schema/counter.ex
+    lib/aurora_meter/schema/event.ex
+    lib/aurora_meter/schema/credit_balance.ex
+    lib/aurora_meter/events
+    lib/aurora_meter/events/gate.ex
+    lib/aurora_meter/events/outbox.ex
+    lib/aurora_meter/events/replay.ex
+    lib/aurora_meter/events/backfill.ex
+    lib/aurora_meter/events/canonical.ex
+    lib/aurora_meter/migration
+    lib/aurora_meter/migration/v8.ex
+    lib/aurora_meter/migration/v6.ex
+    lib/aurora_meter/migration/v7.ex
+    lib/aurora_meter/migration/errors.ex
+    lib/aurora_meter/credits.ex
+    lib/aurora_meter/test.ex
+    lib/aurora_meter/components.ex
+    lib/aurora_meter/tenant.ex
+    lib/aurora_meter/install
+    lib/aurora_meter/install/templates.ex
+    lib/aurora_meter/counter.ex
+    lib/aurora_meter/event.ex
+    lib/aurora_meter/exporter
+    lib/aurora_meter/exporter/journal.ex
+    lib/aurora_meter/broadcaster.ex
+    lib/aurora_meter/errors.ex
+    lib/aurora_meter/config.ex
+    lib/aurora_meter/billing.ex
+    lib/aurora_meter/exporter.ex
+    lib/aurora_meter/events.ex
+    lib/aurora_meter/period.ex
+    lib/aurora_meter/storage
+    lib/aurora_meter/storage/ecto.ex
+    lib/aurora_meter/credits
+    lib/aurora_meter/credits/ledger.ex
+    lib/aurora_meter/credits/hold_reconciler.ex
+    lib/aurora_meter/credits/reconciliation.ex
+    lib/aurora_meter/credits/promotions.ex
+    lib/aurora_meter/credits/money.ex
+    lib/aurora_meter/credits/series.ex
+    .formatter.exs
+    mix.exs
+    README.md
+    LICENSE
+    CHANGELOG.md
+    NOTICE.md
+  Version: 0.5.0
+  Build tools: mix
+  Description: Real-time usage metering, plan entitlements, and Stripe-ready billing primitives for Phoenix: count, gate, and bill on the BEAM. The free core of aurorameter.com.
+  Licenses: MIT
+  Links: 
+    Aurora Meter Pro: https://aurorameter.com/pricing
+    GitHub: https://github.com/liamkillingback/aurora-meter
+    PhxTemplates: https://www.phxtemplates.com
+    Website: https://aurorameter.com
+  Elixir: ~> 1.15
+Package checksum: d72c1995a7b7fb344c9b820b636dd31e4ad2fa7ea9cbbb86e78a7a33d08fa344
+Saved to aurora_meter-0.5.0.tar
+[mixlane] core exit=0 started=2026-09-15T06:41:44Z finished=2026-09-15T06:41:44Z
+hex.build exit=0

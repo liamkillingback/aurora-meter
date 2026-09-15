@@ -1,0 +1,50 @@
+--- seed 0 --- 2026-09-15T06:14:16Z
+[05a race] %{test: :volume, won: [12, 0]}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed
+--- seed 1 --- 2026-09-15T06:14:17Z
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{test: :volume, won: [0, 12]}
+Result: 3 passed
+--- seed 7 --- 2026-09-15T06:14:18Z
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{test: :volume, won: [0, 12]}
+Result: 3 passed
+--- seed 13 --- 2026-09-15T06:14:20Z
+[05a race] %{test: :volume, won: [0, 12]}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed
+--- seed 42 --- 2026-09-15T06:14:21Z
+[05a race] %{test: :volume, won: [12, 0]}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed
+--- seed 101 --- 2026-09-15T06:14:22Z
+[05a race] %{test: :volume, won: [0, 12]}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed
+--- seed 777 --- 2026-09-15T06:14:24Z
+[05a race] %{test: :volume, won: [0, 12]}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed
+--- seed 1234 --- 2026-09-15T06:14:25Z
+[05a race] %{test: :volume, won: [0, 12]}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed
+--- seed 20260915 --- 2026-09-15T06:14:26Z
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{test: :volume, won: [0, 12]}
+Result: 3 passed
+--- seed 999999 --- 2026-09-15T06:14:28Z
+[05a race] %{test: :volume, won: [0, 12]}
+[05a race] %{worker: AuroraMeter.ObanConcurrencyTest.UnguardedExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+[05a race] %{worker: AuroraMeter.Oban.CreditExpiry, result: %{expiries: 1, waiters: 2, winner: 1, loser: 0}, test: :rendezvous}
+Result: 3 passed

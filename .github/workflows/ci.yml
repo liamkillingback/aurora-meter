@@ -114,9 +114,9 @@ jobs:
             package: "yes"
             experimental: "no"
           # D03 and invariant I20: a host with no phoenix_live_view, no
-          # phoenix_html and no igniter compiles, installs and runs. `optional:
-          # true` only affects consumers, so mix.exs needs the AURORA_HEADLESS
-          # switch for this to be possible at all.
+          # phoenix_html, no igniter and no oban compiles, installs and runs.
+          # `optional: true` only affects consumers, so mix.exs needs the
+          # AURORA_HEADLESS switch for this to be possible at all.
           - leg: headless
             elixir: "1.18.5"
             otp: "27.3.4.17"
@@ -236,7 +236,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "AURORA_HEADLESS=${AURORA_HEADLESS:-<unset>} AURORA_LIVEVIEW=${AURORA_LIVEVIEW:-<unset>}"
-          mix deps | grep -E 'phoenix_live_view|phoenix_html|igniter' || echo "no optional integration is present on this leg"
+          mix deps | grep -E 'phoenix_live_view|phoenix_html|igniter|oban' || echo "no optional integration is present on this leg"
 
       - name: Check formatting
         run: mix format --check-formatted
