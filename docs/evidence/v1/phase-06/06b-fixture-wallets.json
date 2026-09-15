@@ -1,0 +1,1864 @@
+{
+  "meta": {
+    "otp": "29",
+    "elixir": "1.20.1",
+    "database": "the maintainer test database, not a disposable fixture database",
+    "generated_by": "tmp/v1/06b-evidence.exs",
+    "core_sha": "6af77f98c4d37caac89421269fb111c4889d9eee",
+    "schema_version": 9,
+    "note": "scripts/v1/migrations.sh --fixture core6_pro9 refuses until build unit 11a supplies the historical fixture dumps, so this run is against the package's own test database with synthetic tenant keys."
+  },
+  "wallets": [
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_00_paid_only",
+      "lots": [
+        {
+          "state": "exhausted",
+          "reference": "pi_paid_a_lotmig_ev9860_00_paid_only",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_paid_a_lotmig_ev9860_00_paid_only"
+          },
+          "available": 0,
+          "expires_at": null,
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 5000000
+        },
+        {
+          "state": "open",
+          "reference": "pi_paid_b_lotmig_ev9860_00_paid_only",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_paid_b_lotmig_ev9860_00_paid_only"
+          },
+          "available": 2000000,
+          "expires_at": null,
+          "amount": 3000000,
+          "reserved": 0,
+          "consumed": 1000000
+        },
+        {
+          "state": "open",
+          "reference": "top_up_manual_lotmig_ev9860_00_paid_only",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "reference": "top_up_manual_lotmig_ev9860_00_paid_only"
+          },
+          "available": 2000000,
+          "expires_at": null,
+          "amount": 2000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 5000000,
+          "caused_by": "debit job_1_lotmig_ev9860_00_paid_only"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_1_lotmig_ev9860_00_paid_only"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_paid_a_lotmig_ev9860_00_paid_only",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "pi_paid_b_lotmig_ev9860_00_paid_only",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 3000000,
+          "held_delta": 0,
+          "balance_after": 8000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "top_up_manual_lotmig_ev9860_00_paid_only",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 2000000,
+          "held_delta": 0,
+          "balance_after": 10000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_1_lotmig_ev9860_00_paid_only",
+          "category": null,
+          "kind": "debit",
+          "amount": -6000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 9,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "paid_only",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 12000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 2000000,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_01_promotional_overlap",
+      "lots": [
+        {
+          "state": "exhausted",
+          "reference": "promo_a_lotmig_ev9860_01_promotional_overlap",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_a_lotmig_ev9860_01_promotional_overlap"
+          },
+          "available": 0,
+          "expires_at": "2026-01-01T00:00:00Z",
+          "amount": 3000000,
+          "reserved": 0,
+          "consumed": 3000000
+        },
+        {
+          "state": "open",
+          "reference": "promo_b_lotmig_ev9860_01_promotional_overlap",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_b_lotmig_ev9860_01_promotional_overlap"
+          },
+          "available": 2000000,
+          "expires_at": "2026-02-01T00:00:00Z",
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 3000000
+        },
+        {
+          "state": "open",
+          "reference": "pi_overlap_lotmig_ev9860_01_promotional_overlap",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_overlap_lotmig_ev9860_01_promotional_overlap"
+          },
+          "available": 10000000,
+          "expires_at": null,
+          "amount": 10000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 3000000,
+          "caused_by": "debit job_overlap_lotmig_ev9860_01_promotional_overlap"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 3000000,
+          "caused_by": "debit job_overlap_lotmig_ev9860_01_promotional_overlap"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "promo_a_lotmig_ev9860_01_promotional_overlap",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 3000000,
+          "held_delta": 0,
+          "balance_after": 3000000,
+          "held_after": 0,
+          "promotional_after": 3000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "promo_b_lotmig_ev9860_01_promotional_overlap",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 8000000,
+          "held_after": 0,
+          "promotional_after": 8000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "pi_overlap_lotmig_ev9860_01_promotional_overlap",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 10000000,
+          "held_delta": 0,
+          "balance_after": 18000000,
+          "held_after": 0,
+          "promotional_after": 8000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_overlap_lotmig_ev9860_01_promotional_overlap",
+          "category": null,
+          "kind": "debit",
+          "amount": -6000000,
+          "held_delta": 0,
+          "balance_after": 12000000,
+          "held_after": 0,
+          "promotional_after": 2000000,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 12000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 2000000
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 12000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 2000000,
+        "debt": 0
+      },
+      "shape": "promotional_overlap",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_02_promotional_no_expiry",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "promo_forever_lotmig_ev9860_02_promotional_no_expiry",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_forever_lotmig_ev9860_02_promotional_no_expiry"
+          },
+          "available": 3000000,
+          "expires_at": null,
+          "amount": 4000000,
+          "reserved": 0,
+          "consumed": 1000000
+        },
+        {
+          "state": "exhausted",
+          "reference": "promo_dated_lotmig_ev9860_02_promotional_no_expiry",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_dated_lotmig_ev9860_02_promotional_no_expiry"
+          },
+          "available": 0,
+          "expires_at": "2099-01-01T00:00:00Z",
+          "amount": 2000000,
+          "reserved": 0,
+          "consumed": 2000000
+        },
+        {
+          "state": "open",
+          "reference": "pi_small_lotmig_ev9860_02_promotional_no_expiry",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_small_lotmig_ev9860_02_promotional_no_expiry"
+          },
+          "available": 1000000,
+          "expires_at": null,
+          "amount": 1000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "debit job_no_expiry_lotmig_ev9860_02_promotional_no_expiry"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_no_expiry_lotmig_ev9860_02_promotional_no_expiry"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "promo_forever_lotmig_ev9860_02_promotional_no_expiry",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 4000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 4000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "promo_dated_lotmig_ev9860_02_promotional_no_expiry",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 2000000,
+          "held_delta": 0,
+          "balance_after": 6000000,
+          "held_after": 0,
+          "promotional_after": 6000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "pi_small_lotmig_ev9860_02_promotional_no_expiry",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 1000000,
+          "held_delta": 0,
+          "balance_after": 7000000,
+          "held_after": 0,
+          "promotional_after": 6000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_no_expiry_lotmig_ev9860_02_promotional_no_expiry",
+          "category": null,
+          "kind": "debit",
+          "amount": -3000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 3000000,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000,
+        "debt": 0
+      },
+      "shape": "promotional_no_expiry",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 0,
+        "expired": 10000000,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_03_partial_expiry",
+      "lots": [
+        {
+          "state": "expired",
+          "reference": "promo_due_lotmig_ev9860_03_partial_expiry",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 10000000,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_due_lotmig_ev9860_03_partial_expiry"
+          },
+          "available": 0,
+          "expires_at": "2020-06-01T00:00:00Z",
+          "amount": 10000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 4000000,
+          "caused_by": "hold hold_over_expiry_lotmig_ev9860_03_partial_expiry"
+        },
+        {
+          "kind": "expire",
+          "to": "expired",
+          "from": "available",
+          "amount": 6000000,
+          "caused_by": "expire expire:25af1652-0486-4050-9ad3-25ac0a659609:10436"
+        },
+        {
+          "kind": "unreserve",
+          "to": "available",
+          "from": "reserved",
+          "amount": 4000000,
+          "caused_by": "release hold_over_expiry_lotmig_ev9860_03_partial_expiry"
+        },
+        {
+          "kind": "expire",
+          "to": "expired",
+          "from": "available",
+          "amount": 4000000,
+          "caused_by": "expire expire:25af1652-0486-4050-9ad3-25ac0a659609"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "promo_due_lotmig_ev9860_03_partial_expiry",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 10000000,
+          "held_delta": 0,
+          "balance_after": 10000000,
+          "held_after": 0,
+          "promotional_after": 10000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_over_expiry_lotmig_ev9860_03_partial_expiry",
+          "category": null,
+          "kind": "hold",
+          "amount": 0,
+          "held_delta": 4000000,
+          "balance_after": 10000000,
+          "held_after": 4000000,
+          "promotional_after": 10000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "expire:25af1652-0486-4050-9ad3-25ac0a659609:10436",
+          "category": "promotional",
+          "kind": "expire",
+          "amount": -6000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 4000000,
+          "promotional_after": 4000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_over_expiry_lotmig_ev9860_03_partial_expiry",
+          "category": null,
+          "kind": "release",
+          "amount": 0,
+          "held_delta": -4000000,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 4000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "expire:25af1652-0486-4050-9ad3-25ac0a659609",
+          "category": "promotional",
+          "kind": "expire",
+          "amount": -4000000,
+          "held_delta": 0,
+          "balance_after": 0,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 0,
+        "expired": 10000000,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 6,
+      "before": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "partial_expiry",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [
+        "reserved_on_expiring_lot"
+      ],
+      "reason": null,
+      "after": {
+        "balance": 8000000,
+        "expired": 0,
+        "held": 3000000,
+        "promotional": 2000000,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_04_pending_hold",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "pi_pending_lotmig_ev9860_04_pending_hold",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_pending_lotmig_ev9860_04_pending_hold"
+          },
+          "available": 5000000,
+          "expires_at": null,
+          "amount": 6000000,
+          "reserved": 1000000,
+          "consumed": 0
+        },
+        {
+          "state": "open",
+          "reference": "promo_pending_lotmig_ev9860_04_pending_hold",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_pending_lotmig_ev9860_04_pending_hold"
+          },
+          "available": 0,
+          "expires_at": "2099-01-01T00:00:00Z",
+          "amount": 2000000,
+          "reserved": 2000000,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "hold hold_still_open_lotmig_ev9860_04_pending_hold"
+        },
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "hold hold_still_open_lotmig_ev9860_04_pending_hold"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_pending_lotmig_ev9860_04_pending_hold",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 6000000,
+          "held_delta": 0,
+          "balance_after": 6000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "promo_pending_lotmig_ev9860_04_pending_hold",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 2000000,
+          "held_delta": 0,
+          "balance_after": 8000000,
+          "held_after": 0,
+          "promotional_after": 2000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_still_open_lotmig_ev9860_04_pending_hold",
+          "category": null,
+          "kind": "hold",
+          "amount": 0,
+          "held_delta": 3000000,
+          "balance_after": 8000000,
+          "held_after": 3000000,
+          "promotional_after": 2000000,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 8000000,
+        "expired": 0,
+        "held": 3000000,
+        "promotional": 2000000
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 8000000,
+        "expired": 0,
+        "held": 3000000,
+        "promotional": 2000000,
+        "debt": 0
+      },
+      "shape": "pending_hold",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": -2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 2000000
+      },
+      "tenant_key": "lotmig_ev9860_05_settled_overrun",
+      "lots": [
+        {
+          "state": "exhausted",
+          "reference": "pi_overrun_lotmig_ev9860_05_settled_overrun",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_overrun_lotmig_ev9860_05_settled_overrun"
+          },
+          "available": 0,
+          "expires_at": null,
+          "amount": 4000000,
+          "reserved": 0,
+          "consumed": 4000000
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "hold hold_overrun_lotmig_ev9860_05_settled_overrun"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "reserved",
+          "amount": 2000000,
+          "caused_by": "settle hold_overrun_lotmig_ev9860_05_settled_overrun"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "settle hold_overrun_lotmig_ev9860_05_settled_overrun"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_overrun_lotmig_ev9860_05_settled_overrun",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 4000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_overrun_lotmig_ev9860_05_settled_overrun",
+          "category": null,
+          "kind": "hold",
+          "amount": 0,
+          "held_delta": 2000000,
+          "balance_after": 4000000,
+          "held_after": 2000000,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_overrun_lotmig_ev9860_05_settled_overrun",
+          "category": null,
+          "kind": "settle",
+          "amount": -6000000,
+          "held_delta": -2000000,
+          "balance_after": -2000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": -2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": -2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "settled_overrun",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_06_released_hold",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "pi_released_lotmig_ev9860_06_released_hold",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_released_lotmig_ev9860_06_released_hold"
+          },
+          "available": 4000000,
+          "expires_at": null,
+          "amount": 4000000,
+          "reserved": 0,
+          "consumed": 0
+        },
+        {
+          "state": "exhausted",
+          "reference": "promo_released_lotmig_ev9860_06_released_hold",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_released_lotmig_ev9860_06_released_hold"
+          },
+          "available": 0,
+          "expires_at": "2099-01-01T00:00:00Z",
+          "amount": 1000000,
+          "reserved": 0,
+          "consumed": 1000000
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "hold hold_released_lotmig_ev9860_06_released_hold"
+        },
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "hold hold_released_lotmig_ev9860_06_released_hold"
+        },
+        {
+          "kind": "unreserve",
+          "to": "available",
+          "from": "reserved",
+          "amount": 1000000,
+          "caused_by": "release hold_released_lotmig_ev9860_06_released_hold"
+        },
+        {
+          "kind": "unreserve",
+          "to": "available",
+          "from": "reserved",
+          "amount": 1000000,
+          "caused_by": "release hold_released_lotmig_ev9860_06_released_hold"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_released_lotmig_ev9860_06_released_hold"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_released_lotmig_ev9860_06_released_hold",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 4000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "promo_released_lotmig_ev9860_06_released_hold",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 1000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 1000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_released_lotmig_ev9860_06_released_hold",
+          "category": null,
+          "kind": "hold",
+          "amount": 0,
+          "held_delta": 2000000,
+          "balance_after": 5000000,
+          "held_after": 2000000,
+          "promotional_after": 1000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_released_lotmig_ev9860_06_released_hold",
+          "category": null,
+          "kind": "release",
+          "amount": 0,
+          "held_delta": -2000000,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 1000000,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_released_lotmig_ev9860_06_released_hold",
+          "category": null,
+          "kind": "debit",
+          "amount": -1000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 6,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "released_hold",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_07_debits",
+      "lots": [
+        {
+          "state": "exhausted",
+          "reference": "pi_debits_lotmig_ev9860_07_debits",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_debits_lotmig_ev9860_07_debits"
+          },
+          "available": 0,
+          "expires_at": null,
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 5000000
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "debit job_a_lotmig_ev9860_07_debits"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "debit job_b_lotmig_ev9860_07_debits"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_c_lotmig_ev9860_07_debits"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_debits_lotmig_ev9860_07_debits",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_a_lotmig_ev9860_07_debits",
+          "category": null,
+          "kind": "debit",
+          "amount": -2000000,
+          "held_delta": 0,
+          "balance_after": 3000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_b_lotmig_ev9860_07_debits",
+          "category": null,
+          "kind": "debit",
+          "amount": -2000000,
+          "held_delta": 0,
+          "balance_after": 1000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_c_lotmig_ev9860_07_debits",
+          "category": null,
+          "kind": "debit",
+          "amount": -1000000,
+          "held_delta": 0,
+          "balance_after": 0,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "debits",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_08_refund",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "pi_refunded_lotmig_ev9860_08_refund",
+          "reversed": 2000000,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_refunded_lotmig_ev9860_08_refund"
+          },
+          "available": 2000000,
+          "expires_at": null,
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 1000000
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_refund_lotmig_ev9860_08_refund"
+        },
+        {
+          "kind": "reverse",
+          "to": "reversed",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "debit refund:pi_refunded_lotmig_ev9860_08_refund:200"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_refunded_lotmig_ev9860_08_refund",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_refund_lotmig_ev9860_08_refund",
+          "category": null,
+          "kind": "debit",
+          "amount": -1000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "refund:pi_refunded_lotmig_ev9860_08_refund:200",
+          "category": "reversal",
+          "kind": "debit",
+          "amount": -2000000,
+          "held_delta": 0,
+          "balance_after": 2000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "refund",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_09_dispute",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "pi_disputed_lotmig_ev9860_09_dispute",
+          "reversed": 3000000,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_disputed_lotmig_ev9860_09_dispute"
+          },
+          "available": 2000000,
+          "expires_at": null,
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reverse",
+          "to": "reversed",
+          "from": "available",
+          "amount": 3000000,
+          "caused_by": "debit dispute:pi_disputed_lotmig_ev9860_09_dispute:du_1:300"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_disputed_lotmig_ev9860_09_dispute",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "dispute:pi_disputed_lotmig_ev9860_09_dispute:du_1:300",
+          "category": "reversal",
+          "kind": "debit",
+          "amount": -3000000,
+          "held_delta": 0,
+          "balance_after": 2000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 4,
+      "before": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "dispute",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_10_reconciled",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "pi_reconciled_lotmig_ev9860_10_reconciled",
+          "reversed": 2000000,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_reconciled_lotmig_ev9860_10_reconciled"
+          },
+          "available": 2000000,
+          "expires_at": null,
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 1000000
+        },
+        {
+          "state": "open",
+          "reference": "reconciled_restore:pi_reconciled_lotmig_ev9860_10_reconciled:sync:100:0:100",
+          "reversed": 0,
+          "category": "adjustment",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_reconciled_lotmig_ev9860_10_reconciled",
+            "reference": "reconciled_restore:pi_reconciled_lotmig_ev9860_10_reconciled:sync:100:0:100"
+          },
+          "available": 1000000,
+          "expires_at": null,
+          "amount": 1000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_reconciled_lotmig_ev9860_10_reconciled"
+        },
+        {
+          "kind": "reverse",
+          "to": "reversed",
+          "from": "available",
+          "amount": 2000000,
+          "caused_by": "debit reconciled:pi_reconciled_lotmig_ev9860_10_reconciled:sync:100:0:200"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_reconciled_lotmig_ev9860_10_reconciled",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_reconciled_lotmig_ev9860_10_reconciled",
+          "category": null,
+          "kind": "debit",
+          "amount": -1000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "reconciled:pi_reconciled_lotmig_ev9860_10_reconciled:sync:100:0:200",
+          "category": "reversal",
+          "kind": "debit",
+          "amount": -2000000,
+          "held_delta": 0,
+          "balance_after": 2000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "reconciled_restore:pi_reconciled_lotmig_ev9860_10_reconciled:sync:100:0:100",
+          "category": "adjustment",
+          "kind": "grant",
+          "amount": 1000000,
+          "held_delta": 0,
+          "balance_after": 3000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "reconciled",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_11_reinstated",
+      "lots": [
+        {
+          "state": "open",
+          "reference": "pi_reinstated_lotmig_ev9860_11_reinstated",
+          "reversed": 3000000,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_reinstated_lotmig_ev9860_11_reinstated"
+          },
+          "available": 2000000,
+          "expires_at": null,
+          "amount": 5000000,
+          "reserved": 0,
+          "consumed": 0
+        },
+        {
+          "state": "open",
+          "reference": "reinstated:pi_reinstated_lotmig_ev9860_11_reinstated:du_2:300",
+          "reversed": 0,
+          "category": "adjustment",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_reinstated_lotmig_ev9860_11_reinstated",
+            "reference": "reinstated:pi_reinstated_lotmig_ev9860_11_reinstated:du_2:300"
+          },
+          "available": 3000000,
+          "expires_at": null,
+          "amount": 3000000,
+          "reserved": 0,
+          "consumed": 0
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reverse",
+          "to": "reversed",
+          "from": "available",
+          "amount": 3000000,
+          "caused_by": "debit dispute:pi_reinstated_lotmig_ev9860_11_reinstated:du_2:300"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_reinstated_lotmig_ev9860_11_reinstated",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "dispute:pi_reinstated_lotmig_ev9860_11_reinstated:du_2:300",
+          "category": "reversal",
+          "kind": "debit",
+          "amount": -3000000,
+          "held_delta": 0,
+          "balance_after": 2000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "reinstated:pi_reinstated_lotmig_ev9860_11_reinstated:du_2:300",
+          "category": "adjustment",
+          "kind": "grant",
+          "amount": 3000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "reinstated",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [
+        "promotional_clamped"
+      ],
+      "reason": null,
+      "after": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_12_grant_on_debt",
+      "lots": [
+        {
+          "state": "exhausted",
+          "reference": "pi_debt_lotmig_ev9860_12_grant_on_debt",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_debt_lotmig_ev9860_12_grant_on_debt"
+          },
+          "available": 0,
+          "expires_at": null,
+          "amount": 2000000,
+          "reserved": 0,
+          "consumed": 2000000
+        },
+        {
+          "state": "open",
+          "reference": "promo_on_debt_lotmig_ev9860_12_grant_on_debt",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_on_debt_lotmig_ev9860_12_grant_on_debt"
+          },
+          "available": 3000000,
+          "expires_at": "2099-01-01T00:00:00Z",
+          "amount": 6000000,
+          "reserved": 0,
+          "consumed": 3000000
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "reserve",
+          "to": "reserved",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "hold hold_debt_lotmig_ev9860_12_grant_on_debt"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "reserved",
+          "amount": 1000000,
+          "caused_by": "settle hold_debt_lotmig_ev9860_12_grant_on_debt"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "settle hold_debt_lotmig_ev9860_12_grant_on_debt"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 3000000,
+          "caused_by": "grant promo_on_debt_lotmig_ev9860_12_grant_on_debt"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "pi_debt_lotmig_ev9860_12_grant_on_debt",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 2000000,
+          "held_delta": 0,
+          "balance_after": 2000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_debt_lotmig_ev9860_12_grant_on_debt",
+          "category": null,
+          "kind": "hold",
+          "amount": 0,
+          "held_delta": 1000000,
+          "balance_after": 2000000,
+          "held_after": 1000000,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hold_debt_lotmig_ev9860_12_grant_on_debt",
+          "category": null,
+          "kind": "settle",
+          "amount": -5000000,
+          "held_delta": -1000000,
+          "balance_after": -3000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "promo_on_debt_lotmig_ev9860_12_grant_on_debt",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 6000000,
+          "held_delta": 0,
+          "balance_after": 3000000,
+          "held_after": 0,
+          "promotional_after": 3000000,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000,
+        "debt": 0
+      },
+      "shape": "grant_on_debt",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "after": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_13_pre_v4",
+      "lots": [
+        {
+          "state": "exhausted",
+          "reference": "promo_pre_v4_lotmig_ev9860_13_pre_v4",
+          "reversed": 0,
+          "category": "promotional",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "promotion": "promo_pre_v4_lotmig_ev9860_13_pre_v4"
+          },
+          "available": 0,
+          "expires_at": "2099-01-01T00:00:00Z",
+          "amount": 4000000,
+          "reserved": 0,
+          "consumed": 4000000
+        },
+        {
+          "state": "open",
+          "reference": "pi_pre_v4_lotmig_ev9860_13_pre_v4",
+          "reversed": 0,
+          "category": "paid",
+          "expired": 0,
+          "source": {
+            "legacy": true,
+            "payment_intent_id": "pi_pre_v4_lotmig_ev9860_13_pre_v4"
+          },
+          "available": 5000000,
+          "expires_at": null,
+          "amount": 6000000,
+          "reserved": 0,
+          "consumed": 1000000
+        }
+      ],
+      "allocations": [
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 4000000,
+          "caused_by": "debit job_pre_v4_lotmig_ev9860_13_pre_v4"
+        },
+        {
+          "kind": "consume",
+          "to": "consumed",
+          "from": "available",
+          "amount": 1000000,
+          "caused_by": "debit job_pre_v4_lotmig_ev9860_13_pre_v4"
+        }
+      ],
+      "ledger": [
+        {
+          "reference": "promo_pre_v4_lotmig_ev9860_13_pre_v4",
+          "category": "promotional",
+          "kind": "grant",
+          "amount": 4000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": null,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "pi_pre_v4_lotmig_ev9860_13_pre_v4",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 6000000,
+          "held_delta": 0,
+          "balance_after": 10000000,
+          "held_after": 0,
+          "promotional_after": null,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_pre_v4_lotmig_ev9860_13_pre_v4",
+          "category": null,
+          "kind": "debit",
+          "amount": -5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": null,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0
+      },
+      "ordering": "inserted_at",
+      "lock_ms": 5,
+      "before": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "pre_v4",
+      "verdict": "migrated"
+    },
+    {
+      "flags": [],
+      "reason": "blocked_before",
+      "after": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_b0_reversal_unattributed",
+      "lots": [],
+      "allocations": [],
+      "ledger": [
+        {
+          "reference": "pi_ev_lotmig_ev9860_b0_reversal_unattributed",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "hand-written-lotmig_ev9860_b0_reversal_unattributed",
+          "category": "reversal",
+          "kind": "debit",
+          "amount": -1000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": null,
+      "ordering": null,
+      "lock_ms": null,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "reversal_unattributed",
+      "verdict": "blocked"
+    },
+    {
+      "flags": [],
+      "reason": "blocked_before",
+      "after": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "tenant_key": "lotmig_ev9860_b1_orphan_settle",
+      "lots": [],
+      "allocations": [],
+      "ledger": [
+        {
+          "reference": "pi_paid_a_lotmig_ev9860_b1_orphan_settle",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 5000000,
+          "held_delta": 0,
+          "balance_after": 5000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "pi_paid_b_lotmig_ev9860_b1_orphan_settle",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 3000000,
+          "held_delta": 0,
+          "balance_after": 8000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "top_up_manual_lotmig_ev9860_b1_orphan_settle",
+          "category": "paid",
+          "kind": "grant",
+          "amount": 2000000,
+          "held_delta": 0,
+          "balance_after": 10000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "job_1_lotmig_ev9860_b1_orphan_settle",
+          "category": null,
+          "kind": "debit",
+          "amount": -6000000,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        },
+        {
+          "reference": "orphan_settle_lotmig_ev9860_b1_orphan_settle",
+          "category": null,
+          "kind": "settle",
+          "amount": 0,
+          "held_delta": 0,
+          "balance_after": 4000000,
+          "held_after": 0,
+          "promotional_after": 0,
+          "hold_transaction_id": null
+        }
+      ],
+      "identities": null,
+      "ordering": null,
+      "lock_ms": null,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      },
+      "shape": "orphan_settle",
+      "verdict": "blocked"
+    }
+  ]
+}

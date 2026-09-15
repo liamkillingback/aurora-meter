@@ -1,0 +1,67 @@
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/credits/lot_migration_replay_test.exs test/aurora_meter/credits_lot_migration_test.exs test/aurora_meter/credits_lot_migration_resume_test.exs --seed 0
+Compiling 1 file (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+
+01:02:18.490 [error] Postgrex.Protocol (#PID<0.387.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.469.0> exited
+.................................................
+01:02:20.138 [warning] AuroraMeter.Credits.LotMigration: "lotmig_14212" raised ** (AuroraMeter.Test.Faults.Injected) injected fault at :before_commit (label: nil) context: %{kind: :write, schema: AuroraMeter.Schema.CreditBalance, statement: :balance_update, repo_fun: :update!}
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/faults.ex:368: AuroraMeter.Test.Faults.fire/6
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/fault_repo.ex:319: AuroraMeter.Test.FaultRepo.guard/4
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:611: AuroraMeter.Credits.LotMigration.write!/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:545: AuroraMeter.Credits.LotMigration.reconciled/6
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/fault_repo.ex:70: AuroraMeter.Test.FaultRepo.transaction/1
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:499: AuroraMeter.Credits.LotMigration.lock_phase/5
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:457: AuroraMeter.Credits.LotMigration.guarded/5
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:426: AuroraMeter.Credits.LotMigration.wallet/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:366: AuroraMeter.Credits.LotMigration.step_wallet/4
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:355: anonymous fn/4 in AuroraMeter.Credits.LotMigration.execute/3
+    (elixir 1.20.1) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:353: AuroraMeter.Credits.LotMigration.execute/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:290: AuroraMeter.Credits.LotMigration.run/1
+    test/aurora_meter/credits_lot_migration_test.exs:494: AuroraMeter.CreditsLotMigrationTest."test LI-06b-4 a write that fails inside the cutover leaves the wallet entirely untouched"/1
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+    (stdlib 8.0) timer.erl:599: :timer.tc/2
+ The wallet is untouched and reported blocked; the run continues.
+....aurora_meter.credits.migrate_lots:
+  wallets        2
+  migrated       1
+  blocked        1
+  deferred       0
+  skipped        0
+  rows           4
+  lots           1
+  allocations    1
+  lock ms max    2
+  duration ms    5
+
+blocked wallets:
+  org_2  reversal_unattributed %{}
+
+1 wallets are now owned by the allocator. Every node must already be on a release that honours `lots_enabled_at`: an older image ignores the column and would write legacy arithmetic over the lots, which the next conservation check would refuse.
+aurora_meter.credits.migrate_lots:
+  wallets        2
+  migrated       1
+  blocked        0
+  deferred       0
+  skipped        0
+  rows           4
+  lots           1
+  allocations    1
+  lock ms max    2
+  duration ms    5
+
+blocked wallets:
+  org_2  reversal_unattributed %{}
+
+1 wallets are now owned by the allocator. Every node must already be on a release that honours `lots_enabled_at`: an older image ignores the column and would write legacy arithmetic over the lots, which the next conservation check would refuse.
+.....
+Finished in 2.0 seconds (0.00s async, 2.0s sync)
+
+Result: 58 passed
+[mixlane] core exit=0 started=2026-09-15T15:02:17Z finished=2026-09-15T15:02:20Z

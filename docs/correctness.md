@@ -717,6 +717,7 @@ ledger promises:
 - `AuroraMeter.CreditsModelTest` / `property I10 a generated history on a cut-over wallet agrees with 01e's independent lot model, lot for lot`
 - `AuroraMeter.CreditsModelTest` / `test I10 the cross-oracle comparison can fail: a lot bucket moved by hand is caught`
 - `AuroraMeter.CreditsLotsConcurrencyTest` / `test I10 concurrent grants and debits on one wallet leave the projection exact`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I10 the cutover stamps projection_checked_at, which only the conservation check writes`
 
 **Evidence.** `docs/evidence/v1/phase-01/i10.md`
 
@@ -830,6 +831,15 @@ race.
 - `AuroraMeter.CreditsLotsTest` / `test I12 a hold taken before expiry settles against its reserved portion afterwards`
 - `AuroraMeter.CreditsLotsTest` / `test I12 the expiry sweep run twice writes one expire row, one allocation and the reference expire:<lot_id>:0`
 - `AuroraMeter.CreditsLotsConcurrencyTest` / `test I12 expiry racing a release conserves and leaves no spendable expired value`
+
+The wallet migration reproduces the **legacy** semantics for the history it
+replays, because the balance row it is checked against was produced by them:
+applying the fixed rule to a release that already happened would move money the
+ledger did not move. The difference appears from cutover onward, and the two
+tests below are what say so.
+
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I12 a hold spanning a partial expiry replays without moving the money`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I12 a hold still open on an expiring lot is reported, and nothing moves`
 
 **Evidence.** `docs/evidence/v1/phase-06/i12.md`
 
@@ -1025,6 +1035,67 @@ the storefront together.
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 rows an old writer inserts during the run are picked up by the same pass`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 a populated core1 database upgrades with every total preserved`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 an interrupted backfill resumes without double counting`
+
+The wallet migration onto credit lots is the one data step in this package that
+rewrites how a wallet's money is accounted for. It is checked against figures
+the legacy ledger itself wrote: every row's `balance_after` and `held_after`
+during the fold, and the balance row before the cutover commits. The first
+group below replays populated wallets; the second is the refusals, one wallet
+per reason; the third is the migration killed, resumed and raced.
+
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a paid-only wallet replays into one lot per grant, spent oldest first`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 overlapping promotional grants replay soonest-expiry first, before paid`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a non-expiring promotional lot sorts last within its category`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a settlement above its hold replays into consume and debt`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a released hold hands its reservation back to the lot it came from`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a refund is attributed to the payment that funded it, not to spend order`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a dispute reversal carrying a dispute id in its reference resolves the payment`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a reconciled reversal and its restore adjustment both name the payment`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a reinstatement adjustment is a lot the same payment's reversal can reach`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a promotional grant that landed on debt keeps its amount and repays the debt`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 every fixture wallet migrates with balance, held and promotional unchanged`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 one lot per grant row, and every allocation names the ledger row that caused it`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 migration writes debt and expired and leaves the three legacy figures alone`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a shadow run reaches the same verdict as the real run that follows it`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a migrated wallet keeps answering the public credit API`
+- `AuroraMeter.CreditsLotMigrationPropertyTest` / `property I19 a generated legacy history replays into lots that reproduce its balance row`
+
+Refusals. A migration that cannot reproduce a wallet exactly must leave it
+alone, and a refusal nobody can demonstrate is not a refusal:
+
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a reversal with no resolvable payment intent blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a reversal larger than the lots that payment funded blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a reversal that would take reserved value blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an adjustment whose restore reference names no payment blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a hold the overdraft tolerance allowed but no lot can back blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a settle with no hold in the history blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a release with no hold in the history blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a row of a kind the fold has no rule for blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an expire row that names no grant blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an expire row larger than the grant it names blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test X261 an expiry that destroyed a grant a hold had reserved blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a history no ordering can reconcile blocks rather than migrating wrong`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 every flag the fold raises is classified, and a blocking one halts the fold`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a blocked wallet keeps lots_enabled_at null, has no lots and records its reason`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 every blocking flag has a wallet that triggers it and none of them migrate`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a wallet larger than max_rows is deferred, paused and left untouched`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a run with a blocked wallet fails the Mix task rather than reporting success`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a wallet a previous run blocked is still counted as blocked by the next one`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 down(version: 9) refuses without confirm_data_loss, which is what protects the lots`
+
+Interrupt, resume and concurrency, on independent connections:
+
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 the run reports every wallet it examined, and the summary counts them`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 the scan resumes from the aggregate cursor and skips what is behind it`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 report-only re-reports a migrated wallet without demoting its verdict`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 status reports the aggregate cursor and every wallet verdict`
+- `AuroraMeter.CreditsLotMigrationResumeTest` / `test I19 a ledger write committed during the snapshot lands in the tail, not in the snapshot`
+- `AuroraMeter.CreditsLotMigrationResumeTest` / `test I19 a rerun after a completed run writes nothing and reports the wallet as skipped`
+- `AuroraMeter.CreditsLotMigrationResumeTest` / `test I19 the aggregate checkpoint records the run and its cursor across two runs`
+
+The wallet migration's own run reports, fixture catalogue, blocked catalogue
+and lock durations are under `docs/evidence/v1/phase-06/`, named from the
+phase 11 evidence below.
 
 **Evidence.** `storefront:docs/evidence/v1/phase-11/i19.md`
 

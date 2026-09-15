@@ -1,0 +1,405 @@
+{
+  "blocked": 2,
+  "meta": {
+    "otp": "29",
+    "elixir": "1.20.1",
+    "database": "the maintainer test database, not a disposable fixture database",
+    "generated_by": "tmp/v1/06b-evidence.exs",
+    "core_sha": "6af77f98c4d37caac89421269fb111c4889d9eee",
+    "schema_version": 9,
+    "note": "scripts/v1/migrations.sh --fixture core6_pro9 refuses until build unit 11a supplies the historical fixture dumps, so this run is against the package's own test database with synthetic tenant keys."
+  },
+  "state": "complete_with_blocked",
+  "rows": 58,
+  "cursor": "lotmig_ev9860_b1_orphan_settle",
+  "shadow": true,
+  "lots": 26,
+  "allocations": 35,
+  "wallets": 16,
+  "migrated": 0,
+  "deferred": 0,
+  "skipped": 0,
+  "duration_ms": 118,
+  "lock_ms_max": 4,
+  "reports": [
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_00_paid_only",
+      "lots": 3,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_00_paid_only",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 4,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_01_promotional_overlap",
+      "lots": 3,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_01_promotional_overlap",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 12000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 2000000,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_02_promotional_no_expiry",
+      "lots": 3,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_02_promotional_no_expiry",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 5,
+      "tenant_key": "lotmig_ev9860_03_partial_expiry",
+      "lots": 1,
+      "allocations": 4,
+      "checkpoint": "lot_migration:lotmig_ev9860_03_partial_expiry",
+      "ordering": "inserted_at",
+      "hold_links": 1,
+      "lock_ms": 2,
+      "before": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [
+        {
+          "flag": "reserved_on_expiring_lot",
+          "blocking": false,
+          "detail": "%{expires_at: ~U[2099-01-01 00:00:00Z], reserved: 2000000, lot_reference: \"promo_pending_lotmig_ev9860_04_pending_hold\"}"
+        }
+      ],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_04_pending_hold",
+      "lots": 2,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_04_pending_hold",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 8000000,
+        "expired": 0,
+        "held": 3000000,
+        "promotional": 2000000,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_05_settled_overrun",
+      "lots": 1,
+      "allocations": 3,
+      "checkpoint": "lot_migration:lotmig_ev9860_05_settled_overrun",
+      "ordering": "inserted_at",
+      "hold_links": 1,
+      "lock_ms": 2,
+      "before": {
+        "balance": -2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 5,
+      "tenant_key": "lotmig_ev9860_06_released_hold",
+      "lots": 2,
+      "allocations": 5,
+      "checkpoint": "lot_migration:lotmig_ev9860_06_released_hold",
+      "ordering": "inserted_at",
+      "hold_links": 1,
+      "lock_ms": 3,
+      "before": {
+        "balance": 4000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_07_debits",
+      "lots": 1,
+      "allocations": 3,
+      "checkpoint": "lot_migration:lotmig_ev9860_07_debits",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_08_refund",
+      "lots": 1,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_08_refund",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 2,
+      "tenant_key": "lotmig_ev9860_09_dispute",
+      "lots": 1,
+      "allocations": 1,
+      "checkpoint": "lot_migration:lotmig_ev9860_09_dispute",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 2000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_10_reconciled",
+      "lots": 2,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_10_reconciled",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 2,
+      "before": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_11_reinstated",
+      "lots": 2,
+      "allocations": 1,
+      "checkpoint": "lot_migration:lotmig_ev9860_11_reinstated",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 3,
+      "before": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [
+        {
+          "flag": "promotional_clamped",
+          "blocking": false,
+          "detail": "%{reference: \"promo_on_debt_lotmig_ev9860_12_grant_on_debt\", repaid: 3000000}"
+        }
+      ],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_12_grant_on_debt",
+      "lots": 2,
+      "allocations": 4,
+      "checkpoint": "lot_migration:lotmig_ev9860_12_grant_on_debt",
+      "ordering": "inserted_at",
+      "hold_links": 1,
+      "lock_ms": 3,
+      "before": {
+        "balance": 3000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 3000000,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [],
+      "reason": null,
+      "state": "shadow_ok",
+      "after": null,
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_13_pre_v4",
+      "lots": 2,
+      "allocations": 2,
+      "checkpoint": "lot_migration:lotmig_ev9860_13_pre_v4",
+      "ordering": "inserted_at",
+      "hold_links": 0,
+      "lock_ms": 2,
+      "before": {
+        "balance": 5000000,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [
+        {
+          "flag": "reversal_unattributed",
+          "blocking": true,
+          "detail": "%{id: \"79212e90-923e-4ba8-97df-29bde1c7cc0c\", reference: \"hand-written-lotmig_ev9860_b0_reversal_unattributed\", resolved: :none}"
+        }
+      ],
+      "reason": "ambiguous",
+      "state": "blocked",
+      "after": null,
+      "rows": 2,
+      "tenant_key": "lotmig_ev9860_b0_reversal_unattributed",
+      "lots": 0,
+      "allocations": 0,
+      "checkpoint": "lot_migration:lotmig_ev9860_b0_reversal_unattributed",
+      "ordering": null,
+      "hold_links": 0,
+      "lock_ms": null,
+      "before": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    },
+    {
+      "flags": [
+        {
+          "flag": "orphan_settle",
+          "blocking": true,
+          "detail": "%{id: \"9a2241bb-3ce4-489d-bbdc-c8f9ae9c1580\", reference: \"orphan_settle_lotmig_ev9860_b1_orphan_settle\"}"
+        }
+      ],
+      "reason": "ambiguous",
+      "state": "blocked",
+      "after": null,
+      "rows": 5,
+      "tenant_key": "lotmig_ev9860_b1_orphan_settle",
+      "lots": 0,
+      "allocations": 0,
+      "checkpoint": "lot_migration:lotmig_ev9860_b1_orphan_settle",
+      "ordering": null,
+      "hold_links": 0,
+      "lock_ms": null,
+      "before": {
+        "balance": 0,
+        "expired": 0,
+        "held": 0,
+        "promotional": 0,
+        "debt": 0
+      }
+    }
+  ],
+  "shadow_wrote_lots": {
+    "lotmig_ev9860_00_paid_only": 0,
+    "lotmig_ev9860_01_promotional_overlap": 0,
+    "lotmig_ev9860_02_promotional_no_expiry": 0,
+    "lotmig_ev9860_03_partial_expiry": 0,
+    "lotmig_ev9860_04_pending_hold": 0,
+    "lotmig_ev9860_05_settled_overrun": 0,
+    "lotmig_ev9860_06_released_hold": 0,
+    "lotmig_ev9860_07_debits": 0,
+    "lotmig_ev9860_08_refund": 0,
+    "lotmig_ev9860_09_dispute": 0,
+    "lotmig_ev9860_10_reconciled": 0,
+    "lotmig_ev9860_11_reinstated": 0,
+    "lotmig_ev9860_12_grant_on_debt": 0,
+    "lotmig_ev9860_13_pre_v4": 0,
+    "lotmig_ev9860_b0_reversal_unattributed": 0,
+    "lotmig_ev9860_b1_orphan_settle": 0
+  },
+  "shadow_left_rows_unchanged": true
+}

@@ -22,7 +22,11 @@ defmodule AuroraMeter.ConfigTest do
     assert Config.provider() == AuroraMeter.Billing.Noop
     assert Config.period_source() == AuroraMeter.Period.Calendar
     assert Config.durable_features() == []
-    assert Config.flush_interval() == 60_000
+    # One hour, not the library's own default: the suite sets it so the
+    # periodic flush can never fire mid-run (`open-findings.md` X264). What
+    # this line is really asserting is that the accessor reads the configured
+    # value rather than a constant, and it does that either way.
+    assert Config.flush_interval() == 3_600_000
     assert Config.broadcast_interval() == 60_000
   end
 

@@ -353,6 +353,23 @@ is a public function any scheduler can call. See
 | `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"40 3 * * *"`. Job arguments `only`, `batch_size`, `max_items`. Do not schedule it until every node has written a flush heartbeat. |
 | `AuroraMeter.Oban.ConfigError` | raised by `AuroraMeter.Oban.validate!/1` | optional-dep | 1.0.0 | Needs `oban`. Carries `:message` and `:problems`. |
 
+### 1.16 `AuroraMeter.Credits.LotMigration`
+
+The wallet migration onto credit lots (schema step S5). Shadow by default, one
+transaction per wallet, and it never cuts a wallet over unless the replay
+reproduces that wallet's `balance`, `held` and `promotional` exactly. See
+[Upgrading to lots](upgrading-to-lots.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Credits.LotMigration.run/1` | `(keyword()) :: {:ok, summary()} \| {:error, term()}` | stable | 0.6.0 | Options `:repo`, `:shadow` (default `true`), `:tenant`, `:batch`, `:resume`, `:max_rows`, `:max_tail`, `:max_wallets`, `:retry_blocked`, `:report_only`, `:allow_cutover`. Arity 0 exists through defaults. |
+| `AuroraMeter.Credits.LotMigration.status/1` | `(keyword()) :: map()` | stable | 0.6.0 | The aggregate cursor and one entry per wallet report. Options `:repo`, `:limit`. Arity 0 exists through defaults. |
+| `AuroraMeter.Credits.LotMigration.checkpoint_name/1` | `(String.t()) :: String.t()` | stable | 0.6.0 | `"lot_migration:<tenant_key>"`, or `"lot_migration:sha256-<digest>"` when the key is not a legal `AuroraMeter.Operations` name. |
+| `AuroraMeter.Credits.LotMigration.cutover_blocked/0` | `() :: map() \| nil` | stable | 0.6.0 | Non-nil while a real cutover is refused, carrying the finding and the reason. |
+| `AuroraMeter.Credits.LotMigration.replay/2` | `([CreditTransaction.t()], String.t()) :: {:ok, map()} \| {:blocked, [map()]}` | stable | 0.6.0 | The pure fold: no repo, no clock, no configuration. |
+
 ## 2. Behaviours and their callbacks
 
 A host or an extension implements these. Adding a required callback to one of
@@ -523,6 +540,7 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
 | `[:aurora_meter, :credits, :hold_reconciliation]` | `amount`, `age_seconds`, `duration` | `tenant_key`, `reference`, `decision`, `outcome` | stable | 0.6.0 | `[:aurora_meter, :credits, :hold_reconciliation]` |
 | `[:aurora_meter, :credits, :conservation_error]` | `balance_delta`, `held_delta`, `promotional_delta`, `expired_delta` | `tenant_key`, `operation`, `reference` | stable | 0.6.0 | `[:aurora_meter, :credits, :conservation_error]` |
+| `[:aurora_meter, :credits, :lot_migration]` | `wallets`, `migrated`, `blocked`, `deferred`, `rows`, `duration_ms` | `shadow`, `state` | stable | 0.6.0 | `[:aurora_meter, :credits, :lot_migration]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 | `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |
@@ -602,6 +620,7 @@ sees node A's slightly different number.
 | `Mix.Tasks.AuroraMeter.Features` | `mix aurora_meter.features` | stable | 0.5.0 | The scanner to run before changing `undeclared_feature_policy`. `--strict` exits 1 when anything referenced is undeclared or declared on only some plans. |
 | `Mix.Tasks.AuroraMeter.Bench` | `mix aurora_meter.bench` | stable | 0.1.0 | Development only. Benchmark numbers are not covered by SemVer. |
 | `Mix.Tasks.AuroraMeter.Events.Backfill` | `mix aurora_meter.events.backfill` | stable | 1.0.0 | Run between core schema versions 7 and 8. Options `-r`, `--batch-size`, `--max-batches`, `--dry-run`, `--force-resume`, `--stale-after`. |
+| `Mix.Tasks.AuroraMeter.Credits.MigrateLots` | `mix aurora_meter.credits.migrate_lots` | stable | 0.6.0 | Run after core schema version 9, with every node already on a release that honours `lots_enabled_at`. Shadow by default. Options `-r`, `--shadow` / `--no-shadow`, `--tenant`, `--batch`, `--no-resume`, `--max-rows`, `--max-tail`, `--max-wallets`, `--retry-blocked`, `--report-only`. Exits non-zero when any wallet was blocked. |
 
 ## 9. Migration entry points
 

@@ -1,0 +1,28 @@
+=== seed 0 ===
+exit=0
+..[06b replay property] compared: 28, refused: 13, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 3, expire_reserved_grant: 4, hold_unbacked: 1, promotional_divergence_settle: 2, promotional_divergence_debit: 3}
+Result: 2 passed (1 property, 1 test)
+=== seed 1 ===
+exit=0
+..[06b replay property] compared: 29, refused: 12, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 1, expire_reserved_grant: 3, hold_unbacked: 1, promotional_divergence_debit: 4, promotional_divergence_grant: 1, promotional_divergence_settle: 2}
+Result: 2 passed (1 property, 1 test)
+=== seed 7 ===
+exit=0
+..[06b replay property] compared: 29, refused: 12, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 1, expire_reserved_grant: 2, hold_unbacked: 2, promotional_divergence_debit: 2, promotional_divergence_settle: 5}
+Result: 2 passed (1 property, 1 test)
+=== seed 42 ===
+exit=0
+..[06b replay property] compared: 22, refused: 19, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 3, expire_reserved_grant: 1, promotional_divergence_debit: 9, promotional_divergence_settle: 4, promotional_divergence_release: 1, promotional_divergence_grant: 1}
+Result: 2 passed (1 property, 1 test)
+=== seed 1337 ===
+exit=0
+..[06b replay property] compared: 31, refused: 10, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 1, reversal_exceeds_lots: 2, promotional_divergence_grant: 1, promotional_divergence_debit: 5, promotional_divergence_settle: 1}
+Result: 2 passed (1 property, 1 test)
+=== seed 20260915 ===
+exit=0
+..[06b replay property] compared: 26, refused: 15, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 2, reversal_exceeds_lots: 1, expire_reserved_grant: 2, hold_unbacked: 1, promotional_divergence_debit: 7, promotional_divergence_settle: 1, promotional_divergence_grant: 1}
+Result: 2 passed (1 property, 1 test)
+=== seed 424242 ===
+exit=0
+..[06b replay property] compared: 33, refused: 8, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 2, reversal_exceeds_lots: 1, expire_reserved_grant: 1, promotional_divergence_settle: 2, promotional_divergence_debit: 2}
+Result: 2 passed (1 property, 1 test)

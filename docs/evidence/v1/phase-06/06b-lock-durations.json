@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "otp": "29",
+    "elixir": "1.20.1",
+    "database": "the maintainer test database, not a disposable fixture database",
+    "generated_by": "tmp/v1/06b-evidence.exs",
+    "core_sha": "6af77f98c4d37caac89421269fb111c4889d9eee",
+    "schema_version": 9,
+    "note": "scripts/v1/migrations.sh --fixture core6_pro9 refuses until build unit 11a supplies the historical fixture dumps, so this run is against the package's own test database with synthetic tenant keys."
+  },
+  "samples": 14,
+  "min_ms": 4,
+  "max_ms": 9,
+  "p50_ms": 5,
+  "all_ms": [
+    4,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    6,
+    6,
+    9
+  ],
+  "per_wallet": [
+    {
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_00_paid_only",
+      "lock_ms": 9
+    },
+    {
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_01_promotional_overlap",
+      "lock_ms": 5
+    },
+    {
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_02_promotional_no_expiry",
+      "lock_ms": 5
+    },
+    {
+      "rows": 5,
+      "tenant_key": "lotmig_ev9860_03_partial_expiry",
+      "lock_ms": 6
+    },
+    {
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_04_pending_hold",
+      "lock_ms": 5
+    },
+    {
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_05_settled_overrun",
+      "lock_ms": 5
+    },
+    {
+      "rows": 5,
+      "tenant_key": "lotmig_ev9860_06_released_hold",
+      "lock_ms": 6
+    },
+    {
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_07_debits",
+      "lock_ms": 5
+    },
+    {
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_08_refund",
+      "lock_ms": 5
+    },
+    {
+      "rows": 2,
+      "tenant_key": "lotmig_ev9860_09_dispute",
+      "lock_ms": 4
+    },
+    {
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_10_reconciled",
+      "lock_ms": 5
+    },
+    {
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_11_reinstated",
+      "lock_ms": 5
+    },
+    {
+      "rows": 4,
+      "tenant_key": "lotmig_ev9860_12_grant_on_debt",
+      "lock_ms": 5
+    },
+    {
+      "rows": 3,
+      "tenant_key": "lotmig_ev9860_13_pre_v4",
+      "lock_ms": 5
+    },
+    {
+      "rows": 0,
+      "tenant_key": "lotmig_ev9860_b0_reversal_unattributed",
+      "lock_ms": null
+    },
+    {
+      "rows": 0,
+      "tenant_key": "lotmig_ev9860_b1_orphan_settle",
+      "lock_ms": null
+    }
+  ]
+}

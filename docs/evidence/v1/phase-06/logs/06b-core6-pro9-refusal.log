@@ -1,0 +1,4 @@
+[1;36m[v1][0m run migrations-20260915T152147Z-3bedea
+[1;36m[v1][0m dir tmp/v1/migrations-20260915T152147Z-3bedea
+[1;31m[v1][0m fixture 'core6_pro9' is not installed yet (build unit 11a supplies test/fixtures/schema/core6_pro9.sql); refusing rather than reporting a pass
+RESULT=fail RUN=migrations-20260915T152147Z-3bedea DIR=/home/liamk/src/PhxTemplates/tmp/v1/migrations-20260915T152147Z-3bedea

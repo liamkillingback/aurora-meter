@@ -209,6 +209,7 @@ defmodule AuroraMeter.MixProject do
         "docs/support-policy.md",
         "docs/correctness.md",
         "docs/upgrading-to-1.0.md",
+        "docs/upgrading-to-lots.md",
         "docs/examples/concepts.md",
         "docs/examples/team-saas.md",
         "docs/examples/allowance-and-overage.md",

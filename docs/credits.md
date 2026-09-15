@@ -356,8 +356,31 @@ never correct.
 None, until you run the wallet migration. The balance row carries
 `lots_enabled_at`, read under its own row lock; while it is null the ledger
 uses exactly the 0.4.0 arithmetic and writes no lot, so an upgrade to schema
-version 9 changes no behaviour at all. The migration that replays a wallet's
-history into lots, reconciles it and sets the flag ships separately.
+version 9 changes no behaviour at all.
+
+To tell which path a wallet is on:
+
+```sql
+SELECT tenant_key, lots_enabled_at IS NOT NULL AS on_lots, debt, expired
+  FROM aurora_meter_credit_balances
+ WHERE tenant_key = 'org_42';
+```
+
+Both writers exist in one release and they never run together on one wallet:
+the flag is read from the balance row the writer has already locked `FOR
+UPDATE`, and the only thing that sets it takes the same lock. A wallet is
+therefore owned by exactly one of them at every instant, and the legacy writer
+keeps working indefinitely for any wallet that is not cut over.
+
+### Moving a wallet onto lots
+
+`mix aurora_meter.credits.migrate_lots` replays a wallet's whole ledger into
+lots, reconciles the replay against that wallet's own `balance`, `held` and
+`promotional`, and sets `lots_enabled_at` only when the two agree exactly. It
+is shadow by default, resumable, and it refuses rather than guesses: a wallet
+whose history cannot be reproduced exactly is reported with the reason and left
+on the legacy writer. See [Upgrading to lots](upgrading-to-lots.md) for the
+procedure and what each refusal means.
 
 
 ## Money series

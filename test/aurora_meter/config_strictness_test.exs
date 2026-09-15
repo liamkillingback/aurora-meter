@@ -47,7 +47,10 @@ defmodule AuroraMeter.ConfigStrictnessTest do
 
         assert log =~ ":nonsense_key"
         assert opts[:repo] == AuroraMeter.TestRepo
-        assert opts[:flush_interval] == 60_000
+        # The suite's own value, one hour, so the periodic flush cannot fire
+        # mid-run (`open-findings.md` X264). The claim is that the rest of the
+        # configuration survives an unknown key, not what the interval is.
+        assert opts[:flush_interval] == 3_600_000
         refute Keyword.has_key?(opts, :nonsense_key)
       end)
     end

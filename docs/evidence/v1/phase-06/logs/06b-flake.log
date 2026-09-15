@@ -1,0 +1,44 @@
+config/config.exs sha256 before: d17f24687783001881c7f9ed2988efa0ce9d9bba1a041e8c5084ee2b604bd788
+27:    flush_interval: 3_600_000,
+
+=== BEFORE: flush_interval 120 ms, so the timer fires constantly ===
+27:    flush_interval: 120,
+--- before seed 0 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- before seed 1 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- before seed 2 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- before seed 3 ---
+exit=2
+  1) test I03 a callback that flushed and then exits is not billed (AuroraMeter.EntitlementsTest)
+     left:  nil
+     right: 4
+Result: 37/38 passed (1/1 property, 36/37 tests)
+--- before seed 4 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+
+=== AFTER: the shipped value, one hour, longer than any suite run ===
+27:    flush_interval: 3_600_000,
+--- after seed 0 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- after seed 1 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- after seed 2 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- after seed 3 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+--- after seed 4 ---
+exit=0
+Result: 38 passed (1 property, 37 tests)
+
+config/config.exs sha256 after: d17f24687783001881c7f9ed2988efa0ce9d9bba1a041e8c5084ee2b604bd788
+RESTORED OK

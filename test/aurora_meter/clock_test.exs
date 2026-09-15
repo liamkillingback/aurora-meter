@@ -313,10 +313,19 @@ defmodule AuroraMeter.ClockTest do
       # both sides. The credit ledger is not the hot path: `track/4` never
       # reaches it, and a ledger write is already several statements and a row
       # lock, so one more round trip is not what makes it cost (06a).
+      #
+      # `credits/lot_migration.ex` reads it **once per wallet it actually cuts
+      # over**, to stamp `lots_enabled_at` and the lots' timestamps, and the
+      # thing that later compares against them is a persisted `expires_at`, so
+      # the database's clock is the only one that can be on both sides. The
+      # replay itself reads no clock at all: it folds against a fixed instant
+      # and orders by nothing temporal (06b). A data migration an operator runs
+      # by hand is not a path, hot or otherwise.
       allowed = [
         "lib/aurora_meter/clock.ex",
         "lib/aurora_meter/credits.ex",
         "lib/aurora_meter/credits/ledger.ex",
+        "lib/aurora_meter/credits/lot_migration.ex",
         "lib/aurora_meter/events/replay.ex",
         "lib/aurora_meter/oban/credit_expiry.ex",
         "lib/mix/tasks/aurora_meter.events.backfill.ex"

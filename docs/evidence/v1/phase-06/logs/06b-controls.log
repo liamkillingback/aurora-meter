@@ -1,0 +1,77 @@
+sha256 before: b305e775732c90fef39c9d64d0ff2187980c18220b72d85c6c17b167de5bee46
+
+=== control c0-baseline ===
+exit=0
+Result: 58 passed
+
+=== control c1-legacy-instant ===
+exit=2
+  1) test LI-06b-4 a kill inside a wallet's transaction leaves it untouched, and the rerun takes it (AuroraMeter.CreditsLotMigrationResumeTest)
+  2) test LI-06b-4 a kill after one wallet commits leaves the rest for the rerun, once each (AuroraMeter.CreditsLotMigrationResumeTest)
+  3) test I19 overlapping promotional grants replay soonest-expiry first, before paid (AuroraMeter.Credits.LotMigrationReplayTest)
+  4) test I19 a non-expiring promotional lot sorts last within its category (AuroraMeter.Credits.LotMigrationReplayTest)
+  5) test I12 a hold spanning a partial expiry replays without moving the money (AuroraMeter.Credits.LotMigrationReplayTest)
+  6) test I12 a hold still open on an expiring lot is reported, and nothing moves (AuroraMeter.Credits.LotMigrationReplayTest)
+  7) test I19 a released hold hands its reservation back to the lot it came from (AuroraMeter.Credits.LotMigrationReplayTest)
+  8) test L10 a pre-version-4 wallet with no promotional_after replays and does not block (AuroraMeter.Credits.LotMigrationReplayTest)
+  9) test I19 an expire row that names no grant blocks the wallet (AuroraMeter.Credits.LotMigrationReplayTest)
+ 10) test I19 an expire row larger than the grant it names blocks the wallet (AuroraMeter.Credits.LotMigrationReplayTest)
+ 11) test I19 every fixture wallet migrates with balance, held and promotional unchanged (AuroraMeter.CreditsLotMigrationTest)
+ 12) test I19 one lot per grant row, and every allocation names the ledger row that caused it (AuroraMeter.CreditsLotMigrationTest)
+ 13) test I19 migration writes debt and expired and leaves the three legacy figures alone (AuroraMeter.CreditsLotMigrationTest)
+ 14) test L9 migration backfills hold_transaction_id on every settle and release row (AuroraMeter.CreditsLotMigrationTest)
+ 15) test LI-06b-6 a shadow run writes no lot, no allocation and no balance change (AuroraMeter.CreditsLotMigrationTest)
+ 16) test I19 a shadow run reaches the same verdict as the real run that follows it (AuroraMeter.CreditsLotMigrationTest)
+ 17) test I19 every blocking flag has a wallet that triggers it and none of them migrate (AuroraMeter.CreditsLotMigrationTest)
+ 18) test I10 the cutover stamps projection_checked_at, which only the conservation check writes (AuroraMeter.CreditsLotMigrationTest)
+Result: 40/58 passed
+
+=== control c2-no-row-chain ===
+exit=2
+  1) test X213 a tail row stamped before every snapshot row is still folded in commit order (AuroraMeter.CreditsLotMigrationResumeTest)
+  2) test X250 a refund that drove the balance negative past a live promotion blocks (AuroraMeter.Credits.LotMigrationReplayTest)
+  3) test X213 a row stamped out of order folds correctly once the order comes from seq (AuroraMeter.Credits.LotMigrationReplayTest)
+  4) test I19 a history no ordering can reconcile blocks rather than migrating wrong (AuroraMeter.Credits.LotMigrationReplayTest)
+  5) test I19 every blocking flag has a wallet that triggers it and none of them migrate (AuroraMeter.CreditsLotMigrationTest)
+  6) test X213 a wallet whose stored timestamps are out of order migrates from seq instead (AuroraMeter.CreditsLotMigrationTest)
+Result: 52/58 passed
+
+=== control c3-no-final-compare ===
+exit=2
+  1) test I19 every blocking flag has a wallet that triggers it and none of them migrate (AuroraMeter.CreditsLotMigrationTest)
+Result: 57/58 passed
+
+=== control c4-wrong-lot-rows ===
+exit=2
+  1) test LI-06b-4 a kill inside a wallet's transaction leaves it untouched, and the rerun takes it (AuroraMeter.CreditsLotMigrationResumeTest)
+  2) test LI-06b-4 a kill after one wallet commits leaves the rest for the rerun, once each (AuroraMeter.CreditsLotMigrationResumeTest)
+  3) test LI-06b-3 two runs racing one wallet on its balance row migrate it exactly once (AuroraMeter.CreditsLotMigrationResumeTest)
+  4) test X213 a tail row stamped before every snapshot row is still folded in commit order (AuroraMeter.CreditsLotMigrationResumeTest)
+  5) test I19 the aggregate checkpoint records the run and its cursor across two runs (AuroraMeter.CreditsLotMigrationResumeTest)
+  6) test I19 every fixture wallet migrates with balance, held and promotional unchanged (AuroraMeter.CreditsLotMigrationTest)
+  7) test I19 one lot per grant row, and every allocation names the ledger row that caused it (AuroraMeter.CreditsLotMigrationTest)
+  8) test I19 migration writes debt and expired and leaves the three legacy figures alone (AuroraMeter.CreditsLotMigrationTest)
+  9) test L9 migration backfills hold_transaction_id on every settle and release row (AuroraMeter.CreditsLotMigrationTest)
+ 10) test I19 a shadow run reaches the same verdict as the real run that follows it (AuroraMeter.CreditsLotMigrationTest)
+ 11) test LI-06b-3 a second run over a migrated wallet writes nothing at all (AuroraMeter.CreditsLotMigrationTest)
+ 12) test I19 a wallet larger than max_rows is deferred, paused and left untouched (AuroraMeter.CreditsLotMigrationTest)
+ 13) test I10 the cutover stamps projection_checked_at, which only the conservation check writes (AuroraMeter.CreditsLotMigrationTest)
+ 14) test LI-06b-4 the same wallet migrates cleanly once the fault is gone (AuroraMeter.CreditsLotMigrationTest)
+ 15) test I19 the run reports every wallet it examined, and the summary counts them (AuroraMeter.CreditsLotMigrationTest)
+ 16) test X213 a wallet whose stored timestamps are out of order migrates from seq instead (AuroraMeter.CreditsLotMigrationTest)
+ 17) test I19 status reports the aggregate cursor and every wallet verdict (AuroraMeter.CreditsLotMigrationTest)
+Result: 41/58 passed
+
+=== control c5-no-hold-backfill ===
+exit=1
+Compilation failed due to warnings while using the --warnings-as-errors option
+
+sha256 after: b305e775732c90fef39c9d64d0ff2187980c18220b72d85c6c17b167de5bee46
+RESTORED OK
+
+=== control c5-no-hold-backfill (rerun) ===
+exit=2
+  1) test L9 migration backfills hold_transaction_id on every settle and release row (AuroraMeter.CreditsLotMigrationTest)
+Result: 57/58 passed
+c5 sha256 before=b305e775732c90fef39c9d64d0ff2187980c18220b72d85c6c17b167de5bee46 after=b305e775732c90fef39c9d64d0ff2187980c18220b72d85c6c17b167de5bee46
+RESTORED OK

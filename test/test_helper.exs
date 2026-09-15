@@ -48,7 +48,8 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 # does exactly that, so those two rows made every `compare: :require_match`
 # assertion fail. A probe script that commits rows needs a prefix in this list.
 AuroraMeter.Test.Connections.sweep!(~w(
-  concurrent corrconc flush_batch gate jobctl killt lotconc lotfault lots model obansched probe
+  concurrent corrconc flush_batch gate jobctl killt lotconc lotfault lotmig lotprop lots model
+  obansched probe
   projection reconcile recordconc replay replaybig storagecase stmt
 ))
 

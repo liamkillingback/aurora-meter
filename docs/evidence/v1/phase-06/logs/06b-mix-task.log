@@ -1,0 +1,50 @@
+tenant: lotmig_task_7426
+
+=== shadow (the default) ===
+[mixlane] core: DB_PORT=5490 mix aurora_meter.credits.migrate_lots -r AuroraMeter.TestRepo --tenant lotmig_task_7426
+
+
+
+
+
+
+
+
+
+
+
+
+
+aurora_meter.credits.migrate_lots (shadow, nothing financial was written):
+  wallets        1
+  migrated       0
+  blocked        0
+  deferred       0
+  skipped        0
+  rows           4
+  lots           3
+  allocations    2
+  lock ms max    8
+  duration ms    88
+[mixlane] core exit=0 started=2026-09-15T15:54:09Z finished=2026-09-15T15:54:10Z
+exit=0
+
+=== --no-shadow, which asks for a real cutover ===
+[mixlane] core: DB_PORT=5490 mix aurora_meter.credits.migrate_lots -r AuroraMeter.TestRepo --tenant lotmig_task_7426 --no-shadow
+
+aurora_meter.credits.migrate_lots will not cut a wallet over yet.
+
+AuroraMeter.Credits.reverse/4 does not take the lot path yet, so a paid refund on a cut-over wallet would consume promotional lots in spend order and write nothing into `reversed`. Shadow runs and reports are unaffected.
+
+Nothing was read and nothing was written. Run it without --no-shadow to
+take the whole replay and reconciliation now; the cutover is a separate
+decision and it needs the lot-aware refund path first (X250).
+
+** (Mix) aurora_meter.credits.migrate_lots: the cutover is refused (X250).
+[mixlane] core exit=1 started=2026-09-15T15:54:10Z finished=2026-09-15T15:54:10Z
+exit=1
+[mixlane] core: DB_PORT=5490 mix run /home/liamk/src/PhxTemplates/tmp/v1/06b-task-check.exs lotmig_task_7426
+lots_enabled_at=nil lots=0 debt=0
+cleaned
+[mixlane] core exit=0 started=2026-09-15T15:54:10Z finished=2026-09-15T15:54:11Z
+check exit=0

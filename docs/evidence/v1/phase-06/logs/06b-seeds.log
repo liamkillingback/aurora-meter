@@ -1,0 +1,12 @@
+=== seed 0 ===
+exit=0
+Result: 1530 passed (57 doctests, 16 properties, 1457 tests), 4 excluded
+=== seed 1 ===
+exit=0
+Result: 1530 passed (57 doctests, 16 properties, 1457 tests), 4 excluded
+=== seed 7 ===
+exit=0
+Result: 1530 passed (57 doctests, 16 properties, 1457 tests), 4 excluded
+=== seed 42 ===
+exit=0
+Result: 1530 passed (57 doctests, 16 properties, 1457 tests), 4 excluded
