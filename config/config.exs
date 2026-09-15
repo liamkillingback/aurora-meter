@@ -24,6 +24,13 @@ if config_env() == :test do
     port: String.to_integer(System.get_env("DB_PORT") || "5490"),
     database: "aurora_meter_test",
     pool: Ecto.Adapters.SQL.Sandbox,
-    # 30: the credits concurrency test opens 20 real (non-sandbox) connections at once.
-    pool_size: 30
+    # 60: the credit lot concurrency test opens **50** real (non-sandbox)
+    # connections at once, which is what G06 bullet 2 and 06a's acceptance
+    # criterion ask for by name, plus the rendezvous holder and the test's own.
+    # Fifty tasks queueing for a smaller pool would still all commit, but they
+    # would not all be in the database at the same time and the claim is about
+    # the lock rather than about the arithmetic. Postgres's default
+    # `max_connections` is 100, so this leaves room for the migration harness's
+    # own small pools beside it.
+    pool_size: 60
 end

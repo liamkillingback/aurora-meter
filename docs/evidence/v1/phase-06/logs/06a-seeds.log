@@ -1,0 +1,64 @@
+=== seed 0 ===
+Compiling 1 file (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.2 seconds (0.00s async, 1.2s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=0 exit=0
+=== seed 1 ===
+Running ExUnit with seed: 1, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.3 seconds (0.00s async, 1.3s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=1 exit=0
+=== seed 7 ===
+Running ExUnit with seed: 7, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.2 seconds (0.00s async, 1.2s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=7 exit=0
+=== seed 42 ===
+Running ExUnit with seed: 42, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.1 seconds (0.00s async, 1.1s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=42 exit=0
+=== seed 101 ===
+Running ExUnit with seed: 101, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.1 seconds (0.00s async, 1.1s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=101 exit=0
+=== seed 1009 ===
+Running ExUnit with seed: 1009, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.2 seconds (0.00s async, 1.2s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=1009 exit=0
+=== seed 20260915 ===
+Running ExUnit with seed: 20260915, max_cases: 48
+Excluding tags: [:headless]
+
+....................
+Finished in 1.2 seconds (0.00s async, 1.2s sync)
+
+Result: 20 passed (1 property, 19 tests)
+seed=20260915 exit=0

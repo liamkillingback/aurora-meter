@@ -230,7 +230,10 @@ defmodule AuroraMeter.Retention do
   @protected [
     "aurora_meter_checkpoints",
     "aurora_meter_counters",
+    "aurora_meter_credit_allocations",
     "aurora_meter_credit_balances",
+    "aurora_meter_credit_lots",
+    "aurora_meter_credit_recurrences",
     "aurora_meter_credit_transactions",
     "aurora_meter_event_totals",
     "aurora_meter_events",

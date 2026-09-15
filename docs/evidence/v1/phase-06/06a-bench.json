@@ -1,0 +1,214 @@
+{
+  "unit": "06a",
+  "otp": "29",
+  "schedulers": 24,
+  "elixir": "1.20.1",
+  "erts": "17.0.1",
+  "results": [
+    {
+      "writer": "legacy",
+      "debit": {
+        "n": 200,
+        "mean_us": 4001,
+        "p50_us": 3979,
+        "p95_us": 4581,
+        "max_us": 6553
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 3990,
+        "p50_us": 3938,
+        "p95_us": 4577,
+        "max_us": 4938
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 4747,
+        "p50_us": 4566,
+        "p95_us": 5318,
+        "max_us": 33911
+      },
+      "lots": 1
+    },
+    {
+      "writer": "allocator",
+      "debit": {
+        "n": 200,
+        "mean_us": 6103,
+        "p50_us": 6069,
+        "p95_us": 6599,
+        "max_us": 8549
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 6177,
+        "p50_us": 6112,
+        "p95_us": 6839,
+        "max_us": 8370
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 6845,
+        "p50_us": 6829,
+        "p95_us": 7654,
+        "max_us": 8262
+      },
+      "lots": 1
+    },
+    {
+      "writer": "legacy",
+      "debit": {
+        "n": 200,
+        "mean_us": 4071,
+        "p50_us": 4032,
+        "p95_us": 4654,
+        "max_us": 5199
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 4066,
+        "p50_us": 4026,
+        "p95_us": 4735,
+        "max_us": 6381
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 4825,
+        "p50_us": 4820,
+        "p95_us": 5317,
+        "max_us": 6240
+      },
+      "lots": 10
+    },
+    {
+      "writer": "allocator",
+      "debit": {
+        "n": 200,
+        "mean_us": 6395,
+        "p50_us": 6218,
+        "p95_us": 6873,
+        "max_us": 39361
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 6168,
+        "p50_us": 6089,
+        "p95_us": 6998,
+        "max_us": 7984
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 7312,
+        "p50_us": 7241,
+        "p95_us": 8052,
+        "max_us": 11684
+      },
+      "lots": 10
+    },
+    {
+      "writer": "legacy",
+      "debit": {
+        "n": 200,
+        "mean_us": 4204,
+        "p50_us": 4162,
+        "p95_us": 4870,
+        "max_us": 5430
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 4177,
+        "p50_us": 4097,
+        "p95_us": 4780,
+        "max_us": 7574
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 5155,
+        "p50_us": 5093,
+        "p95_us": 5656,
+        "max_us": 11560
+      },
+      "lots": 100
+    },
+    {
+      "writer": "allocator",
+      "debit": {
+        "n": 200,
+        "mean_us": 7382,
+        "p50_us": 7361,
+        "p95_us": 8285,
+        "max_us": 10431
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 6894,
+        "p50_us": 6843,
+        "p95_us": 7752,
+        "max_us": 10492
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 8459,
+        "p50_us": 8289,
+        "p95_us": 9611,
+        "max_us": 23935
+      },
+      "lots": 100
+    },
+    {
+      "writer": "legacy",
+      "debit": {
+        "n": 200,
+        "mean_us": 4254,
+        "p50_us": 4229,
+        "p95_us": 4733,
+        "max_us": 5285
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 4442,
+        "p50_us": 4434,
+        "p95_us": 5049,
+        "max_us": 5458
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 5421,
+        "p50_us": 5396,
+        "p95_us": 6059,
+        "max_us": 6534
+      },
+      "lots": 1000
+    },
+    {
+      "writer": "allocator",
+      "debit": {
+        "n": 200,
+        "mean_us": 13626,
+        "p50_us": 13215,
+        "p95_us": 16130,
+        "max_us": 57729
+      },
+      "hold": {
+        "n": 200,
+        "mean_us": 13458,
+        "p50_us": 13228,
+        "p95_us": 15923,
+        "max_us": 17668
+      },
+      "settle": {
+        "n": 200,
+        "mean_us": 15251,
+        "p50_us": 14858,
+        "p95_us": 17198,
+        "max_us": 61859
+      },
+      "lots": 1000
+    }
+  ],
+  "note": "Informational. 08c owns the bench suite and its budgets. Each figure is the wall time of one AuroraMeter.Credits call, including its transaction, on a wallet already holding `lots` grants. The allocator reads and locks the whole book and runs one aggregate conservation check per write, so its cost grows with the wallet's lot count and the legacy writer's does not.",
+  "measured_at": "2026-09-15T13:01:27.225367Z",
+  "iterations_per_operation": 200,
+  "postgres": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "clock": "AuroraMeter.Clock.System"
+}

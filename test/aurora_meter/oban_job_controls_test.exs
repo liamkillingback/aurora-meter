@@ -16,6 +16,7 @@ if Code.ensure_loaded?(Oban) do
     import Ecto.Query, only: [from: 2]
 
     alias AuroraMeter.Credits
+    alias AuroraMeter.Credits.Promotions
     alias AuroraMeter.Oban.CreditExpiry
     alias AuroraMeter.Oban.HoldReconciliation
     alias AuroraMeter.Operations
@@ -120,24 +121,26 @@ if Code.ensure_loaded?(Oban) do
       race_report(%{test: :kill_resume, committed_before_kill: committed, drain_passes: passes})
     end
 
-    test "I16 an expire entry that sorts before its own grant is counted, not fatal", %{
-      tenant: tenant
-    } do
-      # The deterministic form of what the test above met by accident, and it is
-      # a **pre-existing ledger defect** rather than anything 05c introduced.
+    test "I16 an expire entry stamped before its own grant expires the right amount, because the fold orders by seq",
+         %{tenant: tenant} do
+      # **This test changed in build unit 06a, and it changed because the defect
+      # it reproduced is fixed.** It used to assert `failed: 1`, `expired: 0` and
+      # a `KeyError` in the log, and the planting below is deliberately
+      # unchanged so that reverting the fix makes it fail rather than pass
+      # either way.
       #
-      # `remaining_on_grant/3` streams a tenant's promotional grants and negative
-      # entries ordered by `(inserted_at, id)` and folds them;
-      # `Promotions.consume/3` does `Map.update!(grants, grant_id, ...)` for an
-      # `:expire` entry, which **raises `KeyError` when that grant has not been
-      # folded yet**. `inserted_at` on a credit transaction is stamped by Ecto's
-      # autogenerate from the node wall clock (X181), and that clock steps
-      # backwards by up to 2.6 seconds on this host (X59, X100), so an expire row
-      # written after its grant can carry an earlier timestamp and sort before it.
+      # What it reproduced: `remaining_on_grant/3` streamed a tenant's
+      # promotional grants and negative entries ordered by `(inserted_at, id)`
+      # and `Promotions.consume/3` folded them, which needs an `:expire` entry's
+      # grant to have been folded already. `inserted_at` is stamped by Ecto's
+      # autogenerate from the node wall clock (X181) and that clock steps
+      # backwards by up to 2.6 s on this host (X59, X100), so an expire row
+      # written after its grant could carry an earlier timestamp and sort before
+      # it. It cost 7 of 50 expiries in one run of the test above (X213).
       #
-      # Planted here rather than waited for. 06a owns the fix: `seq` on
-      # `aurora_meter_credit_transactions` replaces `inserted_at` as the ordering
-      # key, and a monotonic identity cannot go backwards.
+      # What fixed it: schema version 9 put `seq bigint GENERATED ALWAYS AS
+      # IDENTITY` on `aurora_meter_credit_transactions`, and the fold orders by
+      # it. A sequence is assigned in commit order and cannot go backwards.
       grant = hd(due_grants(tenant, 1))
       plant_early_expire(grant)
 
@@ -146,27 +149,32 @@ if Code.ensure_loaded?(Oban) do
       planted = expiry_count(tenant)
       assert planted == 1
 
+      # **The negative control, and it is what carries the claim.** Fed the same
+      # committed rows in the order the ledger used to use, the fold still
+      # believes the grant is untouched; fed them in `seq` order it sees the
+      # micro-dollar the planted row took. If `seq` were put back to
+      # `inserted_at` these two numbers would be the same and this would fail.
+      assert fold_remaining(tenant, grant.id, :inserted_at) == 1_000_000
+      assert fold_remaining(tenant, grant.id, :seq) == 999_999
+
       log =
         ExUnit.CaptureLog.capture_log(fn ->
           assert {:ok, report} = Credits.expire_due(now(), limit: 10)
 
-          # Counted, not fatal: the sweep returns, and the tenants behind this
-          # one are not starved by it (L05c-3).
           assert report.examined == 1
-          assert report.failed == 1
-          assert report.expired == 0
+          assert report.expired == 1
+          assert report.failed == 0
         end)
 
-      # And it is loud. A silent `failed` count would be this unit hiding a
-      # money defect behind its own resilience, which is the shape
-      # `open-findings.md` X125 warns about.
-      assert log =~ "KeyError"
-      assert log =~ grant.id
-      assert log =~ "The run continues"
+      refute log =~ "KeyError"
 
-      # Nothing new was written for it, so the next run examines it again.
-      assert expiry_count(tenant) == planted
-      refute expired?(grant)
+      # **The end-to-end assertion that discriminates.** The expiry row's amount
+      # is the grant's real remainder, not its face value: under the old
+      # ordering the ledger would have written off the whole 1,000,000 and
+      # destroyed a micro-dollar that had already been spent.
+      assert expiry_count(tenant) == planted + 1
+      assert newest_expiry(tenant).amount == -999_999
+      assert expired?(grant)
     end
 
     test "I16 CreditExpiry re-processes one batch when killed between the batch commit and the checkpoint write, with no second effect",
@@ -541,6 +549,31 @@ if Code.ensure_loaded?(Oban) do
     end
 
     defp expired?(grant), do: TestRepo.get!(CreditTransaction, grant.id).expired_at != nil
+
+    # `Ledger.remaining_on_grant/3` reproduced, with the ordering column as an
+    # argument so the two orders can be compared on the same committed rows.
+    # `repo.all/1` for `repo.stream/1` because this is not inside a transaction.
+    defp fold_remaining(tenant, grant_id, order) do
+      TestRepo.all(
+        from(t in CreditTransaction,
+          where:
+            t.tenant_key == ^tenant and
+              (t.amount < 0 or (t.kind == ^:grant and t.category == ^:promotional)),
+          order_by: ^[asc: order]
+        )
+      )
+      |> Promotions.remaining(grant_id)
+    end
+
+    defp newest_expiry(tenant) do
+      TestRepo.one!(
+        from(t in CreditTransaction,
+          where: t.tenant_key == ^tenant and t.kind == ^:expire,
+          order_by: [desc: t.seq],
+          limit: 1
+        )
+      )
+    end
 
     defp keyset(%{"expires_at" => at, "id" => id}) do
       {:ok, parsed, _} = DateTime.from_iso8601(at)

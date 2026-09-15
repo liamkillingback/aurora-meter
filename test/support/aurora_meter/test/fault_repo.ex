@@ -120,6 +120,17 @@ defmodule AuroraMeter.Test.FaultRepo do
   end
 
   @doc false
+  @spec insert!(term()) :: term()
+  def insert!(changeset),
+    do: guard(:insert!, :write, changeset, fn -> target().insert!(changeset) end)
+
+  @doc false
+  @spec update_all(term(), keyword()) :: {non_neg_integer(), nil | [term()]}
+  def update_all(queryable, updates) do
+    guard(:update_all, :write, queryable, fn -> target().update_all(queryable, updates) end)
+  end
+
+  @doc false
   @spec insert_or_update(term()) :: {:ok, term()} | {:error, term()}
   def insert_or_update(changeset) do
     guard(:insert_or_update, :write, changeset, fn -> target().insert_or_update(changeset) end)

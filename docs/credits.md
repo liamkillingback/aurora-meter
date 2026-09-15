@@ -266,10 +266,98 @@ removes `min(promotional balance, grant amount)`, never taking the balance
 below zero, writes an `:expire` entry referenced `"expire:<grant id>"` and
 stamps the grant's `expired_at` so it is never processed twice.
 
-**Limitation:** the balance keeps one `promotional` figure per tenant, not one
-per grant. With several live promotional grants, the first to expire can take
-credit a later grant contributed. If you issue overlapping promotions, make the
-later one paid or an adjustment, or expire the earlier one first.
+**Limitation, on a wallet that has not been cut over to credit lots:** the
+balance keeps one `promotional` figure per tenant, not one per grant. With
+several live promotional grants, the first to expire can take credit a later
+grant contributed. If you issue overlapping promotions on such a wallet, make
+the later one paid or an adjustment, or expire the earlier one first.
+
+On a wallet the lot engine owns, that limitation is gone. Read on.
+
+
+## Credit lots
+
+Every grant creates a **lot**: an immutable record of that grant's amount,
+category, expiry and source, with five quantities that always add up to the
+amount.
+
+| Quantity | What it is |
+|---|---|
+| `available` | spendable now, unless the lot is past its `expires_at` |
+| `reserved` | held by a pending hold, and spoken for |
+| `consumed` | spent by a debit, a settlement, or a repayment of debt |
+| `reversed` | taken back by a refund or a chargeback |
+| `expired` | destroyed by expiry, and never spendable again |
+
+The database refuses a lot row whose five do not add up, and refuses a negative
+one, so "which grant paid for this" has an answer that cannot quietly drift.
+Each movement between two buckets is one **allocation** row naming the lot and
+the ledger entry that caused it, so a lot's quantities can be rebuilt by
+folding its allocations rather than taken on trust.
+
+### The spend order
+
+Promotional before paid (an adjustment sorts with paid), then the earliest
+non-null `expires_at`, then the oldest grant, then the ledger's own sequence.
+Non-expiring lots sort last within their category. The key is total, so the
+order the database happens to return lots in cannot change what a debit spends.
+
+A 3 USD promotional grant expiring in October, a 5 USD promotional grant
+expiring in November and a 10 USD paid top-up, debited 6 USD, leave the first
+empty, 2 USD on the second and the paid lot untouched.
+
+### Expiry
+
+Expiry moves a due lot's `available` to `expired` and touches nothing else, so
+it cannot reach into a later grant's remainder. What a hold has reserved stays
+reserved; when that hold is released or settles, whatever it does not spend on
+a lot that has since expired becomes `expired` too, rather than spendable
+again.
+
+**Two deliberate differences from 0.4.0**, both of which change what a tenant
+can spend:
+
+* credit whose `expires_at` has passed is **not spendable** even though the
+  sweep has not reached it yet. In 0.4.0 it stayed spendable until the next
+  pass, which made expiry a race rather than bookkeeping. If you funded a
+  tenant with a promotion expiring at midnight, they see refusals from
+  midnight rather than from the next sweep.
+* value released from an expired lot is written off instead of being handed
+  back.
+
+### Debt
+
+A settlement above its hold is executed cost: the work ran and it has to be
+paid for. What the wallet cannot fund becomes `debt`, recorded on the balance
+row rather than hidden in a negative balance nobody can explain. While `debt`
+is outstanding the wallet cannot hold or debit, and the next grant repays it
+before any of the new money becomes available, writing a `consume` allocation
+against the new lot so the repayment is as traceable as a spend.
+
+### Conservation
+
+After every write on a cut-over wallet, in the same transaction:
+
+    balance     = sum(available) + sum(reserved) - debt
+    held        = sum(reserved)
+    promotional = sum(available + reserved) over promotional lots
+    expired     = sum(expired)
+
+The balance row is moved by the write's own deltas and then compared against a
+`SUM` over the wallet's lots. If they disagree, `AuroraMeter.Credits`
+**raises** `AuroraMeter.Credits.ConservationError` and the transaction rolls
+back, so the wallet is left exactly as it was and refuses further writes until
+a human has looked at it. That is the intended trade: a refused write is
+recoverable and a wrong balance is not. Catching the error and carrying on is
+never correct.
+
+### Which wallets are on it
+
+None, until you run the wallet migration. The balance row carries
+`lots_enabled_at`, read under its own row lock; while it is null the ledger
+uses exactly the 0.4.0 arithmetic and writes no lot, so an upgrade to schema
+version 9 changes no behaviour at all. The migration that replays a wallet's
+history into lots, reconciles it and sets the flag ships separately.
 
 
 ## Money series

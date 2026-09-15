@@ -1,0 +1,110 @@
+command: mixlane.sh core elixir --sname am6a --cookie aurora_v1_06a -S mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/06a-multinode/driver.exs
+started_utc=2026-09-15T14:08:29Z
+[mixlane] core: DB_PORT=5490 elixir --sname am6a --cookie aurora_v1_06a -S mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/06a-multinode/driver.exs
+
+==============================================================================
+== Toolchain and environment
+==============================================================================
+  utc                             "2026-09-15T14:08:30.403102Z"
+  node A                          :"am6a@DESKTOP-8R659B3"
+  alive?                          true
+  elixir                          "1.20.1"
+  otp                             "29"
+  erts                            "17.0.1"
+  schedulers                      24
+  core schema                     9
+
+==============================================================================
+== Compiling the harness
+==============================================================================
+  modules                         [H6.Repo, H6.Migration, H6.Boot, H6.Race]
+
+==============================================================================
+== Disposable database
+==============================================================================
+[2026-09-15T14:08:30.581024Z] created aurora_v1_06a_lots
+
+==============================================================================
+== Node A: repo and migrations
+==============================================================================
+[2026-09-15T14:08:31.030686Z] migrated core 1-9
+  aurora_meter tables             12
+
+==============================================================================
+== Node B: a second real BEAM node
+==============================================================================
+  node B apps                     [ecto_sql: {:ok, [:logger, :eex, :crypto, :telemetry, :decimal, :jason, :ecto, :db_connection, :asn1, :public_key, :ssl, :postgrex, :ecto_sql]}, postgrex: {:ok, []}, telemetry: {:ok, []}, phoenix_pubsub: {:ok, [:phoenix_pubsub]}]
+  node A                          :"am6a@DESKTOP-8R659B3"
+  node B                          :"am6b@DESKTOP-8R659B3"
+  node B repo alive?              true
+  core module on B                9
+
+==============================================================================
+== Concurrent spend from two nodes against one hot wallet
+==============================================================================
+  funded (micro-USD)              10000000
+  attempts per node               25
+  hold size                       1000000
+
+==============================================================================
+== Round: released a first, tenant mn6a_148
+==============================================================================
+  node A                          %{errors: [], attempts: 25, admitted: 10, refused: 15}
+  node B                          %{errors: [], attempts: 25, admitted: 0, refused: 25}
+  peak concurrent lock waiters    18
+  reserve allocations             10
+  allocated total                 10000000
+  lot                             %{state: "open", reversed: 0, expired: 0, available: 0, reserved: 10000000, consumed: 0, amount: 10000000}
+  balance row                     %{balance: 10000000, expired: 0, held: 10000000, debt: 0, promotional: 0}
+
+==============================================================================
+== Round: released b first, tenant mn6a_11842
+==============================================================================
+  node A                          %{errors: [], attempts: 25, admitted: 5, refused: 20}
+  node B                          %{errors: [], attempts: 25, admitted: 5, refused: 20}
+  peak concurrent lock waiters    18
+  reserve allocations             10
+  allocated total                 10000000
+  lot                             %{state: "open", reversed: 0, expired: 0, available: 0, reserved: 10000000, consumed: 0, amount: 10000000}
+  balance row                     %{balance: 10000000, expired: 0, held: 10000000, debt: 0, promotional: 0}
+
+==============================================================================
+== Checks
+==============================================================================
+  winner split (first, A admitted, B admitted)[{:a, 10, 0}, {:b, 5, 5}]
+  each node admitted at least one somewheretrue
+  a first: attempts total         "PASS"
+  a first: admitted == funded / hold"PASS"
+  a first: admitted + refused == attempts"PASS"
+  a first: no unexpected errors   "PASS"
+  a first: both nodes took part   "PASS"
+  a first: the two nodes really contended"PASS"
+  a first: one reserve allocation per admitted hold"PASS"
+  a first: allocated == funded    "PASS"
+  a first: lot conserves          "PASS"
+  a first: lot fully reserved     "PASS"
+  a first: held == sum(reserved)  "PASS"
+  a first: balance == available + reserved - debt"PASS"
+  a first: no debt                "PASS"
+  b first: attempts total         "PASS"
+  b first: admitted == funded / hold"PASS"
+  b first: admitted + refused == attempts"PASS"
+  b first: no unexpected errors   "PASS"
+  b first: both nodes took part   "PASS"
+  b first: the two nodes really contended"PASS"
+  b first: one reserve allocation per admitted hold"PASS"
+  b first: allocated == funded    "PASS"
+  b first: lot conserves          "PASS"
+  b first: lot fully reserved     "PASS"
+  b first: held == sum(reserved)  "PASS"
+  b first: balance == available + reserved - debt"PASS"
+  b first: no debt                "PASS"
+  every round contended           "PASS"
+
+==============================================================================
+== Teardown
+==============================================================================
+[2026-09-15T14:08:33.680510Z] dropped aurora_v1_06a_lots
+[2026-09-15T14:08:33.680701Z] 06a two-node concurrent spend: PASS
+[mixlane] core exit=0 started=2026-09-15T14:08:29Z finished=2026-09-15T14:08:33Z
+exit=0 finished_utc=2026-09-15T14:08:33Z

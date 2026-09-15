@@ -22,8 +22,12 @@ defmodule AuroraMeter.CreditsModelTest do
   @moduletag timeout: 600_000
 
   alias AuroraMeter.Credits
+  alias AuroraMeter.Credits.Ledger
   alias AuroraMeter.Credits.Money
   alias AuroraMeter.Credits.Promotions
+  alias AuroraMeter.Schema.CreditAllocation
+  alias AuroraMeter.Schema.CreditBalance
+  alias AuroraMeter.Schema.CreditLot
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Test.Connections
   alias AuroraMeter.Test.LedgerCommands
@@ -66,6 +70,22 @@ defmodule AuroraMeter.CreditsModelTest do
       # Silence is never read as success: a run whose properties covered fewer
       # histories than they asked for says so, on stdout, with the timestamps.
       report_clock_steps()
+
+      # And the cross-oracle property has to have actually compared something.
+      # It is allowed to diverge (06a has two documented divergences from 01e's
+      # view), but a run in which EVERY history diverged compared nothing and
+      # would be green for the wrong reason.
+      counts = cross_oracle_counts()
+
+      if counts.compared + counts.diverged > 0 and counts.compared == 0 do
+        raise "the cross-oracle property diverged on all #{counts.diverged} histories and " <>
+                "compared none of them, so it proved nothing about 06a's allocator against " <>
+                "01e's independent model"
+      end
+
+      IO.puts("[06a cross-oracle] compared: #{counts.compared}, diverged: #{counts.diverged}")
+
+      :persistent_term.erase({__MODULE__, :cross_oracle})
     end)
 
     :ok
@@ -492,7 +512,7 @@ defmodule AuroraMeter.CreditsModelTest do
   end
 
   describe "the clock the ledger orders itself by" do
-    test "I10 a backwards step in the wall clock leaves a promotional grant that can never expire (L20, fixed in 06a)" do
+    test "I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq (L20, fixed in 06a)" do
       # `apply_entry/3` stamps `inserted_at` from `DateTime.utc_now()`
       # (`ledger.ex:452`) and then every query that has to know what happened
       # first orders by that column: `remaining_on_grant/3` (`:345`), which
@@ -528,31 +548,124 @@ defmodule AuroraMeter.CreditsModelTest do
         # funded it.
         move_inserted_at!(tenant, tenant <> ":spend", DateTime.add(grant.inserted_at, -1))
 
-        # The ledger now believes the grant is untouched, although $0.40 of it
-        # is spent and the wallet says so.
-        assert ledger_remaining(tenant, grant.id) == @dollar
+        # **This test changed in build unit 06a, and it changed because the
+        # defect it proved is fixed.** It used to assert that the ledger now
+        # believed the grant untouched (`== @dollar`), that expiry therefore
+        # decided it was only partly expired, and that `expired_at` could never
+        # afterwards be set. The row state it builds is deliberately unchanged:
+        # the spend still carries a timestamp a second before its own grant's.
+        #
+        # **The negative control, and it is what carries the claim.** Folded in
+        # the order the ledger used to use, the committed rows still produce the
+        # inflated remainder, so the planted step is real and it is `seq` that
+        # answers, not something else about these rows.
+        assert fold_remaining(tenant, grant.id, :inserted_at) == @dollar
+        assert ledger_remaining(tenant, grant.id) == 600_000
         assert Credits.balance(tenant).promotional == 600_000
 
-        # The financial consequence. Expiry takes min(remaining, promotional,
-        # spendable) = $0.60 and, because it compares that against a remainder
-        # inflated to $1.00, decides the grant is only partly expired
-        # (`ledger.ex:299`) and leaves `expired_at` unset.
+        # And the financial consequence is gone with it: expiry compares $0.60
+        # against a remainder of $0.60, decides the grant is fully expired and
+        # stamps it, so the sweep does not reopen the same work for ever.
         Credits.expire_due(@dec)
 
         assert Credits.balance(tenant).balance == 0
         assert Credits.balance(tenant).promotional == 0
-        assert is_nil(grant_row(tenant, "promo").expired_at)
+        refute is_nil(grant_row(tenant, "promo").expired_at)
 
-        # And it can never be set: every later pass finds nothing spendable and
-        # a remainder that is still not zero, so it refuses with `:held`
-        # (`ledger.ex:304-305`) for ever. The grant is immortal, and
-        # `expire_due/1` reopens the same work on every run.
-        Credits.expire_due(@dec)
-
-        assert Credits.balance(tenant).balance == 0
-        assert is_nil(grant_row(tenant, "promo").expired_at)
+        # A second pass finds nothing due: the grant is stamped, so it is out of
+        # the candidate set rather than immortal inside it.
+        assert {:ok, 0} = Credits.expire_due(@dec)
       end)
     end
+  end
+
+  # -- the lot view, no longer dormant ----------------------------------------
+  #
+  # `lot_view/1` was written by build unit 01e from `architecture-map.md`
+  # section 7, **before 06a existed**, and 01e could only assert its internal
+  # conservation because there were no lot tables to compare it with. There are
+  # now. That makes it the thing G06 bullet 4 is really asking for and the thing
+  # 06a's own generated-history property is not: a **second implementation** of
+  # the same design, by a different unit, from the specification rather than
+  # from the code. A systematic error in 06a's allocator is exactly what it can
+  # catch and what comparing the database against itself cannot.
+
+  property "I10 a generated history on a cut-over wallet agrees with 01e's independent lot model, lot for lot" do
+    check all(
+            history <- comparable_history(),
+            max_runs: max(div(LedgerCommands.runs(), 2), 10)
+          ) do
+      compare_against_lot_view(history)
+    end
+  end
+
+  # **The compared subset, and every exclusion is measured rather than assumed.**
+  #
+  # `:reverse` is dropped. With it in, **every** history diverged on three of
+  # seven fixed seeds and the run compared nothing at all, which the teardown
+  # below correctly turned into a failure: `Credits.reverse/4` still takes the
+  # plain debit path, so it disagrees with 01e's view of a lot reversal on the
+  # first command that reaches it and the lockstep ends there. Dropping it
+  # leaves a legal history (a reversal only removes value). 06e wires
+  # `reverse_lot/4` and this filter comes out with it (finding X250).
+  #
+  # `expiry: false` for a subtler reason, and it is the one worth reading.
+  # 06a's deliberate compatibility change is that a lot past its `expires_at`
+  # is not spendable before the sweep reaches it, while 01e's `live_lot?/1` is
+  # `available > 0` with no expiry test. That shows up as a **refusal** only
+  # when nothing else can pay; the ordinary case is that both sides accept the
+  # debit and take it out of **different lots**, which a result-level
+  # classifier cannot see at all. Comparing buckets across it would mean
+  # encoding 06a's own spend decision into the oracle, which is the one thing a
+  # second implementation must not do.
+  defp comparable_history do
+    StreamData.map(
+      LedgerCommands.history(expiry: false),
+      &Enum.reject(&1, fn command -> match?({:reverse, _reference, _amount}, command) end)
+    )
+  end
+
+  # The third exclusion, and it is decided from the model rather than from the
+  # generator. A settlement above its hold creates `debt`, and from then on
+  # 06a's planner repays it out of anything a release hands back while 01e's
+  # view does not, so the two part company on buckets without ever disagreeing
+  # on a result. `overrun?` is the model's own record of that having happened.
+  defp debt_reachable?(model) do
+    model
+    |> LedgerModel.closed_holds()
+    |> Enum.any?(fn {_reference, hold} -> hold.overrun? end)
+  end
+
+  test "I10 the cross-oracle comparison can fail: a lot bucket moved by hand is caught" do
+    # **The negative control for the property above** (finding X125). The
+    # property passes by comparing two implementations, and it would pass just
+    # as happily if the comparison itself were vacuous, which is the failure
+    # mode X242 describes. One micro-dollar is moved between two buckets of a
+    # committed lot, which no ledger operation would do and which the lot's own
+    # CHECK constraint permits because the sum is unchanged; the comparison must
+    # notice.
+    with_wallet(fn tenant ->
+      Ledger.enable_lots!(tenant)
+
+      history = [
+        {:grant, "g1", @dollar, :paid, nil},
+        {:debit, "d1", 400_000}
+      ]
+
+      {model, divergences} = drive(tenant, history)
+      assert divergences == []
+      assert :compared = compare_lots(tenant, LedgerModel.lot_view(model))
+
+      Connections.repo().query!(
+        "UPDATE aurora_meter_credit_lots SET available = available - 1, consumed = consumed + 1 " <>
+          "WHERE tenant_key = $1",
+        [tenant]
+      )
+
+      assert_raise ExUnit.AssertionError, fn ->
+        compare_lots(tenant, LedgerModel.lot_view(model))
+      end
+    end)
   end
 
   # -- helpers ----------------------------------------------------------------
@@ -606,17 +719,250 @@ defmodule AuroraMeter.CreditsModelTest do
         IO.puts("""
 
         #{length(steps)} generated history/histories were abandoned as inconclusive: the wall \
-        clock the ledger stamps `inserted_at` from (`ledger.ex:452`) stepped backwards mid-run, \
-        so the ledger's own `(inserted_at, id)` order stopped being the order it wrote in. That \
-        is finding L20, proved on its own by \
-        `test I10 a backwards step in the wall clock leaves a promotional grant that can never \
-        expire (L20, fixed in 06a)`. The properties above therefore covered #{length(steps)} \
-        fewer histories than they asked for.
+        clock the ledger stamps `inserted_at` from stepped backwards mid-run. Since build unit \
+        06a the ledger no longer ORDERS by that column (it orders by `seq`), so a step no longer \
+        makes the ledger misreport a remainder; what it still does is make this harness's own \
+        `inserted_at` comparisons meaningless, which is why the history is abandoned rather than \
+        failed. The properties above therefore covered #{length(steps)} fewer histories than \
+        they asked for.
 
         #{Enum.map_join(steps, "\n", &"  #{&1.tenant} step #{&1.step}: #{inspect(&1.stamps)}")}
         """)
     end
   end
+
+  # -- the cross-oracle comparison --------------------------------------------
+
+  defp compare_against_lot_view(history) do
+    with_wallet(fn tenant ->
+      Ledger.enable_lots!(tenant)
+      {model, divergences} = drive(tenant, history)
+      view = LedgerModel.lot_view(model)
+
+      # The model's own conservation, which 01e asserted alone.
+      assert LedgerModel.v8_problems(view) == [],
+             "01e's lot view does not conserve: #{inspect(LedgerModel.v8_problems(view))}"
+
+      # And the database's, independently.
+      assert_database_conserves(tenant)
+
+      cond do
+        divergences == [] and not debt_reachable?(model) ->
+          assert :compared = compare_lots(tenant, view)
+          record_comparison(:compared)
+
+        # Debt was reachable in this history, so the buckets are allowed to part
+        # company (`:debt_repaid_on_release`). Both sides still have to
+        # conserve, which is asserted above, and the model's own V8 check has
+        # already run.
+        divergences == [] ->
+          record_comparison(:diverged)
+
+        true ->
+          assert_classified!(divergences)
+          record_comparison(:diverged)
+      end
+    end)
+  end
+
+  # Every divergence has to be one 06a has written down. An unclassified one is
+  # the whole point of a second oracle and fails here rather than being
+  # absorbed into a widened list.
+  defp assert_classified!(divergences) do
+    for {command, expected, actual, class} <- divergences do
+      assert class in [:eligibility, :reverse_not_wired, :debt_repaid_on_release],
+             "unclassified divergence on #{inspect(command)}: the model said " <>
+               "#{inspect(expected)} and the ledger said #{inspect(actual)}. " <>
+               "Two implementations of one design disagree in a way 06a has not " <>
+               "written down, which is what this property exists to find."
+    end
+
+    :ok
+  end
+
+  # Runs one history against the real ledger and against the model in lockstep,
+  # classifying every result disagreement **until the first one**.
+  #
+  # After a divergence the two states are different, so every later
+  # disagreement is a consequence rather than a finding: a hold the ledger
+  # refused makes the settle that follows it `:not_found` here and `:ok` there,
+  # which says nothing about the allocator. The first run of this property
+  # reported exactly that cascade as an unclassified divergence, which would
+  # have been a false alarm for a reader and, worse, would have trained the next
+  # one to widen the classification until it caught nothing.
+  defp drive(tenant, history) do
+    Enum.reduce(history, {LedgerModel.new(), []}, fn command, {model, diverged} ->
+      {next, expected} = LedgerModel.apply(model, command)
+      actual = execute(tenant, command)
+      {next, step_divergence(diverged, command, expected, actual)}
+    end)
+  end
+
+  defp step_divergence([_first | _rest] = diverged, _command, _expected, _actual), do: diverged
+
+  defp step_divergence([], command, expected, actual) do
+    case classify(command, expected, actual) do
+      :agree -> []
+      :skip -> []
+      class -> [{command, expected, actual, class}]
+    end
+  end
+
+  defp execute(tenant, {:grant, reference, amount, category, expires_at}) do
+    Credits.grant_with_status(tenant, amount,
+      reference: scoped(tenant, reference),
+      category: category,
+      expires_at: expires_at
+    )
+  end
+
+  defp execute(tenant, {:hold, reference, amount}),
+    do: Credits.hold(tenant, amount, scoped(tenant, reference))
+
+  defp execute(tenant, {:settle, reference, actual}),
+    do: Credits.settle(scoped(tenant, reference), actual)
+
+  defp execute(tenant, {:release, reference}), do: Credits.release(scoped(tenant, reference))
+
+  defp execute(tenant, {:debit, reference, amount}),
+    do: Credits.debit(tenant, amount, scoped(tenant, reference))
+
+  defp execute(tenant, {:reverse, reference, amount}),
+    do: Credits.reverse(tenant, amount, scoped(tenant, reference))
+
+  defp execute(_tenant, {:expire_due, now}), do: Credits.expire_due(now)
+
+  defp scoped(tenant, reference), do: tenant <> ":" <> reference
+
+  # `:reverse` is compared for nothing, and the reason is a real gap rather than
+  # a convenience. `Credits.reverse/4` still calls `debit/5` with
+  # `allow_negative: true`, so on a cut-over wallet it consumes eligible lots in
+  # spend order, **promotional first**, and writes nothing into `reversed`.
+  # 01e's view models the design instead: paid lots only, scoped to the payment,
+  # buckets in the order available, consumed, reserved. Wiring `reverse_lot/4`
+  # is 06e's, and until it lands the two cannot be compared. Recorded as X250.
+  defp classify({:reverse, _reference, _amount}, _expected, _actual), do: :reverse_not_wired
+
+  # `expire_due/1` returns a count across **every** tenant in the database, so
+  # its number is not this wallet's and comparing it would be comparing the
+  # suite. The resulting lot state is compared like any other.
+  defp classify({:expire_due, _now}, _expected, _actual), do: :skip
+
+  # **The third divergence, and 06a's deliberate choice against 01e's view.**
+  # 01e's `replay/3` for a release unreserves and subtracts `held` and stops;
+  # 06a's planner then repays outstanding debt out of what came back, because
+  # LI-06a-5 says `debt > 0` implies no availability, and because a wallet
+  # frozen for spending while holding money it owes is worse for the tenant than
+  # one that pays itself off. `architecture-map.md` 7.2 says "every incoming
+  # **grant** repays outstanding debt first" and should say "every incoming
+  # value" (finding X251).
+  defp classify({:release, _reference}, :ok, {:ok, _txn}), do: :agree
+
+  defp classify(_command, expected, actual) do
+    cond do
+      same?(expected, actual) -> :agree
+      # 06a's one deliberate compatibility change: a lot past its `expires_at`
+      # is not spendable before the sweep reaches it, and 01e's `live_lot?/1`
+      # is `available > 0` with no expiry test. The ledger refusing something
+      # the model accepted is that, and only that.
+      match?({:error, :insufficient_credits}, actual) -> :eligibility
+      true -> :unclassified
+    end
+  end
+
+  defp same?(:ok, {:ok, _txn}), do: true
+  defp same?({:ok, status}, {:ok, _txn, status}), do: true
+  defp same?({:error, reason}, {:error, reason}), do: true
+  defp same?(_expected, _actual), do: false
+
+  # Lot for lot, by the grant reference both sides key on, every bucket exact.
+  defp compare_lots(tenant, view) do
+    import Ecto.Query, only: [from: 2]
+
+    rows =
+      Connections.repo().all(
+        from(l in CreditLot, where: l.tenant_key == ^tenant, order_by: [asc: l.seq])
+      )
+
+    modelled = Map.new(view.lots, fn lot -> {lot.reference, lot} end)
+    actual = Map.new(rows, fn row -> {unscope(tenant, row.reference), row} end)
+
+    assert Map.keys(modelled) |> Enum.sort() == Map.keys(actual) |> Enum.sort(),
+           "the two implementations disagree about which lots exist: model " <>
+             "#{inspect(Enum.sort(Map.keys(modelled)))} against database " <>
+             "#{inspect(Enum.sort(Map.keys(actual)))}"
+
+    for {reference, lot} <- modelled do
+      row = Map.fetch!(actual, reference)
+
+      for bucket <- [:available, :reserved, :consumed, :reversed, :expired] do
+        assert Map.fetch!(lot, bucket) == Map.fetch!(row, bucket),
+               "lot #{reference} #{bucket}: 01e's model says #{Map.fetch!(lot, bucket)} and " <>
+                 "06a's ledger says #{Map.fetch!(row, bucket)}"
+      end
+
+      assert lot.amount == row.amount
+      assert lot.category == row.category
+    end
+
+    # And the wallet, which the view tracks independently of its own buckets.
+    row = Connections.repo().get_by!(CreditBalance, tenant_key: tenant)
+    assert view.balance == row.balance
+    assert view.held == row.held
+    assert view.promotional == row.promotional
+    assert view.expired == row.expired
+    assert view.debt == row.debt
+
+    :compared
+  end
+
+  defp unscope(tenant, reference), do: String.replace_prefix(reference, tenant <> ":", "")
+
+  defp assert_database_conserves(tenant) do
+    import Ecto.Query, only: [from: 2]
+
+    repo = Connections.repo()
+    row = repo.get_by!(CreditBalance, tenant_key: tenant)
+    lots = repo.all(from(l in CreditLot, where: l.tenant_key == ^tenant))
+
+    available = Enum.reduce(lots, 0, &(&1.available + &2))
+    reserved = Enum.reduce(lots, 0, &(&1.reserved + &2))
+    expired = Enum.reduce(lots, 0, &(&1.expired + &2))
+
+    assert row.balance == available + reserved - row.debt
+    assert row.held == reserved
+    assert row.expired == expired
+
+    for lot <- lots do
+      assert lot.available + lot.reserved + lot.consumed + lot.reversed + lot.expired ==
+               lot.amount
+    end
+
+    # No allocation may name a lot that is not this wallet's.
+    orphans =
+      repo.all(
+        from(a in CreditAllocation,
+          where: a.tenant_key == ^tenant,
+          where: a.lot_id not in ^Enum.map(lots, & &1.id),
+          select: a.id
+        )
+      )
+
+    assert orphans == [], "allocations naming a lot outside the wallet: #{inspect(orphans)}"
+  end
+
+  # **Counted, and asserted on an ordinary run** (finding X214). A property that
+  # diverged on every history would compare nothing and still be green, which is
+  # exactly the shape X182 describes.
+  defp record_comparison(outcome) do
+    key = {__MODULE__, :cross_oracle}
+    counts = :persistent_term.get(key, %{compared: 0, diverged: 0})
+    :persistent_term.put(key, Map.update!(counts, outcome, &(&1 + 1)))
+    :ok
+  end
+
+  defp cross_oracle_counts,
+    do: :persistent_term.get({__MODULE__, :cross_oracle}, %{compared: 0, diverged: 0})
 
   defp with_wallet(fun) do
     Connections.checkout!()
@@ -641,10 +987,14 @@ defmodule AuroraMeter.CreditsModelTest do
     )
   end
 
-  # `Ledger.remaining_on_grant/3` (`ledger.ex:340-349`) reproduced exactly, with
-  # `repo.all` for `repo.stream` because this is not inside a transaction. The
-  # order is the ledger's own: `(inserted_at, id)`.
-  defp ledger_remaining(tenant, grant_id) do
+  # `Ledger.remaining_on_grant/3` reproduced exactly, with `repo.all` for
+  # `repo.stream` because this is not inside a transaction. The order is the
+  # ledger's own, which since schema version 9 is `seq`.
+  defp ledger_remaining(tenant, grant_id), do: fold_remaining(tenant, grant_id, :seq)
+
+  # The same fold with the ordering column as an argument, so a test can put the
+  # old order beside the new one on the same committed rows.
+  defp fold_remaining(tenant, grant_id, order) do
     import Ecto.Query, only: [from: 2]
 
     Connections.repo().all(
@@ -652,7 +1002,7 @@ defmodule AuroraMeter.CreditsModelTest do
         where:
           t.tenant_key == ^tenant and
             (t.amount < 0 or (t.kind == ^:grant and t.category == ^:promotional)),
-        order_by: [asc: t.inserted_at, asc: t.id]
+        order_by: ^[asc: order]
       )
     )
     |> Promotions.remaining(grant_id)

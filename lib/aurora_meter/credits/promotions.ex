@@ -1,6 +1,8 @@
 defmodule AuroraMeter.Credits.Promotions do
   @moduledoc false
 
+  require Logger
+
   # Reconstruct attribution in transaction order. A grant can only pay for
   # spending after it was issued, even when it expires before an older grant.
   # Replaying amounts also supports entries written before promotional_after
@@ -41,8 +43,34 @@ defmodule AuroraMeter.Credits.Promotions do
 
   defp apply_entry(_entry, state), do: state
 
+  # An `:expire` entry names the grant it consumed, and folding it needs that
+  # grant to have been folded already. `Map.update!/3` raised `KeyError` when it
+  # had not been, which was reachable because the ledger ordered this stream by
+  # a wall clock (X213: 43 expiries instead of 50 in one run). Ordering by `seq`
+  # closes that for every row written from schema version 9 on.
+  #
+  # It does not close it for a row written **before** version 9. Adding an
+  # identity column rewrites the table and numbers the rows in the physical
+  # order it reads them, and a row that was updated in place (a closed hold, a
+  # stamped grant) is wherever its update put it (finding X244). So the fold
+  # stays total: an expire entry whose grant is not in the map yet is
+  # attributed by the ordinary soonest-expiry rule, which is what an untagged
+  # spend of the same size would do, and it says so once rather than silently.
   defp consume(grants, amount, grant_id) when is_binary(grant_id) do
-    Map.update!(grants, grant_id, &%{&1 | remaining: max(&1.remaining - amount, 0)})
+    case Map.fetch(grants, grant_id) do
+      {:ok, grant} ->
+        Map.put(grants, grant_id, %{grant | remaining: max(grant.remaining - amount, 0)})
+
+      :error ->
+        Logger.warning(
+          "AuroraMeter.Credits.Promotions: an expire entry for grant #{inspect(grant_id)} was " <>
+            "folded before the grant itself, which means this wallet holds rows whose `seq` " <>
+            "is not their insertion order (pre-version-9 rows, finding X244). Attributing it " <>
+            "by the ordinary spend order instead."
+        )
+
+        consume(grants, amount, nil)
+    end
   end
 
   defp consume(grants, amount, nil) do

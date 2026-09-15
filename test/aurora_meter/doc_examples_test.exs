@@ -157,12 +157,30 @@ defmodule AuroraMeter.DocExamplesTest do
             name <- module_references(block.body),
             name not in Enum.map(@not_modules, &elem(&1, 0)),
             not pro?(name),
+            not optional_and_absent?(name),
             module = Module.concat([name]),
             not Code.ensure_loaded?(module),
             do: "#{block.file}:#{block.line} #{name}"
 
       assert missing == [],
              "guides name modules that do not exist:\n  " <> Enum.join(Enum.uniq(missing), "\n  ")
+    end
+
+    test "a guide may name an optional module, and the skip applies only when the dependency is really absent" do
+      # The skip has to be narrow, or it becomes a way to name a module that
+      # exists nowhere. On an ordinary build Oban is present, so nothing is
+      # skipped and the guide's references are checked like any other; on the
+      # headless leg the namespace is genuinely not compiled and skipping it is
+      # the right answer rather than a hole.
+      if Code.ensure_loaded?(Oban) do
+        refute optional_and_absent?("AuroraMeter.Oban")
+        assert Code.ensure_loaded?(AuroraMeter.Oban)
+      else
+        assert optional_and_absent?("AuroraMeter.Oban")
+      end
+
+      refute optional_and_absent?("AuroraMeter.Credits"),
+             "the skip must not reach a module that is not optional"
     end
 
     test "every Pro module a core guide names is absent from core, which is the boundary" do
@@ -463,6 +481,17 @@ defmodule AuroraMeter.DocExamplesTest do
   end
 
   defp pro?(name), do: String.starts_with?(name, @pro_modules_prefix)
+
+  # A guide may legitimately name a module that exists only when an optional
+  # dependency is present. `docs/operations/scheduler.md` names
+  # `AuroraMeter.Oban`, which is compiled behind `Code.ensure_loaded?(Oban)`, so
+  # on the headless leg it does not exist and the check above failed for a guide
+  # that is correct. Found by 06a's headless run and recorded as X246: the leg
+  # had been red at HEAD since the guide landed, because it is not part of
+  # `mix check` and nothing else runs it.
+  defp optional_and_absent?(name) do
+    String.starts_with?(name, "AuroraMeter.Oban") and not Code.ensure_loaded?(Oban)
+  end
 
   # `AuroraMeter.Exporter.Item.t()` inside a printed `@callback` is a type, and
   # layer 3's regex cannot see the difference from text. Read the module's own

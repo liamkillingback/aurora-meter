@@ -21,18 +21,25 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   `:adjustment`) and, on a debit, marks `:reversal` — a refund or chargeback
   taking a paid grant back. A reversal never consumes promotional credit and is
   reported against grants rather than as spend.
+
+  `seq` is the order. It is a Postgres identity column, assigned in commit
+  order, and it is what every query that reconstructs what happened first sorts
+  by. `inserted_at` is a wall-clock stamp and is not monotonic, so it orders
+  nothing (findings L20, X213). `hold_transaction_id` names the hold a `settle`
+  or `release` row closes, and `updated_at` is stamped by the database the
+  first time the row is updated in place.
   """
 
   use Ecto.Schema
 
   import Ecto.Changeset
 
-  @type kind :: :grant | :hold | :settle | :release | :debit | :expire
+  @type kind :: :grant | :hold | :settle | :release | :debit | :expire | :reverse
   @type category :: :paid | :promotional | :adjustment | :reversal
   @type status :: :pending | :settled | :released
   @type t :: %__MODULE__{}
 
-  @kinds [:grant, :hold, :settle, :release, :debit, :expire]
+  @kinds [:grant, :hold, :settle, :release, :debit, :expire, :reverse]
   @grant_categories [:paid, :promotional, :adjustment]
   # `:reversal` is not a grant category: it marks the debit a refund or
   # chargeback writes, so the ledger can tell money being handed back from
@@ -61,11 +68,30 @@ defmodule AuroraMeter.Schema.CreditTransaction do
     field :expired_at, :utc_datetime
     field :metadata, :map, default: %{}
 
+    # The ordering key. Assigned by a Postgres identity column, so for any two
+    # committed rows A and B, if A committed before B started then
+    # `A.seq < B.seq`. `inserted_at` is a wall-clock value and cannot promise
+    # that: it steps backwards on an NTP correction, a leap second or a VM
+    # pause, and the ledger used to order its own account of the past by it
+    # (findings L20, X213). Nothing orders by `inserted_at` any more.
+    field :seq, :integer, read_after_writes: true
+
+    # The hold a `settle` or `release` row closes. Nullable, because every row
+    # written before schema version 9 has none and because no other kind has a
+    # hold to name (backfilled for historical rows by build unit 06b).
+    field :hold_transaction_id, :binary_id
+
+    # Null until the row is updated in place, and then stamped by the database
+    # with `clock_timestamp()` rather than by the node. A row that is never
+    # touched again keeps a null here, which is the honest answer and is what
+    # `schema-migration-map.md` S4 specifies.
+    field :updated_at, :utc_datetime_usec
+
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end
 
   @castable ~w(tenant_key kind category amount held_delta balance_after held_after
-               promotional_after reference
+               promotional_after reference hold_transaction_id
                status settled_amount expires_at expired_at metadata)a
 
   @doc """

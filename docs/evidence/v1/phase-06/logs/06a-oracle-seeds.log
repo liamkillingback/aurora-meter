@@ -1,0 +1,70 @@
+=== seed 0 ===
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 11, diverged: 1
+
+Finished in 8.0 seconds (0.00s async, 8.0s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=0 exit=0
+=== seed 1 ===
+Running ExUnit with seed: 1, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 10, diverged: 2
+
+Finished in 9.4 seconds (0.00s async, 9.4s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=1 exit=0
+=== seed 7 ===
+Running ExUnit with seed: 7, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 9, diverged: 3
+
+Finished in 10.8 seconds (0.00s async, 10.8s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=7 exit=0
+=== seed 42 ===
+Running ExUnit with seed: 42, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 8, diverged: 4
+
+Finished in 8.7 seconds (0.00s async, 8.7s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=42 exit=0
+=== seed 101 ===
+Running ExUnit with seed: 101, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 12, diverged: 0
+
+Finished in 10.3 seconds (0.00s async, 10.3s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=101 exit=0
+=== seed 1009 ===
+Running ExUnit with seed: 1009, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 9, diverged: 3
+
+Finished in 10.0 seconds (0.00s async, 10.0s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=1009 exit=0
+=== seed 20260915 ===
+Running ExUnit with seed: 20260915, max_cases: 48
+Excluding tags: [:headless]
+
+...........................[06a cross-oracle] compared: 7, diverged: 5
+
+Finished in 12.3 seconds (0.00s async, 12.3s sync)
+
+Result: 27 passed (7 properties, 20 tests)
+seed=20260915 exit=0

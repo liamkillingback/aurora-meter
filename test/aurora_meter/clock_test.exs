@@ -306,9 +306,17 @@ defmodule AuroraMeter.ClockTest do
       # the comparison is a persisted `expires_at`, so the database's clock is
       # the right one, and the worker is as far from the hot path as a module
       # gets: it runs on a cron tick, never on a metering call (05c).
+      #
+      # `credits/ledger.ex` reads it once per ledger operation on a cut-over
+      # wallet, and the other side of every comparison it feeds is a persisted
+      # `expires_at`, so the database's clock is the only one that can be on
+      # both sides. The credit ledger is not the hot path: `track/4` never
+      # reaches it, and a ledger write is already several statements and a row
+      # lock, so one more round trip is not what makes it cost (06a).
       allowed = [
         "lib/aurora_meter/clock.ex",
         "lib/aurora_meter/credits.ex",
+        "lib/aurora_meter/credits/ledger.ex",
         "lib/aurora_meter/events/replay.ex",
         "lib/aurora_meter/oban/credit_expiry.ex",
         "lib/mix/tasks/aurora_meter.events.backfill.ex"

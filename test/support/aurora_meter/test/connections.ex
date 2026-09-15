@@ -30,7 +30,9 @@ defmodule AuroraMeter.Test.Connections do
   import Ecto.Query, only: [from: 2]
 
   alias AuroraMeter.Schema.Counter
+  alias AuroraMeter.Schema.CreditAllocation
   alias AuroraMeter.Schema.CreditBalance
+  alias AuroraMeter.Schema.CreditLot
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Schema.Event
   alias AuroraMeter.Schema.EventTotal
@@ -38,7 +40,23 @@ defmodule AuroraMeter.Test.Connections do
   alias AuroraMeter.Schema.Subscription
   alias Ecto.Adapters.SQL.Sandbox
 
-  @tables [Counter, CreditBalance, CreditTransaction, Event, EventTotal, History, Subscription]
+  # **Deletion order, not alphabetical order.** Schema version 9 put the first
+  # foreign keys in the ledger: an allocation references its lot and its ledger
+  # row, and a lot references its grant row, all `ON DELETE RESTRICT`. Deleting
+  # the transactions first now fails rather than orphaning anything, which is
+  # the point of RESTRICT, so the children go first. `tables/0` still answers
+  # with this list, and `row_counts/0` reads every one of them.
+  @tables [
+    CreditAllocation,
+    CreditLot,
+    Counter,
+    CreditBalance,
+    CreditTransaction,
+    Event,
+    EventTotal,
+    History,
+    Subscription
+  ]
 
   @tenantless [AuroraMeter.Schema.FlushReceipt]
 
@@ -46,7 +64,7 @@ defmodule AuroraMeter.Test.Connections do
 
   @reserved_headroom 4
 
-  @doc "The schema modules `cleanup!/1` deletes from, in alphabetical order."
+  @doc "The schema modules `cleanup!/1` deletes from, child tables first."
   @spec tables() :: [module()]
   def tables, do: @tables
 

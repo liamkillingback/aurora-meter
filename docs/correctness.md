@@ -680,8 +680,43 @@ ledger promises:
 - `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a grant at the bigint ceiling is refused by the database (L17, fixed in 06c)`
 - `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a reversal at the bigint floor is refused by the database (L17, fixed in 06c)`
 - `AuroraMeter.CreditsModelTest` / `test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a)`
-- `AuroraMeter.CreditsModelTest` / `test the clock the ledger orders itself by I10 a backwards step in the wall clock leaves a promotional grant that can never expire (L20, fixed in 06a)`
-- PLANNED (06a): `AuroraMeter.CreditsLotTest` / `test I10 the lot conservation constraint rejects drift`
+- `AuroraMeter.CreditsModelTest` / `test the clock the ledger orders itself by I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq (L20, fixed in 06a)`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 the spend order is promotional, then earliest expiry, then oldest grant, then seq`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 a 6 USD debit against promotional A=3, promotional B=5 and paid P=10 takes A=3 and B=3`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 a lot past its expires_at is not eligible for a debit and is not consumed`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 a grant while debt is outstanding repays the debt before creating availability`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 settle below the reservation consumes the reserved subset and unreserves the rest`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 settle above the reservation consumes remaining availability then records debt`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 reverse takes available, then consumed, then reserved, and only consumed creates debt`
+- `AuroraMeter.Credits.AllocatorTest` / `test I10 restore is capped by the lot's reversed amount and repays debt first`
+- `AuroraMeter.Credits.AllocatorTest` / `property I10 every planned movement conserves: each lot's five buckets still sum to its amount`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a grant writes one lot whose quantities, state and reference match the ledger row`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a 6 USD debit against promotional A=3, promotional B=5 and paid P=10 takes A=3 and B=3`
+- `AuroraMeter.CreditsLotsTest` / `test I10 every lot quantity is reproduced by folding that lot's allocations`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a settle stamps hold_transaction_id and updated_at on both rows`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a lot edited by hand is refused by aurora_meter_credit_lots_conservation_check`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a balance row edited by hand raises ConservationError and the write is rolled back`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a settle above its hold records debt, which blocks a new hold until a grant repays it`
+- `AuroraMeter.CreditsLotsTest` / `test I10 credit past its expires_at is not spendable before the sweep reaches it`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a wallet with lots_enabled_at null uses the legacy arithmetic and writes no lot`
+- `AuroraMeter.CreditsLotsTest` / `test I10 enable_lots! refuses a wallet that has a ledger row rather than cutting it over`
+- `AuroraMeter.CreditsLotsTest` / `test I10 the balance row refuses a negative held, which nothing enforced before version 9`
+- `AuroraMeter.CreditsLotsTest` / `test I10 a grant's :source lands on the lot, which is how a refund finds the payment`
+- `AuroraMeter.CreditsLotsTest` / `property I10 a generated history on a lot wallet reconstructs the balance row, the debt, the held amount and every lot's allocations`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed before the ledger row is inserted leaves the wallet untouched`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed after the ledger row and before the allocations leaves the wallet untouched`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed after the allocations and before the lot update leaves the wallet untouched`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed after the lot update and before the balance update leaves the wallet untouched`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 a writer killed after commit, before its reply, leaves exactly one effect and no second one on retry`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 the control: with no fault armed the same writer completes and the wallet moves`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 forcing the allocation insert to fail leaves the lot and the balance untouched`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 forcing the lot update to fail leaves the ledger row uncommitted`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 forcing the balance update to fail rolls back the allocations`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 forcing the new lot's insert to fail leaves the grant uncommitted`
+- `AuroraMeter.CreditsLotsFaultsTest` / `test I10 the fault control: the same three statements without a fault all commit together`
+- `AuroraMeter.CreditsModelTest` / `property I10 a generated history on a cut-over wallet agrees with 01e's independent lot model, lot for lot`
+- `AuroraMeter.CreditsModelTest` / `test I10 the cross-oracle comparison can fail: a lot bucket moved by hand is caught`
+- `AuroraMeter.CreditsLotsConcurrencyTest` / `test I10 concurrent grants and debits on one wallet leave the projection exact`
 
 **Evidence.** `docs/evidence/v1/phase-01/i10.md`
 
@@ -736,6 +771,12 @@ being closed twice".
 - `AuroraMeter.CreditsTest` / `test with_credits/4 I11 returns its result when the hold was settled by someone else`
 - `AuroraMeter.CreditsTest` / `test with_credits/4 I11 records the executed cost when the hold was released by someone else`
 
+- `AuroraMeter.CreditsLotsConcurrencyTest` / `test I11 fifty independent holds against one wallet funded with ten admit exactly ten`
+- `AuroraMeter.CreditsLotsConcurrencyTest` / `test I11 twenty concurrent holds across twenty wallets do not interfere`
+- `AuroraMeter.CreditsLotsConcurrencyTest` / `test I11 without the balance row lock the same fifty holds oversubscribe the wallet`
+- `AuroraMeter.CreditsLotsTest` / `test I11 every ledger write takes the balance row, then the transaction row, then the lots`
+- `AuroraMeter.CreditsLotsTest` / `test I11 settling one hold below its reservation leaves a second hold's reservation on the same lot intact`
+
 **Evidence.** `docs/evidence/v1/phase-05/i11.md`
 
 ## I12 Grant expiry cannot consume later or unrelated funds
@@ -751,16 +792,26 @@ figure became.
 scheduler that calls `expire_due/1`. Only `:promotional` grants may carry an
 `:expires_at`; a paid grant with one is rejected.
 
-**Known limits.** The current allocator assumes at most one live promotional grant
-per tenant. Overlapping promotions are handled correctly for the cases in the
-tests below, but the general multi grant case is the subject of the phase 06 lot
-model, which replaces the single promotional figure with per lot accounting.
+**Known limits.** They now depend on which writer owns the wallet.
 
-Expiry is a pass, not a property of the money. Value that a hold had reserved on
-an already expired grant is spendable again the moment the hold is released, and
-stays spendable until the next `expire_due/1` pass runs (open finding L1).
-`AuroraMeter.CreditsTest` asserts that current behaviour so 06a has a before and
-after; 06a's lot model makes the released value expired rather than spendable.
+On a wallet that has **not** been cut over to credit lots (`lots_enabled_at IS
+NULL`, which is every wallet until `mix aurora_meter.credits.migrate_lots` runs)
+the legacy arithmetic is unchanged and both of the limits below still hold. The
+single promotional figure per tenant cannot say which grant a spend came out of,
+so overlapping promotions are handled correctly only for the cases in the tests
+below. And expiry is a pass rather than a property of the money: value a hold had
+reserved on an already expired grant is spendable again the moment the hold is
+released and stays spendable until the next `expire_due/1` pass (finding L1).
+`AuroraMeter.CreditsTest` asserts that behaviour so there is a before and after.
+
+On a wallet the allocator owns, both are closed. Each grant is its own lot with
+its own five quantities, so an overlapping promotion expires exactly its own
+remainder; and a reservation released or settled on a lot past its `expires_at`
+becomes `expired` rather than `available`, so nothing of an expired lot is ever
+spendable again. A third difference goes with them and is a deliberate
+compatibility change: credit whose `expires_at` has passed is not spendable even
+before the sweep reaches it, which is what makes expiry bookkeeping instead of a
+race.
 
 **Tests.**
 
@@ -771,9 +822,14 @@ after; 06a's lot model makes the released value expired rather than spendable.
 - `AuroraMeter.CreditsReconcileHoldsTest` / `test recovery beside expiry I12 a reconciler release on an expired grant returns spendable credit (L1, fixed in 06a)`
 - `AuroraMeter.CreditsTest` / `test promotional credit expire_due/1 expires only what is left, once, and never below zero`
 - `AuroraMeter.CreditsTest` / `test promotional credit a promotional grant landing on a negative balance first repays the debt`
-- PLANNED (06a): `AuroraMeter.CreditsLotTest` / `test I12 overlapping promotions each expire only their own remainder`
-- PLANNED (06a): `AuroraMeter.CreditsLotTest` / `test I12 value reserved on an expired lot becomes expired, not spendable, when released`
-- PLANNED (06a): `AuroraMeter.CreditsLotTest` / `test I12 expiry racing a settlement conserves the total`
+- `AuroraMeter.Credits.AllocatorTest` / `test I12 a reservation released on a lot past its expiry becomes expired, never available`
+- `AuroraMeter.Credits.AllocatorTest` / `test I12 expiry moves only the due lot's available and refuses when it is all reserved`
+- `AuroraMeter.CreditsLotsTest` / `test I12 expiry moves only the due lot's available to expired and leaves reserved alone`
+- `AuroraMeter.CreditsLotsTest` / `test I12 overlapping promotions expire their own remainder and never each other's`
+- `AuroraMeter.CreditsLotsTest` / `test I12 a reservation released on an expired lot becomes expired, never spendable`
+- `AuroraMeter.CreditsLotsTest` / `test I12 a hold taken before expiry settles against its reserved portion afterwards`
+- `AuroraMeter.CreditsLotsTest` / `test I12 the expiry sweep run twice writes one expire row, one allocation and the reference expire:<lot_id>:0`
+- `AuroraMeter.CreditsLotsConcurrencyTest` / `test I12 expiry racing a release conserves and leaves no spendable expired value`
 
 **Evidence.** `docs/evidence/v1/phase-06/i12.md`
 
@@ -849,7 +905,7 @@ nothing and the next run asks again.
 - `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry cancels with :paused and continues from the cursor after resume`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry counts a grant the ledger refuses and expires the ones before it`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry counts a grant whose transaction raises, advances past it, and expires the rest`
-- `AuroraMeter.ObanJobControlsTest` / `test I16 an expire entry that sorts before its own grant is counted, not fatal`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 an expire entry stamped before its own grant expires the right amount, because the fold orders by seq`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 HoldReconciliation pages with a cursor and finishes the scan`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 HoldReconciliation cancels with :paused within one batch`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 the cutoff is pinned across the pages of one scan`
@@ -957,6 +1013,12 @@ the storefront together.
 - `AuroraMeter.MigrationV7Test` / `test the ladder I19 a fresh install and an incremental upgrade produce the same catalogue`
 - `AuroraMeter.MigrationV7Test` / `test the ladder I19 each published schema history reaches 7 and then 8`
 - `AuroraMeter.MigrationV7Test` / `test the ladder I19 the schema marker is absent below version 7`
+- `AuroraMeter.MigrationV9Test` / `test I19 a fresh install and an incremental upgrade to 9 produce the same catalogue`
+- `AuroraMeter.MigrationV9Test` / `test I19 version 9 creates the lot, allocation and recurrence tables with their constraints`
+- `AuroraMeter.MigrationV9Test` / `test I19 version 9 is additive over a database that already holds credit rows`
+- `AuroraMeter.MigrationV9Test` / `test I19 version 9 refuses a database whose balance rows already violate the new checks`
+- `AuroraMeter.MigrationV9Test` / `test I19 down(version: 9) without confirm_data_loss raises`
+- `AuroraMeter.MigrationV9Test` / `test I19 version 9 is idempotent: running it twice changes nothing`
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 it fills every row, and no row twice`
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 it is idempotent: a second run updates nothing and changes no hash`
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 a run killed between batches resumes byte for byte`

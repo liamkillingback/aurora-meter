@@ -77,18 +77,24 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
     test "each one gets a file of its own, carrying both attributes", %{path: path} do
       generate(path, from: 7)
 
-      files = files(path)
+      concurrent_files = Enum.filter(files(path), &(Path.basename(&1) =~ "_concurrent"))
 
-      assert length(files) == 2,
-             "versions 7 and 8 cannot share a file: #{inspect(Enum.map(files, &Path.basename/1))}"
+      assert length(concurrent_files) == 1,
+             "exactly one generated file may carry version 8: " <>
+               inspect(Enum.map(files(path), &Path.basename/1))
 
-      [ordinary, concurrent] = Enum.map(files, &File.read!/1)
+      ordinary = read_named(path, "v7")
+      concurrent = read_named(path, "v8_concurrent")
 
       assert ordinary =~ "AuroraMeter.Migration.up(from: 7, version: 7)"
       refute ordinary =~ "@disable_ddl_transaction"
       refute ordinary =~ "@disable_migration_lock"
 
+      # The concurrent version is alone in its file. That is the claim, and it
+      # is about this file's contents rather than about how many files the run
+      # produced, so a later schema version does not falsify it.
       assert concurrent =~ "AuroraMeter.Migration.up(from: 8, version: 8)"
+      refute concurrent =~ ~r/up\(from: (?!8)\d+/
       assert concurrent =~ "@disable_ddl_transaction true"
       assert concurrent =~ "@disable_migration_lock true"
     end
@@ -99,12 +105,22 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
 
       names = Enum.map(files(path), &Path.basename/1)
 
-      assert [v7, v8] = names
-      assert v7 =~ ~r/_upgrade_aurora_meter_v7\.exs$/
-      assert v8 =~ ~r/_upgrade_aurora_meter_v8_concurrent\.exs$/
+      v7 = Enum.find(names, &(&1 =~ ~r/_upgrade_aurora_meter_v7\.exs$/))
+      v8 = Enum.find(names, &(&1 =~ ~r/_upgrade_aurora_meter_v8_concurrent\.exs$/))
+
+      assert v7, "no version 7 file in #{inspect(names)}"
+      assert v8, "no version 8 concurrent file in #{inspect(names)}"
 
       assert v7 < v8,
              "Ecto runs migrations in timestamp order, so version 7's file must sort first"
+
+      # And every later version sorts after the concurrent one, for the same
+      # reason: version 8 promotes columns to NOT NULL that a later version's
+      # statements may depend on.
+      for later <- names -- [v7, v8] do
+        assert v8 < later,
+               "#{later} must sort after the concurrent version 8 file"
+      end
     end
 
     test "the generated concurrent file is accepted by AuroraMeter.Migration.up/1",
@@ -116,7 +132,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
         Migration.up(from: 7, version: 8)
       end
 
-      [_v7, concurrent] = Enum.map(files(path), &File.read!/1)
+      concurrent = read_named(path, "v8_concurrent")
 
       assert concurrent =~ "up(from: 8, version: 8)",
              "the generated file must run exactly the version that needs its own transaction"
@@ -128,7 +144,8 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
          %{path: path} do
       generate(path, from: 7)
 
-      [ordinary, concurrent] = Enum.map(files(path), &File.read!/1)
+      ordinary = read_named(path, "v7")
+      concurrent = read_named(path, "v8_concurrent")
 
       assert 7 in Migration.data_loss_versions()
 
@@ -181,6 +198,23 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
   end
 
   defp files(path), do: path |> Path.join("*.exs") |> Path.wildcard() |> Enum.sort()
+
+  # Selects a generated file by the version its name carries rather than by its
+  # position in the listing, so adding a schema version does not break a test
+  # about a different one.
+  defp read_named(path, suffix) do
+    case Enum.filter(files(path), &(Path.basename(&1) =~ "_upgrade_aurora_meter_#{suffix}.exs")) do
+      [file] ->
+        File.read!(file)
+
+      other ->
+        flunk(
+          "expected exactly one generated file for #{suffix}, got " <>
+            inspect(Enum.map(other, &Path.basename/1)) <>
+            " out of " <> inspect(Enum.map(files(path), &Path.basename/1))
+        )
+    end
+  end
 
   defp sources(path), do: path |> files() |> Enum.map(&File.read!/1)
 end

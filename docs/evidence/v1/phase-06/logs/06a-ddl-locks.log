@@ -1,0 +1,159 @@
+started_utc=2026-09-15T13:19:54Z
+[mixlane] core: DB_PORT=5490 elixir -S mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/06a-ddl/capture.exs
+       is_identity, coalesce(identity_generation, '-')
+       is_identity, coalesce(identity_generation, '-')
+       is_identity, coalesce(identity_generation, '-')
+       is_identity, coalesce(identity_generation, '-')
+       is_identity, coalesce(identity_generation, '-')
+wrote 06a-ddl.sql
+begin []
+commit []
+begin []
+       coalesce(sum(available + reserved)
+                FILTER (WHERE category = 'promotional'), 0)::bigint,
+       coalesce(sum(expired), 0)::bigint
+commit []
+begin []
+       coalesce(sum(available + reserved)
+                FILTER (WHERE category = 'promotional'), 0)::bigint,
+       coalesce(sum(expired), 0)::bigint
+commit []
+begin []
+       coalesce(sum(available + reserved)
+                FILTER (WHERE category = 'promotional'), 0)::bigint,
+       coalesce(sum(expired), 0)::bigint
+commit []
+begin []
+commit []
+begin []
+       coalesce(sum(available + reserved)
+                FILTER (WHERE category = 'promotional'), 0)::bigint,
+       coalesce(sum(expired), 0)::bigint
+commit []
+begin []
+       coalesce(sum(available + reserved)
+                FILTER (WHERE category = 'promotional'), 0)::bigint,
+       coalesce(sum(expired), 0)::bigint
+commit []
+== locks ==
+settle (locks6a_10242_settle):
+  aurora_meter_credit_allocations AccessShareLock granted=true
+  aurora_meter_credit_allocations RowExclusiveLock granted=true
+  aurora_meter_credit_allocations_lot_seq_index AccessShareLock granted=true
+  aurora_meter_credit_allocations_pkey AccessShareLock granted=true
+  aurora_meter_credit_allocations_seq_index AccessShareLock granted=true
+  aurora_meter_credit_allocations_seq_seq RowExclusiveLock granted=true
+  aurora_meter_credit_allocations_tenant_seq_index AccessShareLock granted=true
+  aurora_meter_credit_allocations_transaction_id_index AccessShareLock granted=true
+  aurora_meter_credit_balances RowExclusiveLock granted=true
+  aurora_meter_credit_balances RowShareLock granted=true
+  aurora_meter_credit_balances_pkey RowExclusiveLock granted=true
+  aurora_meter_credit_balances_pkey RowShareLock granted=true
+  aurora_meter_credit_balances_tenant_key_index RowExclusiveLock granted=true
+  aurora_meter_credit_balances_tenant_key_index RowShareLock granted=true
+  aurora_meter_credit_lots AccessShareLock granted=true
+  aurora_meter_credit_lots RowExclusiveLock granted=true
+  aurora_meter_credit_lots RowShareLock granted=true
+  aurora_meter_credit_lots_expiry_index AccessShareLock granted=true
+  aurora_meter_credit_lots_expiry_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_expiry_index RowShareLock granted=true
+  aurora_meter_credit_lots_grant_index AccessShareLock granted=true
+  aurora_meter_credit_lots_grant_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_grant_index RowShareLock granted=true
+  aurora_meter_credit_lots_pkey AccessShareLock granted=true
+  aurora_meter_credit_lots_pkey RowExclusiveLock granted=true
+  aurora_meter_credit_lots_pkey RowShareLock granted=true
+  aurora_meter_credit_lots_seq_index AccessShareLock granted=true
+  aurora_meter_credit_lots_seq_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_seq_index RowShareLock granted=true
+  aurora_meter_credit_lots_source_intent_index AccessShareLock granted=true
+  aurora_meter_credit_lots_source_intent_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_source_intent_index RowShareLock granted=true
+  aurora_meter_credit_lots_spend_index AccessShareLock granted=true
+  aurora_meter_credit_lots_spend_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_spend_index RowShareLock granted=true
+  aurora_meter_credit_transactions AccessShareLock granted=true
+  aurora_meter_credit_transactions RowExclusiveLock granted=true
+  aurora_meter_credit_transactions RowShareLock granted=true
+  aurora_meter_credit_transactions_hold_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_hold_index RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_hold_index RowShareLock granted=true
+  aurora_meter_credit_transactions_kind_reference_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_kind_reference_index RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_kind_reference_index RowShareLock granted=true
+  aurora_meter_credit_transactions_pkey AccessShareLock granted=true
+  aurora_meter_credit_transactions_pkey RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_pkey RowShareLock granted=true
+  aurora_meter_credit_transactions_promo_expiry_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_promo_expiry_index RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_promo_expiry_index RowShareLock granted=true
+  aurora_meter_credit_transactions_seq_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_seq_index RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_seq_index RowShareLock granted=true
+  aurora_meter_credit_transactions_seq_seq RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_tenant_key_inserted_at_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_tenant_key_inserted_at_index RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_tenant_key_inserted_at_index RowShareLock granted=true
+  aurora_meter_credit_transactions_tenant_seq_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_tenant_seq_index RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_tenant_seq_index RowShareLock granted=true
+expiry (locks6a_10242_expire):
+  aurora_meter_credit_allocations AccessShareLock granted=true
+  aurora_meter_credit_allocations RowExclusiveLock granted=true
+  aurora_meter_credit_allocations_lot_seq_index AccessShareLock granted=true
+  aurora_meter_credit_allocations_pkey AccessShareLock granted=true
+  aurora_meter_credit_allocations_seq_index AccessShareLock granted=true
+  aurora_meter_credit_allocations_seq_seq RowExclusiveLock granted=true
+  aurora_meter_credit_allocations_tenant_seq_index AccessShareLock granted=true
+  aurora_meter_credit_allocations_transaction_id_index AccessShareLock granted=true
+  aurora_meter_credit_balances AccessShareLock granted=true
+  aurora_meter_credit_balances RowExclusiveLock granted=true
+  aurora_meter_credit_balances RowShareLock granted=true
+  aurora_meter_credit_balances_pkey AccessShareLock granted=true
+  aurora_meter_credit_balances_pkey RowExclusiveLock granted=true
+  aurora_meter_credit_balances_pkey RowShareLock granted=true
+  aurora_meter_credit_balances_tenant_key_index AccessShareLock granted=true
+  aurora_meter_credit_balances_tenant_key_index RowExclusiveLock granted=true
+  aurora_meter_credit_balances_tenant_key_index RowShareLock granted=true
+  aurora_meter_credit_lots AccessShareLock granted=true
+  aurora_meter_credit_lots RowExclusiveLock granted=true
+  aurora_meter_credit_lots RowShareLock granted=true
+  aurora_meter_credit_lots_expiry_index AccessShareLock granted=true
+  aurora_meter_credit_lots_expiry_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_expiry_index RowShareLock granted=true
+  aurora_meter_credit_lots_grant_index AccessShareLock granted=true
+  aurora_meter_credit_lots_grant_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_grant_index RowShareLock granted=true
+  aurora_meter_credit_lots_pkey AccessShareLock granted=true
+  aurora_meter_credit_lots_pkey RowExclusiveLock granted=true
+  aurora_meter_credit_lots_pkey RowShareLock granted=true
+  aurora_meter_credit_lots_seq_index AccessShareLock granted=true
+  aurora_meter_credit_lots_seq_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_seq_index RowShareLock granted=true
+  aurora_meter_credit_lots_source_intent_index AccessShareLock granted=true
+  aurora_meter_credit_lots_source_intent_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_source_intent_index RowShareLock granted=true
+  aurora_meter_credit_lots_spend_index AccessShareLock granted=true
+  aurora_meter_credit_lots_spend_index RowExclusiveLock granted=true
+  aurora_meter_credit_lots_spend_index RowShareLock granted=true
+  aurora_meter_credit_transactions AccessShareLock granted=true
+  aurora_meter_credit_transactions RowExclusiveLock granted=true
+  aurora_meter_credit_transactions RowShareLock granted=true
+  aurora_meter_credit_transactions_hold_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_hold_index RowShareLock granted=true
+  aurora_meter_credit_transactions_kind_reference_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_kind_reference_index RowShareLock granted=true
+  aurora_meter_credit_transactions_pkey AccessShareLock granted=true
+  aurora_meter_credit_transactions_pkey RowShareLock granted=true
+  aurora_meter_credit_transactions_promo_expiry_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_promo_expiry_index RowShareLock granted=true
+  aurora_meter_credit_transactions_seq_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_seq_index RowShareLock granted=true
+  aurora_meter_credit_transactions_seq_seq RowExclusiveLock granted=true
+  aurora_meter_credit_transactions_tenant_key_inserted_at_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_tenant_key_inserted_at_index RowShareLock granted=true
+  aurora_meter_credit_transactions_tenant_seq_index AccessShareLock granted=true
+  aurora_meter_credit_transactions_tenant_seq_index RowShareLock granted=true
+wrote 06a-locks-raw.txt
+[mixlane] core exit=0 started=2026-09-15T13:19:54Z finished=2026-09-15T13:19:55Z
+exit=0 finished_utc=2026-09-15T13:19:55Z

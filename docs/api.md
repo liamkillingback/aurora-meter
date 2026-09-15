@@ -522,6 +522,7 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `threshold` | `tenant_key` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
 | `[:aurora_meter, :credits, :hold_reconciliation]` | `amount`, `age_seconds`, `duration` | `tenant_key`, `reference`, `decision`, `outcome` | stable | 0.6.0 | `[:aurora_meter, :credits, :hold_reconciliation]` |
+| `[:aurora_meter, :credits, :conservation_error]` | `balance_delta`, `held_delta`, `promotional_delta`, `expired_delta` | `tenant_key`, `operation`, `reference` | stable | 0.6.0 | `[:aurora_meter, :credits, :conservation_error]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 | `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |
@@ -696,6 +697,7 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Cluster` | The delta and total gossip protocol between nodes. `apply/3` stays documented because `AuroraMeter.Test.simulate_node/3` calls it; use the test helper, not this. |
 | `AuroraMeter.Config.Schema` | The configuration conventions shared with Pro. Pro adopts them by passing its own schema, never by depending on this module. |
 | `AuroraMeter.Counter` | The ETS row layout and the reserve or commit protocol. Hosts never touch ETS rows. |
+| `AuroraMeter.Credits.Allocator` | The single allocation engine behind every credit movement on a cut-over wallet. The planner is pure and the applier writes what it decided; neither is a supported entry point. |
 | `AuroraMeter.Credits.Ledger` | The ledger implementation behind `AuroraMeter.Credits`. |
 | `AuroraMeter.Credits.Promotions` | Promotional-remainder arithmetic for expiry. |
 | `AuroraMeter.Credits.Reconciliation` | The run loop behind `AuroraMeter.Credits.reconcile_holds/1`: listing, the host callback and its timeout, applying the decision, telemetry. |
@@ -712,6 +714,7 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Migration.V6` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V7` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V8` | One schema version. Call `AuroraMeter.Migration.up/1`. |
+| `AuroraMeter.Migration.V9` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Schema.FlushReceipt` | The idempotent flush receipt row. Bookkeeping for the flusher. |
 | `AuroraMeter.Storage.Ecto` | The bundled adapter. Configure it by name; the callbacks are section 2. |
 | `AuroraMeter.Store` | Owns the ETS tables and the pending flush batch. |

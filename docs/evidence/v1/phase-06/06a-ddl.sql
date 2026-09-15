@@ -1,0 +1,174 @@
+-- Aurora Meter core schema version 9, as the database holds it.
+-- Captured by tmp/v1/06a-ddl/capture.exs against the migrated test database.
+-- Postgres: PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+-- Captured: 2026-09-15T13:19:54.781137Z
+--
+-- Three tables are new in version 9 (lots, allocations, recurrences) and two
+-- are altered (balances, transactions). Every column, constraint and index of
+-- all five is printed, so the altered tables can be read whole rather than as
+-- a diff nobody can check.
+
+-- ============================================================
+-- aurora_meter_credit_lots
+-- ============================================================
+-- columns: name | type | nullable | default | identity | generation
+--   id | uuid | null=NO | default=gen_random_uuid() | identity=NO | -
+--   tenant_key | character varying | null=NO | default=- | identity=NO | -
+--   grant_transaction_id | uuid | null=NO | default=- | identity=NO | -
+--   reference | character varying | null=NO | default=- | identity=NO | -
+--   category | character varying | null=NO | default=- | identity=NO | -
+--   amount | bigint | null=NO | default=- | identity=NO | -
+--   available | bigint | null=NO | default=0 | identity=NO | -
+--   reserved | bigint | null=NO | default=0 | identity=NO | -
+--   consumed | bigint | null=NO | default=0 | identity=NO | -
+--   reversed | bigint | null=NO | default=0 | identity=NO | -
+--   expired | bigint | null=NO | default=0 | identity=NO | -
+--   granted_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   expires_at | timestamp without time zone | null=YES | default=- | identity=NO | -
+--   source | jsonb | null=NO | default='{}'::jsonb | identity=NO | -
+--   state | character varying | null=NO | default='open'::character varying | identity=NO | -
+--   inserted_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   updated_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   seq | bigint | null=NO | default=- | identity=YES | ALWAYS
+-- constraints: name | type | validated | definition
+--   aurora_meter_credit_lots_amount_check | c | valid=true | CHECK ((amount > 0))
+--   aurora_meter_credit_lots_available_check | c | valid=true | CHECK ((available >= 0))
+--   aurora_meter_credit_lots_category_check | c | valid=true | CHECK (((category)::text = ANY ((ARRAY['paid'::character varying, 'promotional'::character varying, 'adjustment'::character varying])::text[])))
+--   aurora_meter_credit_lots_conservation_check | c | valid=true | CHECK ((((((available + reserved) + consumed) + reversed) + expired) = amount))
+--   aurora_meter_credit_lots_consumed_check | c | valid=true | CHECK ((consumed >= 0))
+--   aurora_meter_credit_lots_expired_check | c | valid=true | CHECK ((expired >= 0))
+--   aurora_meter_credit_lots_grant_fkey | f | valid=true | FOREIGN KEY (grant_transaction_id) REFERENCES aurora_meter_credit_transactions(id) ON DELETE RESTRICT
+--   aurora_meter_credit_lots_pkey | p | valid=true | PRIMARY KEY (id)
+--   aurora_meter_credit_lots_reserved_check | c | valid=true | CHECK ((reserved >= 0))
+--   aurora_meter_credit_lots_reversed_check | c | valid=true | CHECK ((reversed >= 0))
+--   aurora_meter_credit_lots_state_check | c | valid=true | CHECK (((state)::text =
+CASE
+    WHEN (reversed = amount) THEN 'reversed'::text
+    WHEN ((available = 0) AND (reserved = 0) AND (expired > 0)) THEN 'expired'::text
+    WHEN ((available = 0) AND (reserved = 0)) THEN 'exhausted'::text
+    ELSE 'open'::text
+END))
+-- indexes:
+--   aurora_meter_credit_lots_expiry_index: CREATE INDEX aurora_meter_credit_lots_expiry_index ON public.aurora_meter_credit_lots USING btree (tenant_key, expires_at) WHERE (((state)::text = 'open'::text) AND (expires_at IS NOT NULL))
+--   aurora_meter_credit_lots_grant_index: CREATE UNIQUE INDEX aurora_meter_credit_lots_grant_index ON public.aurora_meter_credit_lots USING btree (tenant_key, grant_transaction_id)
+--   aurora_meter_credit_lots_pkey: CREATE UNIQUE INDEX aurora_meter_credit_lots_pkey ON public.aurora_meter_credit_lots USING btree (id)
+--   aurora_meter_credit_lots_seq_index: CREATE UNIQUE INDEX aurora_meter_credit_lots_seq_index ON public.aurora_meter_credit_lots USING btree (seq)
+--   aurora_meter_credit_lots_source_intent_index: CREATE INDEX aurora_meter_credit_lots_source_intent_index ON public.aurora_meter_credit_lots USING btree (((source ->> 'payment_intent_id'::text))) WHERE jsonb_exists(source, 'payment_intent_id'::text)
+--   aurora_meter_credit_lots_spend_index: CREATE INDEX aurora_meter_credit_lots_spend_index ON public.aurora_meter_credit_lots USING btree (tenant_key, state, category, expires_at, granted_at, seq)
+
+-- ============================================================
+-- aurora_meter_credit_allocations
+-- ============================================================
+-- columns: name | type | nullable | default | identity | generation
+--   id | uuid | null=NO | default=gen_random_uuid() | identity=NO | -
+--   tenant_key | character varying | null=NO | default=- | identity=NO | -
+--   lot_id | uuid | null=NO | default=- | identity=NO | -
+--   transaction_id | uuid | null=NO | default=- | identity=NO | -
+--   kind | character varying | null=NO | default=- | identity=NO | -
+--   from_bucket | character varying | null=NO | default=- | identity=NO | -
+--   to_bucket | character varying | null=NO | default=- | identity=NO | -
+--   amount | bigint | null=NO | default=- | identity=NO | -
+--   inserted_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   seq | bigint | null=NO | default=- | identity=YES | ALWAYS
+-- constraints: name | type | validated | definition
+--   aurora_meter_credit_allocations_amount_check | c | valid=true | CHECK ((amount > 0))
+--   aurora_meter_credit_allocations_from_bucket_check | c | valid=true | CHECK (((from_bucket)::text = ANY ((ARRAY['available'::character varying, 'reserved'::character varying, 'consumed'::character varying, 'reversed'::character varying, 'expired'::character varying])::text[])))
+--   aurora_meter_credit_allocations_kind_check | c | valid=true | CHECK (((kind)::text = ANY ((ARRAY['reserve'::character varying, 'unreserve'::character varying, 'consume'::character varying, 'expire'::character varying, 'reverse'::character varying, 'restore'::character varying])::text[])))
+--   aurora_meter_credit_allocations_lot_fkey | f | valid=true | FOREIGN KEY (lot_id) REFERENCES aurora_meter_credit_lots(id) ON DELETE RESTRICT
+--   aurora_meter_credit_allocations_movement_check | c | valid=true | CHECK (((from_bucket)::text <> (to_bucket)::text))
+--   aurora_meter_credit_allocations_pkey | p | valid=true | PRIMARY KEY (id)
+--   aurora_meter_credit_allocations_to_bucket_check | c | valid=true | CHECK (((to_bucket)::text = ANY ((ARRAY['available'::character varying, 'reserved'::character varying, 'consumed'::character varying, 'reversed'::character varying, 'expired'::character varying])::text[])))
+--   aurora_meter_credit_allocations_transaction_fkey | f | valid=true | FOREIGN KEY (transaction_id) REFERENCES aurora_meter_credit_transactions(id) ON DELETE RESTRICT
+-- indexes:
+--   aurora_meter_credit_allocations_lot_seq_index: CREATE INDEX aurora_meter_credit_allocations_lot_seq_index ON public.aurora_meter_credit_allocations USING btree (lot_id, seq)
+--   aurora_meter_credit_allocations_pkey: CREATE UNIQUE INDEX aurora_meter_credit_allocations_pkey ON public.aurora_meter_credit_allocations USING btree (id)
+--   aurora_meter_credit_allocations_seq_index: CREATE UNIQUE INDEX aurora_meter_credit_allocations_seq_index ON public.aurora_meter_credit_allocations USING btree (seq)
+--   aurora_meter_credit_allocations_tenant_seq_index: CREATE INDEX aurora_meter_credit_allocations_tenant_seq_index ON public.aurora_meter_credit_allocations USING btree (tenant_key, seq)
+--   aurora_meter_credit_allocations_transaction_id_index: CREATE INDEX aurora_meter_credit_allocations_transaction_id_index ON public.aurora_meter_credit_allocations USING btree (transaction_id)
+
+-- ============================================================
+-- aurora_meter_credit_recurrences
+-- ============================================================
+-- columns: name | type | nullable | default | identity | generation
+--   id | uuid | null=NO | default=gen_random_uuid() | identity=NO | -
+--   tenant_key | character varying | null=NO | default=- | identity=NO | -
+--   key | character varying | null=NO | default=- | identity=NO | -
+--   policy | jsonb | null=NO | default='{}'::jsonb | identity=NO | -
+--   granted_transaction_id | uuid | null=YES | default=- | identity=NO | -
+--   rollover_from_id | uuid | null=YES | default=- | identity=NO | -
+--   period_start | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   state | character varying | null=NO | default='granted'::character varying | identity=NO | -
+--   inserted_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+-- constraints: name | type | validated | definition
+--   aurora_meter_credit_recurrences_grant_fkey | f | valid=true | FOREIGN KEY (granted_transaction_id) REFERENCES aurora_meter_credit_transactions(id) ON DELETE RESTRICT
+--   aurora_meter_credit_recurrences_pkey | p | valid=true | PRIMARY KEY (id)
+--   aurora_meter_credit_recurrences_rollover_fkey | f | valid=true | FOREIGN KEY (rollover_from_id) REFERENCES aurora_meter_credit_recurrences(id) ON DELETE RESTRICT
+--   aurora_meter_credit_recurrences_state_check | c | valid=true | CHECK (((state)::text = ANY ((ARRAY['granted'::character varying, 'issued_and_expired'::character varying])::text[])))
+-- indexes:
+--   aurora_meter_credit_recurrences_key_index: CREATE UNIQUE INDEX aurora_meter_credit_recurrences_key_index ON public.aurora_meter_credit_recurrences USING btree (tenant_key, key)
+--   aurora_meter_credit_recurrences_pkey: CREATE UNIQUE INDEX aurora_meter_credit_recurrences_pkey ON public.aurora_meter_credit_recurrences USING btree (id)
+--   aurora_meter_credit_recurrences_tenant_key_period_start_index: CREATE INDEX aurora_meter_credit_recurrences_tenant_key_period_start_index ON public.aurora_meter_credit_recurrences USING btree (tenant_key, period_start)
+
+-- ============================================================
+-- aurora_meter_credit_balances
+-- ============================================================
+-- columns: name | type | nullable | default | identity | generation
+--   id | uuid | null=NO | default=gen_random_uuid() | identity=NO | -
+--   tenant_key | character varying | null=NO | default=- | identity=NO | -
+--   balance | bigint | null=NO | default=0 | identity=NO | -
+--   held | bigint | null=NO | default=0 | identity=NO | -
+--   promotional | bigint | null=NO | default=0 | identity=NO | -
+--   low_balance_threshold | bigint | null=YES | default=- | identity=NO | -
+--   currency | character varying | null=NO | default='usd'::character varying | identity=NO | -
+--   inserted_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   updated_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   debt | bigint | null=NO | default=0 | identity=NO | -
+--   expired | bigint | null=NO | default=0 | identity=NO | -
+--   lots_enabled_at | timestamp without time zone | null=YES | default=- | identity=NO | -
+--   projection_checked_at | timestamp without time zone | null=YES | default=- | identity=NO | -
+--   low_balance_crossing_id | uuid | null=YES | default=- | identity=NO | -
+-- constraints: name | type | validated | definition
+--   aurora_meter_credit_balances_debt_check | c | valid=true | CHECK ((debt >= 0))
+--   aurora_meter_credit_balances_expired_check | c | valid=true | CHECK ((expired >= 0))
+--   aurora_meter_credit_balances_held_check | c | valid=true | CHECK ((held >= 0))
+--   aurora_meter_credit_balances_pkey | p | valid=true | PRIMARY KEY (id)
+--   aurora_meter_credit_balances_promotional_check | c | valid=true | CHECK ((promotional >= 0))
+-- indexes:
+--   aurora_meter_credit_balances_pkey: CREATE UNIQUE INDEX aurora_meter_credit_balances_pkey ON public.aurora_meter_credit_balances USING btree (id)
+--   aurora_meter_credit_balances_tenant_key_index: CREATE UNIQUE INDEX aurora_meter_credit_balances_tenant_key_index ON public.aurora_meter_credit_balances USING btree (tenant_key)
+
+-- ============================================================
+-- aurora_meter_credit_transactions
+-- ============================================================
+-- columns: name | type | nullable | default | identity | generation
+--   id | uuid | null=NO | default=gen_random_uuid() | identity=NO | -
+--   tenant_key | character varying | null=NO | default=- | identity=NO | -
+--   kind | character varying | null=NO | default=- | identity=NO | -
+--   category | character varying | null=YES | default=- | identity=NO | -
+--   amount | bigint | null=NO | default=- | identity=NO | -
+--   held_delta | bigint | null=NO | default=0 | identity=NO | -
+--   balance_after | bigint | null=NO | default=- | identity=NO | -
+--   held_after | bigint | null=NO | default=- | identity=NO | -
+--   reference | character varying | null=YES | default=- | identity=NO | -
+--   status | character varying | null=YES | default=- | identity=NO | -
+--   settled_amount | bigint | null=YES | default=- | identity=NO | -
+--   expires_at | timestamp without time zone | null=YES | default=- | identity=NO | -
+--   expired_at | timestamp without time zone | null=YES | default=- | identity=NO | -
+--   metadata | jsonb | null=NO | default='{}'::jsonb | identity=NO | -
+--   inserted_at | timestamp without time zone | null=NO | default=- | identity=NO | -
+--   promotional_after | bigint | null=YES | default=- | identity=NO | -
+--   seq | bigint | null=NO | default=- | identity=YES | ALWAYS
+--   updated_at | timestamp without time zone | null=YES | default=- | identity=NO | -
+--   hold_transaction_id | uuid | null=YES | default=- | identity=NO | -
+-- constraints: name | type | validated | definition
+--   aurora_meter_credit_transactions_pkey | p | valid=true | PRIMARY KEY (id)
+-- indexes:
+--   aurora_meter_credit_transactions_hold_index: CREATE INDEX aurora_meter_credit_transactions_hold_index ON public.aurora_meter_credit_transactions USING btree (hold_transaction_id) WHERE (hold_transaction_id IS NOT NULL)
+--   aurora_meter_credit_transactions_kind_reference_index: CREATE UNIQUE INDEX aurora_meter_credit_transactions_kind_reference_index ON public.aurora_meter_credit_transactions USING btree (kind, reference) WHERE (reference IS NOT NULL)
+--   aurora_meter_credit_transactions_pkey: CREATE UNIQUE INDEX aurora_meter_credit_transactions_pkey ON public.aurora_meter_credit_transactions USING btree (id)
+--   aurora_meter_credit_transactions_promo_expiry_index: CREATE INDEX aurora_meter_credit_transactions_promo_expiry_index ON public.aurora_meter_credit_transactions USING btree (expires_at) WHERE (((kind)::text = 'grant'::text) AND ((category)::text = 'promotional'::text) AND (expired_at IS NULL))
+--   aurora_meter_credit_transactions_seq_index: CREATE UNIQUE INDEX aurora_meter_credit_transactions_seq_index ON public.aurora_meter_credit_transactions USING btree (seq)
+--   aurora_meter_credit_transactions_tenant_key_inserted_at_index: CREATE INDEX aurora_meter_credit_transactions_tenant_key_inserted_at_index ON public.aurora_meter_credit_transactions USING btree (tenant_key, inserted_at)
+--   aurora_meter_credit_transactions_tenant_seq_index: CREATE INDEX aurora_meter_credit_transactions_tenant_seq_index ON public.aurora_meter_credit_transactions USING btree (tenant_key, seq)
+--   aurora_meter_pending_holds_index: CREATE INDEX aurora_meter_pending_holds_index ON public.aurora_meter_credit_transactions USING btree (inserted_at) WHERE (((kind)::text = 'hold'::text) AND ((status)::text = 'pending'::text))
+

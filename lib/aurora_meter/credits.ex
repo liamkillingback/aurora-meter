@@ -225,8 +225,20 @@ defmodule AuroraMeter.Credits do
 
   @doc """
   Whether a hold or debit of `amount` would currently be accepted: the
-  available balance plus `:credits_overdraft_tolerance` covers it. Advisory —
+  spendable balance plus `:credits_overdraft_tolerance` covers it. Advisory:
   `hold/4` and `debit/4` re-check under the row lock.
+
+  Spendable is `balance - held` on a wallet that has not been cut over to
+  credit lots. On one that has, it is the sum of the lots that are still
+  eligible to be spent, less any `debt`, and the two differences are
+  deliberate:
+
+    * credit whose `expires_at` has passed is not spendable, even though the
+      expiry sweep has not reached it yet. In 0.4.0 it stayed spendable until
+      the next sweep, which made expiry a race rather than bookkeeping.
+    * a wallet that owes money cannot spend until an incoming grant has repaid
+      the debt. `hold/4` and `debit/4` follow, so both refuse with
+      `:insufficient_credits` while `debt` is outstanding.
 
   ## Examples
 
@@ -236,7 +248,11 @@ defmodule AuroraMeter.Credits do
   """
   @spec sufficient?(term(), integer()) :: boolean()
   def sufficient?(tenant, amount) when is_integer(amount),
-    do: available(tenant) + Config.credits_overdraft_tolerance() >= amount
+    do:
+      tenant
+      |> Tenant.to_key()
+      |> Ledger.spendable()
+      |> Kernel.+(Config.credits_overdraft_tolerance()) >= amount
 
   @doc """
   Credits `amount` micro-dollars to `tenant`.
@@ -250,6 +266,12 @@ defmodule AuroraMeter.Credits do
     * `:category` — `:paid` (default), `:promotional` or `:adjustment`.
     * `:expires_at` — `DateTime`; promotional grants only.
     * `:metadata` — a map stored on the entry.
+    * `:source`: a map naming where the money came from, stored on the credit
+      lot this grant creates. Ignored on a wallet that has not been cut over to
+      lots. The keys Aurora Meter reads are `"payment_intent_id"` (what a refund
+      finds the lots it may reverse by), `"checkout_session_id"`, `"promotion"`,
+      `"recurrence_key"`, `"plan_id"` and `"plan_version"`; anything else is
+      carried and not interpreted.
 
   ## Examples
 
@@ -668,7 +690,12 @@ defmodule AuroraMeter.Credits do
     query =
       from(t in CreditTransaction,
         where: t.tenant_key == ^tenant_key and t.kind in ^kinds,
-        order_by: [desc: t.inserted_at],
+        # `seq` and not `inserted_at`: the ledger's account of its own order
+        # cannot rest on a wall clock that steps backwards (L20, X59, X100).
+        # `:before` still filters on `inserted_at`, which is the documented
+        # option and is a filter rather than a keyset cursor; 06c owns the
+        # keyset form (L8).
+        order_by: [desc: t.seq],
         limit: ^limit
       )
 

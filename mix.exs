@@ -277,6 +277,7 @@ defmodule AuroraMeter.MixProject do
         "AuroraMeter.Subscriptions.apply_due_transitions/1",
         "AuroraMeter.BootChecks",
         "AuroraMeter.Config.Schema",
+        "AuroraMeter.Credits.Allocator",
         "AuroraMeter.Credits.Ledger",
         "AuroraMeter.Credits.Promotions",
         "AuroraMeter.Credits.Reconciliation",
@@ -290,6 +291,7 @@ defmodule AuroraMeter.MixProject do
         "AuroraMeter.Migration.V6",
         "AuroraMeter.Migration.V7",
         "AuroraMeter.Migration.V8",
+        "AuroraMeter.Migration.V9",
         "AuroraMeter.Schema.FlushReceipt",
         # `AuroraMeter.Retention` explains the receipt rule by naming the
         # function that writes the receipt, which is the only way a reader can
@@ -401,6 +403,7 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Cluster,
         AuroraMeter.Config.Schema,
         AuroraMeter.Counter,
+        AuroraMeter.Credits.Allocator,
         AuroraMeter.Credits.Ledger,
         AuroraMeter.Credits.Promotions,
         AuroraMeter.Credits.Reconciliation,
@@ -417,6 +420,7 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Migration.V6,
         AuroraMeter.Migration.V7,
         AuroraMeter.Migration.V8,
+        AuroraMeter.Migration.V9,
         AuroraMeter.Schema.FlushReceipt,
         AuroraMeter.Storage.Ecto,
         AuroraMeter.Store,
