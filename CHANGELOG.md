@@ -13,6 +13,28 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 
 ### Added
 
+- **`AuroraMeter.Operations`**: pause, resume and cursors for every scheduled
+  operation, free and with no Oban reference in it, so a host running Quantum or
+  a plain timer gets the same controls.
+  `AuroraMeter.Operations.pause("credit_expiry:global")` stops a sweep at its
+  next batch boundary; `run_batches/3` is the batch loop both packages' workers
+  run, and it reads the pause before every batch, keeps the cursor in
+  `aurora_meter_checkpoints` rather than in a job argument, and lets a per-item
+  failure be counted and stepped over.
+- **`AuroraMeter.Credits.expire_due/2`**: the expiry sweep, paged, with `:limit`
+  and `:after` and a report carrying the keyset cursor. `expire_due/0,1` are
+  unchanged.
+- **`mix aurora_meter.install --oban`**, which adds the `aurora_meter` queue, a
+  `Oban.Plugins.Cron` plugin and every entry from
+  `AuroraMeter.Oban.cron_entries/1` that is missing, and the
+  `AuroraMeter.Oban.validate!/1` call in `Application.start/2`. It changes no
+  value a host already set: a queue concurrency, a schedule chosen for one of
+  these workers, and the order of the plugins list all survive, and a second run
+  changes nothing. `--check-support` prints what this host resolves against the
+  declared floors and exits non-zero when something present is below one.
+  `--dry-run` is Igniter's own global switch.
+- **Telemetry `[:aurora_meter, :operations, :batch]`** per batch, with `items`
+  and `duration_ms`, and `name` and `result` in the metadata.
 - Durable events. `AuroraMeter.record/4` and `record_batch/2` validate and
   canonicalise at the facade and commit the event with its local totals in one
   transaction. PubSub and ETS hydration happen only after commit.
@@ -105,6 +127,14 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 
 ### Changed
 
+- `AuroraMeter.Oban.CreditExpiry` and `AuroraMeter.Oban.HoldReconciliation` run
+  bounded batches from a checkpointed cursor and **return the run's report**
+  rather than a bare count. A host that matched on `{:ok, n}` from `perform/1`
+  matches on `report.counts["expired"]` now. Both cancel with `{:cancel, :paused}`
+  when their operation is paused.
+- `AuroraMeter.Credits.expire_due/1` counts a grant whose own transaction failed
+  and carries on, rather than letting one grant fail the whole sweep. The grant
+  is still due and the next run examines it again.
 - `AuroraMeter.Clock` gained `db_now/0`. Comparisons against a persisted
   timestamp now take the database's clock, because a node clock and a database
   stamp are two clocks and comparing them is what blocker B01 was.

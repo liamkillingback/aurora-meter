@@ -766,20 +766,37 @@ anywhere: every scheduled entry point is idempotent on its own state instead.
 **Prerequisites.** The Ecto storage adapter. The host owns the scheduler; the core
 ships no job runner.
 
-**Known limits.** The core has no lease tokens and no checkpoints, so a long
-running scheduled operation that is interrupted restarts rather than resumes. The
-lease and checkpoint half of this invariant lives in Pro, whose workers run under
-Oban, and in phase 05. Nothing here promises that two schedulers cannot run
-concurrently; it promises that the effect is the same if they do.
+**Known limits.** Nothing here promises that two schedulers cannot run
+concurrently; it promises that the effect is the same if they do. The core has no
+lease tokens and will not grow any: a lease is a duration, and on this hardware
+the one clock every node shares steps backwards by up to 439 ms
+(`open-findings.md` X100), so a short lease cannot be trusted to order two
+instants. Exclusion, where it is needed at all, is a row lock or a session
+advisory lock, neither of which has a clock in it.
 
-The optional `AuroraMeter.Oban.*` workers add nothing to this. Each `perform/1`
-is one call to an operation and a mapping of its result; the worker opens no
-transaction, takes no lock and holds no state between runs, so two nodes running
-one worker is the same case as two callers of the operation. The `unique` option
-each worker declares is defence in depth: removing it on a copy of the expiry
-worker leaves the duplicate-run result unchanged, which is what
-`AuroraMeter.ObanConcurrencyTest` measures and records rather than claiming a
-pass for a layer nothing tested.
+The core does now have checkpoints. `AuroraMeter.Operations` keeps a cursor, a
+counter map and a pause flag per named operation in `aurora_meter_checkpoints`,
+and `AuroraMeter.Operations.run_batches/3` is the batch loop every core sweep
+runs: the pause is read before every batch, the cursor is read from the row and
+is never a job argument, and a per-item failure is counted and stepped over
+rather than failing the run.
+
+One window is left open deliberately and is worth stating where the guarantee is:
+**a crash between a batch's commit and its checkpoint write re-runs that batch.**
+The checkpoint is written as a statement of its own, outside the batch's
+transaction, so a rolled-back batch cannot roll back an unrelated cursor. Re-running
+a batch is safe only because every operation using the loop re-reads the thing it
+is about to change under that row's own lock, and a later operation whose effects
+were not idempotent could not use this loop.
+
+The optional `AuroraMeter.Oban.*` workers add no guarantee of their own. Each
+`perform/1` runs bounded batches of an operation that is already idempotent; the
+worker opens no transaction, takes no lock and holds no state between runs, so
+two nodes running one worker is the same case as two callers of the operation.
+The `unique` option each worker declares is defence in depth: removing it on a
+copy of the expiry worker leaves the duplicate-run result unchanged, which is
+what `AuroraMeter.ObanConcurrencyTest` measures and records rather than claiming
+a pass for a layer nothing tested.
 
 `AuroraMeter.Credits.reconcile_holds/1` has no lease on a hold on purpose. A lease
 would let a crashed reconciler leave a hold nothing could reconcile until a second
@@ -803,8 +820,19 @@ nothing and the next run asks again.
 - `AuroraMeter.ObanConcurrencyTest` / `test I16 two CreditExpiry runs on independent connections expire each grant once`
 - `AuroraMeter.ObanConcurrencyTest` / `test I16 the CreditExpiry run that loses the grant row lock expires nothing`
 - `AuroraMeter.ObanConcurrencyTest` / `test I16 the same is true with Oban's uniqueness removed, so uniqueness is not what answers`
-- PLANNED (05c): `AuroraMeter.SchedulingTest` / `test I16 duplicate runs from two schedulers produce one effect`
-- PLANNED (05c): `AuroraMeter.SchedulingTest` / `test I16 a resumed operation restarts at its checkpoint after a kill`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry processes at most batch_size grants per batch and records a cursor`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry killed between batches resumes at the checkpoint without skipping work`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry re-processes one batch when killed between the batch commit and the checkpoint write, with no second effect`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 a rewound cursor re-examines committed work and the ledger refuses it, not the cursor`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry cancels with :paused and continues from the cursor after resume`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry counts a grant the ledger refuses and expires the ones before it`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 CreditExpiry counts a grant whose transaction raises, advances past it, and expires the rest`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 an expire entry that sorts before its own grant is counted, not fatal`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 HoldReconciliation pages with a cursor and finishes the scan`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 HoldReconciliation cancels with :paused within one batch`
+- `AuroraMeter.ObanJobControlsTest` / `test I16 the cutoff is pinned across the pages of one scan`
+- PLANNED (06d): `AuroraMeter.ObanJobControlsTest` / `test I16 RecurringGrants resumes at its checkpoint after a kill`
+- PLANNED (07b): `AuroraMeter.ObanJobControlsTest` / `test I16 PlanTransitions resumes at its checkpoint after a kill`
 
 **Evidence.** `docs/evidence/v1/phase-05/i16.md`
 

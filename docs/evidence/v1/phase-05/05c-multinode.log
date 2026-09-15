@@ -1,0 +1,55 @@
+===== run 1 =====
+  before                          %{expiries: 0, unexpired_grants: 24}
+  node A run                      {:"am05c_a@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 24, \"expired\" => 22, \"failed\" => 0, \"skipped\" => 2}, batches: 4}}"}
+  node B run                      {:"am05c_b@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 23, \"expired\" => 2, \"failed\" => 0, \"skipped\" => 21}, batches: 3}}"}
+  after                           %{expiries: 24, unexpired_grants: 0}
+  unique_rows: 1,
+  control_rows: 2,
+  expiry: %{expiries: 24, unexpired_grants: 0},
+  sweeper_rows: 1
+[mixlane] pro exit=0 started=2026-09-15T07:31:31Z finished=2026-09-15T07:31:34Z
+exit=0 finished_utc=2026-09-15T07:31:34Z
+===== run 2 =====
+  before                          %{expiries: 0, unexpired_grants: 24}
+  node A run                      {:"am05c_a@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 24, \"expired\" => 22, \"failed\" => 0, \"skipped\" => 2}, batches: 4}}"}
+  node B run                      {:"am05c_b@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 23, \"expired\" => 2, \"failed\" => 0, \"skipped\" => 21}, batches: 3}}"}
+  after                           %{expiries: 24, unexpired_grants: 0}
+  unique_rows: 1,
+  control_rows: 2,
+  expiry: %{expiries: 24, unexpired_grants: 0},
+  sweeper_rows: 1
+[mixlane] pro exit=0 started=2026-09-15T07:31:34Z finished=2026-09-15T07:31:37Z
+exit=0 finished_utc=2026-09-15T07:31:37Z
+===== run 3 =====
+  before                          %{expiries: 0, unexpired_grants: 24}
+  node A run                      {:"am05c_a@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 24, \"expired\" => 22, \"failed\" => 0, \"skipped\" => 2}, batches: 4}}"}
+  node B run                      {:"am05c_b@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 23, \"expired\" => 2, \"failed\" => 0, \"skipped\" => 21}, batches: 3}}"}
+  after                           %{expiries: 24, unexpired_grants: 0}
+  unique_rows: 1,
+  control_rows: 2,
+  expiry: %{expiries: 24, unexpired_grants: 0},
+  sweeper_rows: 1
+[mixlane] pro exit=0 started=2026-09-15T07:31:37Z finished=2026-09-15T07:31:41Z
+exit=0 finished_utc=2026-09-15T07:31:41Z
+===== run 4 =====
+  before                          %{expiries: 0, unexpired_grants: 24}
+  node A run                      {:"am05c_a@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 24, \"expired\" => 22, \"failed\" => 0, \"skipped\" => 2}, batches: 4}}"}
+  node B run                      {:"am05c_b@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 23, \"expired\" => 2, \"failed\" => 0, \"skipped\" => 21}, batches: 3}}"}
+  after                           %{expiries: 24, unexpired_grants: 0}
+  unique_rows: 1,
+  control_rows: 2,
+  expiry: %{expiries: 24, unexpired_grants: 0},
+  sweeper_rows: 1
+[mixlane] pro exit=0 started=2026-09-15T07:31:41Z finished=2026-09-15T07:31:44Z
+exit=0 finished_utc=2026-09-15T07:31:44Z
+===== run 5 =====
+  before                          %{expiries: 0, unexpired_grants: 24}
+  node A run                      {:"am05c_a@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 24, \"expired\" => 22, \"failed\" => 0, \"skipped\" => 2}, batches: 4}}"}
+  node B run                      {:"am05c_b@DESKTOP-8R659B3", "{:ok, %{stopped: :complete, cursor: nil, counts: %{\"examined\" => 23, \"expired\" => 2, \"failed\" => 0, \"skipped\" => 21}, batches: 3}}"}
+  after                           %{expiries: 24, unexpired_grants: 0}
+  unique_rows: 1,
+  control_rows: 2,
+  expiry: %{expiries: 24, unexpired_grants: 0},
+  sweeper_rows: 1
+[mixlane] pro exit=0 started=2026-09-15T07:31:44Z finished=2026-09-15T07:31:47Z
+exit=0 finished_utc=2026-09-15T07:31:47Z

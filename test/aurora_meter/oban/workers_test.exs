@@ -48,7 +48,7 @@ if Code.ensure_loaded?(Oban) do
       due_grant(tenant, "promo_a:#{tenant}")
       due_grant(tenant, "promo_b:#{tenant}")
 
-      assert CreditExpiry.perform(job()) == {:ok, 2}
+      assert {:ok, %{counts: %{"expired" => 2}}} = CreditExpiry.perform(job())
       before = expiries(tenant)
 
       # The only layer in play here is the one inside the operation. Oban's
@@ -56,17 +56,23 @@ if Code.ensure_loaded?(Oban) do
       # `perform/1` is called twice directly, so a green result can only come
       # from `expire_due/1` re-reading `expired_at` under the grant row's
       # `FOR UPDATE` (X125: name the layer that answered).
-      assert CreditExpiry.perform(job()) == {:ok, 0}
+      assert {:ok, %{counts: %{"expired" => 0, "examined" => 0}}} =
+               CreditExpiry.perform(job())
+
       assert expiries(tenant) == before
     end
 
     describe "CreditExpiry" do
-      test "expires every due grant and returns the count" do
+      test "expires every due grant and reports what it did" do
         tenant = unique_tenant("obanexp")
         due_grant(tenant, "promo_a:#{tenant}")
         due_grant(tenant, "promo_b:#{tenant}")
 
-        assert CreditExpiry.perform(job()) == {:ok, 2}
+        # Build unit 05c: the worker runs bounded batches and returns the run's
+        # report rather than a bare count, so the count is one field of it.
+        assert {:ok, report} = CreditExpiry.perform(job())
+        assert report.counts["expired"] == 2
+        assert report.stopped == :complete
         assert length(expiries(tenant)) == 2
 
         assert %{balance: 0, promotional: 0} =
@@ -103,10 +109,13 @@ if Code.ensure_loaded?(Oban) do
         assert DateTime.diff(AuroraMeter.Clock.now(), opts[:older_than], :second) in 595..605
       end
 
-      test "defaults to an hour, and carries no other option" do
+      test "defaults to an hour and a bounded page, and carries no other option" do
         opts = HoldReconciliation.options(%{})
 
-        assert Keyword.keys(opts) == [:older_than]
+        # 05c added `:limit`: an unbounded reconciliation page is exactly the
+        # thing job controls exist to stop.
+        assert Enum.sort(Keyword.keys(opts)) == [:limit, :older_than]
+        assert opts[:limit] == 200
         assert DateTime.diff(AuroraMeter.Clock.now(), opts[:older_than], :second) in 3595..3605
       end
 
@@ -121,10 +130,10 @@ if Code.ensure_loaded?(Oban) do
         # X181), which can disagree by milliseconds.
         assert {:ok, report} = HoldReconciliation.perform(job(%{"older_than_seconds" => -1}))
 
-        assert report.examined == 1
-        assert report.kept == 1
-        assert report.released == 0
-        assert report.settled == 0
+        assert report.counts["examined"] == 1
+        assert report.counts["kept"] == 1
+        assert report.counts["released"] == 0
+        assert report.counts["settled"] == 0
         assert %{held: 400_000, available: 600_000} = Credits.balance(tenant)
       end
 
@@ -137,7 +146,7 @@ if Code.ensure_loaded?(Oban) do
 
         TestConfig.with_config([{:aurora_meter, :credits_hold_reconciler, reconciler}], fn ->
           assert {:ok, report} = HoldReconciliation.perform(job(%{"older_than_seconds" => -1}))
-          assert report.released == 1
+          assert report.counts["released"] == 1
         end)
 
         assert %{held: 0, available: 1_000_000} = Credits.balance(tenant)

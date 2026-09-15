@@ -15,9 +15,18 @@ if Code.ensure_loaded?(Oban) do
 
     use Oban.Worker, queue: :aurora_meter, max_attempts: 3
 
+    # A module attribute rather than an alias, because an alias to the module
+    # this one is a copy of reads as though the two were interchangeable.
+    @guarded AuroraMeter.Oban.CreditExpiry
+
+    # It **delegates** rather than reimplementing, which is what makes it a
+    # control: the only difference from `AuroraMeter.Oban.CreditExpiry` is the
+    # missing `unique` on the line above. A copy of the body would drift from
+    # the original and then prove nothing about it (build unit 05c, which gave
+    # the worker its batch loop).
     @impl Oban.Worker
-    @spec perform(Oban.Job.t()) :: {:ok, term()} | {:error, term()}
-    def perform(%Oban.Job{}), do: AuroraMeter.Oban.result(AuroraMeter.Credits.expire_due())
+    @spec perform(Oban.Job.t()) :: {:ok, term()} | {:error, term()} | {:cancel, term()}
+    def perform(%Oban.Job{} = job), do: @guarded.perform(job)
   end
 
   defmodule AuroraMeter.ObanConcurrencyTest do
@@ -38,6 +47,7 @@ if Code.ensure_loaded?(Oban) do
     alias AuroraMeter.Credits
     alias AuroraMeter.Oban.CreditExpiry
     alias AuroraMeter.ObanConcurrencyTest.UnguardedExpiry
+    alias AuroraMeter.Operations
     alias AuroraMeter.Schema.CreditTransaction
     alias AuroraMeter.Test.Connections
     alias AuroraMeter.TestRepo
@@ -51,6 +61,9 @@ if Code.ensure_loaded?(Oban) do
 
       on_exit(fn ->
         :ok = Sandbox.checkout(TestRepo, sandbox: false)
+        # The checkpoint is installation-wide, so no `tenant_key LIKE` can reach
+        # it and `cleanup!/1` cannot either (build unit 05c).
+        Operations.clear_checkpoint(CreditExpiry.operation())
         Connections.cleanup!(tenant)
         Sandbox.checkin(TestRepo)
       end)
@@ -69,7 +82,7 @@ if Code.ensure_loaded?(Oban) do
       # Assert on the rows, not on what the tasks returned (docs/testing.md).
       assert length(expiries(tenant)) == 12
 
-      counted = for {:ok, n} <- results, do: n
+      counted = for {:ok, report} <- results, do: report.counts["expired"]
       assert length(counted) == 2
       assert Enum.sum(counted) == 12
 
@@ -190,7 +203,9 @@ if Code.ensure_loaded?(Oban) do
       }
     end
 
-    defp count!({:ok, n}) when is_integer(n), do: n
+    # 05c: the worker returns its run report, so the number this test is about
+    # is one field of it rather than the whole return.
+    defp count!({:ok, %{counts: counts}}), do: Map.fetch!(counts, "expired")
 
     # Postgres' own view of the rendezvous. A backend queued behind the grant
     # row's lock is reported by the server as waiting on a lock, which is how

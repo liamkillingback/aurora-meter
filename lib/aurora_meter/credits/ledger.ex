@@ -22,12 +22,17 @@ defmodule AuroraMeter.Credits.Ledger do
 
   import Ecto.Query
 
+  require Logger
+
   alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Credits.Promotions
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
   alias Phoenix.PubSub
+
+  @typedoc "What one page of the expiry sweep examined. Documented on `AuroraMeter.Credits`."
+  @type expiry_report :: AuroraMeter.Credits.expiry_report()
 
   @typep outcome :: %{
            txn: CreditTransaction.t(),
@@ -266,28 +271,122 @@ defmodule AuroraMeter.Credits.Ledger do
   @doc """
   Expires every promotional grant due at `now`, one transaction per grant.
   Returns the number of grants marked expired.
+
+  Unbounded: it examines every due grant in one pass. `expire_due/2` is the
+  bounded form.
   """
   @spec expire_due(DateTime.t()) :: {:ok, non_neg_integer()}
   def expire_due(now) do
-    repo = Config.repo()
+    {:ok, report} = expire_due(now, [])
+    {:ok, report.expired}
+  end
+
+  @doc """
+  One bounded page of the expiry sweep, from a keyset cursor.
+
+  Options:
+
+    * `:limit` - the most grants to examine. `nil` (the default) examines every
+      due grant, which is what `expire_due/1` does.
+    * `:after` - `{expires_at, id}` of the last grant the previous page
+      examined.
+
+  Returns `{:ok, report}` where `report` is `%{examined:, expired:, skipped:,
+  cursor:}`. `cursor` is `{expires_at, id}` when the page came back full and
+  `nil` when it did not, so a caller that pages knows whether more work is
+  waiting. `skipped` counts a grant the ledger refused: already expired (another
+  run reached it first) or wholly covered by a pending hold.
+
+  ## Two things the cursor is not
+
+  It is **not** a record of what was expired. A grant `expire_locked/3` refuses
+  with `:held` is counted in `skipped` and the cursor moves past it, so it is not
+  examined again *within this scan*. That is correct because the cursor is
+  discarded when the scan completes, and the next run recomputes the candidate
+  set from a fresh `now`, at which point the grant is a candidate again.
+
+  It is **not** a substitute for pinning `now`. The candidate set is defined by
+  a moving predicate (`expires_at <= now`), so a resumed scan that recomputed
+  `now` would be scanning a different set from the one its cursor came from. The
+  caller pins the instant: `AuroraMeter.Oban.CreditExpiry` stores it alongside
+  the cursor and passes the same one back for the whole scan.
+  """
+  @spec expire_due(DateTime.t(), keyword()) :: {:ok, expiry_report()}
+  def expire_due(now, opts) when is_list(opts) do
     now = DateTime.truncate(now, :second)
+    limit = Keyword.get(opts, :limit)
 
     due =
-      repo.all(
-        from(t in CreditTransaction,
-          where:
-            t.kind == ^:grant and t.category == ^:promotional and not is_nil(t.expires_at) and
-              t.expires_at <= ^now and is_nil(t.expired_at),
-          select: t.id
-        )
+      from(t in CreditTransaction,
+        where:
+          t.kind == ^:grant and t.category == ^:promotional and not is_nil(t.expires_at) and
+            t.expires_at <= ^now and is_nil(t.expired_at),
+        order_by: [asc: t.expires_at, asc: t.id],
+        select: {t.id, t.expires_at}
       )
+      |> expire_due_limit(limit)
+      |> expire_due_after(Keyword.get(opts, :after))
+      |> Config.repo().all()
 
-    count =
-      Enum.count(due, fn id ->
-        match?({:ok, _txn}, expire_grant(id, now))
+    report =
+      Enum.reduce(due, %{examined: 0, expired: 0, skipped: 0, failed: 0}, fn {id, _at}, acc ->
+        acc = %{acc | examined: acc.examined + 1}
+
+        case attempt_expiry(id, now) do
+          :expired -> %{acc | expired: acc.expired + 1}
+          :skipped -> %{acc | skipped: acc.skipped + 1}
+          :failed -> %{acc | failed: acc.failed + 1}
+        end
       end)
 
-    {:ok, count}
+    {:ok, Map.put(report, :cursor, expire_due_cursor(due, limit))}
+  end
+
+  # One grant failing is not the sweep failing. A database that cannot be
+  # reached for one tenant must not starve the grants behind it, so every way
+  # one transaction can end badly, a returned error, a raise from the driver, a
+  # pool checkout exit, is counted and the loop goes on. The grant is still due,
+  # so the next run examines it again; nothing was written.
+  #
+  # This is `Reconciliation.attempt/3`'s shape and `Alerts.check_all/0`'s, and
+  # the direction it fails in is the safe one: a grant that was not expired is
+  # money still with the tenant.
+  defp attempt_expiry(id, now) do
+    case expire_grant(id, now) do
+      {:ok, _txn} -> :expired
+      {:error, _reason} -> :skipped
+    end
+  catch
+    kind, reason ->
+      Logger.warning(
+        "AuroraMeter.Credits.expire_due/2: expiring grant #{inspect(id)} failed with " <>
+          Exception.format(kind, reason, __STACKTRACE__) <>
+          " The run continues; the grant is examined again next run."
+      )
+
+      :failed
+  end
+
+  defp expire_due_limit(query, nil), do: query
+  defp expire_due_limit(query, limit) when is_integer(limit), do: limit(query, ^limit)
+
+  defp expire_due_after(query, nil), do: query
+
+  defp expire_due_after(query, {%DateTime{} = at, id}),
+    do: where(query, [t], t.expires_at > ^at or (t.expires_at == ^at and t.id > ^id))
+
+  # `nil` when the page was not full, which is how a caller learns the scan
+  # reached its end. An unbounded call has no cursor at all: it examined
+  # everything.
+  defp expire_due_cursor(_due, nil), do: nil
+
+  defp expire_due_cursor(due, limit) do
+    if length(due) < limit do
+      nil
+    else
+      {id, expires_at} = List.last(due)
+      {expires_at, id}
+    end
   end
 
   @spec expire_grant(Ecto.UUID.t(), DateTime.t()) ::

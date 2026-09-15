@@ -22,13 +22,34 @@ if Code.ensure_loaded?(Oban) do
     | Key | Default | Meaning |
     |---|---|---|
     | `"older_than_seconds"` | `3600` | Only holds open longer than this are examined. |
-    | `"limit"` | `200` | The most holds one run examines. |
+    | `"limit"` | `200` | The most holds one **batch** examines. |
+    | `"max_batches"` | `10` | Batches one job runs before returning. |
     | `"reference_prefix"` | none | Narrow to one kind of work. |
     | `"tenant"` | none | Sweep one tenant. |
 
         %{"older_than_seconds" => 86_400, "reference_prefix" => "job:"}
         |> AuroraMeter.Oban.HoldReconciliation.new()
         |> Oban.insert()
+
+    **The cursor is never a job argument** (L05c-1). It lives in
+    `aurora_meter_checkpoints` under `"hold_reconciliation:global"`, so two jobs
+    for this worker read the same position rather than each carrying its own
+    stale copy.
+
+    ## Pausing
+
+        AuroraMeter.Operations.pause("hold_reconciliation:global")
+
+    The next batch boundary cancels the job with `{:cancel, :paused}`, leaving
+    the cursor where the last batch left it.
+
+    ## The cutoff is pinned for the length of a scan
+
+    `older_than_seconds` selects the candidate set, and the set moves as time
+    passes. A scan spanning several jobs stores the cutoff it started with in
+    its checkpoint beside the cursor, so a resumed cursor points into the set it
+    came from. When the scan completes, the cursor is cleared and the next run
+    takes a fresh cutoff.
 
     ## The cutoff is a duration, and it is an hours-scale one
 
@@ -72,15 +93,25 @@ if Code.ensure_loaded?(Oban) do
 
     alias AuroraMeter.Clock
     alias AuroraMeter.Credits
+    alias AuroraMeter.Operations
+
+    @operation "hold_reconciliation:global"
 
     @default_older_than_seconds 3_600
+    @default_limit 200
+    @default_max_batches 10
+
+    @doc "The checkpoint name this worker pauses and resumes under."
+    @spec operation() :: String.t()
+    def operation, do: @operation
 
     @doc """
-    Reconciles one page of pending holds and returns `{:ok, report}`.
+    Reconciles pending holds in bounded batches and returns `{:ok, report}`.
 
-    Returns `{:error, reason}` when the listing itself fails, which fails the
-    job and lets Oban retry it. It never raises on an operation error and never
-    matches on the report's shape: a later release may add keys to it.
+    `{:cancel, :paused}` when the operation is paused. `{:error, reason}` when
+    the listing itself fails, which fails the job and lets Oban retry it. It
+    never raises on an operation error and never matches on the report's shape:
+    a later release may add keys to it.
 
     ## Examples
 
@@ -91,9 +122,31 @@ if Code.ensure_loaded?(Oban) do
 
     """
     @impl Oban.Worker
-    @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:cancel, term()}
+    @spec perform(Oban.Job.t()) :: {:ok, term()} | {:error, term()} | {:cancel, term()}
     def perform(%Oban.Job{args: args}) do
-      AuroraMeter.Oban.result(Credits.reconcile_holds(options(args)))
+      max_batches = integer_arg(args, "max_batches", @default_max_batches)
+
+      @operation
+      |> Operations.run_batches([max_batches: max_batches], &batch(&1, args))
+      |> result()
+    end
+
+    defp batch(cursor, args) do
+      cutoff = pinned_cutoff(cursor, args)
+
+      opts =
+        args
+        |> options()
+        |> Keyword.put(:older_than, cutoff)
+        |> Keyword.put(:after, keyset(cursor))
+
+      case Credits.reconcile_holds(opts) do
+        {:ok, report} ->
+          {:ok, %{cursor: next_cursor(cutoff, report.cursor), counts: counts(report)}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
 
     @doc false
@@ -101,10 +154,73 @@ if Code.ensure_loaded?(Oban) do
     def options(args) when is_map(args) do
       seconds = Map.get(args, "older_than_seconds", @default_older_than_seconds)
 
-      [older_than: DateTime.add(Clock.now(), -seconds, :second)]
+      [older_than: DateTime.add(Clock.now(), -seconds, :second), limit: @default_limit]
       |> put("limit", Map.get(args, "limit"))
       |> put("reference_prefix", Map.get(args, "reference_prefix"))
       |> put("tenant", Map.get(args, "tenant"))
+    end
+
+    # `Clock.now/0` at the start of a scan, and the scan's own stored cutoff for
+    # every batch after that. `now/0` rather than `db_now/0` because the other
+    # side of the comparison is a hold row's `inserted_at`, which Ecto stamps
+    # from the node clock until 06a moves the ledger's own timestamps into the
+    # database (`open-findings.md` X181). Both sides come from the same clock,
+    # which is the rule.
+    defp pinned_cutoff(%{"older_than" => iso}, _args) when is_binary(iso) do
+      case DateTime.from_iso8601(iso) do
+        {:ok, at, _offset} -> at
+        _unparseable -> cutoff_from(nil)
+      end
+    end
+
+    defp pinned_cutoff(_absent, args), do: cutoff_from(Map.get(args, "older_than_seconds"))
+
+    # A negative value is accepted, and is not a mistake: it is a cutoff in the
+    # future, which is how a caller says "every open hold, including the one
+    # written a moment ago". 05a's tests use it and so does an operator draining
+    # a backlog on purpose.
+    defp cutoff_from(seconds) when is_integer(seconds),
+      do: DateTime.add(Clock.now(), -seconds, :second)
+
+    defp cutoff_from(_other),
+      do: DateTime.add(Clock.now(), -@default_older_than_seconds, :second)
+
+    defp keyset(%{"inserted_at" => at, "id" => id}) when is_binary(at) and is_binary(id) do
+      case DateTime.from_iso8601(at) do
+        {:ok, parsed, _offset} -> {parsed, id}
+        _unparseable -> nil
+      end
+    end
+
+    defp keyset(_absent), do: nil
+
+    defp next_cursor(_cutoff, nil), do: nil
+
+    defp next_cursor(cutoff, {inserted_at, id}) do
+      %{
+        "older_than" => DateTime.to_iso8601(cutoff),
+        "inserted_at" => DateTime.to_iso8601(inserted_at),
+        "id" => id
+      }
+    end
+
+    defp counts(report) do
+      Map.new(
+        [:examined, :kept, :released, :settled, :already_closed, :failed],
+        &{Atom.to_string(&1), Map.get(report, &1, 0)}
+      )
+    end
+
+    defp result({:ok, report}), do: {:ok, report}
+    defp result({:paused, _report}), do: {:cancel, :paused}
+    defp result({:error, reason}), do: {:error, reason}
+
+    # A job argument is an id or a bounded integer and nothing else (task 05.05).
+    defp integer_arg(args, key, default) do
+      case Map.get(args, key) do
+        value when is_integer(value) and value > 0 -> value
+        _absent_or_invalid -> default
+      end
     end
 
     defp put(opts, _key, nil), do: opts

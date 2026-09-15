@@ -24,8 +24,11 @@ defmodule AuroraMeter.Checkpoints do
 
   `pause/1` and `resume/1` set `"paused"` and `"idle"`. A running task reads
   `paused?/1` at a batch boundary and stops cleanly; it never interrupts a
-  batch. `AuroraMeter.Operations` (05c) is the documented operator surface over
-  the same rows.
+  batch. `AuroraMeter.Operations` is the documented operator surface over the
+  same rows, and is what a host and Aurora Meter Pro use; this module is the
+  table's own, and is what core's backfill, replay and migration tasks use
+  because their names predate the `"<operation>:<scope>"` shape `Operations`
+  enforces.
 
   ## The state column is not a lock
 
@@ -146,6 +149,67 @@ defmodule AuroraMeter.Checkpoints do
     repo(opts).query!(@upsert, [name, cursor, counts, state])
     :ok
   end
+
+  # Written for `AuroraMeter.Operations.put_checkpoint/2` (build unit 05c), and
+  # here rather than there because this module owns every statement against the
+  # table (`open-findings.md` X161: if a table has an owner, every writer goes
+  # through it).
+  #
+  # `state` appears in the INSERT and **not** in the DO UPDATE, which is the
+  # whole point of the statement. `put/5` overwrites `state`, so a worker using
+  # it to advance a cursor would clear a pause an operator had just set; `update/3`
+  # leaves `state` alone but refuses to create a row, so the first batch of a
+  # scan that has never run would have nowhere to write. This does both.
+  #
+  # The two booleans say whether the caller supplied the field at all, which
+  # `COALESCE` cannot express on its own: "write an empty cursor" and "leave the
+  # cursor alone" are different instructions and both arrive as an absence of
+  # content.
+  #
+  # **An empty cursor is `'{}'`, not `NULL`.** Version 7 declares `cursor`,
+  # `counts` and `state` all `NOT NULL` with defaults, while
+  # `architecture-map.md` section 4.1 and `schema-migration-map.md` S1 describe
+  # every one of them as nullable and say a `NULL` state means active. The
+  # shipped table is the authority and no unit is adding DDL to make the map
+  # true, so "this scan has no position" is the empty object here and
+  # `AuroraMeter.Operations` reads it back as `nil`.
+  @put_progress """
+  INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+  VALUES ($1, COALESCE($2, '{}'::jsonb), COALESCE($3, '{}'::jsonb), 'idle',
+          (clock_timestamp() AT TIME ZONE 'UTC'))
+  ON CONFLICT (name) DO UPDATE
+    SET cursor = CASE WHEN $4 THEN EXCLUDED.cursor ELSE aurora_meter_checkpoints.cursor END,
+        counts = CASE WHEN $5 THEN EXCLUDED.counts ELSE aurora_meter_checkpoints.counts END,
+        updated_at = EXCLUDED.updated_at
+  """
+
+  @doc """
+  Writes `cursor` and `counts` for `name` **without touching `state`**, creating
+  the row as `"idle"` when it does not exist.
+
+  Either field may be `:absent`, which leaves it as it is. A `cursor` of `nil`
+  is a value rather than an omission: it is how a run says its scan reached the
+  end, and it is stored as the empty object because the column is `NOT NULL`.
+
+  This is what a batch loop advancing a cursor uses, so that an operator pausing
+  the operation mid run cannot be clobbered by the batch that was already in
+  flight. Options: `:repo`.
+  """
+  @spec put_progress(String.t(), map() | nil | :absent, map() | :absent, keyword()) :: :ok
+  def put_progress(name, cursor, counts, opts \\ []) when is_binary(name) do
+    repo(opts).query!(@put_progress, [
+      name,
+      unless_absent(cursor),
+      unless_absent(counts),
+      cursor != :absent,
+      counts != :absent
+    ])
+
+    :ok
+  end
+
+  defp unless_absent(:absent), do: nil
+  defp unless_absent(value), do: value
 
   @doc """
   Merges the given fields into an existing row, leaving the others alone.

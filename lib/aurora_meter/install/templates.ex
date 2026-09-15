@@ -45,6 +45,85 @@ defmodule AuroraMeter.Install.Templates do
     """
   end
 
+  @doc """
+  The whole `config :my_app, Oban` block, for a host that has none.
+
+  Written as source rather than as a term so that the crontab reads the way a
+  person would write it, with the worker module as an alias rather than as
+  `:"Elixir.AuroraMeter.Oban.CreditExpiry"`.
+  """
+  @spec oban_config(module(), [{String.t(), module()}]) :: String.t()
+  def oban_config(repo, entries) do
+    """
+    [
+      repo: #{inspect(repo)},
+      queues: [aurora_meter: 5],
+      plugins: [{Oban.Plugins.Cron, crontab: #{crontab(entries)}}]
+    ]
+    """
+  end
+
+  @doc "The `Oban.Plugins.Cron` plugin literal carrying `entries`."
+  @spec cron_plugin([{String.t(), module()}]) :: String.t()
+  def cron_plugin(entries), do: "{Oban.Plugins.Cron, crontab: " <> crontab(entries) <> "}"
+
+  @doc "The crontab list literal for `entries`."
+  @spec crontab([{String.t(), module()}]) :: String.t()
+  def crontab([]), do: "[]"
+
+  def crontab(entries) do
+    "[\n" <>
+      Enum.map_join(entries, ",\n", fn {schedule, worker} ->
+        "  {#{inspect(schedule)}, #{inspect(worker)}}"
+      end) <> "\n]"
+  end
+
+  @doc "The startup validation line the installer adds to `Application.start/2`."
+  @spec validate_call(atom()) :: String.t()
+  def validate_call(otp_app) do
+    """
+    if Code.ensure_loaded?(AuroraMeter.Oban), do: AuroraMeter.Oban.validate!(otp_app: #{inspect(otp_app)})\
+    """
+  end
+
+  @doc "The same line, as a notice, when the installer could not place it."
+  @spec validate_manual(atom()) :: String.t()
+  def validate_manual(otp_app) do
+    """
+    Add this to your Application.start/2, before the children list:
+
+        #{validate_call(otp_app)}
+
+    It reads configuration rather than a running Oban instance, so it works
+    whether Oban starts before or after AuroraMeter. It raises
+    AuroraMeter.Oban.ConfigError listing every problem it found, rather than the
+    first one.
+    """
+  end
+
+  @doc "What the `--oban` switch did, and what it deliberately did not do."
+  @spec oban_notice([{String.t(), module()}]) :: String.t()
+  def oban_notice(entries) do
+    """
+    Aurora Meter's Oban workers are wired in.
+
+    #{Enum.map_join(entries, "\n", fn {schedule, worker} -> "  #{schedule}  #{inspect(worker)}" end)}
+
+    Nothing you had already set was changed. A queue concurrency you chose, a
+    schedule you chose for one of these workers, and the order of your plugins
+    are all as you wrote them; only absent entries were added. Run the task
+    again and it will report no changes.
+
+    Pause any of them without a deploy:
+
+        AuroraMeter.Operations.pause("credit_expiry:global")
+        AuroraMeter.Operations.resume("credit_expiry:global")
+
+    One case the validator cannot see: a second Oban instance with its own Cron
+    plugin. If you run two, check the crontabs against each other by hand.
+    """
+  end
+
   @doc "What to do after the installer has run."
   @spec quickstart(module(), module(), module()) :: String.t()
   def quickstart(repo, pubsub, plans) do

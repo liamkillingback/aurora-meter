@@ -98,6 +98,28 @@ defmodule AuroraMeter.Credits do
           cursor: {DateTime.t(), Ecto.UUID.t()} | nil
         }
 
+  @typedoc """
+  What one page of `expire_due/2` examined.
+
+  `skipped` counts a grant the ledger refused: it was expired by another run
+  first, or a pending hold covers the whole of what is left of it and taking it
+  now would push the balance below what the hold reserved. `failed` counts one
+  whose transaction ended badly, which is logged with the grant id and left for
+  the next run; one grant failing never fails the sweep, because a database
+  that cannot be reached for one tenant must not starve the grants behind it.
+
+  `cursor` is `{expires_at, id}` of the last grant examined when the page came
+  back full, and `nil` when it did not, so a caller that pages knows whether
+  more work is waiting. The map may gain keys in a later release.
+  """
+  @type expiry_report :: %{
+          examined: non_neg_integer(),
+          expired: non_neg_integer(),
+          skipped: non_neg_integer(),
+          failed: non_neg_integer(),
+          cursor: {DateTime.t(), Ecto.UUID.t()} | nil
+        }
+
   @typedoc "A tenant's balance snapshot, in micro-dollars."
   @type balance :: %{
           balance: integer(),
@@ -827,6 +849,39 @@ defmodule AuroraMeter.Credits do
   # share (`AuroraMeter.Clock`). It is already a database operation, so the
   # round trip costs nothing worth counting.
   def expire_due(now \\ Clock.db_now()), do: Ledger.expire_due(now)
+
+  @doc """
+  One bounded page of the expiry sweep, from a keyset cursor.
+
+  `expire_due/1` examines every due grant in one pass, which is fine for a small
+  installation and is unbounded work for a large one. This is the same sweep,
+  paged.
+
+  Options:
+
+    * `:limit` - the most grants to examine in this page. Unbounded when absent,
+      which makes `expire_due(now, [])` exactly `expire_due(now)` with a report
+      instead of a count.
+    * `:after` - `{expires_at, id}`, the cursor a previous page returned.
+
+  Returns `{:ok, report}`. `report.cursor` is `{expires_at, id}` when the page
+  came back full and `nil` when the scan reached its end.
+
+  **Pin `now` across the pages of one scan.** The candidate set is
+  `expires_at <= now`, which moves, so recomputing `now` between pages would
+  resume a cursor into a different set. `AuroraMeter.Oban.CreditExpiry` stores
+  the instant in its checkpoint beside the cursor and hands the same one back
+  until the scan finishes.
+
+  ## Examples
+
+      {:ok, report} = AuroraMeter.Credits.expire_due(AuroraMeter.Clock.db_now(), limit: 200)
+      report.cursor
+      #=> nil
+
+  """
+  @spec expire_due(DateTime.t(), keyword()) :: {:ok, expiry_report()}
+  def expire_due(now, opts) when is_list(opts), do: Ledger.expire_due(now, opts)
 
   @doc """
   Subscribes the calling process to `tenant`'s credit updates:

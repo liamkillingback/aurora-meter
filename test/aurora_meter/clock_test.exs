@@ -299,10 +299,18 @@ defmodule AuroraMeter.ClockTest do
       # decision anywhere subtracts these (03d, open-findings.md X100). It is
       # read once per run and once per phase, never per batch and never on a
       # metering call.
+      #
+      # `oban/credit_expiry.ex` reads it once per **scan**, to pin the instant
+      # the scan's candidate set is defined by, and then carries that instant in
+      # the checkpoint rather than re-reading it per batch. The other side of
+      # the comparison is a persisted `expires_at`, so the database's clock is
+      # the right one, and the worker is as far from the hot path as a module
+      # gets: it runs on a cron tick, never on a metering call (05c).
       allowed = [
         "lib/aurora_meter/clock.ex",
         "lib/aurora_meter/credits.ex",
         "lib/aurora_meter/events/replay.ex",
+        "lib/aurora_meter/oban/credit_expiry.ex",
         "lib/mix/tasks/aurora_meter.events.backfill.ex"
       ]
 

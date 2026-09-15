@@ -17,14 +17,55 @@ if Code.ensure_loaded?(Igniter) do
       * create a `MyApp.Plans` module with a `:free` and a `:pro` plan (never overwrites one you have)
       * generate the migration that delegates to `AuroraMeter.Migration`
 
-    Options: `--repo`, `--pubsub`, `--plans` (module names; all inferred when omitted).
+    Options: `--repo`, `--pubsub`, `--plans` (module names; all inferred when
+    omitted), `--oban` and `--check-support`.
+
+    ## `--oban`
+
+        mix aurora_meter.install --repo MyApp.Repo --oban
+
+    Wires the optional `AuroraMeter.Oban.*` workers into the host's own Oban
+    instance:
+
+      * `config :my_app, Oban` when it is absent, with the repo, an
+        `aurora_meter` queue and a `Oban.Plugins.Cron` plugin carrying
+        `AuroraMeter.Oban.cron_entries/1`;
+      * when it is present, the `aurora_meter` queue **only if absent**, the Cron
+        plugin **only if absent**, and each recommended crontab entry **only if
+        no entry already names that worker**;
+      * the `AuroraMeter.Oban.validate!/1` call in `Application.start/2`.
+
+    **It never edits a value you already set.** A queue concurrency you chose, a
+    schedule you chose, and the order of your plugins all survive untouched; an
+    entry whose worker is already scheduled is left exactly as written, whatever
+    its schedule. That is the rule, and it is why running the installer twice
+    changes nothing at all.
+
+    ## `--check-support`
+
+        mix aurora_meter.install --check-support
+
+    Prints what this host resolves against Aurora Meter's declared floors and
+    exits non-zero when something present is below one. It writes no file,
+    generates nothing, and **connects to no database**: a Postgres server
+    version can only be learned by asking the server, so the floor is printed
+    and the check is yours to run. See `AuroraMeter.Install.Support`.
+
+    ## `--dry-run`
+
+    `--dry-run` is Igniter's own global switch and needs no declaration here: it
+    prints the diff the task would apply and writes nothing. It works for this
+    task exactly as it works for every other Igniter task, including the
+    `--oban` work above.
 
     Without Igniter available the task falls back to generating the migration
-    and printing the remaining steps.
+    and printing the remaining steps; `--check-support` works there too.
     """
 
     use Igniter.Mix.Task
 
+    alias AuroraMeter.Install.Oban, as: InstallOban
+    alias AuroraMeter.Install.Support
     alias AuroraMeter.Install.Templates
     alias Igniter.Libs.Ecto, as: IgniterEcto
     alias Igniter.Project.Application, as: IgniterApp
@@ -35,8 +76,17 @@ if Code.ensure_loaded?(Igniter) do
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
         group: :aurora_meter,
-        example: "mix aurora_meter.install --repo MyApp.Repo",
-        schema: [repo: :string, pubsub: :string, plans: :string],
+        example: "mix aurora_meter.install --repo MyApp.Repo --oban",
+        # `dry_run` is deliberately absent: it is one of Igniter's global
+        # switches, already parsed and already implemented, and declaring it
+        # here would be a second flag with the same name.
+        schema: [
+          repo: :string,
+          pubsub: :string,
+          plans: :string,
+          oban: :boolean,
+          check_support: :boolean
+        ],
         aliases: [r: :repo]
       }
     end
@@ -44,6 +94,15 @@ if Code.ensure_loaded?(Igniter) do
     @impl Igniter.Mix.Task
     def igniter(igniter) do
       opts = igniter.args.options
+
+      if opts[:check_support] do
+        check_support(igniter)
+      else
+        install(igniter, opts)
+      end
+    end
+
+    defp install(igniter, opts) do
       prefix = IgniterModule.module_name_prefix(igniter)
 
       {igniter, repo} = resolve_repo(igniter, opts[:repo])
@@ -70,8 +129,49 @@ if Code.ensure_loaded?(Igniter) do
         body: Templates.migration_body(),
         on_exists: :skip
       )
+      |> maybe_oban(opts[:oban], repo)
       |> Igniter.add_notice(Templates.quickstart(repo, pubsub, plans))
     end
+
+    # -- --check-support -------------------------------------------------------
+
+    defp check_support(igniter) do
+      rows = Support.rows()
+      igniter = Igniter.add_notice(igniter, Support.report(rows))
+
+      if Support.supported?(rows) do
+        igniter
+      else
+        Igniter.add_issue(
+          igniter,
+          "Aurora Meter is not supported on this host: " <>
+            Enum.map_join(below_floor(rows), ", ", &"#{&1.name} #{&1.resolved} < #{&1.floor}")
+        )
+      end
+    end
+
+    defp below_floor(rows), do: Enum.filter(rows, &(&1.verdict == :below_floor))
+
+    # -- --oban ----------------------------------------------------------------
+
+    defp maybe_oban(igniter, true, repo), do: oban(igniter, repo)
+    defp maybe_oban(igniter, _absent, _repo), do: igniter
+
+    # The merge itself is `AuroraMeter.Install.Oban`'s, because Aurora Meter
+    # Pro's installer does exactly the same thing with its own entries and a
+    # copy of a hundred lines of Sourceror across a package boundary is a copy
+    # that will drift.
+    defp oban(igniter, repo) do
+      otp_app = IgniterApp.app_name(igniter)
+      entries = AuroraMeter.Oban.cron_entries()
+
+      igniter
+      |> InstallOban.wire(otp_app: otp_app, repo: repo, entries: entries)
+      |> InstallOban.validate_call(otp_app)
+      |> Igniter.add_notice(Templates.oban_notice(entries))
+    end
+
+    # -- the pre-existing work -------------------------------------------------
 
     defp resolve_repo(igniter, nil) do
       case IgniterEcto.select_repo(igniter, label: "Which repo should Aurora Meter use?") do
@@ -114,16 +214,34 @@ else
     Without it:
 
         mix aurora_meter.install -r MyApp.Repo
+
+    `--check-support` works here too, and is the same check: it prints what this
+    host resolves against Aurora Meter's floors and exits non-zero when
+    something present is below one.
     """
 
     use Mix.Task
 
+    alias AuroraMeter.Install.Support
     alias AuroraMeter.Install.Templates
 
     @impl Mix.Task
     def run(args) do
-      Mix.Task.run("aurora_meter.gen.migration", args)
-      Mix.shell().info(Templates.manual_steps())
+      if "--check-support" in args do
+        check_support()
+      else
+        Mix.Task.run("aurora_meter.gen.migration", args)
+        Mix.shell().info(Templates.manual_steps())
+      end
+    end
+
+    defp check_support do
+      rows = Support.rows()
+      Mix.shell().info(Support.report(rows))
+
+      unless Support.supported?(rows) do
+        Mix.raise("Aurora Meter is not supported on this host; see the report above.")
+      end
     end
   end
 end
