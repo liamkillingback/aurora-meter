@@ -1186,6 +1186,7 @@ per reason; the third is the migration killed, resumed and raced.
 - `AuroraMeter.CreditsLotMigrationTest` / `test I19 migration writes debt and expired and leaves the three legacy figures alone`
 - `AuroraMeter.CreditsLotMigrationTest` / `test I19 a shadow run reaches the same verdict as the real run that follows it`
 - `AuroraMeter.CreditsLotMigrationTest` / `test I19 a migrated wallet keeps answering the public credit API`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a recurring grant cannot reach a wallet the migration has yet to replay`
 - `AuroraMeter.CreditsLotMigrationPropertyTest` / `property I19 a generated legacy history replays into lots that reproduce its balance row`
 
 Refusals. A migration that cannot reproduce a wallet exactly must leave it
@@ -1202,6 +1203,7 @@ alone, and a refusal nobody can demonstrate is not a refusal:
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an expire row that names no grant blocks the wallet`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an expire row larger than the grant it names blocks the wallet`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test X261 an expiry that destroyed a grant a hold had reserved blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test X276 an expiry the legacy attribution over-counted because a hold blocked a spend`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a history no ordering can reconcile blocks rather than migrating wrong`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 every flag the fold raises is classified, and a blocking one halts the fold`
 - `AuroraMeter.CreditsLotMigrationTest` / `test I19 a blocked wallet keeps lots_enabled_at null, has no lots and records its reason`

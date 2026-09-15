@@ -1345,43 +1345,56 @@ defmodule AuroraMeter.Credits.LotMigration do
     end
   end
 
-  # **The legacy expiry guard is wallet wide, not per grant.**
-  # `Ledger.expire_locked/4` clamps by `max(balance - held, 0)`, which is the
-  # whole wallet's spendable figure, so when other grants cover the held amount
-  # it destroys a grant in full even though a live hold was reserving part of
-  # it. There is no lot assignment that reproduces such a row: expiring only
-  # the available part moves the balance by less than the row says, and
-  # expiring the reserved part as well moves `held`, which the row says did not
-  # move. So it blocks, under a flag of its own, because "a hold was reserving
-  # part of the grant your sweep destroyed" and "this row has been edited by
-  # hand" need different things from an operator.
+  # **An expiry can ask for more than its lot holds, and a hold is why.**
+  # The legacy ledger has no per-grant reservation at all: `held` is one number
+  # for the wallet. Two of its functions act on that missing idea and both
+  # produce an expire row the lots cannot reproduce.
   #
-  # Found by the generated-history property on its first run, off by exactly
-  # one micro-dollar: a 522,138 promotional grant, a one micro-dollar hold, and
-  # a sweep that expired all 522,138.
+  #   * `Ledger.expire_locked/4` clamps by `max(balance - held, 0)`, the whole
+  #     wallet's spendable figure, so when other grants cover the held amount it
+  #     destroys a grant in full although a live hold was reserving part of
+  #     **that** grant (finding X261).
+  #   * `Promotions.consume/3` gives a spend to the soonest-expiring grant with
+  #     `remaining > 0`, with no idea a hold has reserved it. The lot model
+  #     cannot spend a reservation, so it takes the spend from the **next**
+  #     grant, and the two attributions then differ by what was reserved. The
+  #     later expiry of that next grant asks for more than the lot has, and
+  #     that lot's own `reserved` is zero (finding X276).
+  #
+  # The bound is therefore the reservation **anywhere in the wallet**, not on
+  # this lot: a spend the lot model could not take where the legacy fold took
+  # it was blocked by a reservation somewhere, and that is the only way the two
+  # can disagree. Keying on `lot.reserved` alone called X276's wallet corrupt,
+  # which is the wrong thing to tell an operator: there is nothing to repair.
+  #
+  # Above that bound no reservation explains the gap, and `expire_over_lot`
+  # means what it says: this row does not belong to this grant.
   defp expired(acc, row, lot, amount) when amount >= 0 do
+    reserved = acc.book |> Enum.map(& &1.reserved) |> Enum.sum()
+
     cond do
       amount <= lot.available ->
         movements = expire_movements(lot.id, amount)
         {:ok, acc, %{movements: movements, debt_delta: 0, book: move(acc.book, movements)}}
 
-      amount <= lot.available + lot.reserved ->
-        {:flag, :expire_reserved_grant, expire_detail(row, lot, amount)}
+      amount <= lot.available + reserved ->
+        {:flag, :expire_reserved_grant, expire_detail(row, lot, amount, reserved)}
 
       true ->
-        {:flag, :expire_over_lot, expire_detail(row, lot, amount)}
+        {:flag, :expire_over_lot, expire_detail(row, lot, amount, reserved)}
     end
   end
 
   defp expired(_acc, row, _lot, amount),
     do: {:flag, :unsupported_row, %{kind: :expire, amount: amount, id: row.id}}
 
-  defp expire_detail(row, lot, amount) do
+  defp expire_detail(row, lot, amount, wallet_reserved) do
     %{
       reference: row.reference,
       amount: amount,
       available: lot.available,
       reserved: lot.reserved,
+      wallet_reserved: wallet_reserved,
       id: row.id
     }
   end

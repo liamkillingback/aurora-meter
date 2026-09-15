@@ -42,16 +42,24 @@ database has (null `hold_transaction_id`). The comparisons are:
 
 ## Results: seven fixed seeds, forty histories each
 
+Re-run at core `011ac34` after 06b was reopened at 06d's review. 06c changed
+`reverse/4` to write `kind: :reverse` and 06d added recurring grants, so a seed
+draws a different history from the one it drew when 06b first shipped; these are
+the current numbers and the earlier ones are kept below them.
+
 | Seed | compared | refused | reordered by `seq` | skipped |
 |---|---|---|---|---|
-| 0 | 28 | 13 | 0 | 0 |
+| 0 | 27 | 14 | 0 | 0 |
 | 1 | 29 | 12 | 0 | 0 |
-| 7 | 29 | 12 | 0 | 0 |
-| 42 | 22 | 19 | 0 | 0 |
+| 7 | 30 | 11 | 0 | 0 |
+| 42 | 21 | 20 | 0 | 0 |
 | 1337 | 31 | 10 | 0 | 0 |
 | 20260915 | 26 | 15 | 0 | 0 |
 | 424242 | 33 | 8 | 0 | 0 |
-| **total** | **198** | **89** | **0** | **0** |
+| **total** | **197** | **90** | **0** | **0** |
+
+At 06b's first hand-back, on core `6af77f9`: 198 compared, 89 refused, 0
+reordered, 0 skipped, over the same seven seeds.
 
 Each run's `compared` includes one from the negative-control test in the same
 file, so the property itself compared 191 generated histories and refused 89.
@@ -67,15 +75,24 @@ proved by named tests instead
 
 | Cause | Count | Finding |
 |---|---|---|
-| `promotional_divergence` raised by a `debit` | 32 | X263 |
+| `promotional_divergence` raised by a `debit` | 28 | X263 |
 | `promotional_divergence` raised by a `settle` | 17 | X263 |
-| `promotional_divergence` raised by a `grant` | 4 | X263 |
+| `promotional_divergence` raised by a `grant` | 3 | X263 |
 | `promotional_divergence` raised by a `release` | 1 | X263 |
-| `expire_reserved_grant` | 13 | X261 |
-| `reversal_took_reserved` | 13 | |
+| `promotional_divergence` raised by a `reverse` | 2 | X257 |
+| `expire_reserved_grant` | 18 | X261, X276 |
+| `reversal_took_reserved` | 12 | |
 | `hold_unbacked`, with `debt > 0` | 5 | X262 |
 | `reversal_exceeds_lots` | 4 | |
-| `promotional_divergence` raised by a `reverse` | **0** | X257 |
+
+Two changes from the first run are worth naming rather than leaving as noise.
+`expire_reserved_grant` rises from 13 to 18 because it now catches X276's shape,
+which the first run mis-filed as `expire_over_lot` and which failed the property
+outright when 06d's review re-ran it. And `promotional_divergence` raised by a
+`reverse`, which was **zero** in 280 histories on the first run, now appears
+twice: X257's refund clamp is real and rare, and 06c's `kind: :reverse` change
+is what let the generator reach it. X263 remains the common cause by a wide
+margin, 49 of 90.
 
 Every refusal the property accepts is named above with the finding that
 explains it, and anything else fails the property with the history that
@@ -84,7 +101,50 @@ says `debt > 0`: the other cause of that flag needs a non-zero overdraft
 tolerance, which this property does not configure, so it must never appear and
 would fail the run if it did.
 
-## What the generator found
+## What the generator found the second time
+
+**X276, at seed 1337, after eleven clean runs of the property.** An expire row
+one micro-dollar over its lot's `available`, with **nothing reserved on that
+lot**. The fold refused, which was right, and filed it as `expire_over_lot`,
+which was wrong: that flag tells an operator the row does not belong to the
+grant and to go and look at the data, and there is nothing to look at.
+
+The cause is the third instance of the one missing idea X261 and X263 are
+about. `Promotions.consume/3` gives a spend to the soonest-expiring grant with
+`remaining > 0` and has no idea a hold has reserved it; the lot model cannot
+spend a reservation, so it takes the spend from the **next** grant; the two
+attributions then differ by what was reserved, and the next grant's later
+expiry is over by exactly that much.
+
+Shrunk from 37 commands to six:
+
+    promotional 1          expiring first
+    promotional 10 USD     expiring later
+    paid 50 USD
+    hold 1                 reserves the whole of the first grant
+    debit 1                legacy attributes it to the first, the lots to the second
+    expire_due  x2         one sweep each, because two due in one pass is undefined (L19)
+
+**The paid grant is load bearing**, and that is the part worth keeping. Without
+other funds in the wallet the sweep's own `max(balance - held, 0)` clamp reduces
+the expire row by exactly the micro-dollar in dispute and the disagreement never
+reaches the log at all. It takes a wallet with money elsewhere for the legacy
+attribution to be written down, which is why the first shrink of this history
+did not reproduce and why five hand-written histories never found it.
+
+The fix is the bound, not the refusal: `expire_reserved_grant` is now bounded by
+the value reserved **anywhere in the wallet** rather than on the lot being
+expired, because a reservation elsewhere is precisely how the two attributions
+come apart. `expire_over_lot` keeps its meaning for a shortfall no reservation
+explains, and that discrimination is now asserted rather than inferred from the
+flag's name.
+
+**And `mix check` cannot see any of this.** The property draws a different
+history at whatever seed the run picks, so the whole suite was green at 1642
+passing while seed 1337 failed. `tmp/v1/06b-property-seeds.sh` is the run that
+sees it and it is not part of the gate.
+
+## What the generator found the first time
 
 **1. `expire_reserved_grant` (X261), on the first run of ten histories.** Off by
 exactly one micro-dollar: a 522,138 promotional grant, a one micro-dollar hold,
@@ -129,8 +189,8 @@ spent first, which is false the moment a hold has reserved some of it. The
 arithmetic is worked in `06b-blocked-catalogue.md`.
 
 **That is the most important number this unit produced.** Sixty seven of the
-eighty nine refusals are one of these two shapes, both caused by the legacy
-figures not knowing which grant a hold reserved. A wallet that has ever
+ninety refusals are one of these two shapes, both caused by the legacy figures
+not knowing which grant a hold reserved. A wallet that has ever
 combined promotional credit with a hold is likely to be unmigratable, and the
 cause is a defect in the legacy arithmetic that the lot model fixes rather than
 an ambiguity in the history.

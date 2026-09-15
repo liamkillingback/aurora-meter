@@ -25,6 +25,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
   alias AuroraMeter.Checkpoints
   alias AuroraMeter.Credits
   alias AuroraMeter.Credits.LotMigration
+  alias AuroraMeter.Credits.Recurrences
   alias AuroraMeter.Operations
   alias AuroraMeter.Schema.CreditAllocation
   alias AuroraMeter.Schema.CreditBalance
@@ -749,6 +750,36 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
 
     {:ok, fresh} = LotMigration.run(shadow: true, resume: false)
     assert first in Enum.map(fresh.reports, & &1.tenant_key)
+  end
+
+  test "I19 a recurring grant cannot reach a wallet the migration has yet to replay" do
+    # 06d writes recurring grants through the ordinary grant path, so they are
+    # invisible to this fold only because they refuse a wallet the allocator
+    # does not own. That is 06d's structural argument and this is the
+    # measurement of it: the gate answers `false` for exactly the wallets the
+    # migration replays, and `true` only after the cutover it performs.
+    allow_cutover!()
+    tenant = wallet(:paid_only)
+
+    rows =
+      TestRepo.aggregate(
+        from(t in CreditTransaction, where: t.tenant_key == ^tenant),
+        :count,
+        :id
+      )
+
+    refute Recurrences.lots?(tenant)
+    assert {:ok, summary} = Recurrences.run(tenant: tenant)
+    assert Map.get(summary.counts, "granted", 0) == 0
+
+    assert TestRepo.aggregate(
+             from(t in CreditTransaction, where: t.tenant_key == ^tenant),
+             :count,
+             :id
+           ) == rows
+
+    assert only(migrate(tenant)).state == :migrated
+    assert Recurrences.lots?(tenant)
   end
 
   test "I19 report-only re-reports a migrated wallet without demoting its verdict" do

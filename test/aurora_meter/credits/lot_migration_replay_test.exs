@@ -381,6 +381,45 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
 
     assert {:blocked, blocked} = fold(tenant)
     assert :expire_over_lot in flags(blocked)
+
+    # **The discrimination, asserted rather than left to the flag name.**
+    # `expire_reserved_grant` is bounded by the value reserved anywhere in the
+    # wallet, because a reservation is the only thing that can make the two
+    # attributions disagree (X261, X276). This row is over that bound by a wide
+    # margin, which is what "no reservation explains this" means and what keeps
+    # a hand-edited row from being filed as an ordinary attribution difference.
+    detail = Enum.find(blocked, &(&1.flag == :expire_over_lot)).detail
+    refute :expire_reserved_grant in flags(blocked)
+    assert detail.amount > detail.available + detail.wallet_reserved
+  end
+
+  test "X276 an expiry the legacy attribution over-counted because a hold blocked a spend" do
+    # The shrunk form of the 37 command history the generated-history property
+    # produced at seed 1337. Five commands, and the whole disagreement is one
+    # micro-dollar:
+    #
+    #   promotional 1 expiring first, promotional 10 USD expiring later,
+    #   a hold of 1 (which reserves the whole of the first grant),
+    #   a debit of 1, then the two sweeps.
+    #
+    # `Promotions.consume/3` gives the debit to the soonest-expiring grant with
+    # `remaining > 0`, which is the tiny one, because it has no idea a hold has
+    # reserved it. The lot model cannot spend a reservation, so it takes the
+    # debit from the 10 USD grant instead. When that grant expires, the legacy
+    # row says 10 USD and the lot holds 10 USD less one micro-dollar.
+    tenant = unique_tenant("lotmig")
+    LedgerFixtures.build!(:expiry_over_attribution, tenant)
+
+    assert {:blocked, blocked} = fold(tenant)
+    detail = Enum.find(blocked, &(&1.flag == :expire_reserved_grant)).detail
+
+    # The arithmetic, pinned. The shortfall is exactly one micro-dollar, this
+    # lot has nothing reserved, and the wallet does.
+    assert detail.amount == 10 * @dollar
+    assert detail.available == 10 * @dollar - 1
+    assert detail.reserved == 0
+    assert detail.wallet_reserved == 1
+    assert detail.amount == detail.available + detail.wallet_reserved
   end
 
   test "X261 an expiry that destroyed a grant a hold had reserved blocks the wallet" do

@@ -74,7 +74,7 @@ packages against one `_build` each.
 | `MIX_ENV=test mix run tmp/v1/06b-evidence.exs` | 0 | 14 migrated, 2 blocked | `06b-shadow.json`, `06b-migrate.json` |
 | `mix aurora_meter.credits.migrate_lots -r AuroraMeter.TestRepo --tenant <one wallet>` | **0** | shadow: 1 wallet, 3 lots and 2 allocations planned, lock 8 ms, nothing written | `logs/06b-mix-task.log` |
 | the same with `--no-shadow` | **1** | the X250 refusal printed in full, nothing read and nothing written, verified afterwards as `lots_enabled_at=nil lots=0 debt=0` | `logs/06b-mix-task.log` |
-| `tmp/v1/06b-property-seeds.sh` (the generated-history replay property, seven fixed seeds, 40 histories each) | 0 each | **198 compared, 89 refused, 0 reordered, 0 skipped** | `logs/06b-property-seeds.log` |
+| `tmp/v1/06b-property-seeds.sh` (the generated-history replay property, seven fixed seeds, 40 histories each) | 0 each | **197 compared, 90 refused, 0 reordered, 0 skipped** at core `011ac34`; 198 / 89 at the first hand-back | `logs/06b-property-seeds.log` |
 | `tmp/v1/06b-control6.sh` (the X262 measurement: the allocator patched to repay debt on a reversal, three seeds, both files restored sha256-identical) | 0 | `hold_unbacked` 1 to 0 and 1 to 0; nothing else moved | `logs/06b-control6.log` |
 | the X264 reproduction: `flush_interval: 120` with two non-sandbox modules before `entitlements_test.exs`, seeds 0 to 4 | **2 at one seed of the five** | `I03 ... is not billed`, `left: nil, right: 4`; which seed moves between runs | `logs/06b-flake.log` |
 | the same after the fix | 0 at every seed | 38 passed each | `logs/06b-flake.log` |
@@ -277,9 +277,63 @@ I19, I12 and I10.
 shadow, read the blocked list, deal with it, run for real, read the report. The
 real run is currently refused (section 6).
 
+### The reopening, and what it found
+
+06b was reopened at 06d's review. The generated-history property, re-run at HEAD
+by the orchestrator, **failed at seed 1337 after eleven clean runs**: an expire
+row one micro-dollar over its lot's `available`, with nothing reserved on that
+lot, filed as `expire_over_lot`.
+
+The verdict was **right and its reason was wrong**, and those need separating:
+the fold refused and wrote nothing, which is what a migration must do with a row
+it cannot reproduce; but `expire_over_lot` tells an operator the row does not
+belong to the grant and to go and look at the data, and there is nothing to look
+at.
+
+The cause is the third instance of the one missing idea X261 and X263 are about.
+`Promotions.consume/3` gives a spend to the soonest-expiring grant with
+`remaining > 0` and has no idea a hold has reserved it; the lot model cannot
+spend a reservation, so it takes the spend from the **next** grant; the two
+attributions then differ by what was reserved, and the next grant's later expiry
+is over by exactly that much, **on a lot whose own `reserved` is zero**. That is
+why the old bound, which keyed on `lot.reserved`, could not see it.
+
+Shrunk from 37 commands to six, and the shrink taught something the 37 could
+not: **the paid grant in it is load bearing.** Without other funds in the wallet
+the sweep's own `max(balance - held, 0)` clamp reduces the expire row by exactly
+the micro-dollar in dispute and the disagreement never reaches the log. The
+first attempt at the shrink left the payment out and did not reproduce.
+
+Fixed by correcting the bound rather than the refusal: `expire_reserved_grant`
+is now bounded by the value reserved **anywhere in the wallet**, because a
+reservation elsewhere is precisely how the two attributions come apart, and the
+detail carries `wallet_reserved` beside `reserved`. `expire_over_lot` keeps its
+meaning for a shortfall no reservation explains, and the discrimination between
+the two is now asserted in the hand-corrupted fixture's own test rather than
+inferred from the flag's name. Finding **X276**.
+
+Two things the orchestrator asked me to confirm rather than assume:
+
+- **06c's `kind: :reverse`.** Not a regression: it changed which histories a
+  seed draws, and the fold already had a clause for both row shapes with a test
+  for each (X266). The property's refusal tally now shows
+  `promotional_divergence` raised by a `reverse` **twice**, where the first run
+  saw it zero times in 280 histories, so 06c's change is what let the generator
+  finally reach X257's refund clamp.
+- **06d's recurring grants.** Confirmed by measurement, not structure:
+  `Recurrences.lots?/1` answers `false` for exactly the wallets this migration
+  replays, a `Recurrences.run/1` over such a wallet grants nothing and adds no
+  ledger row, and the same wallet answers `true` only after the cutover. Test:
+  `I19 a recurring grant cannot reach a wallet the migration has yet to replay`.
+
+**`mix check` could not see any of it.** The suite was green at 1642 passing
+while seed 1337 failed, because the property draws a different history at
+whatever seed the run picks. `tmp/v1/06b-property-seeds.sh` is the run that sees
+it and it is not part of the gate; that is a standing gap, not a one-off.
+
 ## 6. Open defects
 
-Twelve findings were raised, `open-findings.md` **X253** to **X264**. In order
+Thirteen findings were raised, `open-findings.md` **X253** to **X264** and **X276**. In order
 of how much they matter to the release:
 
 - **X263** and **X261** together are the largest. Two thirds of every refusal

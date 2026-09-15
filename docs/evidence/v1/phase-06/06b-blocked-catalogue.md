@@ -15,14 +15,18 @@ which walks the table below in one run, plus one test per flag in
 
 ## How the wallets were built
 
-Nine of the thirteen are produced by calling the shipped `AuroraMeter.Credits`
-API against a wallet whose `lots_enabled_at` is null, which is the legacy
-writer. Four cannot be: a settlement with no hold, a release with no hold, a row
-of a kind nothing writes and an expiry larger than the grant it names are
-histories the API refuses to produce. Those are written directly by
-`AuroraMeter.Test.LedgerFixtures.corrupt!/3`, and that is the point of them: a
-database that has been hand repaired really can hold such a row, and the
-migration's job is to refuse it rather than to guess.
+Seven of the fourteen are produced purely by calling the shipped
+`AuroraMeter.Credits` API against a wallet whose `lots_enabled_at` is null,
+which is the legacy writer. Two more (`projection_mismatch`,
+`history_out_of_order`) start there and then have one or two rows edited, which
+is what a balance row or a timestamp that has drifted looks like.
+
+The remaining five cannot come from the API at all: a settlement with no hold, a
+release with no hold, a row of a kind nothing writes, an expiry that names no
+grant, and an expiry far larger than the grant it names. Those are written
+directly by `AuroraMeter.Test.LedgerFixtures.corrupt!/3`, and that is the point
+of them: a database that has been hand repaired really can hold such a row, and
+the migration's job is to refuse it rather than to guess.
 
 The column "built by" says which.
 
@@ -40,7 +44,7 @@ The column "built by" says which.
 | `unsupported_row` | `corrupt!/3` | a paid wallet plus a row of kind `:reverse` | `AuroraMeter.Schema.CreditTransaction` declares seven kinds and the ledger writes six. A row of the seventh has no replay rule, and the fold is total rather than silently skipping it |
 | `expire_unattributed` | `corrupt!/3` | a partially expired promotional grant whose `expire` row lost its `metadata["grant_id"]` | the expiry names no grant, so the fold cannot tell which lot lost the value |
 | `expire_over_lot` | `corrupt!/3` | the same wallet with the expire row's amount multiplied by ten | the expiry claims to have destroyed more than the grant held |
-| `expire_reserved_grant` | the API | a 1 USD promotion expiring soonest, a 10 USD promotion expiring later, a 1 USD hold, then the sweep | **found by the generated-history property.** The legacy expiry guard is `max(balance - held, 0)` for the whole wallet, not per grant, so the later promotion covers the held amount and the sweep destroys the grant the hold was actually reserving. See below (finding X261) |
+| `expire_reserved_grant` | the API | **two wallets, because there are two ways in.** (a) a 1 USD promotion expiring soonest, a 10 USD promotion expiring later, a 1 USD hold, then the sweep; (b) the same plus a 50 USD payment and a 1 USD debit, with the two grants expiring in separate sweeps | **both found by the generated-history property.** (a) the expiry guard is `max(balance - held, 0)` for the whole wallet, so the later promotion covers the held amount and the sweep destroys the grant the hold was reserving (X261). (b) the promotional fold attributes the debit to the reserved grant, the lot model has to take it from the next one, and that grant's later expiry is then one micro-dollar over (X276). The bound is the value reserved **anywhere in the wallet**, not on this lot, and the detail carries both |
 | `promotional_divergence` | the API | a 5 USD payment, spent; then a 4 USD promotion; then a 5 USD refund of the payment | see below. **Two causes, and the detail's `kind` says which.** The named fixture is the refund clamp; the generated-history property showed the common one is a hold reserving promotional credit (finding X263) |
 | `projection_mismatch` | the API plus one edited row | a paid wallet whose balance row is one micro-dollar out | the replay reconciles against itself and not against the row. This is the flag that catches a balance row that had already drifted from its own log |
 | `history_out_of_order` | the API plus two edited rows | a wallet with two rows stamped in the opposite order to their commit order **and** a third row whose `balance_after` is wrong | neither candidate ordering reproduces the chain, so the order the history really happened in cannot be recovered from what the rows carry |
@@ -96,9 +100,10 @@ later release, not to this one.
 
 The wallet above is the one this unit built by hand, and **it is the rare
 case**. In 280 generated legacy histories across seven fixed seeds, a
-`promotional_divergence` raised by a reversal appeared **zero** times. Fifty
-four appeared, and every one of them was raised by a `debit`, a `settle`, a
-`grant` or a `release`.
+`promotional_divergence` raised by a reversal appeared **twice**. Forty nine
+appeared raised by a `debit`, a `settle`, a `grant` or a `release`. (On the
+first run of the same seven seeds, before 06c gave a reversal its own row kind,
+the reversal count was **zero** and the others were fifty four.)
 
 The mechanism is the other half of the same missing idea. `promotional_delta/2`
 (`Credits.Ledger`) subtracts the **whole** of a negative amount from
@@ -119,7 +124,8 @@ holds one micro-dollar, reserved by a hold that has not settled. The lots are
 **right**, and there is no lot assignment that produces the legacy number
 without writing a lot that is wrong, so the wallet blocks (finding X263).
 
-The same missing idea produces `expire_reserved_grant`:
+The same missing idea produces `expire_reserved_grant`, by **two** routes.
+
 `Ledger.expire_locked/4` clamps the amount it expires by
 `max(balance - held, 0)` for the **whole wallet**, so when another grant covers
 the held amount the sweep destroys the grant a hold was reserving. Expiring
@@ -127,8 +133,22 @@ only the available part moves the balance by less than the row says; expiring
 the reserved part as well moves `held`, which the row says did not move. Either
 way the row cannot be reproduced (finding X261).
 
+`Promotions.consume/3` is the other route and it is subtler, because the
+reservation is on a **different** grant. It gives a spend to the
+soonest-expiring grant with `remaining > 0`, with no idea a hold has reserved
+it. The lot model cannot spend a reservation, so it takes the spend from the
+next grant, and from then on the two attributions differ by exactly what was
+reserved. When that next grant expires, the legacy row asks for the whole grant
+and the lot holds one micro-dollar less, **with nothing reserved on the lot
+being expired** (finding X276).
+
+That second route is why the bound on this flag is the value reserved anywhere
+in the wallet rather than on the lot in question: a reservation elsewhere is
+precisely how the two attributions come apart. Above that bound nothing
+explains the gap and `expire_over_lot` means what it says.
+
 **This is the number that matters most in this unit.** Across 287 generated
-histories, 198 reconciled exactly and 89 were refused, and 67 of those 89 were
+histories, 197 reconciled exactly and 90 were refused, and 67 of those 90 were
 one of these two shapes. A wallet that has ever combined promotional credit
 with a hold is likely to be unmigratable, and the reason is a defect in the
 legacy arithmetic that the lot model fixes rather than an ambiguity in the

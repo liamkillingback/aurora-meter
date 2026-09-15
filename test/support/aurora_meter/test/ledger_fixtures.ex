@@ -53,6 +53,12 @@ defmodule AuroraMeter.Test.LedgerFixtures do
   @due ~U[2020-06-01 00:00:00Z]
   @after_due ~U[2020-07-01 00:00:00Z]
 
+  # A second due instant, strictly after `@after_due`, so a fixture can expire
+  # two grants in two separate sweeps. Two grants falling due in one pass have
+  # an undefined outcome (finding L19) and no fixture may produce one.
+  @later ~U[2020-08-01 00:00:00Z]
+  @after_later ~U[2020-09-01 00:00:00Z]
+
   @shapes [
     :paid_only,
     :promotional_overlap,
@@ -163,6 +169,38 @@ defmodule AuroraMeter.Test.LedgerFixtures do
     promo!(tenant, 10 * @dollar, "promo_later", @never)
     hold!(tenant, 1 * @dollar, "hold_on_soonest")
     {:ok, _n} = Credits.expire_due(@after_due)
+    :ok
+  end
+
+  # **The legacy promotional attribution does not know about holds either.**
+  # `Promotions.consume/3` gives a spend to the soonest-expiring grant that has
+  # `remaining > 0`, with no idea that a hold has reserved that grant's value.
+  # The lot model cannot spend a reservation, so it takes the spend from the
+  # **next** grant, and from then on the two attributions differ by exactly
+  # what was reserved. The later expiry of that next grant then asks for more
+  # than the lot has.
+  #
+  # Shrunk from the 37 command history the generated-history property produced
+  # at seed 1337, off by one micro-dollar on a 20,652,859 grant
+  # (finding X276).
+  @doc false
+  @spec build_expiry_over_attribution(String.t()) :: :ok
+  def build_expiry_over_attribution(tenant) do
+    promo!(tenant, 1, "promo_tiny", @due)
+    promo!(tenant, 10 * @dollar, "promo_next", @later)
+
+    # The paid grant is not decoration. Without it the sweep's own
+    # `max(balance - held, 0)` clamp reduces the expire row by exactly the one
+    # micro-dollar in dispute and the disagreement never reaches the log. It
+    # takes a wallet with other funds for the legacy attribution to be written
+    # down, which is why the generator found this and five hand-written
+    # histories did not.
+    grant!(tenant, 50 * @dollar, "pi_covers_the_hold")
+
+    hold!(tenant, 1, "hold_on_tiny")
+    debit!(tenant, 1, "debit_past_the_hold")
+    {:ok, _n} = Credits.expire_due(@after_due)
+    {:ok, _n} = Credits.expire_due(@after_later)
     :ok
   end
 
