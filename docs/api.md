@@ -255,6 +255,9 @@ in section 2.
 | `AuroraMeter.Config.record_max_concurrency/0` | `() :: pos_integer()` | additive | 1.0.0 | |
 | `AuroraMeter.Config.flush_interval/0` | `() :: pos_integer()` | stable | 0.1.0 | |
 | `AuroraMeter.Config.broadcast_interval/0` | `() :: pos_integer()` | stable | 0.1.0 | |
+| `AuroraMeter.Config.flush_receipt_retention/0` | `() :: pos_integer()` | additive | 1.0.0 | Days. |
+| `AuroraMeter.Config.replay_checkpoint_retention/0` | `() :: pos_integer()` | additive | 1.0.0 | Days. |
+| `AuroraMeter.Config.flush_node_id/0` | `() :: String.t() \| nil` | additive | 1.0.0 | `nil` means `to_string(node())`; `AuroraMeter.Retention.node_id/0` resolves it. |
 | `AuroraMeter.Config.history?/0` | `() :: boolean()` | stable | 0.2.0 | |
 | `AuroraMeter.Config.subscription_cache_ttl/0` | `() :: non_neg_integer()` | stable | 0.2.0 | |
 | `AuroraMeter.Config.cluster_sync?/0` | `() :: boolean()` | stable | 0.3.0 | |
@@ -304,7 +307,26 @@ everything else in this inventory works headless.
 | `AuroraMeter.Components.spend_chart/1` | HEEx component | optional-dep | 0.4.0 | Needs `phoenix_live_view` and `phoenix_html`. |
 | `AuroraMeter.Components.credit_summary/1` | HEEx component | optional-dep | 0.4.0 | Needs `phoenix_live_view` and `phoenix_html`. |
 
-### 1.14 Oban workers (optional dependency)
+### 1.14 Retention
+
+Deletes the operational rows the allow list names, and nothing else. Financial
+history is never deleted, at any age, under any option. See
+[Retention](retention.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Retention.plan/1` | `(keyword()) :: {:ok, map()} \| {:blocked, map(), [map()]}` | additive | 1.0.0 | Dry run. Writes nothing. Options `:only`, `:older_than`. |
+| `AuroraMeter.Retention.prune/1` | `(keyword()) :: {:ok, map()} \| {:blocked, map(), [map()]}` | additive | 1.0.0 | Options `:only`, `:older_than`, `:batch_size`, `:max_items`. A table outside the allow list raises `ArgumentError`. |
+| `AuroraMeter.Retention.status/1` | `(keyword()) :: map()` | additive | 1.0.0 | Every node's flush heartbeat, whether it blocks a receipt prune, and the package version each node runs. |
+| `AuroraMeter.Retention.forget_node/2` | `(String.t(), keyword()) :: {:ok, map()} \| {:error, :not_found}` | additive | 1.0.0 | The only override of the receipt rule, for one named node that is genuinely gone. Logs at `:warning`. |
+| `AuroraMeter.Retention.tables/0` | `() :: [atom()]` | additive | 1.0.0 | The allow-list keys. |
+| `AuroraMeter.Retention.protected/0` | `() :: [String.t()]` | additive | 1.0.0 | The tables a prune must never delete a row from. |
+| `AuroraMeter.Retention.operation/1` | `(atom()) :: String.t()` | additive | 1.0.0 | The `AuroraMeter.Operations` name one table's prune pauses under. |
+| `AuroraMeter.Retention.node_id/0` | `() :: String.t()` | additive | 1.0.0 | This node's heartbeat identity: `:flush_node_id`, or `to_string(node())`. |
+
+### 1.15 Oban workers (optional dependency)
 
 Compiled only when `Oban` is loaded. Without it the whole `AuroraMeter.Oban`
 namespace is absent, which is not an error: every operation these workers wrap
@@ -328,6 +350,7 @@ is a public function any scheduler can call. See
 | `AuroraMeter.Oban.EventsReplay` | `AuroraMeter.Events.Replay.run/1` | optional-dep | 1.0.0 | Needs `oban`. No schedule: a projection rebuild is an operator action, and `cron_entries/1` never returns it. |
 | `AuroraMeter.Oban.RecurringGrants` | recurring credit grants | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; the worker cancels with `{:cancel, :not_implemented}` and `cron_entries/1` omits it. |
 | `AuroraMeter.Oban.PlanTransitions` | due plan changes | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; same behaviour as `AuroraMeter.Oban.RecurringGrants`. |
+| `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"40 3 * * *"`. Job arguments `only`, `batch_size`, `max_items`. Do not schedule it until every node has written a flush heartbeat. |
 | `AuroraMeter.Oban.ConfigError` | raised by `AuroraMeter.Oban.validate!/1` | optional-dep | 1.0.0 | Needs `oban`. Carries `:message` and `:problems`. |
 
 ## 2. Behaviours and their callbacks
@@ -467,6 +490,9 @@ never treated as Aurora Meter keys.
 | `:record_max_concurrency` | positive integer, `64` | additive | 1.0.0 | Callers that may hold an open record transaction at once. Beyond it, `{:error, {:unavailable, :overloaded}}`; never a fallback to buffered tracking. |
 | `:flush_interval` | positive integer, `5_000` | stable | 0.1.0 | Milliseconds. |
 | `:broadcast_interval` | positive integer, `1_000` | stable | 0.1.0 | Milliseconds. |
+| `:flush_receipt_retention` | positive integer, `30` | additive | 1.0.0 | Days a flush receipt is kept before `AuroraMeter.Retention` may delete it. Floor 1 day, refused at boot below it. Age alone never deletes one. |
+| `:replay_checkpoint_retention` | positive integer, `365` | additive | 1.0.0 | Days a finished `"events_replay:<generation>"` checkpoint row is kept. Floor 1 day. |
+| `:flush_node_id` | string or `nil`, `nil` | additive | 1.0.0 | This node's identity in its `"flush:<node>"` heartbeat row. `nil` means `to_string(node())`. |
 | `:history` | boolean, `true` | stable | 0.2.0 | UTC day buckets for `AuroraMeter.history/3`. |
 | `:subscription_cache_ttl` | non-negative integer, `5_000` | stable | 0.2.0 | Milliseconds. `0` disables the cache. |
 | `:cluster_sync` | boolean, `true` | stable | 0.3.0 | Delta gossip and total announcements between nodes. |
@@ -500,6 +526,8 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 | `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |
 | `[:aurora_meter, :replay, :phase]` | `duration` | `generation`, `phase`, and per phase `seeded`, `resumed`, `drained`, `differences` | stable | 1.0.0 | `[:aurora_meter, :replay, :phase]` |
+| `[:aurora_meter, :operations, :batch]` | `items`, `duration_ms` | `name`, `result` | stable | 1.0.0 | `[:aurora_meter, :operations, :batch]` |
+| `[:aurora_meter, :retention, :prune]` | `deleted`, `duration` | `table`, `blocked` | stable | 1.0.0 | `[:aurora_meter, :retention, :prune]` |
 
 `declared` was added to the `track` and `reserve` metadata in 0.5.0, which is an
 additive change: a handler matching on the old keys is unaffected.

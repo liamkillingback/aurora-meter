@@ -431,7 +431,7 @@ if Code.ensure_loaded?(Oban) do
         # later with a payload argument fails this).
         allowed = ~w(batch_size max_batches limit older_than_seconds reference_prefix tenant
                      generation compare compare_limit max_batches activate resume rehydrate
-                     timeout since_days older_than_days)
+                     timeout since_days older_than_days only max_items)
 
         for {worker, _operation, _schedule, _description} <- AuroraMeter.Oban.__registry__() do
           documented = documented_args(worker)

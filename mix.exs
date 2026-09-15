@@ -224,6 +224,7 @@ defmodule AuroraMeter.MixProject do
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
+        "docs/retention.md",
         "docs/operations/scheduler.md",
         "docs/operations/replay.md",
         "docs/testing.md",
@@ -289,6 +290,11 @@ defmodule AuroraMeter.MixProject do
         "AuroraMeter.Migration.V7",
         "AuroraMeter.Migration.V8",
         "AuroraMeter.Schema.FlushReceipt",
+        # `AuroraMeter.Retention` explains the receipt rule by naming the
+        # function that writes the receipt, which is the only way a reader can
+        # check the claim. The module is internal and carries `@moduledoc
+        # false`, so ExDoc can resolve it and not link to it.
+        "AuroraMeter.Storage.Ecto.flush_batch/3",
         "AuroraMeter.Supervisor"
       ],
       source_ref: "v#{@version}",

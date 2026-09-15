@@ -15,6 +15,7 @@ it, and nothing here is where the correctness lives:
 | `AuroraMeter.Credits.expire_due/1` | Expires promotional grants whose date has passed. |
 | `AuroraMeter.Credits.reconcile_holds/1` | Asks the host about holds still open past a cutoff, and applies the answer. |
 | `AuroraMeter.Events.Replay.run/1` | Rebuilds a projection generation from the event log. |
+| `AuroraMeter.Retention.prune/1` | Deletes the disposable operational rows the retention allow list names, and only those. |
 
 If you run Oban, the optional `AuroraMeter.Oban.*` workers wrap these so you do
 not have to write the wrapper. If you run something else, or nothing, call the
@@ -63,8 +64,9 @@ config :my_app, Oban,
 | `AuroraMeter.Oban.EventsReplay` | `AuroraMeter.Events.Replay.run/1` | operator run | 1 | Continues from the replay's own checkpoint, or refuses when one is already running. |
 | `AuroraMeter.Oban.RecurringGrants` | `AuroraMeter.Credits.Recurrences.run/1` | not in this release | 3 | Cancels with `{:cancel, :not_implemented}`. |
 | `AuroraMeter.Oban.PlanTransitions` | `AuroraMeter.Subscriptions.apply_due_transitions/1` | not in this release | 3 | Cancels with `{:cancel, :not_implemented}`. |
+| `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | `40 3 * * *` | 3 | Deletes nothing the first run did not: a `DELETE` finds the rows gone. There is no cursor to go stale, because the scan advances by doing the work. |
 
-Two of the five wrap operations a later Aurora Meter 1.0 release adds. They ship
+Two of the six wrap operations a later Aurora Meter 1.0 release adds. They ship
 now so that the registry an installer reads is complete and no host writes a
 module name that does not resolve. `cron_entries/1` omits them until their
 operation is compiled in, and starts returning them with no change to your
@@ -72,7 +74,7 @@ configuration once it is. `AuroraMeter.Oban.EventsReplay` has no schedule for a
 different reason: rebuilding a projection is a deliberate act, not something
 that should begin because a minute elapsed.
 
-All five declare the queue `:aurora_meter`, which is the queue Aurora Meter Pro's
+All six declare the queue `:aurora_meter`, which is the queue Aurora Meter Pro's
 workers declare too. One queue, because they are the same kind of work and a
 host that sizes one has sized both.
 

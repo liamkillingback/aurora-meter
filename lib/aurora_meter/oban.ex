@@ -61,7 +61,7 @@ if Code.ensure_loaded?(Oban) do
     ## Availability
 
     `cron_entries/1` returns an entry only for a worker whose operation is
-    compiled into this build. Two of the five workers wrap operations that
+    compiled into this build. Two of the six workers wrap operations that
     Aurora Meter 1.0 adds after this module: until those land, the worker exists
     (so a crontab written by hand cannot name a module that is missing), it is
     absent from `cron_entries/1`, and running it by hand cancels the job with
@@ -94,7 +94,9 @@ if Code.ensure_loaded?(Oban) do
       {AuroraMeter.Oban.RecurringGrants, {AuroraMeter.Credits.Recurrences, :run, 1}, "7 * * * *",
        "Issues recurring credit grants that have come due."},
       {AuroraMeter.Oban.PlanTransitions, {AuroraMeter.Subscriptions, :apply_due_transitions, 1},
-       "*/5 * * * *", "Applies scheduled plan changes whose effective date has arrived."}
+       "*/5 * * * *", "Applies scheduled plan changes whose effective date has arrived."},
+      {AuroraMeter.Oban.Retention, {AuroraMeter.Retention, :prune, 1}, "40 3 * * *",
+       "Deletes the disposable operational rows the retention allow list names."}
     ]
 
     @typedoc "One crontab entry, in the shape `Oban.Plugins.Cron` accepts."
@@ -138,14 +140,15 @@ if Code.ensure_loaded?(Oban) do
         iex> AuroraMeter.Oban.cron_entries()
         [
           {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
-          {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation}
+          {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
+          {"40 3 * * *", AuroraMeter.Oban.Retention}
         ]
 
         iex> AuroraMeter.Oban.cron_entries(include: [:credit_expiry])
         [{"*/30 * * * *", AuroraMeter.Oban.CreditExpiry}]
 
         iex> AuroraMeter.Oban.cron_entries(
-        ...>   exclude: [AuroraMeter.Oban.HoldReconciliation],
+        ...>   exclude: [AuroraMeter.Oban.HoldReconciliation, AuroraMeter.Oban.Retention],
         ...>   schedules: %{credit_expiry: "0 4 * * *"}
         ...> )
         [{"0 4 * * *", AuroraMeter.Oban.CreditExpiry}]

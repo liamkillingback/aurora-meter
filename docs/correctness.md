@@ -72,6 +72,15 @@ deleted while any node could still retry. The receipt id must be generated once
 per batch and reused across retries; a caller that generates a fresh id per
 attempt gets no protection.
 
+`AuroraMeter.Retention` is the only thing in this package that deletes a receipt,
+and it is what turns "never deleted while any node could still retry" from an
+instruction into a mechanism: it refuses unless every node's `"flush:<node>"`
+heartbeat proves no node holds a batch from before the cutoff, refuses when no
+node is reporting at all, and offers exactly one override (`forget_node/1`) for a
+node an operator has confirmed is gone. The consequence of removing a receipt
+anyway is demonstrated rather than assumed, in
+`test I01 a retry of a batch whose receipt was pruned would double count`.
+
 **Known limits.** The receipt deduplicates a batch, not a unit of usage. Usage
 that was never handed to a batch, because the Store or the VM was lost before the
 flush, is gone and is not recoverable from the receipt table. The guarantee says
@@ -98,6 +107,19 @@ durable feature.
 - `AuroraMeter.KillTest` / `test I01 a Store killed before the flush loses the buffered deltas, as documented`
 - `AuroraMeter.StorageTest` / `test a batch receipt deduplicates counters and history after unrelated writes`
 - `AuroraMeter.ClusterTest` / `test when the database write commits and then reports failure a node that has heard gossip retries its batch without duplicating usage`
+- `AuroraMeter.RetentionTest` / `test I01 a receipt is not pruned while a node's heartbeat reports an older pending batch`
+- `AuroraMeter.RetentionTest` / `test I01 a receipt is not pruned while a node's heartbeat is itself older than the cutoff`
+- `AuroraMeter.RetentionTest` / `test I01 receipts are pruned when every node is idle and current`
+- `AuroraMeter.RetentionTest` / `test I01 receipts are pruned when a node has a pending batch newer than the cutoff`
+- `AuroraMeter.RetentionTest` / `test I01 a node with no heartbeat row does not block`
+- `AuroraMeter.RetentionTest` / `test I01 no heartbeat anywhere blocks a prune that would delete something`
+- `AuroraMeter.RetentionTest` / `test I01 an unreadable pending_since blocks rather than being ignored`
+- `AuroraMeter.RetentionTest` / `test I01 a heartbeat state this release does not write blocks`
+- `AuroraMeter.RetentionTest` / `test I01 forget_node/1 removes the block for exactly one node and leaves the others`
+- `AuroraMeter.RetentionTest` / `test I01 a node id containing an @ is handled, which is what every real node id looks like`
+- `AuroraMeter.RetentionTest` / `test I01 forget_node/1 refuses a node it has never heard of`
+- `AuroraMeter.RetentionTest` / `test I01 a retry of a batch whose receipt was pruned would double count`
+- `AuroraMeter.RetentionTest` / `test I01 a retry of a batch whose receipt was protected does not double count`
 
 **Evidence.** `docs/evidence/v1/phase-01/i01.md`
 
@@ -831,6 +853,9 @@ nothing and the next run asks again.
 - `AuroraMeter.ObanJobControlsTest` / `test I16 HoldReconciliation pages with a cursor and finishes the scan`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 HoldReconciliation cancels with :paused within one batch`
 - `AuroraMeter.ObanJobControlsTest` / `test I16 the cutoff is pinned across the pages of one scan`
+- `AuroraMeter.RetentionControlsTest` / `test I16 the retention worker resumes at its checkpoint after a kill`
+- `AuroraMeter.RetentionControlsTest` / `test I16 two retention jobs on independent connections delete every eligible row and none twice`
+- `AuroraMeter.RetentionControlsTest` / `test I16 the retention worker cancels nothing and reports a paused table`
 - PLANNED (06d): `AuroraMeter.ObanJobControlsTest` / `test I16 RecurringGrants resumes at its checkpoint after a kill`
 - PLANNED (07b): `AuroraMeter.ObanJobControlsTest` / `test I16 PlanTransitions resumes at its checkpoint after a kill`
 

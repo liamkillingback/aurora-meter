@@ -1,0 +1,76 @@
+[mixlane] core: DB_PORT=5490 bash /mnt/c/Users/liamk/AppData/Local/Temp/claude/--wsl-localhost-ubuntu-24-04-home-liamk-src-PhxTemplates/bd71637f-563d-4638-96fe-0b0493546d48/scratchpad/sizing.sh
+database: aurora_meter_test
+rows: 1000000, spread over 60 days
+
+insert: 3044 ms
+count: 1000000
+table: 50 MB   index: 39 MB   total: 88 MB
+bytes per row: 92.6
+at the shipped 5000 ms flush_interval (this environment is configured for 60000 ms): 17280 rows per node per day, 1.53 MiB per node per day, 0.54 GiB per node per year
+
+== plan/1, the count ==
+  Result  (cost=12926.34..12926.35 rows=1 width=16) (actual time=22.956..25.306 rows=1 loops=1)
+    Buffers: shared hit=6370
+    CTE bound
+      ->  Result  (cost=0.00..0.02 rows=1 width=8) (actual time=0.002..0.003 rows=1 loops=1)
+    InitPlan 3 (returns $3)
+      ->  Finalize Aggregate  (cost=12926.29..12926.30 rows=1 width=8) (actual time=22.953..25.301 rows=1 loops=1)
+            Buffers: shared hit=6370
+            InitPlan 2 (returns $1)
+              ->  CTE Scan on bound  (cost=0.00..0.02 rows=1 width=8) (actual time=0.003..0.004 rows=1 loops=1)
+            ->  Gather  (cost=12926.05..12926.26 rows=2 width=8) (actual time=22.901..25.297 rows=3 loops=1)
+                  Workers Planned: 2
+                  Params Evaluated: $1
+                  Workers Launched: 2
+                  Buffers: shared hit=6370
+                  ->  Partial Aggregate  (cost=11926.05..11926.06 rows=1 width=8) (actual time=20.549..20.549 rows=1 loops=3)
+                        Buffers: shared hit=6370
+                        ->  Parallel Seq Scan on aurora_meter_flush_receipts  (cost=0.00..11578.80 rows=138901 width=0) (actual time=0.008..16.350 rows=166677 loops=3)
+                              Filter: (inserted_at < $1)
+                              Rows Removed by Filter: 166657
+                              Buffers: shared hit=6370
+    InitPlan 4 (returns $4)
+      ->  CTE Scan on bound bound_1  (cost=0.00..0.02 rows=1 width=8) (actual time=0.000..0.001 rows=1 loops=1)
+  Planning:
+    Buffers: shared hit=3
+  Planning Time: 0.075 ms
+  Execution Time: 25.321 ms
+
+== prune/1, one batch of 1000 ==
+  Delete on aurora_meter_flush_receipts  (cost=37164.52..44953.25 rows=0 width=0) (actual time=62.065..62.067 rows=0 loops=1)
+    Buffers: shared hit=11373
+    CTE bound
+      ->  Result  (cost=0.00..0.02 rows=1 width=8) (actual time=0.002..0.002 rows=1 loops=1)
+    ->  Nested Loop  (cost=37164.50..44953.23 rows=1000 width=46) (actual time=59.798..61.858 rows=1000 loops=1)
+          Buffers: shared hit=10373
+          ->  HashAggregate  (cost=37164.08..37174.08 rows=1000 width=56) (actual time=59.782..59.880 rows=1000 loops=1)
+                Group Key: "ANY_subquery".id
+                Batches: 1  Memory Usage: 321kB
+                Buffers: shared hit=6373
+                ->  Subquery Scan on "ANY_subquery"  (cost=37149.08..37161.58 rows=1000 width=56) (actual time=59.426..59.596 rows=1000 loops=1)
+                      Buffers: shared hit=6373
+                      ->  Limit  (cost=37149.08..37151.58 rows=1000 width=24) (actual time=58.995..59.075 rows=1000 loops=1)
+                            Buffers: shared hit=6373
+                            InitPlan 2 (returns $1)
+                              ->  CTE Scan on bound  (cost=0.00..0.02 rows=1 width=8) (actual time=0.003..0.003 rows=1 loops=1)
+                            ->  Sort  (cost=37149.06..37982.47 rows=333363 width=24) (actual time=58.994..59.035 rows=1000 loops=1)
+                                  Sort Key: aurora_meter_flush_receipts_1.inserted_at
+                                  Sort Method: top-N heapsort  Memory: 168kB
+                                  Buffers: shared hit=6373
+                                  ->  Seq Scan on aurora_meter_flush_receipts aurora_meter_flush_receipts_1  (cost=0.00..18871.12 rows=333363 width=24) (actual time=0.008..42.354 rows=500030 loops=1)
+                                        Filter: (inserted_at < $1)
+                                        Rows Removed by Filter: 499970
+                                        Buffers: shared hit=6370
+          ->  Index Scan using aurora_meter_flush_receipts_pkey on aurora_meter_flush_receipts  (cost=0.42..7.79 rows=1 width=22) (actual time=0.002..0.002 rows=1 loops=1000)
+                Index Cond: (id = "ANY_subquery".id)
+                Buffers: shared hit=4000
+  Planning:
+    Buffers: shared hit=124
+  Planning Time: 0.202 ms
+  Execution Time: 62.098 ms
+
+prune/1 over the eligible rows: 20787 ms -> {:ok, %{flush_receipts: 499033}}
+rows left (inside the 30 day window): 499967
+
+truncated.
+[mixlane] core exit=0 started=2026-09-15T09:33:10Z finished=2026-09-15T09:33:34Z

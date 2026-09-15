@@ -48,13 +48,25 @@ defmodule AuroraMeter.Checkpoints do
 
   `heartbeat/3` stamps `cursor["heartbeat_at"]` and `cursor["runner"]` so an
   operator can tell a stalled task from a finished one. **Nothing in this
-  package subtracts it from anything.** `open-findings.md` X100 measured
-  `clock_timestamp()` stepping backwards nine times in 300 seconds, worst
-  439 ms, on a 32.5 second cadence, so "the heartbeat is older than N seconds"
-  is not a sound test for "the runner is gone" at any N a person would pick.
-  The sound test is `claim/3`: a session advisory lock dies with the connection
-  that held it, so a runner that was killed has already released it and a
-  runner that is alive has not, with no duration anywhere in the decision.
+  package decides an exclusion question from its age.** `open-findings.md` X100
+  measured `clock_timestamp()` stepping backwards nine times in 300 seconds,
+  worst 439 ms, on a 32.5 second cadence, so "the heartbeat is older than N
+  seconds" is not a sound test for "the runner is gone" at any N a person would
+  pick. The sound test is `claim/3`: a session advisory lock dies with the
+  connection that held it, so a runner that was killed has already released it
+  and a runner that is alive has not, with no duration anywhere in the decision.
+
+  **The rule is about exclusion at seconds scale, and that boundary is worth
+  stating because one caller is on the other side of it.**
+  `AuroraMeter.Retention` does compare a `"flush:<node>"` row's age against a
+  cutoff, and it is sound there for the reason `architecture-map.md` section 3
+  gives: unsafe at seconds, safe at minutes and hours. The smallest window it
+  will act on is one day, refused below that at boot, which is about 200,000
+  times the measured backwards step; both sides of that comparison are stamped
+  by `clock_timestamp()`; and the decision it feeds is a **veto** on deleting
+  data rather than a licence to take another runner's work. Its moduledoc
+  carries the arithmetic. A decision at seconds scale still has no business
+  reading this column.
 
   ## The missing table
 

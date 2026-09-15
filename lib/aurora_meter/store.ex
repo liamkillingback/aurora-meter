@@ -24,6 +24,7 @@ defmodule AuroraMeter.Store do
 
   use GenServer
 
+  alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Counter
 
@@ -119,7 +120,26 @@ defmodule AuroraMeter.Store do
           %{tenant_key: tenant, feature: feature, date: date, delta: delta}
         end
 
-      batch = %{id: Ecto.UUID.generate(), counters: counters, history: history, taken: taken}
+      # `snapshot_at` is when this node took the deltas out of ETS, and it is
+      # read by exactly two things: `AuroraMeter.Flusher`'s heartbeat, which
+      # tells `AuroraMeter.Retention` how old the oldest batch this node still
+      # holds is, and (from build unit 08a) the pending-batch gauge.
+      #
+      # `Clock.now/0` and not `Clock.db_now/0`, and the reason is the contract
+      # rather than convenience: there is no database in this function and there
+      # must not be one. `snapshot/0` runs inside the ETS owner while the hot
+      # path writes around it, and a round trip to Postgres here would put the
+      # database on the path that exists to keep the database off it. What the
+      # value is compared against, and the bound that comparison relies on, is
+      # `AuroraMeter.Retention`'s to state, and it does.
+      batch = %{
+        id: Ecto.UUID.generate(),
+        counters: counters,
+        history: history,
+        taken: taken,
+        snapshot_at: Clock.now()
+      }
+
       :ets.insert(@flush_batches, {:pending, batch})
       batch
     end

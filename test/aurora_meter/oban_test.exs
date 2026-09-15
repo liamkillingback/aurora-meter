@@ -26,7 +26,8 @@ if Code.ensure_loaded?(Oban) do
       test "returns one entry per available worker that has a schedule" do
         assert Scheduler.cron_entries() == [
                  {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
-                 {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation}
+                 {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
+                 {"40 3 * * *", AuroraMeter.Oban.Retention}
                ]
       end
 
@@ -56,7 +57,8 @@ if Code.ensure_loaded?(Oban) do
 
         assert scheduled_workers() == [
                  AuroraMeter.Oban.CreditExpiry,
-                 AuroraMeter.Oban.HoldReconciliation
+                 AuroraMeter.Oban.HoldReconciliation,
+                 AuroraMeter.Oban.Retention
                ]
       end
 
@@ -81,16 +83,20 @@ if Code.ensure_loaded?(Oban) do
 
       test "honours :exclude, by module and by short name" do
         assert Scheduler.cron_entries(exclude: [AuroraMeter.Oban.CreditExpiry]) ==
-                 [{"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation}]
+                 [
+                   {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
+                   {"40 3 * * *", AuroraMeter.Oban.Retention}
+                 ]
 
-        assert Scheduler.cron_entries(exclude: [:hold_reconciliation]) ==
+        assert Scheduler.cron_entries(exclude: [:hold_reconciliation, :retention]) ==
                  [{"*/30 * * * *", AuroraMeter.Oban.CreditExpiry}]
       end
 
       test "honours :schedules, including for a worker that has no default" do
         assert Scheduler.cron_entries(schedules: %{hold_reconciliation: "0 * * * *"}) == [
                  {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
-                 {"0 * * * *", AuroraMeter.Oban.HoldReconciliation}
+                 {"0 * * * *", AuroraMeter.Oban.HoldReconciliation},
+                 {"40 3 * * *", AuroraMeter.Oban.Retention}
                ]
 
         assert Scheduler.cron_entries(

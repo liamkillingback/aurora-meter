@@ -122,6 +122,101 @@ defmodule AuroraMeter.ConfigStrictnessTest do
     end
   end
 
+  describe "the retention floor" do
+    # Build unit 05d. This is the only rule in the package whose failure deletes
+    # data that cannot be recovered, and the whole safety argument in
+    # `AuroraMeter.Retention`'s moduledoc rests on it: a window below one day is
+    # about twenty times the worst measured backwards step of a node's wall
+    # clock, where a day is about thirty thousand times it, so the comparison
+    # stops being sound somewhere in between and the floor is where it is
+    # refused.
+    #
+    # **The keys are enumerated by name, not by type.** Reading them out of the
+    # schema by looking for `{:custom, _, :retention_days, _}` would make this
+    # test disappear the moment somebody replaced that type with `:pos_integer`,
+    # which is precisely the regression worth catching. Reading them by name
+    # means the key stays in the list, the below-floor value is then accepted,
+    # and the test fails naming it.
+    #
+    # It also goes through `AuroraMeter.Config.validate!/0`, the function
+    # `AuroraMeter.start_link/1` calls at boot, rather than through
+    # `retention_days/2` directly: calling the validator by hand would pass even
+    # if the schema entry had stopped referencing it.
+    @floor 1
+
+    defp retention_keys do
+      for {key, _opts} <- Config.schema().schema,
+          Regex.match?(~r/_retention(_days)?$/, Atom.to_string(key)),
+          do: key
+    end
+
+    test "every key whose name says it is a retention window is found" do
+      keys = retention_keys()
+
+      assert length(keys) >= 2, """
+      only #{length(keys)} retention keys were found (#{inspect(keys)}), which suggests the
+      detection is wrong rather than that the package shrank. Every test below iterates this
+      list, so an empty or short one would pass by examining nothing.
+      """
+
+      assert :flush_receipt_retention in keys
+      assert :replay_checkpoint_retention in keys
+    end
+
+    test "a window below one day is refused at boot, and the message names the key and the floor" do
+      for key <- retention_keys(), below <- [0, -1, -365] do
+        with_config([{:aurora_meter, key, below}], fn ->
+          # If this does not raise, the floor is gone: a window of seconds
+          # becomes configurable and a clock that steps backwards can invert the
+          # comparison that deletes rows.
+          error = assert_raise NimbleOptions.ValidationError, fn -> Config.validate!() end
+
+          message = Exception.message(error)
+
+          # The message is what an operator acts on, so it is asserted rather
+          # than the fact that something raised.
+          assert message =~ inspect(key),
+                 "the refusal of #{below} days does not name #{inspect(key)}: #{message}"
+
+          assert message =~ "floor is 1 day",
+                 "the refusal of #{inspect(key)} does not name the floor: #{message}"
+
+          assert message =~ "#{below} days",
+                 "the refusal of #{inspect(key)} does not name the value given: #{message}"
+        end)
+      end
+    end
+
+    test "exactly one day is accepted, so the boundary is pinned on both sides" do
+      for key <- retention_keys() do
+        with_config([{:aurora_meter, key, @floor}], fn ->
+          opts = Config.validate!()
+          assert opts[key] == @floor
+        end)
+      end
+    end
+
+    test "a window below one day is refused in transition mode too" do
+      # A floor that a transition release waived would be a floor that is absent
+      # on every host running 0.5.x, which is every host that upgrades.
+      for key <- retention_keys() do
+        with_config([{:aurora_meter, key, 0}], fn ->
+          assert_raise NimbleOptions.ValidationError, fn -> Config.validate!(:transition) end
+          assert_raise NimbleOptions.ValidationError, fn -> Config.validate!(:strict) end
+        end)
+      end
+    end
+
+    test "a value that is not a number of days at all is refused" do
+      for key <- retention_keys(), bad <- ["30", 30.0, :thirty, nil] do
+        with_config([{:aurora_meter, key, bad}], fn ->
+          error = assert_raise NimbleOptions.ValidationError, fn -> Config.validate!() end
+          assert Exception.message(error) =~ inspect(key)
+        end)
+      end
+    end
+  end
+
   describe "module-typed keys" do
     test "a module-typed key pointing at a module without the callback raises at boot naming the callback" do
       # AuroraMeter.Test.PolicyPlans is a real, loadable module that exports no

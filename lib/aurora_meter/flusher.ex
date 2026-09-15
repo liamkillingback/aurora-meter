@@ -12,11 +12,20 @@ defmodule AuroraMeter.Flusher do
   """
   use GenServer
   require Logger
+  alias AuroraMeter.Clock
   alias AuroraMeter.Cluster
   alias AuroraMeter.Config
   alias AuroraMeter.Counter
+  alias AuroraMeter.Retention
   alias AuroraMeter.Storage
   alias AuroraMeter.Store
+
+  # How often an **idle** node refreshes its heartbeat. A node with no traffic
+  # still has to prove it is alive, or its row goes stale and blocks a receipt
+  # prune for ever; but writing one on every tick would be 17,280 writes a day
+  # to say nothing changed. A successful or failed flush writes one regardless
+  # of this interval, because those two carry news.
+  @heartbeat_interval 60_000
 
   @doc false
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -40,12 +49,12 @@ defmodule AuroraMeter.Flusher do
     Process.flag(:trap_exit, true)
     interval = Config.flush_interval()
     schedule(interval)
-    {:ok, %{interval: interval}}
+    {:ok, %{interval: interval, heartbeat_at: nil, heartbeat_warned?: false}}
   end
 
   @impl true
   def handle_info(:flush, state) do
-    do_flush()
+    {_result, state} = do_flush(state)
     schedule(state.interval)
     {:noreply, state}
   end
@@ -53,25 +62,32 @@ defmodule AuroraMeter.Flusher do
   def handle_info(_other, state), do: {:noreply, state}
 
   @impl true
-  def handle_call(:flush, _from, state), do: {:reply, do_flush(), state}
+  def handle_call(:flush, _from, state) do
+    {result, state} = do_flush(state)
+    {:reply, result, state}
+  end
 
   @impl true
-  def terminate(_reason, _state) do
-    with {:ok, _} <- do_flush(), do: do_flush()
+  def terminate(_reason, state) do
+    case do_flush(state) do
+      {{:ok, _}, state} -> do_flush(state)
+      _failed -> :ok
+    end
+
     :ok
   end
 
   defp schedule(interval), do: Process.send_after(self(), :flush, interval)
 
-  defp do_flush do
+  defp do_flush(state) do
     case batch() do
-      nil -> {:ok, 0}
-      batch -> persist(batch)
+      nil -> {{:ok, 0}, idle_heartbeat(state)}
+      batch -> persist(batch, state)
     end
   rescue
-    error -> failed(Exception.message(error))
+    error -> failed(Exception.message(error), state)
   catch
-    kind, reason -> failed({kind, reason})
+    kind, reason -> failed({kind, reason}, state)
   end
 
   defp batch do
@@ -81,7 +97,7 @@ defmodule AuroraMeter.Flusher do
     end
   end
 
-  defp persist(batch) do
+  defp persist(batch, state) do
     case Storage.flush_batch(batch.id, batch.counters, batch.history) do
       {:ok, %{counters: counters, history: history}} ->
         originals = Map.new(batch.taken, fn {key, _} -> {triple(key), key} end)
@@ -92,24 +108,85 @@ defmodule AuroraMeter.Flusher do
         count = length(batch.taken)
         delta_sum = Enum.sum(Enum.map(batch.taken, &elem(&1, 1)))
         :telemetry.execute([:aurora_meter, :flush], %{count: count, delta_sum: delta_sum}, %{})
-        {:ok, count}
+
+        # After the pending entry is cleared, never before: the heartbeat says
+        # "this node holds nothing older than now", and it must not be able to
+        # say so while the batch is still in the table.
+        {{:ok, count}, heartbeat(state, :idle)}
 
       {:error, reason} ->
-        failed(reason)
+        failed(reason, state)
     end
   end
 
-  defp failed(reason) do
+  defp failed(reason, state) do
     Logger.error("AuroraMeter flush failed; the same batch will be retried: #{inspect(reason)}")
 
-    count =
+    pending =
       case :ets.lookup(Store.flush_batches_table(), :pending) do
-        [{:pending, batch}] -> length(batch.taken)
-        [] -> 0
+        [{:pending, batch}] -> batch
+        [] -> nil
       end
 
+    count = if pending, do: length(pending.taken), else: 0
+
     :telemetry.execute([:aurora_meter, :flush, :error], %{count: count}, %{error: reason})
-    {:error, reason}
+
+    # Best effort, and the reason it can be: when the database is what failed,
+    # this write fails too. That is exactly the case the staleness half of
+    # `AuroraMeter.Retention`'s receipt rule covers, because a heartbeat that
+    # stopped being written is a heartbeat that goes stale and blocks.
+    state = if pending, do: heartbeat(state, {:pending, pending}), else: state
+
+    {{:error, reason}, state}
+  end
+
+  # -- the heartbeat ----------------------------------------------------------
+
+  # An idle tick has no news, so it refreshes at most once per
+  # `@heartbeat_interval`. `Clock.monotonic_ms/0` and not `now/0`: this is an
+  # in-memory span inside one process and nothing else ever reads it
+  # (`AuroraMeter.Clock`).
+  defp idle_heartbeat(%{heartbeat_at: at} = state) do
+    if is_nil(at) or Clock.monotonic_ms() - at >= @heartbeat_interval do
+      heartbeat(state, :idle)
+    else
+      state
+    end
+  end
+
+  # A heartbeat must never be able to fail a flush. `record_flush_state/2`
+  # already catches everything, and the result is logged once at `:warning` and
+  # at `:debug` after that, so a database below core schema version 7 says so
+  # once rather than every five seconds.
+  defp heartbeat(state, what) do
+    case Retention.record_flush_state(what) do
+      :ok ->
+        %{state | heartbeat_at: Clock.monotonic_ms()}
+
+      {:error, reason} ->
+        state = warn_heartbeat(state, reason)
+        %{state | heartbeat_at: Clock.monotonic_ms()}
+    end
+  end
+
+  defp warn_heartbeat(%{heartbeat_warned?: true} = state, reason) do
+    Logger.debug("AuroraMeter flush heartbeat write failed again: #{inspect(reason)}")
+    state
+  end
+
+  defp warn_heartbeat(state, reason) do
+    Logger.warning("""
+    AuroraMeter could not write its flush heartbeat: #{inspect(reason)}
+
+    The flush itself is unaffected. What this costs is retention: a node whose \
+    heartbeat is stale blocks AuroraMeter.Retention.prune(only: [:flush_receipts]), \
+    which is the safe direction. A database below core schema version 7 has no \
+    aurora_meter_checkpoints table and will report this on every flush; later \
+    occurrences are logged at :debug.
+    """)
+
+    %{state | heartbeat_warned?: true}
   end
 
   defp triple({tenant, feature, {:day, date}}),

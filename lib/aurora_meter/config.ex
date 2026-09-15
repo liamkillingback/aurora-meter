@@ -88,6 +88,32 @@ defmodule AuroraMeter.Config do
             ],
             flush_interval: [type: :pos_integer, default: 5_000],
             broadcast_interval: [type: :pos_integer, default: 1_000],
+            flush_receipt_retention: [
+              type: {:custom, __MODULE__, :retention_days, [:flush_receipt_retention]},
+              default: 30,
+              doc:
+                "Days a flush receipt is kept before `AuroraMeter.Retention` may delete it. " <>
+                  "Age alone never deletes one: every node's flush heartbeat must also prove " <>
+                  "no node still holds a batch from before the cutoff. The floor is 1 day " <>
+                  "and it is a correctness floor, not a taste: see `AuroraMeter.Retention`."
+            ],
+            replay_checkpoint_retention: [
+              type: {:custom, __MODULE__, :retention_days, [:replay_checkpoint_retention]},
+              default: 365,
+              doc:
+                "Days a finished `\"events_replay:<generation>\"` checkpoint row is kept " <>
+                  "before `AuroraMeter.Retention` may delete it. The generations named by " <>
+                  "the live projection row are never deleted, at any age."
+            ],
+            flush_node_id: [
+              type: {:or, [:string, nil]},
+              default: nil,
+              doc:
+                "This node's identity in its `\"flush:<node>\"` heartbeat row. Defaults to " <>
+                  "`to_string(node())`, which is `\"nonode@nohost\"` on an unnamed VM: set it " <>
+                  "per node when several unnamed VMs share one database, or their heartbeats " <>
+                  "collapse into one row that cannot tell one node from ten."
+            ],
             history: [
               type: :boolean,
               default: true,
@@ -415,6 +441,53 @@ defmodule AuroraMeter.Config do
   @spec broadcast_interval() :: pos_integer()
   def broadcast_interval, do: get(:broadcast_interval)
 
+  @doc """
+  Days a flush receipt is kept before `AuroraMeter.Retention` may delete it
+  (default 30, floor 1 day).
+
+  ## Examples
+
+      iex> AuroraMeter.Config.flush_receipt_retention()
+      30
+
+  """
+  @spec flush_receipt_retention() :: pos_integer()
+  def flush_receipt_retention, do: get(:flush_receipt_retention)
+
+  @doc """
+  Days a finished replay checkpoint row is kept (default 365, floor 1 day).
+
+  ## Examples
+
+      iex> AuroraMeter.Config.replay_checkpoint_retention()
+      365
+
+  """
+  @spec replay_checkpoint_retention() :: pos_integer()
+  def replay_checkpoint_retention, do: get(:replay_checkpoint_retention)
+
+  @doc """
+  The configured identity for this node's `"flush:<node>"` heartbeat row, or
+  `nil` when nothing is configured.
+
+  `nil` means "use `to_string(node())`", which `AuroraMeter.Retention.node_id/0`
+  resolves. It is not resolved here because a default is written once, in the
+  schema, and `node()` is not a value a compile-time schema can hold.
+
+  On an unnamed VM `node()` is `:nonode@nohost` for every node, so several
+  unnamed VMs sharing one database write **one** heartbeat row between them,
+  which cannot distinguish one node from ten. `AuroraMeter.Retention` logs a
+  warning when it sees that name.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.flush_node_id()
+      nil
+
+  """
+  @spec flush_node_id() :: String.t() | nil
+  def flush_node_id, do: get(:flush_node_id)
+
   @doc "Whether UTC day buckets are maintained for `AuroraMeter.history/3` (default `true`)."
   @spec history?() :: boolean()
   def history?, do: get(:history)
@@ -470,6 +543,40 @@ defmodule AuroraMeter.Config do
   """
   @spec credits_hold_reconciler_timeout() :: pos_integer()
   def credits_hold_reconciler_timeout, do: get(:credits_hold_reconciler_timeout)
+
+  @doc false
+  # The retention floor, and it is a correctness floor rather than a taste.
+  #
+  # A retention window is compared against a stored timestamp, and two of the
+  # three stamps involved are written by a node's wall clock while the cutoff
+  # comes from the database's. `open-findings.md` X100 measured the shared clock
+  # stepping backwards by up to 439 ms and X59 measured a node's by up to
+  # 2.6472 s, so the comparison is sound only while the window is enormous
+  # relative to those numbers. At one day it is roughly 30,000 times the worst
+  # combined step; at one minute it is 20 times, and at one second the argument
+  # is simply gone. So the small value is refused **at boot**, where an operator
+  # can still read the message, rather than silently producing a deletion that
+  # cannot be undone.
+  #
+  # One day is also far longer than any legitimate use: a host that wants its
+  # receipts gone sooner than a day wants a different mechanism, not a smaller
+  # number here.
+  @spec retention_days(term(), atom()) :: {:ok, pos_integer()} | {:error, String.t()}
+  def retention_days(days, _key) when is_integer(days) and days >= 1, do: {:ok, days}
+
+  def retention_days(days, key) when is_integer(days) do
+    {:error,
+     "#{inspect(key)} is #{days} days, and the floor is 1 day. A retention window is " <>
+       "compared against a stored timestamp, and the clocks that write those timestamps " <>
+       "step backwards by up to a few seconds (open-findings.md X59, X100). A window of " <>
+       "a day is about thirty thousand times that; a window of minutes is not, and this " <>
+       "decision deletes data that cannot be recovered. Pass a one-off " <>
+       ":older_than to AuroraMeter.Retention.prune/1 if you need a narrower cutoff once."}
+  end
+
+  def retention_days(other, key),
+    do:
+      {:error, "#{inspect(key)} is a number of days (a positive integer), got: #{inspect(other)}"}
 
   @doc false
   @spec schema() :: NimbleOptions.t()

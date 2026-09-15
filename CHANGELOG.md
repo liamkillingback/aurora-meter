@@ -13,6 +13,38 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 
 ### Added
 
+- **`AuroraMeter.Retention`, and `AuroraMeter.Oban.Retention`.** A closed,
+  compile-time allow list of what may be deleted, with an age predicate **and** a
+  state predicate on every entry: `aurora_meter_flush_receipts` past
+  `:flush_receipt_retention` (30 days), and finished
+  `"events_replay:<generation>"` checkpoint rows past
+  `:replay_checkpoint_retention` (365 days). Everything else is on the protected
+  list and is never deleted at any age, and a test derives the tables the
+  migrations create and fails unless every one is classified, in both
+  directions. `plan/1` is a dry run that runs the prune's own predicate with
+  `count(*)` and writes nothing; `prune/1` deletes in bounded batches with a
+  per-run budget. See [Retention](retention.md).
+- **The flush heartbeat, and the receipt rule it exists for.** A flush receipt
+  is what makes a retried batch apply at most once, so deleting one while a node
+  still holds that batch would double-count real usage. Every node's
+  `AuroraMeter.Flusher` now writes a `"flush:<node>"` row into
+  `aurora_meter_checkpoints` (idle after a batch commits, pending with the
+  batch's instant after one fails, and idle on a throttled tick otherwise), and
+  `AuroraMeter.Retention` refuses to prune receipts unless every one of those
+  rows proves no node holds a batch from before the cutoff. It also refuses when
+  no node is reporting at all, which is what an un-upgraded fleet looks like.
+  `AuroraMeter.Retention.status/0` lists the fleet, and
+  `AuroraMeter.Retention.forget_node/1` is the one explicit, logged override for
+  a node an operator has confirmed is gone.
+- Configuration: `:flush_receipt_retention` (30 days),
+  `:replay_checkpoint_retention` (365 days) and `:flush_node_id` (this node's
+  heartbeat identity, defaulting to `to_string(node())`). The two windows have a
+  **floor of one day**, refused at boot below it: a retention window is compared
+  against a stored timestamp, and the clocks that write those timestamps step
+  backwards by up to a few seconds, so a window of minutes is not a sound test
+  and this decision cannot be undone.
+- Telemetry `[:aurora_meter, :retention, :prune]`, with `deleted` and `duration`
+  measurements and `table` and `blocked` metadata.
 - **`AuroraMeter.Operations`**: pause, resume and cursors for every scheduled
   operation, free and with no Oban reference in it, so a host running Quantum or
   a plain timer gets the same controls.

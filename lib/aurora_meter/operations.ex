@@ -295,9 +295,12 @@ defmodule AuroraMeter.Operations do
     end)
   end
 
+  # The literal event name rather than the module attribute, so the inventory
+  # guard that greps `lib/` for emit sites can see it (A05). The attribute is
+  # kept because the moduledoc interpolates it, and a test asserts the two agree.
   defp emit(name, batch, started, result) do
     :telemetry.execute(
-      @telemetry,
+      [:aurora_meter, :operations, :batch],
       %{items: items(batch), duration_ms: Clock.monotonic_ms() - started},
       %{name: name, result: result}
     )

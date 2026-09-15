@@ -59,6 +59,28 @@ defmodule AuroraMeter.Storage.Ecto do
   @impl AuroraMeter.Storage
   def flush_batch(id, counters, history) do
     repo().transaction(fn ->
+      # `inserted_at` is stamped by **this node's wall clock**, and from build
+      # unit 05d something compares it: `AuroraMeter.Retention` deletes a
+      # receipt older than a cutoff taken from `clock_timestamp()`. That is two
+      # clocks on one comparison, which is `open-findings.md` X181's shape, and
+      # `architecture-map.md` section 3 says a timestamp a money decision reads
+      # should be stamped by the database.
+      #
+      # It is **not** changed here, and the reason is not inertia. Ecto's
+      # `insert_all/3` takes no fragment in a value, so the database stamp needs
+      # either raw SQL, which would remove the `:receipt_insert` fault point the
+      # I02 harness injects at (`AuroraMeter.Test.FaultRepo`), or a column
+      # default, which is DDL and therefore a new core schema version that
+      # `schema-migration-map.md` fixes the contents of. Neither is 05d's to do.
+      #
+      # What makes the comparison sound in the meantime is the size of the
+      # window, and `AuroraMeter.Retention`'s moduledoc states the bound rather
+      # than assuming it: the smallest cutoff the configuration will accept is
+      # one day, and one day is 288 times the largest clock disagreement
+      # anything else in this system tolerates (`events_future_tolerance` and
+      # Stripe's webhook signature window are both 300 seconds). Recorded as a
+      # finding, with the structural fix named for the release that next opens a
+      # core schema version.
       {inserted, _} =
         repo().insert_all(FlushReceipt, [%{id: id, inserted_at: Clock.now()}],
           on_conflict: :nothing,

@@ -1,0 +1,73 @@
+05d: retention controls. Every command, in order, with its exit code.
+All through tmp/v1/mixlane.sh, which sets DB_PORT=5490 and serialises _build.
+Core 0b3df43, Pro f08561b, storefront c916b9b. 2026-09-15.
+
+CORE
+  mix compile                                                     exit 0
+  mix compile --warnings-as-errors                                exit 1  (fragment/1 in insert_all; see X220)
+  mix compile --warnings-as-errors                                exit 0  (after reverting to Clock.now/0)
+  mix test flusher_test store_test kill_test                      exit 0  12 passed
+  mix test oban_scheduler_map_test oban_test api_inventory_test
+           config_strictness_test clock_test                      exit 2  7 failures (the new registry entry, the new config keys)
+  mix test (the same five)                                        exit 0  72 passed
+  mix test retention_test.exs                                     exit 2  4 failures (utc_datetime precision, then three blocked/ok mismatches)
+  mix test retention_test.exs                                     exit 0  31 passed (4 doctests, 27 tests)
+  mix test retention_controls_test.exs                            exit 0  5 passed
+  AURORA_RACE_REPORT=1 mix test retention_controls_test.exs --seed 1
+                                                                  exit 0  contended 5/5, unassisted 0/5
+  mix test flusher_test.exs                                       exit 0  10 passed
+  mix run priv/v1/receipt_sizing.exs                              exit 0  05d-sizing.log
+  mix format <14 changed files>                                   exit 0
+  mix check                                                       exit 1  (mix docs: retention.md not in extras; a link to a @moduledoc false function)
+  mix check                                                       exit 0  1393 passed, Dialyzer 0 errors
+  bash tmp/v1/05d-core-headless.sh                                exit 1  (the mix run -e block ran in :dev)
+  bash tmp/v1/05d-core-headless.sh                                exit 0  headless ok, 1305 passed at seed 0
+  MIX_ENV=test mix deps.get && mix compile --force                exit 0  (restores the test build the headless leg left without igniter)
+
+PRO
+  mix compile --warnings-as-errors                                exit 1  (outbox_retention_days already existed; see X217)
+  mix compile --warnings-as-errors                                exit 0
+  mix test scheduler_map_test audit_log_test job_controls_test    exit 2  3 failures (the new worker, the new args)
+  mix test (the same three)                                       exit 0  47 passed
+  mix test retention_test.exs                                     exit 2  6 failures (subject_kind check constraint)
+  mix test retention_test.exs                                     exit 0  23 passed (3 doctests, 20 tests)
+  mix test api_inventory_test.exs                                 exit 0  19 passed
+  mix test correctness_index_test.exs                             exit 0  12 passed
+  mix test docs_claims_test.exs                                   exit 2  the Since guard, twice
+  mix test docs_claims_test.exs                                   exit 0  8 passed
+  mix format <11 changed files>                                   exit 0
+  rm -rf priv/plts _build/*/dialyxir* _build/*/lib/aurora_meter   (X114)
+  mix check                                                       exit 2  three credo nested-module suggestions
+  mix check                                                       exit 2  the changelog Since guard
+  mix check                                                       exit 0  946 passed, Dialyzer "Total errors: 1, Skipped: 1"
+
+THE RETENTION FLOOR (added at the 05d review, X225)
+  core  mix test config_strictness_test.exs                       exit 2  1 failure (assert_raise/3 arity)
+  core  mix test config_strictness_test.exs                       exit 0  29 passed
+  pro   mix test pro/config_test.exs                              exit 0  32 passed
+  core  mix format config_strictness_test.exs                     exit 0
+  pro   mix format pro/config_test.exs                            exit 0
+
+  The control, one schema entry's type swapped away from the custom validator,
+  everything else unchanged, then restored and the restore verified by sha256:
+
+  core config.ex :flush_receipt_retention -> :pos_integer          28/29 passed
+       "the refusal of :flush_receipt_retention does not name the floor:
+        invalid value for :flush_receipt_retention option: expected positive
+        integer, got: 0"
+  core config.ex :flush_receipt_retention -> :non_neg_integer      27/29 passed
+       (two tests, including the raise itself: 0 is accepted)
+  core config.ex restored, sha256 e1a5df580c57852c50ab9a1d293ce4c0a78185ff02db24fc77bbcb6c9481c7f8
+       identical before and after
+
+  pro  config/schema.ex :outbox_retention_days -> :pos_integer     31/32 passed
+       "the refusal of :outbox_retention_days does not name the floor:
+        invalid value for :outbox_retention_days option: expected positive
+        integer, got: 0"
+  pro  config/schema.ex :outbox_retention_days -> :non_neg_integer 30/32 passed
+  pro  config/schema.ex restored, sha256 f7f38ed925fdd30ffd239c0dafcd3913ea8e710542d57238f760f1ba839e0ac0
+       identical before and after
+
+  :pos_integer keeps the numeric floor by accident (NimbleOptions' positive
+  integer is >= 1), so it is caught only by the assertion on the MESSAGE.
+  :non_neg_integer loses the floor outright and is caught by the raise.
