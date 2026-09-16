@@ -63,6 +63,7 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Events.Gate,
     AuroraMeter.Install.Options,
     AuroraMeter.Install.Plan,
+    AuroraMeter.Install.Shell,
     AuroraMeter.Install.Templates,
     AuroraMeter.LiveDashboard.Auth,
     AuroraMeter.LiveDashboard.NotStartedError,

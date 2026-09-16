@@ -144,7 +144,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     # which is the larger population by far.
     allow_cutover!()
 
-    new_shape = unique_tenant("lotmig")
+    new_shape = legacy_tenant()
     {:ok, _} = Credits.grant(new_shape, 5 * @dollar, reference: "pi_x266", source: %{})
 
     {:ok, reversal} =
@@ -155,7 +155,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     assert reversal.kind == :reverse, "the row this test is about was not written"
     assert reversal.category == :reversal
 
-    legacy = unique_tenant("lotmig")
+    legacy = legacy_tenant()
     {:ok, _} = Credits.grant(legacy, 5 * @dollar, reference: "pi_x266_legacy")
 
     {:ok, _} =
@@ -335,7 +335,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
 
   test "I19 a blocked wallet keeps lots_enabled_at null, has no lots and records its reason" do
     allow_cutover!()
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     {:ok, _txn} = Credits.grant(tenant, 5 * @dollar, reference: "pi_blocked")
     {:ok, _txn} = Credits.reverse(tenant, 1 * @dollar, "hand-written-refund")
 
@@ -363,7 +363,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     # exits zero with the wallet still on the legacy writer, which is exactly
     # the shape of "a skipped required suite is a failure" applied to money.
     allow_cutover!()
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     block_reversal_unattributed(tenant)
 
     first = migrate(tenant)
@@ -409,7 +409,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     ]
 
     for {name, build} <- cases do
-      tenant = unique_tenant("lotmig")
+      tenant = legacy_tenant()
       build.(tenant)
 
       summary = migrate(tenant)
@@ -567,7 +567,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     # A legacy wallet carrying the reference shape a real Stripe top-up leaves
     # behind, because that is what the fold derives `source.payment_intent_id`
     # from and the refund below has to be able to find its own payment.
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     intent = "pi_#{System.unique_integer([:positive])}"
     {:ok, _} = Credits.grant(tenant, 10 * @dollar, reference: intent)
     {:ok, _} = Credits.debit(tenant, 6 * @dollar, "job_#{intent}")
@@ -611,7 +611,12 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
 
   test "X221 a tenant key that is not a legal operation name still gets a checkpoint" do
     allow_cutover!()
-    tenant = "lotmig ops@example.com/#{System.unique_integer([:positive])}"
+
+    tenant =
+      LedgerFixtures.legacy_wallet!(
+        "lotmig ops@example.com/#{System.unique_integer([:positive])}"
+      )
+
     on_exit(fn -> Checkpoints.delete(LotMigration.checkpoint_name(tenant)) end)
 
     {:ok, _txn} = Credits.grant(tenant, 2 * @dollar, reference: "pi_odd_key")
@@ -700,7 +705,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
   test "I19 the run reports every wallet it examined, and the summary counts them" do
     allow_cutover!()
     good = wallet(:paid_only)
-    bad = unique_tenant("lotmig")
+    bad = legacy_tenant()
     block_reversal_unattributed(bad)
 
     {:ok, summary} =
@@ -865,4 +870,12 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     # this is the unit that first puts money in those tables.
     assert 9 in AuroraMeter.Migration.data_loss_versions()
   end
+
+  # A wallet that predates the lots-on-creation release, which is what this
+  # module's whole subject is. Since 0.5.0 `Ledger.locked_row/2` stamps
+  # `lots_enabled_at` on the INSERT that creates a wallet, so the first ledger
+  # call against an unknown tenant produces a wallet the allocator already
+  # owns. A wallet with a legacy history to replay has to be created as one.
+  defp legacy_tenant(prefix \\ "lotmig"),
+    do: LedgerFixtures.legacy_wallet!(unique_tenant(prefix))
 end

@@ -423,8 +423,16 @@ defmodule AuroraMeter.ExamplesTest do
       assert {:ok, _} = Credits.settle("doc:#{tenant}", 900_000)
       assert Credits.available(tenant) == -400_000
 
-      # ...and the next spend is refused until a grant repairs it.
-      assert {:error, :insufficient_credits} = Credits.debit(tenant, 1_000, "req:#{tenant}")
+      # ...and the next spend is refused until a grant repairs it, by a term
+      # that names the debt rather than blaming the balance. This wallet was
+      # created by this test, so since 0.5.0 it is on the allocator, which is
+      # what a new host gets and therefore what the document must describe.
+      assert {:error, :debt_outstanding} = Credits.debit(tenant, 1_000, "req:#{tenant}")
+
+      # The document's other half: a grant of any category clears it, and it is
+      # the only thing that does.
+      {:ok, _} = Credits.grant(tenant, 1_000_000, reference: "topup:#{tenant}")
+      assert {:ok, _} = Credits.debit(tenant, 1_000, "req:#{tenant}")
     end
 
     test "with_credits/4 settles the real cost" do

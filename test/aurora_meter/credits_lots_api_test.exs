@@ -14,6 +14,7 @@ defmodule AuroraMeter.CreditsLotsApiTest do
   alias AuroraMeter.Credits
   alias AuroraMeter.Credits.Ledger
   alias AuroraMeter.Credits.Lots
+  alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
   @oct ~U[2026-10-01 00:00:00Z]
@@ -226,7 +227,13 @@ defmodule AuroraMeter.CreditsLotsApiTest do
     # The honest answer rather than a synthesised one: the legacy ledger does
     # not record which grant a spend came out of, so a lot list invented from it
     # would be a guess presented as provenance.
-    tenant = unique_tenant("lotsapi")
+    #
+    # The wallet is built as a pre-release one deliberately. Since 0.5.0 a
+    # wallet is born on the allocator, so "has not been cut over" now means
+    # "existed before that release" rather than "is new", and the only wallets
+    # this answer is about are the ones `mix aurora_meter.credits.migrate_lots`
+    # has not reached yet.
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("lotsapi"))
     {:ok, _} = Credits.grant(tenant, 5 * @dollar, reference: "pay")
 
     assert Lots.list(tenant) == []

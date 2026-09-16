@@ -1,0 +1,140 @@
+{
+  "schema": "aurora-v1-bench-summary/1",
+  "generated_at": "2026-09-16T21:19:48.839Z",
+  "directory": "/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush",
+  "package": {
+    "git_dirty": true,
+    "git_sha": "0b6b48c407dc8ec2e67c6cf850ad6af6065d0f00",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "modes": {
+    "flush_100k": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 21576,
+      "median_p50_us": 4461917.85,
+      "median_p95_us": 5048449.92,
+      "min_throughput_ops_per_sec": 21339.63,
+      "max_throughput_ops_per_sec": 22825.15,
+      "spread_percent": 6.51,
+      "workload": {
+        "batch_size": 500,
+        "dirty_keys": 100000,
+        "keys": 100000,
+        "operations": 500000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 196,
+        "tenants": 100000
+      },
+      "command": "mix aurora_meter.bench flush_100k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-1.json --label flush_100k",
+      "run_ids": [
+        "1f394918-0def-4a36-9f14-2ce91bec9244",
+        "01e66265-f2f8-4c48-8528-b23640cc61ce",
+        "ca7cc1bd-42c1-4127-aed5-3769f9897854",
+        "07118a9f-47dc-4358-8947-ea7f3b3ad415",
+        "c5cff6eb-a1e5-4ece-944c-be3f728716f8"
+      ],
+      "files": [
+        "flush_100k-1.json",
+        "flush_100k-2.json",
+        "flush_100k-3.json",
+        "flush_100k-4.json",
+        "flush_100k-5.json"
+      ]
+    },
+    "flush_10k": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 23313.32,
+      "median_p50_us": 435948.84,
+      "median_p95_us": 465230.95,
+      "min_throughput_ops_per_sec": 22701.56,
+      "max_throughput_ops_per_sec": 23760.04,
+      "spread_percent": 4.45,
+      "workload": {
+        "batch_size": 500,
+        "dirty_keys": 10000,
+        "keys": 10000,
+        "operations": 50000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8131,
+        "tenants": 10000
+      },
+      "command": "mix aurora_meter.bench flush_10k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_10k-1.json --label flush_10k",
+      "run_ids": [
+        "10eb6b56-9215-4a4c-901a-3ef7be5ab00f",
+        "f2729087-5a72-4e20-b7f1-7704ac1a4701",
+        "19a67d71-03a9-46b0-8fcf-1b89a8e6c73c",
+        "9c02bcb6-0a25-463b-8e4d-a6b388a5c1df",
+        "a67e9a11-a073-429e-94a1-2bcaf2a78af1"
+      ],
+      "files": [
+        "flush_10k-1.json",
+        "flush_10k-2.json",
+        "flush_10k-3.json",
+        "flush_10k-4.json",
+        "flush_10k-5.json"
+      ]
+    },
+    "flush_1k": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 22619.2,
+      "median_p50_us": 40311.73,
+      "median_p95_us": 59192.45,
+      "min_throughput_ops_per_sec": 19091.45,
+      "max_throughput_ops_per_sec": 23084.8,
+      "spread_percent": 17.3,
+      "workload": {
+        "batch_size": 500,
+        "dirty_keys": 1000,
+        "keys": 1000,
+        "operations": 5000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 195,
+        "tenants": 1000
+      },
+      "command": "mix aurora_meter.bench flush_1k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_1k-1.json --label flush_1k",
+      "run_ids": [
+        "de51926b-f70d-4f07-bfa8-a47b9f093afd",
+        "78d8088d-8b67-46eb-b31d-32f82f63e8c2",
+        "7d9896d8-ecbb-49c6-a671-3493f157b56d",
+        "ce1c9574-1350-4736-a1f0-c8afd1c1b2fd",
+        "5a3dbae8-9254-4530-a4c9-57bae5982950"
+      ],
+      "files": [
+        "flush_1k-1.json",
+        "flush_1k-2.json",
+        "flush_1k-3.json",
+        "flush_1k-4.json",
+        "flush_1k-5.json"
+      ]
+    }
+  }
+}

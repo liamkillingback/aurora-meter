@@ -6,38 +6,72 @@ defmodule AuroraMeter.Install.Templates do
   alias AuroraMeter.Install.Options
   alias AuroraMeter.Install.Plan
 
-  @doc "A starter plans module with a free and a pro plan."
-  @spec plans_module(module()) :: String.t()
-  def plans_module(module) do
+  @doc """
+  A starter plans module with a free and a pro plan.
+
+  **The body only, never a whole `defmodule`.**
+  `Igniter.Project.Module.create_module/3` wraps whatever contents it is given in
+  a `defmodule <name> do ... end` of its own, so a template that carried one
+  produced a file that defined `MyApp.Plans.MyApp.Plans` (holding the plans) and
+  `MyApp.Plans` (holding nothing). The same task writes
+  `config :aurora_meter, plans: MyApp.Plans`, so every application the installer
+  produced refused to start:
+
+      ** (ArgumentError) config :aurora_meter, plans: MyApp.Plans does not export
+         __aurora_plans__/0.
+
+  Found by build unit 09c, the first unit to boot an application the installer
+  built rather than to read the file it wrote (`open-findings.md` X374, repair
+  unit R5). `Mix.Tasks.AuroraMeter.InstallTest` now evaluates the generated
+  config, compiles the generated module and runs the boot-time check against the
+  module the config actually names.
+  """
+  @spec plans_module() :: String.t()
+  def plans_module do
     """
-    defmodule #{inspect(module)} do
-      @moduledoc \"\"\"
-      Aurora Meter plans. Declared at compile time and validated by the DSL.
+    @moduledoc \"\"\"
+    Aurora Meter plans. Declared at compile time and validated by the DSL.
 
-      Hard limits block at the cap (`AuroraMeter.with_quota/4`), metered features
-      count past their included allowance for billing, counters measure without
-      ever blocking or billing, boolean features gate access outright and integer
-      features carry a plan value for `AuroraMeter.feature_value/3`.
-      See https://hexdocs.pm/aurora_meter/plans.html.
-      \"\"\"
-      use AuroraMeter.Plans
+    Hard limits block at the cap (`AuroraMeter.with_quota/4`), metered features
+    count past their included allowance for billing, counters measure without
+    ever blocking or billing, boolean features gate access outright and integer
+    features carry a plan value for `AuroraMeter.feature_value/3`.
+    See https://hexdocs.pm/aurora_meter/plans.html.
+    \"\"\"
+    use AuroraMeter.Plans
 
-      plan :free do
-        price 0
-        limit :ai_generations, 100, :hard
-        feature :priority_support, false
-        feature :seats, 1
-      end
+    plan :free do
+      price 0
+      limit :ai_generations, 100, :hard
+      feature :priority_support, false
+      feature :seats, 1
+    end
 
-      plan :pro do
-        price 4_900
-        metered :ai_generations, included: 10_000, unit_price: 1
-        feature :priority_support, true
-        feature :seats, 10
-      end
+    plan :pro do
+      price 4_900
+      metered :ai_generations, included: 10_000, unit_price: 1
+      feature :priority_support, true
+      feature :seats, 10
     end
     """
   end
+
+  @doc """
+  The queue every Aurora Meter worker declares, for the two places the installer
+  writes it.
+
+  It is `AuroraMeter.Oban.queue/0`'s value, kept here as well because
+  `AuroraMeter.Oban` is compiled **only when Oban is installed** and this module
+  is compiled whenever Igniter is. A direct call from the installer was a
+  compile-time reference to a module a host without Oban does not have, and it
+  warned on every single compile of the dependency in such a host
+  (`open-findings.md` X375, repair unit R5).
+
+  `AuroraMeter.InstallTemplatesTest` asserts the two agree, on a build that has
+  Oban, so the copy cannot drift.
+  """
+  @spec queue() :: atom()
+  def queue, do: :aurora_meter
 
   @doc """
   The migration body: delegate to the versioned `AuroraMeter.Migration`, naming
@@ -145,7 +179,7 @@ defmodule AuroraMeter.Install.Templates do
     """
     [
       repo: #{inspect(repo)},
-      queues: [aurora_meter: 5],
+      queues: [#{queue()}: 5],
       plugins: [{Oban.Plugins.Cron, crontab: #{crontab(entries)}}]
     ]
     """
@@ -187,6 +221,65 @@ defmodule AuroraMeter.Install.Templates do
     AuroraMeter.Oban.ConfigError listing every problem it found, rather than the
     first one.
     """
+  end
+
+  @doc """
+  What `--oban` says when the host has no Oban, naming the line to add.
+
+  The host has asked for something this build cannot give it. Until repair unit
+  R5 the answer was an `UndefinedFunctionError` naming `AuroraMeter.Oban`, a
+  module that only exists when Oban does, so the message a host got named the
+  thing it was missing in the one vocabulary it could do nothing with.
+  """
+  @spec oban_missing(String.t()) :: String.t()
+  def oban_missing(floor) do
+    """
+    --oban was passed and this application does not have Oban.
+
+    Add it to your deps in mix.exs and run this task again:
+
+        {:oban, "#{requirement(floor)}"}
+
+    Aurora Meter does not depend on Oban. Every operation its workers wrap is a
+    public function you can call from any scheduler, so you can also skip the
+    switch entirely and schedule them yourself: see the scheduler map in the
+    documentation.
+
+    Nothing was written.
+    """
+  end
+
+  @doc """
+  What `--oban` says when Oban is installed and Aurora Meter's workers are not
+  in this build.
+
+  The host added Oban after `aurora_meter` was compiled, which is the same
+  stale-build state `--check-support` reports, and the same one line fixes it.
+  """
+  @spec oban_not_compiled() :: String.t()
+  def oban_not_compiled do
+    """
+    --oban was passed and Oban is installed. Aurora Meter's Oban workers are
+    not compiled into this build, which happens when oban was added to your
+    deps after aurora_meter had already been compiled.
+
+        mix deps.compile aurora_meter --force
+
+    Then run this task again. `mix aurora_meter.install --check-support` reports
+    the same thing for every optional integration at once.
+
+    Nothing was written.
+    """
+  end
+
+  # "2.17.0" is the floor `AuroraMeter.Install.Support` declares; "~> 2.17" is
+  # what a host writes in mix.exs. One number, converted, rather than two that
+  # can disagree.
+  defp requirement(floor) do
+    case String.split(floor, ".") do
+      [major, minor | _] -> "~> #{major}.#{minor}"
+      _ -> ">= #{floor}"
+    end
   end
 
   @doc "What the `--oban` switch did, and what it deliberately did not do."

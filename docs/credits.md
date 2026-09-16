@@ -88,11 +88,14 @@ not reduce them. `available` is the arithmetic `balance - held` and stays one:
 it is what `runway_days` divides, and on a wallet in debt it can be positive
 while nothing at all may be spent.
 
-On a wallet that has **not** been cut over to lots, which is every wallet until
-`mix aurora_meter.credits.migrate_lots` runs, `spendable == available`,
+On a wallet that has **not** been cut over to lots, `spendable == available`,
 `promotional_spendable == promotional`, and `debt` and `expired` are both `0`.
 So a dashboard can render all eight figures without asking which writer owns the
 wallet.
+
+That is a wallet created before you upgraded to 0.5.0 and not yet migrated. A
+wallet created since is on lots from its first ledger call and reports all
+eight for real. See [which wallets are on lots](#which-wallets-are-on-lots).
 
 ## Grants
 
@@ -433,6 +436,38 @@ Every grant creates a **lot**: an immutable record of that grant's amount,
 category, expiry and source, with five quantities that always add up to the
 amount.
 
+### Which wallets are on lots
+
+**A wallet created by 0.5.0 or later is on lots from its first ledger call**,
+and there is nothing to switch on. The wallet is created by whatever writes to
+it first (a grant, a hold, even setting a low-balance threshold), and the same
+statement that creates it marks it as the allocator's.
+
+**A wallet that existed before you upgraded stays on the 0.4.0 writer** until
+you run `mix aurora_meter.credits.migrate_lots`. Nothing moves it implicitly:
+the flag that decides is written by the statement that **creates** a wallet and
+by the migration, and by nothing else, so upgrading the library does not
+re-home a single wallet that already has a history.
+
+So an installation that has been through the upgrade holds two kinds of wallet
+until the migration has run, and they behave differently in ways a customer can
+see:
+
+| | wallet from before the upgrade | wallet created since |
+|---|---|---|
+| `AuroraMeter.Credits.Lots.list/2` | `[]` | one lot per grant |
+| `Lots.allocations/2` | `[]` | every movement, with the row that caused it |
+| spend order | promotional first, then undifferentiated paid credit | the full order below, per lot |
+| credit past its `expires_at` | spendable until the sweep reaches it | not spendable |
+| `debt` and `expired` | always `0` | real figures |
+| a refusal after an overspend | `:insufficient_credits` | `:debt_outstanding` |
+| a refund larger than the paid credit left | `promotional` is clamped down | the promotion is kept whole and the shortfall becomes `debt` |
+| `recurring_credits` on the plan | grants nothing | grants the allowance |
+| `:credits_overdraft_tolerance` | extends a hold and a debit | extends a debit only |
+
+[Upgrading a wallet to credit lots](upgrading-to-lots.md) is how you end the
+split, and it can be run repeatedly and one tenant at a time.
+
 | Quantity | What it is |
 |---|---|
 | `available` | spendable now, unless the lot is past its `expires_at` |
@@ -686,6 +721,13 @@ AuroraMeter.Credits.Recurrences.run(limit: 5_000)
 
 A run walks entitled subscriptions in keyset order, skips a tenant whose plan
 declares no allowance, and works out which periods each allowance still owes.
+
+**A recurring allowance needs a wallet the allocator owns**, which is any wallet
+created by 0.5.0 or later, including one that does not exist yet: the grant that
+pays the allowance is what creates it. A tenant whose wallet predates the
+upgrade is skipped with `reason: :lots_disabled` until
+`mix aurora_meter.credits.migrate_lots` has reached it, and the run reports the
+count so the skip is visible rather than silent.
 Each period is its own transaction under the wallet's balance row lock, so a
 twelve-period catch-up is twelve short transactions and a concurrent debit
 interleaves between them.

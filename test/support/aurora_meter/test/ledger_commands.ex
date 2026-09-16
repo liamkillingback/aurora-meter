@@ -54,6 +54,7 @@ defmodule AuroraMeter.Test.LedgerCommands do
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Test.Connections
+  alias AuroraMeter.Test.LedgerFixtures
   alias AuroraMeter.Test.LedgerModel
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -310,7 +311,22 @@ defmodule AuroraMeter.Test.LedgerCommands do
   @spec run([tuple()], keyword()) :: map()
   def run(history, opts \\ []) do
     own? = Connections.checkout!()
-    tenant = AuroraMeter.Test.unique_tenant("model")
+
+    # **A pre-release wallet, because `LedgerModel` is the flat-ledger model.**
+    # 01e wrote it from `architecture-map.md` before lots existed and its
+    # `replay/3` is the legacy writer's arithmetic. Since 0.5.0 a wallet is born
+    # on the allocator (`Ledger.locked_row/2`), so a wallet left to create
+    # itself here would be compared against a model of a writer that no longer
+    # owns it: the run would report the two engines' documented differences
+    # (credit past its `expires_at` is not spendable, a refund beyond
+    # non-promotional credit becomes `debt` instead of clamping `promotional`)
+    # as divergences, and the oracle would be measuring the wrong thing.
+    #
+    # `ledger_model.ex` and the exclusion predicate in `credits_model_test.exs`
+    # are untouched. What the oracle models, and what it declines to compare,
+    # are exactly what they were; only the wallet handed to it is now stated
+    # rather than assumed.
+    tenant = LedgerFixtures.legacy_wallet!(AuroraMeter.Test.unique_tenant("model"))
 
     try do
       final =

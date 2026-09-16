@@ -34,6 +34,7 @@ defmodule AuroraMeter.CreditsModelTest do
   alias AuroraMeter.Test.FaultRepo
   alias AuroraMeter.Test.Faults
   alias AuroraMeter.Test.LedgerCommands
+  alias AuroraMeter.Test.LedgerFixtures
   alias AuroraMeter.Test.LedgerModel
 
   @oct ~U[2026-10-01 00:00:00Z]
@@ -1094,9 +1095,25 @@ defmodule AuroraMeter.CreditsModelTest do
   defp cross_oracle_counts,
     do: :persistent_term.get({__MODULE__, :cross_oracle}, %{compared: 0, diverged: 0})
 
+  # **The wallet is created as a pre-release one, and that is a statement about
+  # which oracle this is.** `LedgerModel` is the flat-ledger model: 01e wrote it
+  # from `architecture-map.md` before lots existed, and its `replay/3` is the
+  # legacy writer's arithmetic. Since 0.5.0 a wallet is born on the allocator
+  # (`Ledger.locked_row/2`), so a wallet left to create itself here would be
+  # compared against a model of a writer that no longer owns it, and the
+  # divergences would be the two engines' documented differences rather than a
+  # defect in either.
+  #
+  # The lot half of the cross-oracle is not affected and is not changed: the
+  # tests that compare `LedgerModel.lot_view/1` call `Ledger.enable_lots!/1` on
+  # the wallet this function hands them, which still holds because a wallet
+  # created here has no ledger rows yet.
+  #
+  # `ledger_model.ex` itself is untouched. It is the independent oracle, and
+  # what it models is exactly what it modelled before.
   defp with_wallet(fun) do
     Connections.checkout!()
-    tenant = AuroraMeter.Test.unique_tenant("model")
+    tenant = LedgerFixtures.legacy_wallet!(AuroraMeter.Test.unique_tenant("model"))
 
     try do
       fun.(tenant)

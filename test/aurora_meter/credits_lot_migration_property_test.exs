@@ -150,8 +150,8 @@ defmodule AuroraMeter.CreditsLotMigrationPropertyTest do
 
   property "I19 a generated legacy history replays into lots that reproduce its balance row" do
     check all(history <- legacy_history(), max_runs: LedgerCommands.runs(20)) do
-      tenant = AuroraMeter.Test.unique_tenant("lotprop")
       own? = Connections.checkout!()
+      tenant = legacy_tenant()
 
       try do
         issued = drive(tenant, history)
@@ -171,8 +171,8 @@ defmodule AuroraMeter.CreditsLotMigrationPropertyTest do
     # lot, which no operation would do and which the lot's own CHECK constraint
     # permits because the sum is unchanged. Every direction the property checks
     # must notice: the allocation fold, and the SQL identities.
-    tenant = AuroraMeter.Test.unique_tenant("lotprop")
     own? = Connections.checkout!()
+    tenant = legacy_tenant()
 
     try do
       history = [
@@ -565,4 +565,9 @@ defmodule AuroraMeter.CreditsLotMigrationPropertyTest do
     history: #{inspect(history, limit: :infinity, pretty: true)}
     """
   end
+
+  # A wallet that predates the lots-on-creation release. See
+  # `LedgerFixtures.legacy_wallet!/1`.
+  defp legacy_tenant(prefix \\ "lotprop"),
+    do: LedgerFixtures.legacy_wallet!(AuroraMeter.Test.unique_tenant(prefix))
 end

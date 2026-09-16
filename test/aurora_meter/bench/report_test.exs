@@ -284,22 +284,27 @@ defmodule AuroraMeter.Bench.ReportTest do
                "without re-running: #{inspect(notes)}"
     end
 
-    # `flush_10k` and `flush_100k` cannot pass on this code, and the reason is a
-    # defect in the library rather than in the bench: one flush builds a single
-    # `insert_all` with SEVEN bind parameters per counter row, and Postgres's
-    # wire protocol takes 65,535, so a batch of more than **9,362** dirty
-    # counter keys cannot be sent at all. The flusher then retains it for an
-    # idempotent retry for ever. Measured to the key in
-    # `docs/evidence/v1/phase-08/08c-flush-limit.md`; filed as **X338**; owned by
-    # a later unit, because 08c must not change `Storage.flush_batch/3` (it is
-    # what `db_recovery` measures).
+    # This list is **empty, and that is the news.**
     #
-    # When X338 is fixed this list is emptied and the rule below covers all
-    # eighteen modes. A test that fails the day a bug is fixed is the point:
-    # nobody has to remember to come back.
-    @expected_failures ~w(flush_10k flush_100k)
+    # It held `flush_10k` and `flush_100k` from 08c until repair unit R4,
+    # because neither could pass on that code and the reason was a defect in the
+    # library rather than in the bench: one flush built a single `insert_all`
+    # with seven bind parameters per counter row against Postgres's wire limit
+    # of 65,535, so a batch of more than 9,362 dirty counter keys could not be
+    # sent at all, and the flusher retained it for an idempotent retry for ever
+    # (**X338**, measured to the key in
+    # `docs/evidence/v1/phase-08/08c-flush-limit.md`). The assertion below then
+    # said, in its own failure message, that the day the defect was fixed
+    # somebody had to come back and empty this list. R4 chunked the insert at a
+    # size derived from the schema, re-ran both modes, and did
+    # (`docs/evidence/v1/repairs/r4-flush-ceiling.md`).
+    #
+    # Leave it empty. An entry here is a published measurement that is known to
+    # be wrong, and it needs a finding id, a reason the owning unit cannot fix
+    # it, and a date somebody will.
+    @expected_failures []
 
-    test "P3 every record carries a correct flag, and only the modes X338 explains are false", %{
+    test "P3 every record carries a correct flag, and none of the eighteen modes is false", %{
       records: records
     } do
       for {mode, record} <- records do
@@ -307,20 +312,27 @@ defmodule AuroraMeter.Bench.ReportTest do
 
         if mode in @expected_failures do
           assert record["correct"] == false,
-                 "#{mode} now passes. X338 (a flush of more than 9,362 dirty counter keys " <>
-                   "cannot be sent to Postgres) must have been fixed. Remove #{mode} from " <>
-                   "@expected_failures so the general rule covers it."
-
-          assert record["errors"]["by_tag"]["flush_failed"] >= 1, "#{mode}"
-
-          assert Enum.any?(record["notes"], &String.contains?(&1, "FAILED")),
-                 "#{mode}: a run that could not flush must say so in its notes"
+                 "#{mode} now passes, and it is listed here as a known failure. Remove it " <>
+                   "from @expected_failures so the general rule covers it, and say in the " <>
+                   "finding it names that it is closed."
         else
           assert record["correct"] == true,
                  "#{mode}'s committed smoke record says correct: false. Its numbers are not " <>
                    "evidence of anything and it must not be published as a measurement."
         end
       end
+    end
+
+    test "P3 the expected-failure list is empty, and adding to it is a deliberate act" do
+      # Without this, emptying the list would be indistinguishable from nobody
+      # having looked. X338 was the only entry this list has ever had; it is
+      # closed, and a future entry should have to argue for itself rather than
+      # arrive as a quiet edit to a word list.
+      assert @expected_failures == [],
+             "#{inspect(@expected_failures)} is published as a measurement that is known to " <>
+               "be wrong. That is sometimes right, and it was right for X338 between 08c and " <>
+               "repair unit R4, but it needs a finding id and an owner rather than a list " <>
+               "entry."
     end
   end
 end

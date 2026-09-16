@@ -17,6 +17,8 @@ defmodule AuroraMeter.Install.Support do
   printed; the check is the host's to run.
   """
 
+  alias AuroraMeter.Install.Templates
+
   @typedoc "One row of the report."
   @type row :: %{
           name: String.t(),
@@ -100,6 +102,46 @@ defmodule AuroraMeter.Install.Support do
   """
   @spec declared_deps() :: [{atom(), String.t(), :required | :optional}]
   def declared_deps, do: Enum.map(@deps, fn {app, floor, req, _guard} -> {app, floor, req} end)
+
+  @doc """
+  The declared floor for one dependency, or `nil` when this package does not
+  declare it.
+
+  For a message that has to name a version. A refusal that tells a host to add a
+  dependency and invents the version it asks for is a refusal that will be wrong
+  one release from now, so the number comes from the same table
+  `--check-support` prints (repair unit R5).
+  """
+  @spec floor_for(atom()) :: String.t() | nil
+  def floor_for(app) do
+    case List.keyfind(@deps, app, 0) do
+      {^app, floor, _req, _guard} -> floor
+      nil -> nil
+    end
+  end
+
+  @doc """
+  Whether `mix aurora_meter.install --oban` can be honoured on this host, and
+  what to tell the host when it cannot.
+
+  Takes the two answers rather than asking for them. `oban` is in **this**
+  package's own lockfile, so `Code.ensure_loaded?(Oban)` is true in every test
+  this suite will ever run, and a check that asked for itself could not be
+  exercised from here at all. That is the whole reason the switch raised
+  `UndefinedFunctionError` in a host without Oban through a unit whose subject
+  was the installer (`open-findings.md` X375, repair unit R5).
+
+  The second argument distinguishes the two states that look the same from a
+  host's side and need opposite answers: no Oban at all, and Oban added after
+  `aurora_meter` was compiled. The second is the `:stale_build` verdict
+  `rows/1` already reports, and the same one line fixes it.
+  """
+  @spec oban_switch(boolean(), boolean()) :: :ok | {:error, String.t()}
+  def oban_switch(false, _workers_compiled?),
+    do: {:error, Templates.oban_missing(floor_for(:oban))}
+
+  def oban_switch(true, false), do: {:error, Templates.oban_not_compiled()}
+  def oban_switch(true, true), do: :ok
 
   @doc """
   Whether anything present is below its floor or half installed.

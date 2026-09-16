@@ -1,0 +1,8 @@
+started_utc=2026-09-16T21:21:41Z
+modes=db_recovery
+runs=1
+container=aurora-meter-pro-testdb
+outage_seconds=10
+extra=--duration 30000 --backlog-keys 12000 --drain-timeout 60000
+failed_runs=0
+finished_utc=2026-09-16T21:22:14Z

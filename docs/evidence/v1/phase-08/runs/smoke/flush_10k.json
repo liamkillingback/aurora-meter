@@ -3,16 +3,23 @@
     "cluster": null,
     "dirty_keys_at_end": 0,
     "drain": null,
-    "pending_batch_items_at_end": 10000,
+    "pending_batch_items_at_end": 0,
     "timeline": [
       {
-        "duration_us": 303554.03,
-        "error": "\"postgresql protocol can not handle 70000 parameters, the maximum is 65535\"",
+        "duration_us": 464171.34,
         "keys_built": 10000,
-        "persisted": 0,
-        "result": "error",
+        "persisted": 10000,
+        "result": "ok",
         "round": 1,
-        "rows_per_second": 0.0
+        "rows_per_second": 21543.77
+      },
+      {
+        "duration_us": 409202.9,
+        "keys_built": 10000,
+        "persisted": 10000,
+        "result": "ok",
+        "round": 2,
+        "rows_per_second": 24437.75
       }
     ]
   },
@@ -22,10 +29,10 @@
     "feature_sources": "%{}",
     "flush_interval": 3600000,
     "history": false,
-    "seed": 8066,
+    "seed": 7938,
     "storage": "AuroraMeter.Storage.Ecto"
   },
-  "correct": false,
+  "correct": true,
   "database": {
     "container": "aurora-meter-pro-testdb",
     "database": "aurora_meter_bench",
@@ -35,26 +42,24 @@
     "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
     "used": true
   },
-  "duration_ms": 303.55,
+  "duration_ms": 873.37,
   "errors": {
-    "by_tag": {
-      "flush_failed": 1
-    },
+    "by_tag": {},
     "rate": 0.0,
-    "total": 1
+    "total": 0
   },
-  "finished_at": "2026-09-16T10:53:27.106920Z",
+  "finished_at": "2026-09-16T21:22:50.843814Z",
   "kind": "end_to_end",
   "label": "flush_10k",
   "latency_us": {
-    "max": 303554.03,
+    "max": 464171.34,
     "method": "nearest_rank",
-    "p50": 303554.03,
-    "p95": 303554.03,
-    "p99": 303554.03,
+    "p50": 409202.9,
+    "p95": 464171.34,
+    "p99": 464171.34,
     "sample_every": null,
     "sampled": false,
-    "samples": 1
+    "samples": 2
   },
   "machine": {
     "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
@@ -65,42 +70,41 @@
   },
   "memory": {
     "after": {
-      "binary": 3984216,
-      "ets": 21267496,
-      "processes": 55077288,
-      "total": 127395488
+      "binary": 2458024,
+      "ets": 22176552,
+      "processes": 84196592,
+      "total": 155843064
     },
     "after_warmup": {
-      "binary": 65971776,
-      "ets": 1993560,
-      "processes": 19639512,
-      "total": 133811448
+      "binary": 66117360,
+      "ets": 1995872,
+      "processes": 19422248,
+      "total": 133730176
     },
     "before": {
-      "binary": 66011712,
-      "ets": 1991432,
-      "processes": 19639512,
-      "total": 133841176
+      "binary": 66109944,
+      "ets": 1993744,
+      "processes": 19412632,
+      "total": 133702824
     },
-    "counters_table_bytes": 5162824
+    "counters_table_bytes": 10204744
   },
   "mode": "flush_10k",
   "notes": [
     "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
     "each round makes 10000 distinct dirty counter keys with Counter.incr/4 and then times one synchronous Flusher.flush/0. duration_ms is the sum of the flushes only; building the dirty set is outside the clock. History is off, because a day bucket would be a second dirty key per increment and the mode's name would be wrong.",
-    "the flush of 10000 dirty keys FAILED, so this run measures nothing: [\"\\\"postgresql protocol can not handle 70000 parameters, the maximum is 65535\\\"\"]. A failed flush retains its batch for an idempotent retry, so the remaining rounds were not run: they would have built more dirty keys on top of a batch that cannot be written.",
-    "persisted total: 0 (expected 0)",
+    "persisted total: 20000 (expected 20000)",
     "dirty keys at the end: 0 (expected 0)",
-    "pending batch items at the end: 10000 (expected 0)",
-    "flush receipts: 0 (one per successful round, 2 rounds requested)"
+    "pending batch items at the end: 0 (expected 0)",
+    "flush receipts: 2 (one per successful round, 2 rounds requested)"
   ],
   "package": {
     "git_dirty": null,
-    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "git_sha": "0b6b48c407dc8ec2e67c6cf850ad6af6065d0f00",
     "name": "aurora_meter",
     "version": "0.5.0"
   },
-  "run_id": "95a2159a-da70-4be4-b870-2af5750f4272",
+  "run_id": "0c79b07f-802c-4cff-8ae6-fe26fe60629f",
   "runtime": {
     "elixir": "1.20.1",
     "erts": "17.0.1",
@@ -108,8 +112,8 @@
     "schedulers_online": 24
   },
   "schema_version": 1,
-  "started_at": "2026-09-16T10:53:24.461464Z",
-  "throughput_ops_per_sec": 0.0,
+  "started_at": "2026-09-16T21:22:45.654240Z",
+  "throughput_ops_per_sec": 22899.69,
   "warmup": {
     "duration_ms": 0.0,
     "operations": 0
@@ -118,11 +122,11 @@
     "batch_size": 500,
     "dirty_keys": 10000,
     "keys": 10000,
-    "operations": 0,
+    "operations": 20000,
     "per_proc": 2000,
     "procs": 1,
     "rounds": 2,
-    "seed": 8066,
+    "seed": 7938,
     "tenants": 10000
   }
 }

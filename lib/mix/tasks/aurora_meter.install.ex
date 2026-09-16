@@ -55,7 +55,10 @@ if Code.ensure_loaded?(Igniter) do
         mix aurora_meter.install --repo MyApp.Repo --oban
 
     Wires the optional `AuroraMeter.Oban.*` workers into the host's own Oban
-    instance:
+    instance. It needs Oban to be a dependency of your application: without one
+    the switch refuses, names the line to add to `mix.exs`, and writes nothing.
+
+    With one:
 
       * `config :my_app, Oban` when it is absent, with the repo, an
         `aurora_meter` queue and a `Oban.Plugins.Cron` plugin carrying
@@ -86,7 +89,25 @@ if Code.ensure_loaded?(Igniter) do
     `--dry-run` is Igniter's own global switch and needs no declaration here: it
     prints the diff the task would apply and writes nothing. It works for this
     task exactly as it works for every other Igniter task, including the
-    `--oban` work above.
+    `--oban` work above, **and it prints that diff in a script as well as at a
+    terminal**. See `--dry-run` under "Exit status and scripts" below.
+
+    ## Exit status and scripts
+
+    A refusal (a bad `--feature-policy`, a bad `--events-source`, `--oban`
+    without Oban) writes nothing and **exits 1**, so `set -e` and `if ! mix ...`
+    do what you expect. Igniter's own behaviour is to display the issues and
+    exit 0; this task and Aurora Meter Pro's wrap `run/1` to add the status
+    (`open-findings.md` X366).
+
+    `--dry-run` prints its change set whether or not you are at a terminal.
+    Igniter treats a run whose standard input is not a character device as
+    `--yes`, and `--yes` suppresses the diff, so the plain
+    `mix aurora_meter.install --dry-run` in a CI step printed **nothing at all**:
+    it wrote no file, which is right, and reported no change set, which is the
+    only reason to run it (X376). A dry run writes nothing and is never asked to
+    confirm, so an implicit `--yes` has nothing to agree to here and this task
+    drops it. Pass `--yes` explicitly and you get the quiet form you asked for.
 
     Without Igniter available the task falls back to generating the migration
     and printing the remaining steps; `--check-support` works there too.
@@ -96,6 +117,7 @@ if Code.ensure_loaded?(Igniter) do
 
     alias AuroraMeter.Install.Oban, as: InstallOban
     alias AuroraMeter.Install.Options
+    alias AuroraMeter.Install.Shell
     alias AuroraMeter.Install.Support
     alias AuroraMeter.Install.Templates
     alias Igniter.Libs.Ecto, as: IgniterEcto
@@ -125,8 +147,17 @@ if Code.ensure_loaded?(Igniter) do
       }
     end
 
+    # The two edges of this task that Igniter's defaults get wrong for a host
+    # running it from a script rather than at a prompt: a refusal that exits 0
+    # (X366) and a `--dry-run` that reports nothing (X376). Both are explained in
+    # full in `AuroraMeter.Install.Shell`, and Aurora Meter Pro's installer wraps
+    # the same two.
+    @impl Mix.Task
+    def run(argv), do: Shell.halt_on_issues(super(argv))
+
     @impl Igniter.Mix.Task
     def igniter(igniter) do
+      igniter = %{igniter | args: Shell.report_dry_run(igniter.args)}
       opts = igniter.args.options
 
       if opts[:check_support] do
@@ -136,8 +167,10 @@ if Code.ensure_loaded?(Igniter) do
         # an igniter carrying one issue and no change at all. Igniter writes
         # nothing when there are issues, and an igniter with no change in it is
         # the strongest form of "created no file".
-        case Options.parse(opts) do
-          {:ok, settings} -> install(igniter, opts, settings)
+        with {:ok, settings} <- Options.parse(opts),
+             :ok <- oban_available(opts[:oban]) do
+          install(igniter, opts, settings)
+        else
           {:error, message} -> Igniter.add_issue(igniter, message)
         end
       end
@@ -242,19 +275,48 @@ if Code.ensure_loaded?(Igniter) do
     defp maybe_oban(igniter, true, repo), do: oban(igniter, repo)
     defp maybe_oban(igniter, _absent, _repo), do: igniter
 
+    # Checked with `Options.parse/1`, before anything is computed, so a host that
+    # cannot have `--oban` is told so and keeps a tree nothing touched.
+    #
+    # Until repair unit R5 this was not checked at all, and `--oban` in a host
+    # without Oban raised `UndefinedFunctionError` naming `AuroraMeter.Oban`, an
+    # internal module the host has never heard of and cannot install
+    # (`open-findings.md` X375). Nothing was written, which was right, and
+    # nothing actionable was said, which was not. Reproduced in a real
+    # `mix phx.new` application by 09c and again by R5.
+    defp oban_available(true) do
+      Support.oban_switch(Code.ensure_loaded?(Oban), Code.ensure_loaded?(AuroraMeter.Oban))
+    end
+
+    defp oban_available(_absent), do: :ok
+
     # The merge itself is `AuroraMeter.Install.Oban`'s, because Aurora Meter
     # Pro's installer does exactly the same thing with its own entries and a
     # copy of a hundred lines of Sourceror across a package boundary is a copy
     # that will drift.
     defp oban(igniter, repo) do
       otp_app = IgniterApp.app_name(igniter)
-      entries = AuroraMeter.Oban.cron_entries()
+      entries = recommended_entries()
 
       igniter
       |> InstallOban.wire(otp_app: otp_app, repo: repo, entries: entries)
       |> InstallOban.validate_call(otp_app)
       |> Igniter.add_notice(Templates.oban_notice(entries))
     end
+
+    # `apply/3` and not `AuroraMeter.Oban.cron_entries()`. This task is compiled
+    # whenever Igniter is present and `AuroraMeter.Oban` only when Oban is, so
+    # the direct call was a compile-time reference to a module a host without
+    # Oban does not have, and the compiler said so on **every** compile of the
+    # dependency in such a host (X375). `oban_available/1` has already refused
+    # the run if the module is not there, so the only thing `apply/3` hides from
+    # the compiler is a question already answered.
+    #
+    # Credo's "avoid apply when the number of arguments is known" is right in
+    # general and wrong here: the arity is not what is being hidden, the module
+    # is, and hiding it from the compiler is the entire purpose.
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
+    defp recommended_entries, do: apply(AuroraMeter.Oban, :cron_entries, [])
 
     # -- the pre-existing work -------------------------------------------------
 
@@ -281,7 +343,12 @@ if Code.ensure_loaded?(Igniter) do
           igniter
 
         {false, igniter} ->
-          IgniterModule.create_module(igniter, plans, Templates.plans_module(plans))
+          # `plans_module/0` returns the module BODY. `create_module/3` writes
+          # the `defmodule MyApp.Plans do ... end` around it, and a template
+          # that carried one of its own produced a file defining
+          # `MyApp.Plans.MyApp.Plans` with an empty `MyApp.Plans` in front of
+          # it, which is the module the config above names (X374, R5).
+          IgniterModule.create_module(igniter, plans, Templates.plans_module())
       end
     end
   end

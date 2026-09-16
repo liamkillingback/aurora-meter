@@ -1,0 +1,53 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <h1 class="text-3xl font-semibold">Aurora Meter, in an application</h1>
+
+  <p>
+    This is the reference application for <a href="https://hexdocs.pm/aurora_meter" class="link">Aurora Meter</a>. It meters
+    usage, enforces a plan's quotas, holds and settles prepaid credit, records a
+    durable fact for every unit of work, and stages that fact for export, and it does
+    all of it in about six hundred lines you can read.
+  </p>
+
+  <div class="alert alert-info" role="note">
+    <div>
+      <p><strong>There is no AI here and there is no payment here.</strong></p>
+      <p class="text-sm">
+        The workload is a deterministic simulation: no account, no key, no network
+        call. Credit is granted by the seed or from the developer tools page and is
+        labelled synthetic wherever it appears. Nothing on any page takes money or
+        says that money was taken.
+      </p>
+    </div>
+  </div>
+
+  <h2 class="text-xl font-semibold mt-6">What to look at</h2>
+  <ul class="list-disc pl-6 space-y-1">
+    <li>
+      <strong>/generate</strong>
+      is the whole teaching path: a quota that reserves, a credit hold for an
+      estimate, the work, a durable record, a settlement for the real cost.
+      Double-click the button and watch it be refused.
+    </li>
+    <li>
+      <strong>/history</strong>
+      lines up the three identities of one request: the local row, the durable event
+      and the credit hold.
+    </li>
+    <li>
+      <strong>/ops</strong>
+      is the operator's view: the conservation identity, the credit lots in spend
+      order, the outbox, and the two reporting sources side by side.
+    </li>
+  </ul>
+
+  <h2 class="text-xl font-semibold mt-6">Signing in</h2>
+  <p :if={@current_scope && @current_scope.user}>
+    You are signed in. <.link navigate={~p"/generate"} class="link">Start generating</.link>.
+  </p>
+  <p :if={is_nil(@current_scope) || is_nil(@current_scope.user)}>
+    Run <code>mix sample.seed</code>, then
+    <.link navigate={~p"/users/log-in"} class="link">log in</.link>
+    with one of the seeded accounts it prints. It logs in by emailed link and the
+    mail is in the local mailbox at <code>/dev/mailbox</code>.
+  </p>
+</Layouts.app>

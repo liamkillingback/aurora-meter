@@ -6,20 +6,20 @@
     "pending_batch_items_at_end": 0,
     "timeline": [
       {
-        "duration_us": 53966.32,
+        "duration_us": 58228.08,
         "keys_built": 1000,
         "persisted": 1000,
         "result": "ok",
         "round": 1,
-        "rows_per_second": 18530.08
+        "rows_per_second": 17173.84
       },
       {
-        "duration_us": 41372.32,
+        "duration_us": 39730.11,
         "keys_built": 1000,
         "persisted": 1000,
         "result": "ok",
         "round": 2,
-        "rows_per_second": 24170.75
+        "rows_per_second": 25169.82
       }
     ]
   },
@@ -29,7 +29,7 @@
     "feature_sources": "%{}",
     "flush_interval": 3600000,
     "history": false,
-    "seed": 8066,
+    "seed": 7938,
     "storage": "AuroraMeter.Storage.Ecto"
   },
   "correct": true,
@@ -42,21 +42,21 @@
     "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
     "used": true
   },
-  "duration_ms": 95.34,
+  "duration_ms": 97.96,
   "errors": {
     "by_tag": {},
     "rate": 0.0,
     "total": 0
   },
-  "finished_at": "2026-09-16T10:52:28.288796Z",
+  "finished_at": "2026-09-16T21:22:44.605339Z",
   "kind": "end_to_end",
   "label": "flush_1k",
   "latency_us": {
-    "max": 53966.32,
+    "max": 58228.08,
     "method": "nearest_rank",
-    "p50": 41372.32,
-    "p95": 53966.32,
-    "p99": 53966.32,
+    "p50": 39730.11,
+    "p95": 58228.08,
+    "p99": 58228.08,
     "sample_every": null,
     "sampled": false,
     "samples": 2
@@ -70,22 +70,22 @@
   },
   "memory": {
     "after": {
-      "binary": 771272,
-      "ets": 4699792,
-      "processes": 30953528,
-      "total": 83391528
+      "binary": 905784,
+      "ets": 4701200,
+      "processes": 30686376,
+      "total": 83319304
     },
     "after_warmup": {
-      "binary": 65981552,
-      "ets": 1993904,
-      "processes": 19697976,
-      "total": 133877864
+      "binary": 66117312,
+      "ets": 1995904,
+      "processes": 19440728,
+      "total": 133750672
     },
     "before": {
-      "binary": 66021856,
-      "ets": 1991776,
-      "processes": 19959888,
-      "total": 134169808
+      "binary": 66110344,
+      "ets": 1993776,
+      "processes": 19440584,
+      "total": 133733368
     },
     "counters_table_bytes": 1129288
   },
@@ -100,11 +100,11 @@
   ],
   "package": {
     "git_dirty": null,
-    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "git_sha": "0b6b48c407dc8ec2e67c6cf850ad6af6065d0f00",
     "name": "aurora_meter",
     "version": "0.5.0"
   },
-  "run_id": "ad64b9db-91f9-425a-be07-7ef8ed2af9f3",
+  "run_id": "0d4a664a-e0e5-4daa-9efa-3ad6ab07859a",
   "runtime": {
     "elixir": "1.20.1",
     "erts": "17.0.1",
@@ -112,8 +112,8 @@
     "schedulers_online": 24
   },
   "schema_version": 1,
-  "started_at": "2026-09-16T10:52:27.670465Z",
-  "throughput_ops_per_sec": 20977.85,
+  "started_at": "2026-09-16T21:22:43.938224Z",
+  "throughput_ops_per_sec": 20416.87,
   "warmup": {
     "duration_ms": 0.0,
     "operations": 0
@@ -126,7 +126,7 @@
     "per_proc": 2000,
     "procs": 1,
     "rounds": 2,
-    "seed": 8066,
+    "seed": 7938,
     "tenants": 1000
   }
 }

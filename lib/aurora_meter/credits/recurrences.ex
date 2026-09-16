@@ -84,6 +84,12 @@ defmodule AuroraMeter.Credits.Recurrences do
       allowance, the cap and the catch-up are all defined over lots, and a
       second, weaker implementation over the legacy projection is not one this
       package will carry. See `docs/upgrading-to-lots.md`.
+
+      A tenant with **no wallet at all** is not skipped: since 0.5.0 the grant
+      that pays the allowance is what creates the wallet, and a wallet created
+      now is born on the allocator. This is the ordinary case for a customer
+      who has just subscribed, and an allowance is usually the first credit a
+      wallet ever sees.
     * The storage adapter must implement
       `c:AuroraMeter.Storage.list_subscriptions/2`. A run that cannot list
       subscriptions returns `{:error, {:unsupported, :list_subscriptions}}`;
@@ -836,15 +842,49 @@ defmodule AuroraMeter.Credits.Recurrences do
   end
 
   @doc false
-  # Whether the allocator owns this wallet.
+  # Whether the allocator will own this wallet when the grant writes to it.
+  #
+  # Three cases, and the third is the one repair unit R6 added (`open-findings.md`
+  # X380):
+  #
+  #   * the wallet has `lots_enabled_at` set: the allocator owns it, true;
+  #   * the wallet exists with the flag null: a wallet that predates the
+  #     lots-on-creation release and has not been migrated, false, and it is
+  #     skipped with `reason: :lots_disabled` exactly as before;
+  #   * **there is no wallet row at all: true**, because the grant this gate is
+  #     deciding about is what creates it, and `Ledger.locked_row/2` stamps
+  #     `lots_enabled_at` on the insert that does.
+  #
+  # Without the third case a recurring allowance could never reach a customer
+  # who had never been granted anything, which is every customer at the moment
+  # they subscribe, and an allowance is usually the first credit a wallet ever
+  # sees. The gate would have been circular: the wallet needs a grant to exist,
+  # and the grant needs the wallet to exist.
+  #
+  # This is a pre-filter that saves a transaction per period. The reading that
+  # decides is still the locked one in `AuroraMeter.Credits.Ledger`, so a wallet
+  # created between this read and that lock is judged there, on its real flag,
+  # under the row lock.
   @spec lots?(String.t()) :: boolean()
   def lots?(tenant_key) do
-    Config.repo().one(
-      from(b in CreditBalance,
-        where: b.tenant_key == ^tenant_key and not is_nil(b.lots_enabled_at),
-        select: true
-      )
-    ) || false
+    case Config.repo().one(
+           from(b in CreditBalance,
+             where: b.tenant_key == ^tenant_key,
+             select: b.lots_enabled_at
+           )
+         ) do
+      nil ->
+        not wallet_exists?(tenant_key)
+
+      _stamped ->
+        true
+    end
+  end
+
+  @spec wallet_exists?(String.t()) :: boolean()
+  defp wallet_exists?(tenant_key) do
+    Config.repo().one(from(b in CreditBalance, where: b.tenant_key == ^tenant_key, select: true)) ||
+      false
   end
 
   # -- telemetry and counters -------------------------------------------------

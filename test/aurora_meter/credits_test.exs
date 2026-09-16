@@ -9,6 +9,7 @@ defmodule AuroraMeter.CreditsTest do
   alias AuroraMeter.Credits.Ledger
   alias AuroraMeter.Credits.Money
   alias AuroraMeter.Schema.CreditTransaction
+  alias AuroraMeter.Test.LedgerFixtures
 
   doctest AuroraMeter.Credits
   doctest AuroraMeter.Credits.Money
@@ -363,7 +364,10 @@ defmodule AuroraMeter.CreditsTest do
     end
 
     test "still cannot push promotional above the balance" do
-      tenant = unique_tenant()
+      # Legacy: the flat ledger clamped `promotional` down with the balance.
+      # On the allocator the promotion is kept whole and the shortfall becomes
+      # `debt` instead (`credits_lot_reversal_test.exs` / X250).
+      tenant = LedgerFixtures.legacy_wallet!(unique_tenant())
       fund!(tenant, 500_000, category: :promotional)
       fund!(tenant, 100_000, category: :paid)
 
@@ -424,7 +428,7 @@ defmodule AuroraMeter.CreditsTest do
     end
 
     test "expire_due/1 expires only what is left, once, and never below zero" do
-      tenant = unique_tenant()
+      tenant = LedgerFixtures.legacy_wallet!(unique_tenant())
       attach([[:aurora_meter, :credits, :expire]], tenant)
       past = DateTime.add(DateTime.utc_now(), -60, :second)
       future = DateTime.add(DateTime.utc_now(), 3_600, :second)
@@ -463,7 +467,7 @@ defmodule AuroraMeter.CreditsTest do
       # used to walk straight through that: it took the balance below `held`,
       # and the settle that followed took the balance itself negative — a debt
       # the tenant silently repays out of their next top-up.
-      tenant = unique_tenant()
+      tenant = LedgerFixtures.legacy_wallet!(unique_tenant())
       past = DateTime.add(DateTime.utc_now(), -60, :second)
 
       grant = fund!(tenant, 500_000, category: :promotional, expires_at: past)
@@ -496,7 +500,7 @@ defmodule AuroraMeter.CreditsTest do
       # `promotional` on the balance is the sum of every live grant, so
       # expiring against that total let the first grant to expire reclaim
       # money the second had contributed.
-      tenant = unique_tenant()
+      tenant = LedgerFixtures.legacy_wallet!(unique_tenant())
       past = DateTime.add(DateTime.utc_now(), -60, :second)
       future = DateTime.add(DateTime.utc_now(), 3_600, :second)
 
@@ -537,7 +541,7 @@ defmodule AuroraMeter.CreditsTest do
       # is released the value goes back to the balance as ordinary spendable
       # credit, although the grant it came from expired an hour ago, and it
       # stays spendable until some scheduler happens to run expire_due/1 again.
-      tenant = unique_tenant()
+      tenant = LedgerFixtures.legacy_wallet!(unique_tenant())
       past = DateTime.add(DateTime.utc_now(), -60, :second)
 
       fund!(tenant, 500_000, category: :promotional, expires_at: past)

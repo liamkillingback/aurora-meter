@@ -953,6 +953,7 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Events.Gate` | The admission counter that bounds concurrent durable writes. Configure `:record_max_concurrency`; there is nothing to call. |
 | `AuroraMeter.Install.Options` | Parses and validates `--feature-policy` and `--events-source` for both definitions of the install task, so the Igniter-less fallback cannot silently ignore a switch. |
 | `AuroraMeter.Install.Plan` | The host migration files an install or an upgrade has to become, for both packages. Both generators and both installers read it, so no two of them can emit a different file. |
+| `AuroraMeter.Install.Shell` | The two adjustments both installers make to how an Igniter task talks to the shell: a refusal exits 1 rather than 0, and `--dry-run` reports its change set in a script rather than only at a terminal. |
 | `AuroraMeter.Install.Templates` | The strings the installer writes. |
 | `AuroraMeter.LiveDashboard.Auth` | The `:authorized_by` contract both dashboard pages are registered with. Register the page; the option is documented on it. |
 | `AuroraMeter.LiveDashboard.NotStartedError` | Raised inside the section readers when a node-local table is absent, and converted into `{:unavailable, :not_started}`. It is never raised out of them. |

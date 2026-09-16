@@ -1,0 +1,59 @@
+{
+  "schema": "aurora-v1-bench-summary/1",
+  "generated_at": "2026-09-16T21:22:14.950Z",
+  "directory": "/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-outage-above-ceiling",
+  "package": {
+    "git_dirty": true,
+    "git_sha": "0b6b48c407dc8ec2e67c6cf850ad6af6065d0f00",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "modes": {
+    "db_recovery": {
+      "kind": "end_to_end",
+      "runs": 1,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 1559638.94,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 1559638.94,
+      "max_throughput_ops_per_sec": 1559638.94,
+      "spread_percent": null,
+      "workload": {
+        "batch_size": 500,
+        "duration_ms": 30000,
+        "history": true,
+        "keys": 12000,
+        "operations": 46788971,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8130,
+        "storage_delay_us": 0,
+        "tenants": 12000,
+        "warmed_keys": 24000
+      },
+      "command": "mix aurora_meter.bench db_recovery --json /home/liamk/src/PhxTemplates/tmp/v1/bench/r4-outage-above-ceiling/runs/db_recovery-1.json --label db_recovery --duration 30000 --backlog-keys 12000 --drain-timeout 60000",
+      "run_ids": [
+        "caf89875-8b1a-408c-bd3d-077443f0493c"
+      ],
+      "files": [
+        "db_recovery-1.json"
+      ]
+    }
+  }
+}

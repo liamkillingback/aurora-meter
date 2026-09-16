@@ -419,6 +419,102 @@ jobs:
       - run: mix v1.migrations
 
   # ---------------------------------------------------------------------------
+  # The sample application under examples/.
+  #
+  # It is a second Phoenix project with its own mix.lock, its own _build and its
+  # own database, and it depends on this package by path. That last part is why
+  # this job exists: a change to the library's public API that breaks a real
+  # application fails here, on the same commit, rather than being found by the
+  # first reader who tries to run it.
+  #
+  # Three things are deliberate.
+  #
+  # `working-directory` and a cache key of its own, so it never shares `_build`
+  # with the `library` job (execution-waves rule 1: never two Mix tasks against
+  # one build path).
+  #
+  # `mix test` only. No dialyzer, no credo and no coverage floor: the sample is
+  # documentation that executes, and a style gate on it would be a gate on the
+  # readability decisions it is making on purpose.
+  #
+  # No `assets.setup`. Building the CSS and the JS needs two binaries and two
+  # git dependencies from GitHub, and none of it is on the path `mix test`
+  # takes. A job that fetched them would fail on GitHub's availability rather
+  # than on this repository's code.
+  # ---------------------------------------------------------------------------
+  sample:
+    name: sample application (examples/aurora_meter_example_ai)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+      DB_PORT: "5432"
+    services:
+      postgres:
+        image: postgres:16.13
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.5"
+          otp-version: "27.3.4.17"
+          version-type: strict
+
+      - name: Restore the sample's own deps and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            examples/aurora_meter_example_ai/deps
+            examples/aurora_meter_example_ai/_build
+          # The library's own mix.lock is in the key as well as the sample's:
+          # the sample compiles the library from source through a path
+          # dependency, so a library dependency change invalidates this cache
+          # too.
+          key: ${{ runner.os }}-mix-sample-1.18.5-otp-27.3.4.17-${{ hashFiles('examples/aurora_meter_example_ai/mix.lock', 'mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-sample-1.18.5-otp-27.3.4.17-
+
+      - name: Fetch dependencies
+        working-directory: examples/aurora_meter_example_ai
+        run: mix deps.get
+
+      - name: Check formatting
+        working-directory: examples/aurora_meter_example_ai
+        run: mix format --check-formatted
+
+      - name: Compile (warnings as errors)
+        working-directory: examples/aurora_meter_example_ai
+        run: mix compile --warnings-as-errors --force
+
+      - name: Tests
+        working-directory: examples/aurora_meter_example_ai
+        run: mix test --seed 0
+
+      # `test/aurora_meter/packaging_test.exs` asserts that the archive excludes
+      # this tree. It lives in the library's own suite and runs in the `library`
+      # job; repeating it here would need a second dependency fetch in the
+      # package root for no extra coverage.
+
+      - name: Nothing in the sample tree is untracked
+        run: |
+          set -euo pipefail
+          untracked=$(git status --porcelain --untracked-files=all -- examples/ | wc -l)
+          if [ "$untracked" -ne 0 ]; then
+            echo "the sample job left files behind:"
+            git status --porcelain --untracked-files=all -- examples/
+            exit 1
+          fi
+          echo "examples/ is clean"
+
+  # ---------------------------------------------------------------------------
   # Secret scanning.
   # ---------------------------------------------------------------------------
   secrets:

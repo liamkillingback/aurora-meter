@@ -95,11 +95,72 @@ defmodule AuroraMeter.Test.LedgerFixtures do
   def ref(tenant, name), do: name <> "_" <> String.replace(tenant, ~r/[^A-Za-z0-9_]/, "_")
 
   @doc """
+  Creates `tenant`'s balance row in the shape a wallet that **predates the
+  lots-on-creation release** has, and returns `tenant`.
+
+  Since 0.5.0 a wallet is born on the allocator: `Ledger.locked_row/2` stamps
+  `lots_enabled_at` on the INSERT that creates it, so the first ledger call
+  against an unknown tenant produces a lot wallet. A wallet from before that
+  release has a balance row already, with the flag null, and the only thing
+  that moves it is `mix aurora_meter.credits.migrate_lots`.
+
+  This writes that row directly, which is the one honest way to produce it:
+  every legacy shape in this module, and the migration those shapes exist to
+  check, is about a wallet the allocator does not own, and after the release
+  there is no API call that creates one. It inserts rather than updates, so it
+  must run before the wallet's first ledger call.
+
+  The row carries nothing but identity, currency and timestamps: every figure
+  on it is still produced by the shipped legacy arithmetic, which is what the
+  moduledoc above promises and what keeps the migration from being checked
+  against itself.
+
+  Calling it twice on one wallet is fine, so a caller may say it out loud
+  beside a `build!/2` that already does it. Calling it on a wallet the
+  allocator owns raises: a legacy shape cannot be imposed on a wallet that has
+  lots, and quietly clearing the flag would produce a wallet whose rows and
+  whose flag disagree, which is the one state the two writers may never be in.
+  """
+  @spec legacy_wallet!(String.t()) :: String.t()
+  def legacy_wallet!(tenant) do
+    now = Clock.now()
+    repo = Config.repo()
+
+    repo.insert_all(
+      CreditBalance,
+      [
+        %{
+          id: Ecto.UUID.generate(),
+          tenant_key: tenant,
+          currency: Config.credits_currency(),
+          lots_enabled_at: nil,
+          inserted_at: now,
+          updated_at: now
+        }
+      ],
+      on_conflict: :nothing,
+      conflict_target: [:tenant_key]
+    )
+
+    case repo.one(from(b in CreditBalance, where: b.tenant_key == ^tenant)) do
+      %CreditBalance{lots_enabled_at: nil} ->
+        tenant
+
+      %CreditBalance{lots_enabled_at: stamped} ->
+        raise ArgumentError,
+              "LedgerFixtures.legacy_wallet!/1 refuses #{inspect(tenant)}: its wallet is " <>
+                "already on the allocator (lots_enabled_at #{inspect(stamped)}). Call it " <>
+                "before the wallet's first ledger call, which is what creates it."
+    end
+  end
+
+  @doc """
   Builds `shape` on `tenant` through the real legacy ledger and returns
   `tenant`.
   """
   @spec build!(atom(), String.t()) :: String.t()
   def build!(shape, tenant) do
+    legacy_wallet!(tenant)
     apply(__MODULE__, :"build_#{shape}", [tenant])
 
     # Every row a 0.4.0 database holds has a null `hold_transaction_id`: the

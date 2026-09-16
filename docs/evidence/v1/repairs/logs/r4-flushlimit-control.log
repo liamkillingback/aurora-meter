@@ -1,0 +1,29 @@
+[mixlane] core: DB_PORT=5490 bash /home/liamk/src/PhxTemplates/tmp/v1/r4-bisect-control.sh
+[snapshot] lib/aurora_meter/storage/ecto.ex dcf5d6accc21
+control no-chunking: lib/aurora_meter/storage/ecto.ex patched (one statement again, as before the fix); sha256[:12]=3d0dcdcbc3bc
+[control] the same bisection, with the chunking removed
+derived chunk size, counters: 9362 rows per statement
+derived chunk size, history:  8191 rows per statement
+08c's boundary, re-probed
+      9362 keys: ok        9362 persisted in 442.8 ms
+      9363 keys: ERROR     "postgresql protocol can not handle 65541 parameters, the maximum is 65535" (195.5 ms)
+the ladder above it
+     10000 keys: ERROR     "postgresql protocol can not handle 70000 parameters, the maximum is 65535" (174.9 ms)
+a rung FAILED at 10000: {:error, "postgresql protocol can not handle 70000 parameters, the maximum is 65535"}
+      9681 keys: ERROR     "postgresql protocol can not handle 67767 parameters, the maximum is 65535" (164.2 ms)
+      9521 keys: ERROR     "postgresql protocol can not handle 66647 parameters, the maximum is 65535" (173.7 ms)
+      9441 keys: ERROR     "postgresql protocol can not handle 66087 parameters, the maximum is 65535" (126.7 ms)
+      9401 keys: ERROR     "postgresql protocol can not handle 65807 parameters, the maximum is 65535" (140.0 ms)
+      9381 keys: ERROR     "postgresql protocol can not handle 65667 parameters, the maximum is 65535" (145.3 ms)
+      9371 keys: ERROR     "postgresql protocol can not handle 65597 parameters, the maximum is 65535" (169.1 ms)
+      9366 keys: ERROR     "postgresql protocol can not handle 65562 parameters, the maximum is 65535" (147.8 ms)
+      9364 keys: ERROR     "postgresql protocol can not handle 65548 parameters, the maximum is 65535" (139.2 ms)
+      9363 keys: ERROR     "postgresql protocol can not handle 65541 parameters, the maximum is 65535" (141.0 ms)
+largest dirty-key count that flushes: 9362
+smallest that does not:              9363
+history on, so every increment makes a second dirty key in a wider table
+     20000 keys: ERROR     "postgresql protocol can not handle 140000 parameters, the maximum is 65535" (716.3 ms)
+08c boundary re-probe: %{9362 => {:ok, 9362}, 9363 => {:error, "postgresql protocol can not handle 65541 parameters, the maximum is 65535"}}
+[trap] restoring
+[restore] lib/aurora_meter/storage/ecto.ex dcf5d6accc21 ok
+[mixlane] core exit=0 started=2026-09-16T21:27:16Z finished=2026-09-16T21:27:53Z

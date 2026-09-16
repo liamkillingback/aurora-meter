@@ -157,8 +157,15 @@ if Code.ensure_loaded?(Igniter) do
 
     # The queue is added only when absent, so a concurrency the host chose is
     # never changed. `&{:ok, &1}` is the whole of that promise.
+    #
+    # `Templates.queue/0` and not `AuroraMeter.Oban.queue/0`: this module is
+    # compiled whenever Igniter is present and `AuroraMeter.Oban` only when Oban
+    # is, so the direct call was a compile-time reference to a module a host
+    # without Oban does not have. It warned on every compile of the dependency in
+    # such a host, which is the first thing a new host saw (X375, repair unit
+    # R5). The two values are asserted equal by the package's own suite.
     defp queues(zipper) do
-      CodeKeyword.set_keyword_key(zipper, AuroraMeter.Oban.queue(), 5, &{:ok, &1})
+      CodeKeyword.set_keyword_key(zipper, Templates.queue(), 5, &{:ok, &1})
     end
 
     # `Igniter.Code.Common.within/2` because `set_keyword_key/4` re-wraps

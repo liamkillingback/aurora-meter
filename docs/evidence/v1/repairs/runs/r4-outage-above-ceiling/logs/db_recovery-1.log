@@ -1,0 +1,328 @@
+
+07:21:42.619 [error] Aurora Meter refuses to reprice an existing plan version. The commercial content of 1 compiled plan version(s) differs from the snapshot registered for them:
+
+  * plan bench_cluster version 1: stored 45396b2b979a, compiled 8f368657fd5a
+
+Every subscription pinned to one of those versions was sold the stored definition. Publish the change as a new version instead, for example:
+
+    plan :bench_cluster, version: "2", effective_at: ~U[2026-01-01 00:00:00Z] do
+      # the new price and limits
+    end
+
+Or revert the edit. Setting `config :aurora_meter, plan_version_conflict: :warn` logs this instead of raising, which is the transition-release default and not a fix. The stored definitions are in aurora_meter_plan_versions:
+
+    SELECT plan_id, version, encode(fingerprint, 'hex'), definition
+    FROM aurora_meter_plan_versions ORDER BY plan_id, version;
+
+
+07:21:42.627 [warning] AuroraMeter.Plans: the stored snapshot of plan free version 1 names ["ai_generations", "seats"], which no atom on this node matches, so those entries are dropped from the resolved plan. Every entitlement function takes an atom, so no caller can ask about one of them; code that enumerates plan.features (the Pro usage reporter does, to decide what to bill) will not see them. Keep the module that declares the name loadable, or restore the plan version's block.
+
+07:21:42.627 [warning] AuroraMeter.Plans: the stored snapshot of plan scale version 1 names ["ai_generations", "seats"], which no atom on this node matches, so those entries are dropped from the resolved plan. Every entitlement function takes an atom, so no caller can ask about one of them; code that enumerates plan.features (the Pro usage reporter does, to decide what to bill) will not see them. Keep the module that declares the name loadable, or restore the plan version's block.
+
+07:21:51.812 [error] AuroraMeter flush failed; the same batch will be retried: "FATAL 57P01 (admin_shutdown) terminating connection due to administrator command"
+
+07:21:51.812 [error] Postgrex.Protocol (#PID<0.263.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+    query: SELECT coalesce(sum(value), 0) FROM aurora_meter_counters WHERE tenant_key LIKE $1
+
+07:21:51.813 [error] Postgrex.Protocol (#PID<0.260.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:51.817 [error] Postgrex.Protocol (#PID<0.263.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:51.817 [error] Postgrex.Protocol (#PID<0.260.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:51.850 [error] Postgrex.Protocol (#PID<0.278.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+    query: INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)
+VALUES ($1, $2, $3, $4, (clock_timestamp() AT TIME ZONE 'UTC'))
+ON CONFLICT (name) DO UPDATE
+  SET cursor = EXCLUDED.cursor,
+      counts = EXCLUDED.counts,
+      state = EXCLUDED.state,
+      updated_at = EXCLUDED.updated_at
+
+
+07:21:51.856 [error] Postgrex.Protocol (#PID<0.278.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:51.862 [warning] AuroraMeter could not write its flush heartbeat: %Postgrex.Error{message: nil, postgres: %{code: :admin_shutdown, line: "3286", message: "terminating connection due to administrator command", file: "postgres.c", routine: "ProcessInterrupts", unknown: "FATAL", severity: "FATAL", pg_code: "57P01"}, connection_id: 144221, query: "INSERT INTO aurora_meter_checkpoints (name, cursor, counts, state, updated_at)\nVALUES ($1, $2, $3, $4, (clock_timestamp() AT TIME ZONE 'UTC'))\nON CONFLICT (name) DO UPDATE\n  SET cursor = EXCLUDED.cursor,\n      counts = EXCLUDED.counts,\n      state = EXCLUDED.state,\n      updated_at = EXCLUDED.updated_at\n"}
+
+The flush itself is unaffected. What this costs is retention: a node whose heartbeat is stale blocks AuroraMeter.Retention.prune(only: [:flush_receipts]), which is the safe direction. A database below core schema version 7 has no aurora_meter_checkpoints table and will report this on every flush; later occurrences are logged at :debug.
+
+
+07:21:52.215 [error] Postgrex.Protocol (#PID<0.272.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.261.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.259.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.280.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.264.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.269.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.257.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.279.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.282.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.268.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.267.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.258.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.275.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.254.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.262.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.276.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.273.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.265.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.270.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.277.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.274.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.256.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.266.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.253.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.216 [error] Postgrex.Protocol (#PID<0.271.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.232 [error] Postgrex.Protocol (#PID<0.264.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.233 [error] Postgrex.Protocol (#PID<0.259.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.233 [error] Postgrex.Protocol (#PID<0.272.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.234 [error] Postgrex.Protocol (#PID<0.280.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.234 [error] Postgrex.Protocol (#PID<0.261.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.235 [error] Postgrex.Protocol (#PID<0.257.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.235 [error] Postgrex.Protocol (#PID<0.269.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.236 [error] Postgrex.Protocol (#PID<0.268.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.236 [error] Postgrex.Protocol (#PID<0.279.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.237 [error] Postgrex.Protocol (#PID<0.282.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.237 [error] Postgrex.Protocol (#PID<0.258.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.239 [error] Postgrex.Protocol (#PID<0.267.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.239 [error] Postgrex.Protocol (#PID<0.275.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.239 [error] Postgrex.Protocol (#PID<0.254.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.240 [error] Postgrex.Protocol (#PID<0.276.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.240 [error] Postgrex.Protocol (#PID<0.273.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.240 [error] Postgrex.Protocol (#PID<0.262.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.241 [error] Postgrex.Protocol (#PID<0.265.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.241 [error] Postgrex.Protocol (#PID<0.274.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.242 [error] Postgrex.Protocol (#PID<0.270.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.242 [error] Postgrex.Protocol (#PID<0.256.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.243 [error] Postgrex.Protocol (#PID<0.253.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.245 [error] Postgrex.Protocol (#PID<0.271.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.245 [error] Postgrex.Protocol (#PID<0.277.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.245 [error] Postgrex.Protocol (#PID<0.266.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.826 [error] Postgrex.Protocol (#PID<0.281.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+    query: SELECT coalesce(sum(value), 0) FROM aurora_meter_counters WHERE tenant_key LIKE $1
+
+07:21:52.831 [error] Postgrex.Protocol (#PID<0.281.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:52.873 [error] AuroraMeter flush failed; the same batch will be retried: "FATAL 57P01 (admin_shutdown) terminating connection due to administrator command"
+
+07:21:52.884 [error] Postgrex.Protocol (#PID<0.255.0> ({Postgrex.Protocol, "aurora_meter_bench"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+
+07:21:52.889 [error] Postgrex.Protocol (#PID<0.255.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.366 [error] Postgrex.Protocol (#PID<0.259.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.367 [error] Postgrex.Protocol (#PID<0.253.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.617 [error] Postgrex.Protocol (#PID<0.278.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.642 [error] Postgrex.Protocol (#PID<0.268.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.652 [error] Postgrex.Protocol (#PID<0.265.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.658 [error] Postgrex.Protocol (#PID<0.262.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.731 [error] Postgrex.Protocol (#PID<0.280.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.814 [error] Postgrex.Protocol (#PID<0.257.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:53.973 [error] Postgrex.Protocol (#PID<0.263.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.012 [error] Postgrex.Protocol (#PID<0.275.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.132 [error] Postgrex.Protocol (#PID<0.276.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.288 [error] Postgrex.Protocol (#PID<0.269.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.302 [error] Postgrex.Protocol (#PID<0.272.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.309 [error] Postgrex.Protocol (#PID<0.273.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.377 [error] Postgrex.Protocol (#PID<0.271.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.394 [error] Postgrex.Protocol (#PID<0.274.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (Postgrex.Error) FATAL 57P03 (cannot_connect_now) the database system is shutting down
+
+07:21:54.463 [error] Postgrex.Protocol (#PID<0.270.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp recv (idle): closed
+
+07:21:54.523 [error] Postgrex.Protocol (#PID<0.255.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.548 [error] Postgrex.Protocol (#PID<0.260.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.570 [error] Postgrex.Protocol (#PID<0.282.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.583 [error] Postgrex.Protocol (#PID<0.259.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.634 [error] Postgrex.Protocol (#PID<0.279.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.842 [error] Postgrex.Protocol (#PID<0.254.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.857 [error] Postgrex.Protocol (#PID<0.267.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.933 [error] Postgrex.Protocol (#PID<0.258.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:54.953 [error] Postgrex.Protocol (#PID<0.261.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.007 [error] Postgrex.Protocol (#PID<0.277.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.093 [error] Postgrex.Protocol (#PID<0.281.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.105 [error] Postgrex.Protocol (#PID<0.264.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.173 [error] Postgrex.Protocol (#PID<0.256.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.211 [error] Postgrex.Protocol (#PID<0.266.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.624 [error] Postgrex.Protocol (#PID<0.257.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.694 [error] Postgrex.Protocol (#PID<0.268.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:55.731 [error] Postgrex.Protocol (#PID<0.265.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:56.111 [error] Postgrex.Protocol (#PID<0.262.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:56.221 [error] Postgrex.Protocol (#PID<0.253.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:57.155 [error] Postgrex.Protocol (#PID<0.259.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:57.346 [error] Postgrex.Protocol (#PID<0.270.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:57.679 [error] Postgrex.Protocol (#PID<0.278.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:57.797 [error] Postgrex.Protocol (#PID<0.282.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.006 [error] Postgrex.Protocol (#PID<0.255.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.018 [error] Postgrex.Protocol (#PID<0.280.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.154 [error] Postgrex.Protocol (#PID<0.281.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.360 [error] Postgrex.Protocol (#PID<0.271.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.495 [error] Postgrex.Protocol (#PID<0.258.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.660 [error] Postgrex.Protocol (#PID<0.275.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.695 [error] Postgrex.Protocol (#PID<0.266.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.721 [error] Postgrex.Protocol (#PID<0.276.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.885 [error] Postgrex.Protocol (#PID<0.263.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:58.913 [error] Postgrex.Protocol (#PID<0.268.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.034 [error] Postgrex.Protocol (#PID<0.274.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.192 [error] Postgrex.Protocol (#PID<0.272.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.227 [error] Postgrex.Protocol (#PID<0.279.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.374 [error] Postgrex.Protocol (#PID<0.262.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.609 [error] Postgrex.Protocol (#PID<0.273.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.845 [error] Postgrex.Protocol (#PID<0.257.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:21:59.925 [error] Postgrex.Protocol (#PID<0.277.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:00.038 [error] Postgrex.Protocol (#PID<0.269.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:00.374 [error] Postgrex.Protocol (#PID<0.253.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:00.407 [error] Postgrex.Protocol (#PID<0.265.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:01.037 [error] Postgrex.Protocol (#PID<0.270.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:01.178 [error] Postgrex.Protocol (#PID<0.261.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:01.288 [error] Postgrex.Protocol (#PID<0.267.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:01.660 [error] Postgrex.Protocol (#PID<0.260.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:01.827 [error] Postgrex.Protocol (#PID<0.254.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:02.140 [error] Postgrex.Protocol (#PID<0.259.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:02.215 [error] AuroraMeter flush failed; the same batch will be retried: "[Elixir.AuroraMeter.TestRepo] connection not available and request was dropped from queue after 2956ms. This means requests are coming in and your connection pool cannot serve them fast enough. You can address this by:\n\n  1. Ensuring your database is available and that you can connect to it\n  2. Tracking down slow queries and making sure they are running fast enough\n  3. Increasing the pool_size (although this increases resource consumption)\n  4. Allowing requests to wait longer by increasing :queue_target and :queue_interval\n\nSee DBConnection.start_link/2 for more information\n"
+
+07:22:02.933 [error] Postgrex.Protocol (#PID<0.264.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:03.042 [error] Postgrex.Protocol (#PID<0.281.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:03.529 [error] Postgrex.Protocol (#PID<0.282.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:03.855 [error] Postgrex.Protocol (#PID<0.256.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:04.002 [error] Postgrex.Protocol (#PID<0.266.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:04.147 [error] Postgrex.Protocol (#PID<0.255.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+07:22:04.263 [error] Postgrex.Protocol (#PID<0.268.0> ({Postgrex.Protocol, "aurora_meter_bench"})) failed to connect: ** (DBConnection.ConnectionError) tcp connect (localhost:5490): connection refused - :econnrefused
+
+Aurora Meter bench: db_recovery (db_recovery, kind: end_to_end)
+  operations:   46788971 over 8 procs
+  warm-up:      0 ops in 0.0 ms (discarded)
+  elapsed:      29999.87 ms
+  throughput:   1559638.94 ops/s
+  latency (us): p50   p95   p99   (sampled: false, n=0)
+  errors:       0 (%{})
+  correct:      true
+  toolchain:    Elixir 1.20.1 / OTP 29
+  database:     aurora_meter_bench on localhost:5490 (PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit)
+  note: db_recovery expects a REAL outage, orchestrated by scripts/v1/bench.sh, inside its 30000 ms load window. Run without one it is a plain sustained-load measurement, which is what its smoke run is, and the evidence says which it was.
+  note: duration driven: 8 workers incremented 12000 rotating keys for 29999.87 ms, then the load stopped and the drain took 2136.53 ms. latency_us is null throughout, because this mode measures backlog and drain and not per-operation latency.
+  note: persisted total after the drain: 46788971 (expected 46788971)
+  note: dirty keys after the drain: 0 (expected 0)
+  note: pending batch items after the drain: 0 (expected 0)
+  note: latency_us.p50, p95, p99 and max are null: this mode took no per-operation timing sample. Its unit of work is not an operation in a loop, so a percentile over operations would be a number with no referent.
+

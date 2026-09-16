@@ -19,6 +19,9 @@ if Code.ensure_loaded?(Igniter.Test) do
 
     import Igniter.Test
 
+    # No `alias AuroraMeter.Config` here: it would shadow Elixir's own `Config`,
+    # and `Config.Reader` below is Elixir's.
+    alias AuroraMeter.Config.Schema
     alias AuroraMeter.Install.Plan
     alias AuroraMeter.Install.Support
     alias AuroraMeter.Install.Templates
@@ -60,6 +63,14 @@ if Code.ensure_loaded?(Igniter.Test) do
 
       assert plans =~ "use AuroraMeter.Plans"
       assert plans =~ "plan :free do"
+
+      # One `defmodule`, not two. `Igniter.Project.Module.create_module/3` writes
+      # the `defmodule Demo.Plans do ... end` itself, so a template that carried
+      # one of its own produced a file defining `Demo.Plans.Demo.Plans` with an
+      # empty `Demo.Plans` in front of it. Asserted here on the plain run a host
+      # actually makes; what it means is asserted by compiling the file and
+      # running the boot check, below (X374, repair unit R5).
+      assert occurrences(plans, "defmodule ") == 1
 
       # I19, L09b-3: the installer's migration names both ends of the range.
       # It used to emit `AuroraMeter.Migration.up()`, which runs to whatever
@@ -676,6 +687,83 @@ if Code.ensure_loaded?(Igniter.Test) do
       end
     end
 
+    # -- does the thing it built actually run? ---------------------------------
+
+    describe "the application the installer produces" do
+      @moduletag :install_boot
+
+      # Every other test in this file asserts that the task WROTE the right
+      # files: twice, byte identical, with the right contents, adding exactly
+      # the missing Oban entries, refusing bad input. Not one of them asserted
+      # that the application it produced would start, and for two phases it did
+      # not: the generated plans file defined `Demo.Plans.Demo.Plans` and the
+      # configuration the same task wrote named `Demo.Plans`, so every host that
+      # ran `mix aurora_meter.install` got an application that raised on boot.
+      # Build unit 09c found it by building a real Phoenix application; this
+      # file could not have, because an installer test that never boots the
+      # result is testing a file writer (X374, repair unit R5).
+      #
+      # What these two tests do is take the task's own two outputs, EVALUATE the
+      # configuration (rather than grep it), COMPILE the module (rather than
+      # match a string in it), and run the same check `AuroraMeter.start_link/1`
+      # runs at boot against the module the configuration actually names.
+      #
+      # What they do not do is start an OTP application: this suite has one
+      # `AuroraMeter` supervisor of its own and one global configuration, and a
+      # second is not something a test project can be given. A real
+      # `mix phx.new` host, installed into and booted, is repair unit R5's
+      # evidence page, under `v1/repairs/`.
+
+      test "G09 I20 the module the config names is the module the plans file defines, and it passes the boot check" do
+        # An explicit name, so nothing here can be confused with the `Demo.Plans`
+        # the fixture above writes by hand, and so this file compiles exactly one
+        # module of its own into the test VM.
+        plans = Demo.PlansBootCheck
+        igniter = install(["--repo", "Demo.Repo", "--plans", inspect(plans)])
+
+        # 1. What did the task configure? Read by evaluating the file it wrote.
+        assert configured_plans(igniter) == plans
+
+        # 2. What does the file it wrote define? Read by compiling it.
+        assert compile_plans(igniter) == [plans],
+               "the generated file does not define exactly the module the config names"
+
+        # 3. The boot check itself: `AuroraMeter.Config.check_modules!/1` calls
+        #    this for `:plans`, from `AuroraMeter.start_link/1`. It raised
+        #    "does not export __aurora_plans__/0" on every installed host.
+        assert boot_check(plans) == :ok
+
+        # 4. And the plans the template promises really are in it. `apply/3`
+        #    because the module is compiled by step 2 at run time and a direct
+        #    call is a compile-time reference the compiler cannot resolve, which
+        #    under `--warnings-as-errors` fails the build rather than the test
+        #    (`open-findings.md` X373).
+        # credo:disable-for-next-line Credo.Check.Refactor.Apply
+        assert plans |> apply(:__aurora_plan_index__, []) |> Map.keys() |> Enum.sort() ==
+                 [:free, :pro]
+      end
+
+      test "G09 I20 control: the nested form the installer used to write fails every one of those checks" do
+        # Built from today's template rather than from a copy of yesterday's, so
+        # the control cannot go stale: this is exactly `create_module/3`'s
+        # wrapping applied to a template that carries its own `defmodule`, which
+        # is what the installer did until this repair.
+        plans = Demo.PlansNestedControl
+        defined = compile_string(nested_form(plans))
+
+        assert plans in defined
+
+        assert Module.concat(plans, plans) in defined,
+               "the control did not reproduce the nesting, so it is not a control"
+
+        refute function_exported?(plans, :__aurora_plans__, 0)
+
+        assert_raise ArgumentError, ~r/does not export __aurora_plans__\/0/, fn ->
+          boot_check(plans)
+        end
+      end
+    end
+
     describe "the generated migration" do
       test "I19 the body names an explicit range and never calls up/0 or down/0" do
         refute_unbounded(migration_body(install(["--repo", "Demo.Repo"])))
@@ -718,6 +806,62 @@ if Code.ensure_loaded?(Igniter.Test) do
     end
 
     # -- helpers ---------------------------------------------------------------
+
+    # The `plans:` module the generated configuration names, read by **running**
+    # `config/config.exs` through `Config.Reader` rather than by matching a
+    # string in it. The defect this closes was a disagreement between two
+    # generated files, and a test that greps both of them for the same name
+    # passes while they disagree.
+    defp configured_plans(igniter) do
+      @config
+      |> Config.Reader.eval!(source(igniter, @config))
+      |> get_in([:aurora_meter, :plans])
+    end
+
+    # Every module the generated plans file defines, in the order it defines
+    # them, by compiling the file exactly as written.
+    defp compile_plans(igniter) do
+      igniter.rewrite
+      |> Rewrite.sources()
+      |> Enum.map(&{&1.path, Rewrite.Source.get(&1, :content)})
+      |> Enum.find(fn {path, content} ->
+        String.ends_with?(path, ".ex") and content =~ "use AuroraMeter.Plans"
+      end)
+      |> case do
+        {_path, content} -> compile_string(content)
+        nil -> flunk("the installer wrote no plans module")
+      end
+    end
+
+    defp compile_string(content) do
+      modules = content |> Code.compile_string() |> Enum.map(&elem(&1, 0))
+
+      on_exit(fn ->
+        Enum.each(modules, fn module ->
+          :code.purge(module)
+          :code.delete(module)
+        end)
+      end)
+
+      modules
+    end
+
+    # `create_module/3`'s wrapping applied to a template that carries its own
+    # `defmodule`: the file the installer wrote until repair unit R5.
+    defp nested_form(module) do
+      inner = "defmodule #{inspect(module)} do\n#{Templates.plans_module()}\nend"
+
+      "defmodule #{inspect(module)} do\n#{inner}\nend"
+    end
+
+    # The check `AuroraMeter.start_link/1` runs at boot, against one module.
+    # Reached through `Config.module_contracts/0` rather than restated, so a
+    # change to what a plans module must export changes this test with it.
+    defp boot_check(module) do
+      contract = Keyword.fetch!(AuroraMeter.Config.module_contracts(), :plans)
+
+      Schema.ensure_exports!(:aurora_meter, :plans, module, contract)
+    end
 
     # L09b-3. Anchored on the shape of a call with no arguments rather than on
     # one spelling of it, so a body that reintroduced `up( )` or `up()` with a

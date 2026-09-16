@@ -276,7 +276,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
   end
 
   test "I19 a reversal with no resolvable payment intent blocks the wallet" do
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     {:ok, _txn} = Credits.grant(tenant, 5 * @dollar, reference: "pi_manual_#{tenant}")
     {:ok, _txn} = Credits.reverse(tenant, 1 * @dollar, "hand-written-refund-#{tenant}")
 
@@ -286,7 +286,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
   end
 
   test "I19 a reversal larger than the lots that payment funded blocks the wallet" do
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     intent = "pi_small_grant_#{tenant}"
     {:ok, _txn} = Credits.grant(tenant, 1 * @dollar, reference: intent)
 
@@ -300,7 +300,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
   end
 
   test "I19 a reversal that would take reserved value blocks the wallet" do
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     intent = "pi_all_reserved_#{tenant}"
     {:ok, _txn} = Credits.grant(tenant, 2 * @dollar, reference: intent)
     {:ok, _txn} = Credits.hold(tenant, 2 * @dollar, "hold_all_#{tenant}")
@@ -315,7 +315,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
   end
 
   test "I19 an adjustment whose restore reference names no payment blocks the wallet" do
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
 
     {:ok, _txn} =
       Credits.grant(tenant, 1 * @dollar,
@@ -328,7 +328,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
   end
 
   test "I19 a hold the overdraft tolerance allowed but no lot can back blocks the wallet" do
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
 
     TestConfig.with_config([{:aurora_meter, :credits_overdraft_tolerance, 3 * @dollar}], fn ->
       {:ok, _txn} = Credits.grant(tenant, 1 * @dollar, reference: "pi_thin_#{tenant}")
@@ -407,7 +407,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
     # reserved it. The lot model cannot spend a reservation, so it takes the
     # debit from the 10 USD grant instead. When that grant expires, the legacy
     # row says 10 USD and the lot holds 10 USD less one micro-dollar.
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     LedgerFixtures.build!(:expiry_over_attribution, tenant)
 
     assert {:blocked, blocked} = fold(tenant)
@@ -429,7 +429,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
     # reproduces that row: expiring only the available part moves the balance
     # by less than the row says, and expiring the reserved part as well moves
     # `held`, which the row says did not move.
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     LedgerFixtures.build!(:expiry_over_hold, tenant)
 
     assert {:blocked, blocked} = fold(tenant)
@@ -448,7 +448,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
     # The two genuinely disagree about what the customer holds, so the wallet
     # is not migrated. Found by working the arithmetic rather than by a test
     # failing, and kept as a test so it cannot be argued away later.
-    tenant = unique_tenant("lotmig")
+    tenant = legacy_tenant()
     intent = "pi_clamped_#{tenant}"
     {:ok, _txn} = Credits.grant(tenant, 5 * @dollar, reference: intent)
     {:ok, _txn} = Credits.debit(tenant, 5 * @dollar, "job_clamped_#{tenant}")
@@ -510,4 +510,10 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
     assert Enum.all?(blocked, &is_map_key(&1, :blocking))
     assert Enum.any?(blocked, & &1.blocking)
   end
+
+  # A wallet that predates the lots-on-creation release. See
+  # `LedgerFixtures.legacy_wallet!/1`: a wallet is born on the allocator since
+  # 0.5.0, and the replay is only ever asked about one that was not.
+  defp legacy_tenant(prefix \\ "lotmig"),
+    do: LedgerFixtures.legacy_wallet!(unique_tenant(prefix))
 end

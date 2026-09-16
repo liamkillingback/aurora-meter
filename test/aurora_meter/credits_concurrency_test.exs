@@ -17,7 +17,6 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
 
   alias AuroraMeter.Credits
   alias AuroraMeter.Schema.CreditBalance
-  alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Test.Connections
   alias AuroraMeter.TestRepo
   alias Ecto.Adapters.SQL
@@ -35,12 +34,16 @@ defmodule AuroraMeter.CreditsConcurrencyTest do
     :ok = Sandbox.checkout(TestRepo, sandbox: false)
     tenant = AuroraMeter.Test.unique_tenant("concurrent")
 
-    on_exit(fn ->
-      :ok = Sandbox.checkout(TestRepo, sandbox: false)
-      TestRepo.delete_all(from(t in CreditTransaction, where: t.tenant_key == ^tenant))
-      TestRepo.delete_all(from(b in CreditBalance, where: b.tenant_key == ^tenant))
-      Sandbox.checkin(TestRepo)
-    end)
+    # `Connections.cleanup!/1` rather than two `delete_all`s of its own, because
+    # a wallet created here is now born on the allocator and its ledger rows
+    # carry children: an allocation references its transaction and a lot
+    # references its grant row, both `ON DELETE RESTRICT`. Deleting the
+    # transactions first is refused, and a teardown that raises leaves rows
+    # **committed** on a real connection, where the next test's wallet-wide
+    # scans (`reconcile_holds/1`, `expire_due/1`) count them. `cleanup!/1`
+    # already owns the deletion order and is prefix-bounded, so it takes the
+    # `:witness` wallet below with it.
+    on_exit(fn -> Connections.cleanup!(tenant) end)
 
     {:ok, tenant: tenant}
   end

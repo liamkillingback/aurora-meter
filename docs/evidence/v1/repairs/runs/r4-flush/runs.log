@@ -1,0 +1,15 @@
+flush_1k run 1: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_1k-1.json
+flush_1k run 2: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_1k-2.json
+flush_1k run 3: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_1k-3.json
+flush_1k run 4: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_1k-4.json
+flush_1k run 5: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_1k-5.json
+flush_10k run 1: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_10k-1.json
+flush_10k run 2: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_10k-2.json
+flush_10k run 3: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_10k-3.json
+flush_10k run 4: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_10k-4.json
+flush_10k run 5: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_10k-5.json
+flush_100k run 1: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-1.json
+flush_100k run 2: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-2.json
+flush_100k run 3: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-3.json
+flush_100k run 4: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-4.json
+flush_100k run 5: exit=0 json=/home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-5.json

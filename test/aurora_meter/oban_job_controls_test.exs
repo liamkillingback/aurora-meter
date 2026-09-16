@@ -25,6 +25,7 @@ if Code.ensure_loaded?(Oban) do
     alias AuroraMeter.Test.Connections
     alias AuroraMeter.Test.FaultRepo
     alias AuroraMeter.Test.Faults
+    alias AuroraMeter.Test.LedgerFixtures
     alias AuroraMeter.TestRepo
     alias Ecto.Adapters.SQL.Sandbox
 
@@ -33,6 +34,16 @@ if Code.ensure_loaded?(Oban) do
     setup do
       :ok = Sandbox.checkout(TestRepo, sandbox: false)
       tenant = AuroraMeter.Test.unique_tenant("jobctl")
+
+      # **A wallet that predates the lots-on-creation release, and it is the
+      # subject rather than a detail.** `Ledger.expire_due/2`'s first phase
+      # scans grant rows joined to balances `WHERE lots_enabled_at IS NULL`
+      # (`ledger.ex:612`), and the cursor, the `max_batches` paging and the
+      # grant row lock this module proves are all defined over that scan. A
+      # wallet the allocator owns is expired by the second phase, which walks
+      # lots and takes a different lock. See `credits_new_wallet_test.exs` for
+      # what that phase does, and `open-findings.md` X384 for what it does not.
+      LedgerFixtures.legacy_wallet!(tenant)
 
       # Each test gets its own operation name, so the checkpoint rows of two
       # tests can never be read as each other's. `Connections.cleanup!/1` is

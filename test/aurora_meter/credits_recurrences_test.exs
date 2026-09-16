@@ -34,6 +34,7 @@ defmodule AuroraMeter.CreditsRecurrencesTest do
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Storage
   alias AuroraMeter.Test.Config, as: TestConfig
+  alias AuroraMeter.Test.LedgerFixtures
   alias AuroraMeter.Test.PeriodSources
 
   doctest AuroraMeter.Schema.CreditRecurrence
@@ -177,7 +178,17 @@ defmodule AuroraMeter.CreditsRecurrencesTest do
   end
 
   test "I18 a wallet the allocator does not own is skipped and told why" do
-    tenant = unique_tenant("recur")
+    # **"Does not own" means a wallet that predates the lots-on-creation
+    # release, and since 0.5.0 that is the only thing it can mean.** A tenant
+    # with no wallet at all is not skipped any more: the grant that pays the
+    # allowance is what creates the wallet, and a wallet created now is born on
+    # the allocator. That was the shape this test used to build, and building it
+    # again would be asserting the old answer to a question that changed. The
+    # new answer is asserted by `credits_new_wallet_test.exs` / `test X380
+    # recurring_credits grants a real allowance to a wallet nobody enabled
+    # anything on`, which is the case an allowance is actually for: a customer
+    # who has just subscribed and has never been granted anything.
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("recur"))
     AuroraMeter.subscribe(tenant, :allowance)
 
     with_clock(@september, fn ->

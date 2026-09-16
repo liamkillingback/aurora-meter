@@ -30,6 +30,7 @@ defmodule AuroraMeter.CreditsReconcileHoldsTest do
   alias AuroraMeter.CreditsReconcileHoldsTest.Releaser
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Test.Faults
+  alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
   @event [:aurora_meter, :credits, :hold_reconciliation]
@@ -593,12 +594,15 @@ defmodule AuroraMeter.CreditsReconcileHoldsTest do
       # the value a released hold returns is exactly what `Credits.release/2`
       # returns and nothing else: this unit adds no arithmetic of its own.
       #
-      # That value is spendable today although the grant it came from expired,
-      # which is open finding L1 and is 06a's to fix. Asserting today's
-      # behaviour here is what gives 06a a before and an after; when the lot
-      # model lands, the released value becomes `expired` and this expectation
-      # flips while the description stays.
-      tenant = unique_tenant()
+      # That value is spendable although the grant it came from expired, which
+      # is open finding L1. **The lot model landed and the expectation did not
+      # flip here; it forked.** On a wallet the allocator owns the released
+      # reservation becomes `expired` and never spendable, which is asserted by
+      # `credits_lots_test.exs` / `test I12 a reservation released on an expired
+      # lot becomes expired, never spendable`. On a wallet still on the legacy
+      # writer the leak is exactly as it was, and stays until the migration
+      # reaches it, so this keeps asserting it against the wallet it is about.
+      tenant = LedgerFixtures.legacy_wallet!(unique_tenant())
       past = DateTime.add(Clock.now(), -60, :second)
 
       fund!(tenant, 500_000, category: :promotional, expires_at: past)

@@ -47,7 +47,8 @@ when a counter is first read, never on the write path.
 Measured with the bundled benchmark (`mix aurora_meter.bench <mode>`) on
 2026-09-16 on WSL Ubuntu 24.04.4, AMD Ryzen 9 7900X, 24 logical CPUs, 19.5 GiB,
 Elixir 1.20.1 / OTP 29 (ERTS 17.0.1), Postgres 16.13. Each figure is the
-**median of five runs**, each in a fresh BEAM.
+**median of five runs**, each in a fresh BEAM. The flush row was re-measured on
+2026-09-17 on the same machine, after a fix to the flusher's write path.
 
 **micro** means the measurement isolates an in-memory path with no database
 anywhere in it. **end-to-end** means every write reaches Postgres through the
@@ -61,7 +62,7 @@ the number.
 | 8 processes, `with_quota/4` | micro | 423,658 ops/s | 27.14 us |
 | 8 processes, durable `record/4` | end-to-end | 1,804 events/s | 6,035.22 us |
 | 8 processes, `Credits.debit/4` | end-to-end | 1,091 ops/s | 9,241.27 us |
-| 1 process, flush of 1,000 dirty keys | end-to-end | 21,659 rows/s | 58,413.57 us |
+| 1 process, flush of 1,000 dirty keys | end-to-end | 22,619 rows/s | 59,192.45 us |
 
 Every mode, its workload, its run-to-run spread and its raw records are in
 [docs/evidence/v1/phase-08/08c-results.md](https://github.com/liamkillingback/aurora-meter/blob/main/docs/evidence/v1/phase-08/08c-results.md),
@@ -72,6 +73,22 @@ and the reason are in that file.
 
 Plan lookups are cached in ETS and evicted on every subscription write, on every
 node, so the entitlement check is also database-free per request.
+
+## A complete application you can run
+
+[`examples/aurora_meter_example_ai/`](examples/aurora_meter_example_ai/README.md)
+is the reference application: Phoenix and LiveView, an organisation tenant, a
+hard quota, prepaid credit held and settled per request, a durable event for
+every unit of work, and a host-owned outbox draining to the reference exporter.
+It is MIT, it needs Elixir and Postgres and nothing else, and there is no AI and
+no payment in it: the workload is a deterministic simulation and the credit is
+seeded.
+
+```bash
+cd examples/aurora_meter_example_ai && mix setup && mix sample.seed && PORT=4021 mix phx.server
+```
+
+It is not part of the published package.
 
 ## Quick start
 

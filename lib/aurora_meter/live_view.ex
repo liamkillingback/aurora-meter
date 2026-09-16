@@ -232,6 +232,36 @@ defmodule AuroraMeter.LiveView do
 
   defp resolve_key!(tenant, _where), do: Tenant.to_key(tenant)
 
+  @doc """
+  Every feature on `tenant`'s plan as a quota map, in the order
+  `AuroraMeter.Components.usage_summary/1` renders them.
+
+      {:ok, assign(socket, quotas: AuroraMeter.LiveView.quotas(org))}
+
+      <.usage_summary quotas={@quotas} />
+
+  **Pass the quotas rather than the tenant whenever the page is live.** A
+  function component is re-rendered only when the assigns handed to it change,
+  and a tenant does not change when usage does, so meters driven by a tenant
+  render once and then hold that figure for the life of the socket.
+  `assign_quotas/2` refreshes this list from a usage message.
+
+  Returns `[]` for a tenant with no plan. Needs no LiveView.
+  """
+  @spec quotas(term()) :: [map()]
+  def quotas(tenant) do
+    case AuroraMeter.plan(tenant) do
+      nil ->
+        []
+
+      plan ->
+        plan.features
+        |> Map.keys()
+        |> Enum.sort()
+        |> Enum.map(&AuroraMeter.quota(tenant, &1))
+    end
+  end
+
   # `Phoenix.LiveView` is an optional dependency, so everything that needs a
   # `%Phoenix.LiveView.Socket{}` sits behind the same guard `components.ex` uses.
   # The functions above need none of it and stay outside, which is what keeps a
@@ -341,6 +371,74 @@ defmodule AuroraMeter.LiveView do
     end
 
     def handle_usage(_other, socket), do: socket
+
+    @doc """
+    Re-reads `feature`'s quota into `socket.assigns[key]` when `message` belongs
+    to this socket's tenant, and returns the socket unchanged when it does not.
+
+        def handle_info({:aurora_meter, :usage, _} = message, socket) do
+          {:noreply, AuroraMeter.LiveView.assign_quota(message, socket, :quota, :ai_generations)}
+        end
+
+        <.usage_meter quota={@quota} />
+
+    **This exists because a quota map is the only thing that makes
+    `AuroraMeter.Components.usage_meter/1` update.** LiveView re-renders a
+    function component only when the assigns handed to it change, so a meter
+    given a tenant and a feature name renders the figure it read first and then
+    never moves, however correctly the socket is subscribed. Putting the number
+    in an assign is the fix, and this is that line.
+
+    The tenant comes from `socket.assigns.aurora_meter_tenant_key`, which
+    `on_mount/4` and `switch_tenant/2` maintain, so a message that arrives after
+    a switch is dropped for the same reason `handle_usage/2` drops it.
+
+    Optional in the same way `handle_usage/2` is: assigning
+    `AuroraMeter.quota(org, feature)` yourself does exactly this.
+    """
+    @spec assign_quota(term(), Phoenix.LiveView.Socket.t(), atom(), atom()) ::
+            Phoenix.LiveView.Socket.t()
+    def assign_quota({:aurora_meter, :usage, %{tenant_key: key}}, socket, assign, feature)
+        when is_atom(assign) and is_atom(feature) do
+      if key == socket.assigns[:aurora_meter_tenant_key] do
+        Phoenix.Component.assign(socket, assign, AuroraMeter.quota(key, feature))
+      else
+        socket
+      end
+    end
+
+    def assign_quota(_other, socket, _assign, _feature), do: socket
+
+    @doc """
+    Re-reads every feature on the tenant's plan into `socket.assigns.quotas`
+    when `message` belongs to this socket's tenant.
+
+        def mount(_params, session, socket) do
+          org = MyApp.Accounts.org_for_session!(session)
+          if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
+          {:ok, assign(socket, org: org, quotas: AuroraMeter.LiveView.quotas(org))}
+        end
+
+        def handle_info({:aurora_meter, :usage, _} = message, socket) do
+          {:noreply, AuroraMeter.LiveView.assign_quotas(message, socket)}
+        end
+
+        <.usage_summary quotas={@quotas} />
+
+    `quotas/1` is the `mount/3` half and is compiled without LiveView; this is
+    the message half, and it drops a message for another tenant exactly as
+    `handle_usage/2` does.
+    """
+    @spec assign_quotas(term(), Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+    def assign_quotas({:aurora_meter, :usage, %{tenant_key: key}}, socket) do
+      if key == socket.assigns[:aurora_meter_tenant_key] do
+        Phoenix.Component.assign(socket, :quotas, AuroraMeter.LiveView.quotas(key))
+      else
+        socket
+      end
+    end
+
+    def assign_quotas(_other, socket), do: socket
 
     @doc """
     Folds a `{:aurora_meter, :credits, ...}` or `{:aurora_meter, :low_balance, ...}`

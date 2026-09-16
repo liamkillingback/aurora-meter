@@ -27,6 +27,7 @@ defmodule AuroraMeter.CreditsLotsTest do
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
   alias AuroraMeter.Schema.CreditTransaction
+  alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
   @oct ~U[2026-10-01 00:00:00Z]
@@ -539,7 +540,10 @@ defmodule AuroraMeter.CreditsLotsTest do
   end
 
   test "I10 a wallet with lots_enabled_at null uses the legacy arithmetic and writes no lot" do
-    tenant = unique_tenant("lots")
+    # Built as a pre-release wallet on purpose. Since 0.5.0 a wallet is born on
+    # the allocator, so `lots_enabled_at` is null only on a wallet that existed
+    # before that release and that the migration has not reached.
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("lots"))
 
     {:ok, _} = Credits.grant(tenant, 5 * @dollar, reference: "pay")
     {:ok, _} = Credits.hold(tenant, 2 * @dollar, "h1")
@@ -557,7 +561,11 @@ defmodule AuroraMeter.CreditsLotsTest do
   test "I10 enable_lots! refuses a wallet that has a ledger row rather than cutting it over" do
     # A test seam that could be used to skip a replay would be a way to lose
     # money quietly. 06b owns the cutover, with its per-wallet reconciliation.
-    tenant = unique_tenant("lots")
+    #
+    # The wallet is a pre-release one, because that is the only kind the
+    # refusal is still about: a wallet created since 0.5.0 is on the allocator
+    # already and has nothing to cut over.
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("lots"))
     {:ok, _} = Credits.grant(tenant, @dollar, reference: "pay")
 
     assert_raise ArgumentError, ~r/migrate_lots/, fn -> Ledger.enable_lots!(tenant) end

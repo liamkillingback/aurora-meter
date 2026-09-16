@@ -10,11 +10,51 @@ payment it belongs to and an overlapping promotion able to explain itself.
 This page is the procedure for moving an existing installation onto lots. It is
 written for the person running the upgrade, not for the person who wrote it.
 
+## Who needs this page
+
+**A new installation does not.** From 0.5.0 a wallet is on lots from the moment
+it is created: the statement that creates a wallet marks it as the allocator's,
+so a host who installs Aurora Meter today never has a legacy wallet and never
+runs this task. Everything on this page is about wallets that already existed
+when you upgraded.
+
+**An installation that upgraded does**, and until the task has run it holds two
+kinds of wallet at once:
+
+- every wallet that existed before the upgrade is still on the 0.4.0 writer,
+  because nothing moves an existing wallet implicitly and the flag that decides
+  is written only by the statement that **creates** a wallet and by this
+  migration;
+- every wallet created since the upgrade is on the allocator.
+
+That split is the state this page exists to end, and it is worth being blunt
+about what it means in the meantime: **two tenants of one installation can be
+told different things by the same API.** The table under "Which wallets are on
+lots" in [credits](credits.md) lists every difference, and the ones a support
+engineer meets first are these:
+
+- a refund larger than the paid credit a wallet still has clamps `promotional`
+  down on an old wallet and keeps the promotion whole while raising `debt` on a
+  new one;
+- a wallet that has overspent refuses with `:insufficient_credits` on an old
+  wallet and `{:error, :debt_outstanding}` on a new one;
+- a plan that declares `recurring_credits` grants the allowance on a new wallet
+  and nothing at all on an old one, reported as `reason: :lots_disabled`;
+- credit past its `expires_at` is still spendable on an old wallet until the
+  sweep runs, and not spendable on a new one.
+
+There is no configuration to turn the new behaviour off for new wallets. If you
+need one installation to behave the same way throughout, run this migration;
+that is what it is for, and it can be run repeatedly, tenant by tenant.
+
 ## What changes, and what does not
 
 A wallet is on lots when its `aurora_meter_credit_balances.lots_enabled_at` is
 set. Until then it is on the legacy writer and behaves exactly as it did in
-0.4.0. Nothing sets the column except the migration described here.
+0.4.0. Two things set the column and nothing else does: the `INSERT` that
+creates a wallet, and the migration described here. An `INSERT` cannot reach a
+wallet that already exists, so no wallet with a history to replay is ever moved
+without the per-wallet reconciliation below.
 
 `balance`, `held` and `promotional` keep their meaning and their values. After
 cutover they are a **checked projection** of the wallet's lots: every ledger

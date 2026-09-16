@@ -1,0 +1,37 @@
+
+07:06:13.604 [error] Aurora Meter refuses to reprice an existing plan version. The commercial content of 1 compiled plan version(s) differs from the snapshot registered for them:
+
+  * plan bench_cluster version 1: stored 45396b2b979a, compiled 8f368657fd5a
+
+Every subscription pinned to one of those versions was sold the stored definition. Publish the change as a new version instead, for example:
+
+    plan :bench_cluster, version: "2", effective_at: ~U[2026-01-01 00:00:00Z] do
+      # the new price and limits
+    end
+
+Or revert the edit. Setting `config :aurora_meter, plan_version_conflict: :warn` logs this instead of raising, which is the transition-release default and not a fix. The stored definitions are in aurora_meter_plan_versions:
+
+    SELECT plan_id, version, encode(fingerprint, 'hex'), definition
+    FROM aurora_meter_plan_versions ORDER BY plan_id, version;
+
+
+07:06:13.611 [warning] AuroraMeter.Plans: the stored snapshot of plan free version 1 names ["ai_generations", "seats"], which no atom on this node matches, so those entries are dropped from the resolved plan. Every entitlement function takes an atom, so no caller can ask about one of them; code that enumerates plan.features (the Pro usage reporter does, to decide what to bill) will not see them. Keep the module that declares the name loadable, or restore the plan version's block.
+
+07:06:13.611 [warning] AuroraMeter.Plans: the stored snapshot of plan scale version 1 names ["ai_generations", "seats"], which no atom on this node matches, so those entries are dropped from the resolved plan. Every entitlement function takes an atom, so no caller can ask about one of them; code that enumerates plan.features (the Pro usage reporter does, to decide what to bill) will not see them. Keep the module that declares the name loadable, or restore the plan version's block.
+
+Aurora Meter bench: flush_1k (flush_1k, kind: end_to_end)
+  operations:   5000 over 8 procs
+  warm-up:      0 ops in 0.0 ms (discarded)
+  elapsed:      221.2 ms
+  throughput:   22604.29 ops/s
+  latency (us): p50 41450.54  p95 58311.9  p99 58311.9  (sampled: false, n=5)
+  errors:       0 (%{})
+  correct:      true
+  toolchain:    Elixir 1.20.1 / OTP 29
+  database:     aurora_meter_bench on localhost:5490 (PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit)
+  note: each round makes 1000 distinct dirty counter keys with Counter.incr/4 and then times one synchronous Flusher.flush/0. duration_ms is the sum of the flushes only; building the dirty set is outside the clock. History is off, because a day bucket would be a second dirty key per increment and the mode's name would be wrong.
+  note: persisted total: 5000 (expected 5000)
+  note: dirty keys at the end: 0 (expected 0)
+  note: pending batch items at the end: 0 (expected 0)
+  note: flush receipts: 5 (one per successful round, 5 rounds requested)
+

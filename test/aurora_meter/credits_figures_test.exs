@@ -18,6 +18,7 @@ defmodule AuroraMeter.CreditsFiguresTest do
   alias AuroraMeter.Credits.Money
   alias AuroraMeter.Schema.CreditLot
   alias AuroraMeter.Schema.CreditTransaction
+  alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
   @past ~U[2020-01-01 00:00:00Z]
@@ -129,7 +130,11 @@ defmodule AuroraMeter.CreditsFiguresTest do
     # The compatibility promise of the four new keys: a host that has not run
     # the lot migration sees figures that restate what it already had, so a
     # dashboard can render them without asking which writer owns the wallet.
-    tenant = unique_tenant("figures")
+    #
+    # Since 0.5.0 that host is one who upgraded, not one who installed: a wallet
+    # created after this release is born on the allocator. The promise is
+    # unchanged for the wallets it was ever about, and this builds one.
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("figures"))
 
     empty = Credits.balance(tenant)
     assert empty.spendable == empty.available
@@ -595,17 +600,25 @@ defmodule AuroraMeter.CreditsFiguresTest do
   end
 
   defp legacy_wallet do
-    tenant = unique_tenant("figures")
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("figures"))
     {:ok, _} = Credits.grant(tenant, 5 * @dollar, reference: named(tenant, "paid"))
     {:ok, _} = Credits.hold(tenant, 2 * @dollar, named(tenant, "job"))
     tenant
   end
 
   # A legacy wallet can go negative without any `debt` at all, and it must go
-  # on refusing with `:insufficient_credits`: no wallet a published version can
-  # produce sees the new atom.
+  # on refusing with `:insufficient_credits`.
+  #
+  # **The reach of that atom changed in 0.5.0 and this comment used to say so
+  # the other way round.** It read "no wallet a published version can produce
+  # sees the new atom", which was true while every wallet was born on the
+  # legacy writer. A wallet created since is born on the allocator, so
+  # `:debt_outstanding` is an ordinary thing for a new host to meet and the
+  # `:frozen_*` cases above are the reachable ones. This case is now about the
+  # wallets that predate the release, which still refuse the old way and must
+  # keep doing so until the migration reaches them.
   defp legacy_overrun_wallet do
-    tenant = unique_tenant("figures")
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("figures"))
     {:ok, _} = Credits.grant(tenant, 2 * @dollar, reference: named(tenant, "paid"))
     {:ok, _} = Credits.hold(tenant, 2 * @dollar, named(tenant, "job"))
     {:ok, _} = Credits.settle(named(tenant, "job"), 5 * @dollar)

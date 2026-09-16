@@ -40,25 +40,68 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @marker_gap 3
 
     @doc """
-    Renders a labelled usage bar for one feature, driven by `AuroraMeter.quota/2`.
+    Renders a labelled usage bar for one feature.
 
     Hard caps show `used / limit`; metered features show `used / included` and
     flag overage; counters show the bare count with no bar (they have no
     denominator, ADR 0006); boolean features show whether they are enabled;
     integer features show their plan value.
+
+    ## Pass `quota` in a LiveView, `tenant` and `feature` anywhere else
+
+        # Live: updates when usage moves.
+        <.usage_meter quota={@quota} />
+
+        # Snapshot: reads the current value once, at render time.
+        <.usage_meter tenant={@org} feature={:ai_generations} />
+
+    **The two forms are not interchangeable inside a LiveView, and the reason
+    is change tracking rather than taste.** LiveView re-renders a function
+    component only when the assigns passed to it have changed. The `tenant`
+    form's assigns are the tenant and the feature name, and neither of those
+    moves when usage does, so a socket that is subscribed correctly, receives
+    the broadcast and re-renders would keep showing the figure read at the
+    first render. That is not a bar that lags; it is a bar that never moves
+    again, and nothing on the page says so.
+
+    The `quota` form has no such gap, because the number **is** the assign:
+    when usage changes the map changes, and change tracking re-renders for the
+    ordinary reason. Fetch it with `AuroraMeter.quota/2` in `mount/3` and again
+    wherever you handle the usage message:
+
+        def mount(_params, session, socket) do
+          org = MyApp.Accounts.org_for_session!(session)
+          if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
+          {:ok, assign(socket, org: org, quota: AuroraMeter.quota(org, :ai_generations))}
+        end
+
+        def handle_info({:aurora_meter, :usage, _payload} = message, socket) do
+          {:noreply, AuroraMeter.LiveView.assign_quota(message, socket, :quota, :ai_generations)}
+        end
+
+    `AuroraMeter.LiveView.assign_quota/4` is that second line; it drops a
+    message for another tenant and re-reads the quota for the socket's own.
+
+    Exactly one of `quota`, or `tenant` **and** `feature`, is required. Passing
+    neither, or both, raises rather than guessing which one the caller meant.
     """
-    attr(:tenant, :any, required: true)
-    attr(:feature, :atom, required: true)
+    attr(:quota, :map,
+      default: nil,
+      doc: "A map from `AuroraMeter.quota/2`. The live form: prefer it in a LiveView."
+    )
+
+    attr(:tenant, :any, default: nil, doc: "Read the quota at render time. A snapshot.")
+    attr(:feature, :atom, default: nil, doc: "Required with `tenant`.")
     attr(:label, :string, default: nil)
     attr(:rest, :global)
 
     def usage_meter(assigns) do
-      quota = AuroraMeter.quota(assigns.tenant, assigns.feature)
+      quota = resolve_quota!(assigns)
 
       assigns =
         assigns
         |> assign(:quota, quota)
-        |> assign(:label, assigns.label || to_string(assigns.feature))
+        |> assign(:label, assigns.label || to_string(quota.feature))
         |> assign(:usage_text, usage_text(quota))
 
       ~H"""
@@ -82,22 +125,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    @doc "Renders a usage meter for every feature in the tenant's plan."
-    attr(:tenant, :any, required: true)
+    @doc """
+    Renders a usage meter for every feature in the tenant's plan.
+
+    `quotas` and `tenant` divide exactly as they do in `usage_meter/1`, for the
+    same change-tracking reason: pass `quotas={@quotas}` in a LiveView so the
+    meters move, `tenant={@org}` anywhere a single snapshot is what is wanted.
+    `AuroraMeter.LiveView.quotas/1` builds the list and
+    `AuroraMeter.LiveView.assign_quotas/2` refreshes it from a usage message.
+
+        <.usage_summary quotas={@quotas} />
+        <.usage_summary tenant={@org} />
+    """
+    attr(:quotas, :list,
+      default: nil,
+      doc: "A list of maps from `AuroraMeter.quota/2`. The live form."
+    )
+
+    attr(:tenant, :any, default: nil, doc: "Read every feature's quota at render time.")
     attr(:rest, :global)
 
     def usage_summary(assigns) do
-      features =
-        case AuroraMeter.plan(assigns.tenant) do
-          nil -> []
-          plan -> plan.features |> Map.keys() |> Enum.sort()
-        end
-
-      assigns = assign(assigns, :features, features)
+      assigns = assign(assigns, :quotas, resolve_quotas!(assigns))
 
       ~H"""
       <div class="aurora-usage-summary" {@rest}>
-        <.usage_meter :for={feature <- @features} tenant={@tenant} feature={feature} />
+        <.usage_meter :for={quota <- @quotas} quota={quota} />
       </div>
       """
     end
@@ -324,6 +377,61 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @spec coord(number()) :: String.t()
     defp coord(value), do: :erlang.float_to_binary(value / 1, decimals: 2)
+
+    # **The two forms are exclusive, and an ambiguous call raises.** A component
+    # that quietly preferred one over the other would turn "I passed both and
+    # they disagreed" into a wrong number on a page, which is the class of
+    # defect this whole attribute exists to close.
+    @spec resolve_quota!(map()) :: map()
+    defp resolve_quota!(%{quota: %{} = quota, tenant: nil, feature: nil}), do: quota
+
+    defp resolve_quota!(%{quota: nil, tenant: tenant, feature: feature})
+         when not is_nil(tenant) and not is_nil(feature),
+         do: AuroraMeter.quota(tenant, feature)
+
+    defp resolve_quota!(%{quota: nil, tenant: nil, feature: nil}) do
+      raise ArgumentError,
+            "AuroraMeter.Components.usage_meter/1 needs either quota={...} or both " <>
+              "tenant={...} and feature={...}, and was given neither. In a LiveView pass " <>
+              "quota={@quota}: a meter driven by tenant and feature cannot update when " <>
+              "usage changes, because neither of those assigns moves when it does."
+    end
+
+    defp resolve_quota!(%{quota: %{}}) do
+      raise ArgumentError,
+            "AuroraMeter.Components.usage_meter/1 was given quota={...} together with " <>
+              "tenant or feature. Pass one form or the other: with both, which of the two " <>
+              "the meter showed would depend on an internal precedence rule rather than on " <>
+              "anything the caller wrote."
+    end
+
+    defp resolve_quota!(%{tenant: tenant, feature: feature}) do
+      missing = if is_nil(tenant), do: "tenant", else: "feature"
+      given = if is_nil(tenant), do: "feature=#{inspect(feature)}", else: "tenant"
+
+      raise ArgumentError,
+            "AuroraMeter.Components.usage_meter/1 was given #{given} without #{missing}. " <>
+              "The snapshot form needs both."
+    end
+
+    @spec resolve_quotas!(map()) :: [map()]
+    defp resolve_quotas!(%{quotas: quotas, tenant: nil}) when is_list(quotas), do: quotas
+
+    defp resolve_quotas!(%{quotas: nil, tenant: tenant}) when not is_nil(tenant),
+      do: AuroraMeter.LiveView.quotas(tenant)
+
+    defp resolve_quotas!(%{quotas: nil, tenant: nil}) do
+      raise ArgumentError,
+            "AuroraMeter.Components.usage_summary/1 needs either quotas={...} or " <>
+              "tenant={...}, and was given neither. In a LiveView pass quotas={@quotas}: " <>
+              "meters driven by a tenant cannot update when usage changes."
+    end
+
+    defp resolve_quotas!(_assigns) do
+      raise ArgumentError,
+            "AuroraMeter.Components.usage_summary/1 was given both quotas={...} and " <>
+              "tenant={...}. Pass one form or the other."
+    end
 
     defp usage_text(%{kind: :hard, used: used, limit: limit}), do: "#{used} / #{limit}"
     defp usage_text(%{kind: :metered, used: used, included: inc}), do: "#{used} / #{inc}"

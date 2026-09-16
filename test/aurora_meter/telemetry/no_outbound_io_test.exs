@@ -49,7 +49,14 @@ defmodule AuroraMeter.NoOutboundIoTest do
     "module(version)" =>
       "AuroraMeter.Migration.V<n>, built from an integer version by module/1 in the " <>
         "same file. Every possible value is a module of this package.",
-    "Config" => "AuroraMeter.Config, with a retention window accessor name. No I/O at all."
+    "Config" => "AuroraMeter.Config, with a retention window accessor name. No I/O at all.",
+    "AuroraMeter.Oban" =>
+      "this package's own optional Oban namespace, asked for its recommended crontab by " <>
+        "mix aurora_meter.install --oban. A literal module, and the only thing apply/3 hides " <>
+        "is the compile-time reference: the installer is compiled whenever Igniter is present " <>
+        "and AuroraMeter.Oban only when Oban is, so a direct call warned on every compile of " <>
+        "the dependency in a host without Oban (open-findings.md X375). The call is reached " <>
+        "only after the task has checked the module is loaded, and refused if it is not."
   }
 
   test "D11 no core module calls an HTTP client, a socket or a shell" do

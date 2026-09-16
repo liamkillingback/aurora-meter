@@ -41,6 +41,7 @@ defmodule AuroraMeter.CreditsLotReversalTest do
   alias AuroraMeter.Schema.CreditAllocation
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
+  alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
   @september ~U[2026-09-15 12:00:00Z]
@@ -276,7 +277,7 @@ defmodule AuroraMeter.CreditsLotReversalTest do
     # there is nothing to scope against and the caller falls back to the
     # wallet-wide path. This is the legacy wallet 06e's fallback exists for,
     # and the money still comes back.
-    legacy = unique_tenant("lotrev")
+    legacy = LedgerFixtures.legacy_wallet!(unique_tenant("lotrev"))
     {:ok, _} = Credits.grant(legacy, 5 * @dollar, reference: "pi_legacy")
     assert is_nil(row(legacy).lots_enabled_at)
 
@@ -602,12 +603,17 @@ defmodule AuroraMeter.CreditsLotReversalTest do
     # whole feature could not reach a production wallet. This is the first test
     # where one arrives on the lot path through the production route, takes an
     # allowance, and is then refunded for the payment that funded it.
-    tenant = unique_tenant("lotrev")
+    tenant = LedgerFixtures.legacy_wallet!(unique_tenant("lotrev"))
     AuroraMeter.subscribe(tenant, :allowance)
 
     # A legacy wallet, written by the legacy ledger through the public API,
     # with the payment references a real Stripe top-up leaves behind: 06b's
     # fold derives `source.payment_intent_id` from exactly that shape.
+    #
+    # Since 0.5.0 that wallet has to be created as a pre-release one: this test
+    # is about a wallet arriving on the lot path **through the migration**, and
+    # a wallet created now is already there. The route a new host takes instead
+    # is asserted by `credits_new_wallet_test.exs`.
     n = System.unique_integer([:positive])
     {paid_a, paid_b, manual} = {"pi_#{n}a", "pi_#{n}b", "top_up_#{n}"}
 

@@ -1,0 +1,24 @@
+[mixlane] core: DB_PORT=5490 elixir -S mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/r4-flushlimit.exs
+Compiling 10 files (.ex)
+derived chunk size, counters: 9362 rows per statement
+derived chunk size, history:  8191 rows per statement
+08c's boundary, re-probed
+      9362 keys: ok        9362 persisted in 446.2 ms
+      9363 keys: ok        9363 persisted in 412.9 ms
+the ladder above it
+     10000 keys: ok        10000 persisted in 386.0 ms
+     25000 keys: ok        25000 persisted in 1027.9 ms
+     50000 keys: ok        50000 persisted in 2073.0 ms
+    100000 keys: ok        100000 persisted in 3992.7 ms
+    200000 keys: ok        200000 persisted in 8673.4 ms
+no rung of the ladder failed.
+highest dirty-key count flushed and verified: 200000
+There is no bind-parameter ceiling left to bisect for: the statement count now
+grows with the batch and each statement stays at or under the derived chunk size.
+What is left is time, and the ladder above prints it.
+history on, so every increment makes a second dirty key in a wider table
+     20000 keys: ok        40000 persisted in 1612.7 ms
+08c boundary re-probe: %{9362 => {:ok, 9362}, 9363 => {:ok, 9363}}
+postgres: PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+elixir 1.20.1 / OTP 29
+[mixlane] core exit=0 started=2026-09-16T21:27:57Z finished=2026-09-16T21:29:46Z

@@ -27,6 +27,8 @@ defmodule AuroraMeter.Broadcaster do
 
   use GenServer
 
+  require Logger
+
   alias AuroraMeter.Cluster
   alias AuroraMeter.Config
   alias AuroraMeter.Counter
@@ -51,20 +53,66 @@ defmodule AuroraMeter.Broadcaster do
     {:ok, %{interval: interval}}
   end
 
+  # **The tick survives a tick it cannot serve** (`open-findings.md` X348).
+  #
+  # `do_broadcast/0` opens with `Counter.touched_keys/0`, which is
+  # `:ets.tab2list/1` on a table `AuroraMeter.Store` owns. A tick that lands
+  # between a Store crash and its restart raises `:badarg`, and until this
+  # rescue existed that killed the Broadcaster. The shipped
+  # `broadcast_interval` default is **one second**, so a host whose Store
+  # crashed had a live chance of it on every crash, and two such pairs close
+  # together took the whole supervision tree down with the buffered deltas in
+  # it.
+  #
+  # This is the fix `AuroraMeter.Flusher.do_flush/1` has had all along: a
+  # `rescue` and a `catch`, and the next tick scheduled either way. A broadcast
+  # that cannot read the tables has nothing to publish, and once the Store is
+  # back the next tick publishes everything touched since, because the touched
+  # set is read fresh every time rather than carried in this process's state.
+  #
+  # There is no new telemetry event here on purpose. `docs/telemetry.md` and
+  # `docs/api.md` are a published contract that `AuroraMeter.Test.TelemetryCensus`
+  # holds the tree to, and a failed broadcast is an operational log line rather
+  # than a metric a host should be building an alert on: the thing worth alerting
+  # on is the Store crash itself.
   @impl GenServer
   def handle_info(:broadcast, state) do
-    do_broadcast()
+    safe_broadcast()
     schedule(state.interval)
     {:noreply, state}
   end
 
   def handle_info(_other, state), do: {:noreply, state}
 
+  # The synchronous call does NOT rescue, and that is deliberate. `broadcast_now/0`
+  # is called by tests and by a host that wants a value on screen right now; a
+  # caller asking for one broadcast and being told `:ok` when nothing could be
+  # read is the silent pass this suite keeps finding (X325). The periodic tick
+  # has nobody to tell, which is why it is the one that swallows.
   @impl GenServer
   def handle_call(:broadcast, _from, state), do: {:reply, do_broadcast(), state}
 
   @spec schedule(pos_integer()) :: reference()
   defp schedule(interval), do: Process.send_after(self(), :broadcast, interval)
+
+  @spec safe_broadcast() :: :ok
+  defp safe_broadcast do
+    do_broadcast()
+  rescue
+    error -> broadcast_failed(Exception.message(error))
+  catch
+    kind, reason -> broadcast_failed({kind, reason})
+  end
+
+  @spec broadcast_failed(term()) :: :ok
+  defp broadcast_failed(reason) do
+    Logger.error(
+      "AuroraMeter broadcast failed; the next tick will publish what is still touched: " <>
+        inspect(reason)
+    )
+
+    :ok
+  end
 
   @spec do_broadcast() :: :ok
   defp do_broadcast do

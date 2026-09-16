@@ -87,6 +87,17 @@ with no database anywhere in it; *end-to-end* reaches Postgres through the real
 adapter on every write. On this machine they differ by three orders of
 magnitude.
 
+> **The three `flush_*` rows were re-measured on 2026-09-17 by repair unit R4**
+> and are the only rows on this page that did not come from the 2026-09-16 run.
+> `flush_10k` and `flush_100k` were `correct: false` here because they could not
+> flush at all: finding **X338**, a bind-parameter ceiling at 9,362 dirty counter
+> keys, which R4 closed. `flush_1k` was re-measured with them because its figure
+> is published in `README.md` and a table holding one figure from before a change
+> to the code it measures and two from after would be worse than either. R4's
+> records are under `docs/evidence/v1/repairs/runs/r4-flush/` and the write-up is
+> `docs/evidence/v1/repairs/r4-flush-ceiling.md`. Everything else on this page is
+> the 2026-09-16 measurement and is untouched.
+
 | Mode | Kind | What it measures | Workload | Median throughput (ops/s) | Median p50 (us) | Median p95 (us) | Spread across 5 runs | correct |
 |---|---|---|---|---|---|---|---|---|
 | `spread` | micro | `Counter.incr/4`, one distinct key per worker | 8 x 500,000 = 4,000,000 ops | 3,418,407.02 | 1.93 | 3.38 | 12.19% | true |
@@ -100,9 +111,9 @@ magnitude.
 | `replay` | end-to-end | `Events.Replay.run/1` over the seeded population | 8 x 500 = 20,000 ops | 51,223.83 | 77,618.5 | 82,741.25 | 15.11% | true |
 | `credits_debit` | end-to-end | `Credits.debit/4` across distinct wallets (lots enabled) | 8 x 2,000 = 16,000 ops | 1,091.03 | 6,814.68 | 9,241.27 | 48.01% | true |
 | `credits_hot_wallet` | end-to-end | the same debit against one shared wallet | 8 x 2,000 = 16,000 ops | 186.81 | 42,541.99 | 46,661.68 | 19.36% | true |
-| `flush_1k` | end-to-end | one `Flusher.flush/0` with 1,000 dirty keys | 1,000 dirty keys x 5 rounds | 21,658.59 | 42,515.36 | 58,413.57 | 4.55% | true |
-| `flush_10k` | end-to-end | one `Flusher.flush/0` with 10,000 dirty keys | 10,000 dirty keys x 5 rounds | 0 | 290,959.48 | 290,959.48 | n/a | **false** |
-| `flush_100k` | end-to-end | one `Flusher.flush/0` with 100,000 dirty keys | 100,000 dirty keys x 5 rounds | 0 | 2,565,796.71 | 2,565,796.71 | n/a | **false** |
+| `flush_1k` | end-to-end | one `Flusher.flush/0` with 1,000 dirty keys | 1,000 dirty keys x 5 rounds | 22,619.2 | 40,311.73 | 59,192.45 | 17.3% | true |
+| `flush_10k` | end-to-end | one `Flusher.flush/0` with 10,000 dirty keys | 10,000 dirty keys x 5 rounds | 23,313.32 | 435,948.84 | 465,230.95 | 4.45% | true |
+| `flush_100k` | end-to-end | one `Flusher.flush/0` with 100,000 dirty keys | 100,000 dirty keys x 5 rounds | 21,576 | 4,461,917.85 | 5,048,449.92 | 6.51% | true |
 | `db_delay` | end-to-end | sustained load with a delay in front of every storage call | 8 procs x 20,000 ms over 2,000 keys, 50,000 us per storage call | 1,544,940.46 | null | null | 5.1% | true |
 | `db_recovery` | end-to-end | sustained load, then the drain | 8 procs x 20,000 ms over 2,000 keys | 1,517,524.56 | null | null | 9.47% | true |
 | `cluster_2` | end-to-end | two real nodes reserving against one hard limit | 2 nodes x 20,000 reservations, limit 10,000 | 196,500.18 | null | null | 41.32% | true |
@@ -176,11 +187,15 @@ unverifiable.
   absolute figures are superseded: it measured 6,069 us p50 at one lot with
   Ecto's debug logging on, and this harness measures **6,814.68 us p50 /
   9,241.27 us p95** with logging off at eight concurrent workers.
-- **`flush_10k` and `flush_100k` did not measure anything.** A flush of more than
-  9,362 dirty counter keys cannot be sent to Postgres at all. See
-  `08c-flush-limit.md` (finding X338). Criterion 4 ("every mode runs with tiny
-  parameters and reports `correct: true`") is met by **sixteen of eighteen**
-  modes, and the two exceptions are that defect rather than a gap in the suite.
+- **`flush_10k` and `flush_100k` did not measure anything on 2026-09-16.** A
+  flush of more than 9,362 dirty counter keys could not be sent to Postgres at
+  all. See `08c-flush-limit.md` (finding X338). Criterion 4 ("every mode runs
+  with tiny parameters and reports `correct: true`") was met by **sixteen of
+  eighteen** modes on that run, and the two exceptions were that defect rather
+  than a gap in the suite. **Repair unit R4 closed X338 on 2026-09-17** and
+  re-measured all three flush modes; criterion 4 is now met by all eighteen, and
+  the table above carries their figures
+  (`docs/evidence/v1/repairs/r4-flush-ceiling.md`).
 
 ## 5. Changes
 
@@ -207,7 +222,7 @@ unverifiable.
 
 | Finding | What |
 |---|---|
-| **X338** | a flush of more than 9,362 dirty counter keys cannot be sent, and is retried for ever. `08c-flush-limit.md` |
+| **X338** | a flush of more than 9,362 dirty counter keys cannot be sent, and is retried for ever. `08c-flush-limit.md`. **Closed by repair unit R4 on 2026-09-17**: `docs/evidence/v1/repairs/r4-flush-ceiling.md` |
 | **X339** | the build document's claim that `hot` has a 0.4.0 baseline; the 0.4.0 task has no hot-key mode. `08c-baseline.md` |
 | **X340** | this unit's own convergence reading was wrong and reported a correct cluster as unconverged. `08c-cluster.md` |
 | **X341** | this unit's own overshoot bound was too tight and could not fail at the default interval. `08c-cluster.md` |

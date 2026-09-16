@@ -704,6 +704,61 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Fixed
 
+- **`mix aurora_meter.install` produced an application that could not start.**
+  The starter plans module it generates was written as a whole
+  `defmodule MyApp.Plans do ... end`, and `Igniter` wraps whatever contents it
+  is given in a `defmodule` of its own, so the generated file defined
+  `MyApp.Plans.MyApp.Plans` (holding the plans) and left `MyApp.Plans` empty.
+  The configuration the same task wrote named the empty one, and every
+  application built this way raised at boot:
+
+      ** (ArgumentError) config :aurora_meter, plans: MyApp.Plans does not
+         export __aurora_plans__/0.
+
+  It is the first command a new user runs. Found by building a real Phoenix
+  application on the library rather than by reading the file the task wrote,
+  which is also what the installer's tests now do: they evaluate the generated
+  configuration, compile the generated module, and run the same check
+  `AuroraMeter.start_link/1` runs at boot against the module the configuration
+  actually names. A host that already ran the installer should delete the inner
+  `defmodule` line and its `end`, or move its own plans up a level.
+
+- **`mix aurora_meter.install --oban` crashed in an application without Oban,
+  and the free package warned on every compile in one.** The switch called
+  `AuroraMeter.Oban.cron_entries/0`, and that module exists only when Oban is
+  installed, so the answer a host got was an `UndefinedFunctionError` naming an
+  internal module it cannot install. It now refuses, names the line to add to
+  `mix.exs`, and writes nothing; and when Oban is present but was added after
+  `aurora_meter` was compiled it says so and names
+  `mix deps.compile aurora_meter --force`. The same two call sites emitted
+
+      warning: AuroraMeter.Oban.cron_entries/0 is undefined
+      warning: AuroraMeter.Oban.queue/0 is undefined
+
+  on **every** compile of the dependency in an application without Oban, which
+  was the first thing a new host saw. Both are gone.
+
+- **`mix aurora_meter.install --dry-run` printed nothing in a script, which is
+  where it is run.** Igniter treats a run whose standard input is not a
+  character device as `--yes`, and `--yes` suppresses the diff, so the switch
+  wrote no file (right) and reported no change set (its entire purpose). A dry
+  run writes nothing and is never asked to confirm, so the inferred `--yes` has
+  nothing to agree to and is now dropped. An explicit `--yes` still gives the
+  quiet form.
+
+- **A refusal now exits 1.** `mix aurora_meter.install` with a value it will not
+  accept printed its refusal, left every file untouched, and exited **0**, so no
+  script, CI step or install recipe could tell a refusal from a success. This
+  reached every refusal in the task. `--check-support` already raised for the
+  same reason.
+
+- **`docs/getting-started.md` never mentioned `mix aurora_meter.install`.** A
+  reader following that page met `mix igniter.install aurora_meter` and
+  `mix aurora_meter.gen.migration` and never met `--feature-policy` or
+  `--events-source`, which are the two settings the task itself creates and
+  never changes. The page now names the task, all four switches, and what a
+  refusal does.
+
 - **A wallet that owes money no longer reports credit it will refuse to spend,
   and the refusal says why.** After a refund or a settlement above its hold, a
   wallet holding a promotion can owe money and hold visible credit at the same

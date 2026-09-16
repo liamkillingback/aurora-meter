@@ -15,14 +15,20 @@ defmodule AuroraMeter.KillTest do
   unrelated failure somewhere else entirely. ExUnit runs synchronous modules one
   at a time, which is the only thing containing it.
 
-  **This module consumes the whole of `AuroraMeter.Supervisor`'s restart
-  budget.** The supervisor is `one_for_one` with OTP's defaults, three restarts
-  in five seconds, and the three tests below kill a supervised child once each.
-  A fourth automatic restart inside the same five seconds would take the
-  supervisor down and every later test with it, so a unit adding a kill test
-  here (03b, 05c) must either replace one of these or space them deliberately.
+  **This module spends three of `AuroraMeter.Supervisor`'s ten restarts.** The
+  supervisor is `one_for_one` with an explicitly chosen `max_restarts: 10,
+  max_seconds: 60` (repair unit R4, `open-findings.md` X354), and the three
+  tests below kill a supervised child once each. That was three of **three** in
+  five seconds until R4, which is why a single stray automatic restart in
+  another module used to take the supervisor down and every later test with it
+  (X347, X349). The wider budget makes that far less likely and does not make it
+  impossible, so the rule stands and the test below still enforces it: a unit
+  adding a kill test here (03b, 05c) accounts for its restarts deliberately.
   `Supervisor.restart_child/2`, which `AuroraMeter.FlusherTest` uses, is a
   manual restart and does not count.
+
+  The number appears in exactly two places, `AuroraMeter.Supervisor.init/1` and
+  `@budget` below, and they move together.
   """
   use ExUnit.Case, async: false
 
@@ -73,16 +79,49 @@ defmodule AuroraMeter.KillTest do
   @self "test/aurora_meter/kill_test.exs"
   @budget 3
 
-  # The moduledoc above says this module spends the whole restart budget. It
-  # said so before today too, and `store_gauge_test.exs` spent a fourth anyway,
-  # which took `AuroraMeter.Supervisor` down mid-suite whenever the seed placed
-  # the two `async: false` modules close together. A rule nothing enforces is one
-  # already being broken (`open-findings.md` X153, X347, X349).
+  # The intensity `AuroraMeter.Supervisor` chose, and the moduledoc above
+  # describes. Read back out of `init/1` rather than trusted, so that changing
+  # it there fails here rather than leaving this file describing a tree that no
+  # longer exists (X354).
+  @intensity %{max_restarts: 10, max_seconds: 60}
+
+  test "X354 AuroraMeter.Supervisor's restart intensity is the one written down here" do
+    assert {:ok, {flags, children}} = AuroraMeter.Supervisor.init([])
+
+    refute Enum.empty?(children),
+           "AuroraMeter.Supervisor.init/1 returned no children, so this guard would be " <>
+             "reading the flags of a tree that does not exist (X325)."
+
+    assert %{strategy: :one_for_one, intensity: intensity, period: period} = flags
+
+    assert {intensity, period} == {@intensity.max_restarts, @intensity.max_seconds},
+           "AuroraMeter.Supervisor now allows #{intensity} restarts in #{period} seconds and " <>
+             "this module is written for #{@intensity.max_restarts} in " <>
+             "#{@intensity.max_seconds}. The intensity and this module's budget move " <>
+             "together: change the moduledoc, @intensity and @budget in one edit, and say " <>
+             "in supervisor.ex why the new number was chosen."
+
+    assert @budget < intensity,
+           "this module spends #{@budget} of #{intensity} restarts, which leaves no room at " <>
+             "all for anything else in the suite. Either lower the budget or raise the " <>
+             "intensity deliberately."
+  end
+
+  # The moduledoc above says this module is the only one that spends restarts.
+  # It said so before today too, and `store_gauge_test.exs` spent a fourth
+  # anyway, which took `AuroraMeter.Supervisor` down mid-suite whenever the seed
+  # placed the two `async: false` modules close together. A rule nothing
+  # enforces is one already being broken (`open-findings.md` X153, X347, X349).
   #
   # So the moduledoc is now an assertion. A test that needs a child of
   # `AuroraMeter.Supervisor` to run `init/1` again should use
   # `Supervisor.terminate_child/2` plus `Supervisor.restart_child/2`, which runs
   # the same code and is not charged against restart intensity.
+  #
+  # R4 widened the intensity (X354) and did NOT relax this guard. A wider budget
+  # makes a stray restart survivable rather than harmless, and "survivable" is
+  # not a thing to spend without saying so: an unaccounted automatic restart is
+  # still a test that will one day run next to two others.
   test "this module is the only one that spends AuroraMeter.Supervisor's restart budget" do
     names = supervised_names()
 
@@ -97,11 +136,12 @@ defmodule AuroraMeter.KillTest do
     assert others == [],
            "a supervised child of AuroraMeter.Supervisor is killed and left to restart " <>
              "automatically outside #{@self}: #{inspect(others)}. The supervisor is " <>
-             "one_for_one with OTP's defaults, three restarts in five seconds, and this " <>
-             "module spends all three, so that is a FOURTH: it takes the tree down and " <>
-             "every later test with it whenever the seed runs the two modules close " <>
-             "together. Use Supervisor.terminate_child/2 plus Supervisor.restart_child/2, " <>
-             "which runs init/1 on the same path and is not charged against intensity."
+             "one_for_one with #{@intensity.max_restarts} restarts in " <>
+             "#{@intensity.max_seconds} seconds and this module spends #{@budget} of them, " <>
+             "so this is an unaccounted one: enough of them close together take the tree " <>
+             "down and every later test with it. Use Supervisor.terminate_child/2 plus " <>
+             "Supervisor.restart_child/2, which runs init/1 on the same path and is not " <>
+             "charged against intensity."
 
     assert length(mine) == @budget,
            "#{@self} makes #{length(mine)} automatic restarts and the budget is " <>

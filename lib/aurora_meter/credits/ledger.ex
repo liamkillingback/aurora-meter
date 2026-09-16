@@ -1015,6 +1015,35 @@ defmodule AuroraMeter.Credits.Ledger do
   # the transaction. Every write to a tenant's ledger serialises on this lock;
   # holds and debits are checked against the locked row, which is what makes
   # "exactly ten $0.10 holds against $1.00" true under concurrency.
+  #
+  # **A wallet created from here is born on the allocator** (`lots_enabled_at`
+  # stamped at the same instant as `inserted_at`), and that is an orchestrator
+  # decision of 2026-09-17 on findings X380, X283 and X255 rather than a
+  # convenience. It is worth saying why it is *this* line and not another one,
+  # because two units before this declined to write it and were right to.
+  #
+  # 06b's criterion asked `locked_row/2` to stamp the flag "when the INSERT
+  # actually inserts". 06b, 06e and repair unit R1 all refused, for one reason
+  # (X255, X283): `architecture-map.md` 7.4 makes `lots_enabled_at` the output
+  # of a **verified replay**, paired with a per-wallet checkpoint report, so a
+  # flag stamped here would mint cut-over wallets with no report and no
+  # operator decision, on `mix deps.update` rather than on a choice.
+  #
+  # **That objection is entirely about wallets that already exist**, and this
+  # line cannot reach one. `on_conflict: :nothing` on `conflict_target:
+  # [:tenant_key]` means the statement either inserts a wallet that did not
+  # exist a moment ago or writes nothing at all: there is no path by which it
+  # updates a row, so no wallet with a history to replay is moved, and 7.4's
+  # requirement is untouched for every wallet 7.4 is about. A new wallet has no
+  # history to reconcile, so the replay it would be asked for is vacuous, which
+  # is the observation R2 made and X255's original requirement stated outright:
+  # "a genuinely new wallet is born on the lot path".
+  #
+  # The split population this creates (wallets from before the upgrade on the
+  # legacy writer, wallets from after it on the allocator) is the state
+  # `mix aurora_meter.credits.migrate_lots` exists to resolve. It is documented
+  # in `docs/upgrading-to-lots.md` and `docs/credits.md` rather than left for a
+  # host to find by watching two wallets behave differently.
   @spec locked_row(module(), String.t()) :: CreditBalance.t()
   defp locked_row(repo, tenant_key) do
     now = Clock.now()
@@ -1026,6 +1055,7 @@ defmodule AuroraMeter.Credits.Ledger do
           id: Ecto.UUID.generate(),
           tenant_key: tenant_key,
           currency: Config.credits_currency(),
+          lots_enabled_at: DateTime.truncate(now, :second),
           inserted_at: now,
           updated_at: now
         }

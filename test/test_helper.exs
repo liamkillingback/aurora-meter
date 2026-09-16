@@ -60,9 +60,18 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 # table and compared it with the whole projection. `AuroraMeter.Events.Replay`
 # does exactly that, so those two rows made every `compare: :require_match`
 # assertion fail. A probe script that commits rows needs a prefix in this list.
+# `deferred` was missing until repair unit R6 and the gap was not theoretical.
+# `credits_after_commit_test.exs` commits on real connections under that prefix
+# and grants `reference: "g1"` and `reference: "seed"`, which are **not** tenant
+# scoped; `(kind, reference)` is unique across the whole table. An interrupted
+# run of that file therefore left two rows that made every later run's
+# `reference: "seed"` grant return `:duplicate_reference`, in files that never
+# touch a real connection, for as long as the database lived. Observed on
+# 2026-09-17 on this machine: `deferred_4363` holding `seed` and `d0`, and
+# `deferred_7881` holding `g1`.
 AuroraMeter.Test.Connections.sweep!(~w(
-  concurrent corrconc flush_batch gate jobctl killt lotconc lotfault lotmig lotprop lots model
-  obansched planconc plantrans probe
+  concurrent corrconc deferred flush_batch gate jobctl killt lotconc lotfault lotmig lotprop lots
+  model obansched planconc plantrans probe
   projection recurconc reconcile recordconc replay replaybig storagecase stmt
 ))
 

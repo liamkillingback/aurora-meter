@@ -1658,6 +1658,12 @@ compiled, so the verdict is about the build and not about the probe (X325).
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 a dependency below its floor beats the stale-build check to the verdict`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 the abort message names every problem and the command that fixes it`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 an absent optional dependency is neither an error nor a stale build`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 no Oban at all: the message names the line to add to mix.exs`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 Oban present and the workers not compiled: the stale build, and the one line that fixes it`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 control: a host that has both is not refused`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 the version the refusal asks for is the floor the support matrix declares`
+- `AuroraMeter.InstallShellTest` / `test the queue name the installer writes I20 the two places it is written agree with each other`
+- `AuroraMeter.InstallShellTest` / `test the queue name the installer writes I20 and both agree with AuroraMeter.Oban.queue/0`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 a first run writes :deny with no flag given`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 --feature-policy warn writes :warn and not :deny`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 every documented value is accepted and written`

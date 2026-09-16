@@ -1,0 +1,155 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": [
+      {
+        "duration_us": 4301927.52,
+        "keys_built": 100000,
+        "persisted": 100000,
+        "result": "ok",
+        "round": 1,
+        "rows_per_second": 23245.39
+      },
+      {
+        "duration_us": 4569029.66,
+        "keys_built": 100000,
+        "persisted": 100000,
+        "result": "ok",
+        "round": 2,
+        "rows_per_second": 21886.49
+      },
+      {
+        "duration_us": 4434094.5,
+        "keys_built": 100000,
+        "persisted": 100000,
+        "result": "ok",
+        "round": 3,
+        "rows_per_second": 22552.52
+      },
+      {
+        "duration_us": 5533332.88,
+        "keys_built": 100000,
+        "persisted": 100000,
+        "result": "ok",
+        "round": 4,
+        "rows_per_second": 18072.29
+      },
+      {
+        "duration_us": 4335513.47,
+        "keys_built": 100000,
+        "persisted": 100000,
+        "result": "ok",
+        "round": 5,
+        "rows_per_second": 23065.32
+      }
+    ]
+  },
+  "command": "mix aurora_meter.bench flush_100k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/r4-flush/runs/flush_100k-3.json --label flush_100k",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 8132,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 23173.9,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T21:13:48.359052Z",
+  "kind": "end_to_end",
+  "label": "flush_100k",
+  "latency_us": {
+    "max": 5533332.88,
+    "method": "nearest_rank",
+    "p50": 4434094.5,
+    "p95": 5533332.88,
+    "p99": 5533332.88,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 5
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 49005336,
+      "ets": 502672672,
+      "processes": 497395488,
+      "total": 1096095200
+    },
+    "after_warmup": {
+      "binary": 66019912,
+      "ets": 1995672,
+      "processes": 19404672,
+      "total": 133612944
+    },
+    "before": {
+      "binary": 66012496,
+      "ets": 1993544,
+      "processes": 19411160,
+      "total": 133601696
+    },
+    "counters_table_bytes": 252134984
+  },
+  "mode": "flush_100k",
+  "notes": [
+    "each round makes 100000 distinct dirty counter keys with Counter.incr/4 and then times one synchronous Flusher.flush/0. duration_ms is the sum of the flushes only; building the dirty set is outside the clock. History is off, because a day bucket would be a second dirty key per increment and the mode's name would be wrong.",
+    "persisted total: 500000 (expected 500000)",
+    "dirty keys at the end: 0 (expected 0)",
+    "pending batch items at the end: 0 (expected 0)",
+    "flush receipts: 5 (one per successful round, 5 rounds requested)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "0b6b48c407dc8ec2e67c6cf850ad6af6065d0f00",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "ca7cc1bd-42c1-4127-aed5-3769f9897854",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T21:11:36.703445Z",
+  "throughput_ops_per_sec": 21576.0,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "dirty_keys": 100000,
+    "keys": 100000,
+    "operations": 500000,
+    "per_proc": 2000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 8132,
+    "tenants": 100000
+  }
+}

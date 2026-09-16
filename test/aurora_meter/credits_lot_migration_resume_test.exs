@@ -76,7 +76,7 @@ defmodule AuroraMeter.CreditsLotMigrationResumeTest do
   end
 
   defp wallet(shape) do
-    tenant = AuroraMeter.Test.unique_tenant("lotmig")
+    tenant = legacy_tenant()
     LedgerFixtures.build!(shape, tenant)
     tenant
   end
@@ -436,4 +436,9 @@ defmodule AuroraMeter.CreditsLotMigrationResumeTest do
       await_waiters(target, attempts - 1)
     end
   end
+
+  # A wallet that predates the lots-on-creation release. See
+  # `LedgerFixtures.legacy_wallet!/1`.
+  defp legacy_tenant(prefix \\ "lotmig"),
+    do: LedgerFixtures.legacy_wallet!(AuroraMeter.Test.unique_tenant(prefix))
 end

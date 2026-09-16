@@ -24,12 +24,9 @@ defmodule AuroraMeter.CreditsAfterCommitTest do
   """
   use ExUnit.Case, async: false
 
-  import Ecto.Query, only: [from: 2]
-
   alias AuroraMeter.Credits
-  alias AuroraMeter.Schema.CreditBalance
-  alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Test.Config, as: TestConfig
+  alias AuroraMeter.Test.Connections
   alias AuroraMeter.TestRepo
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -44,10 +41,14 @@ defmodule AuroraMeter.CreditsAfterCommitTest do
       # The queue is per process and this process is about to move on to
       # another test, so an undrained one would leak an effect into it.
       Credits.after_commit(discard: true)
-      :ok = Sandbox.checkout(TestRepo, sandbox: false)
-      TestRepo.delete_all(from(t in CreditTransaction, where: t.tenant_key == ^tenant))
-      TestRepo.delete_all(from(b in CreditBalance, where: b.tenant_key == ^tenant))
-      Sandbox.checkin(TestRepo)
+
+      # `Connections.cleanup!/1` rather than two `delete_all`s of its own: a
+      # wallet created here is now born on the allocator, so its ledger rows
+      # carry lots and allocations that reference them `ON DELETE RESTRICT`.
+      # Deleting the transactions first is refused, and a teardown that raises
+      # on a real connection leaves the rows committed for every later test to
+      # find. `cleanup!/1` owns the deletion order.
+      Connections.cleanup!(tenant)
     end)
 
     %{tenant: tenant, phases: phases}

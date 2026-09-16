@@ -12,6 +12,24 @@ erl_crash.dump
 /priv/plts/*.plt.hash
 /demo/_build/
 /demo/deps/
+# The sample application under examples/ is a full Phoenix project with its own
+# build output. Its own .gitignore covers these too; they are repeated here so
+# that a `git add -A` run from the package root cannot commit them whichever
+# directory it is run from. A previous unit in this programme left 2,909
+# untracked files in a package root and another left 153 stray HTML files, and
+# both were caught at the commit gate rather than by their authors.
+/examples/*/_build/
+/examples/*/deps/
+/examples/*/cover/
+/examples/*/doc/
+/examples/*/.elixir_ls/
+/examples/*/.fetch
+/examples/*/tmp/
+/examples/*/.env
+/examples/*/priv/static/assets/
+/examples/*/priv/static/cache_manifest.json
+/examples/*/assets/node_modules/
+/examples/*/*.tar
 # Optional-dependency leg builds (AURORA_HEADLESS, AURORA_NO_LIVEVIEW and friends).
 # They are build output, not source, and a leg deliberately builds an incomplete
 # tree (open-findings.md X329), so it must never reach a commit.
