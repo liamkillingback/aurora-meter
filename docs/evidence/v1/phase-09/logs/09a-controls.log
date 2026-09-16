@@ -1,0 +1,96 @@
+[lane] core lane acquired, and held for the WHOLE run: no control patch
+[lane] is ever on disk while another agent can take the lane
+=== baseline ===
+  lib/aurora_meter/broadcaster.ex                  sha256=3ac8e81cfee6045023a3accbeb1d24c79952869ce963b5d8ae776cc63b7e2232
+  lib/aurora_meter/live_view.ex                    sha256=e49a4fa3aaac77f20e1b6c3f4843510354f439800e173077d132cbffd0f9ddc8
+  lib/aurora_meter/plug/ensure_entitled.ex         sha256=74b5f1fdfcf969bcd56f8e48b5e2a61fd07b4022129abb568799806d04fd7db2
+  all 12 anchors occur exactly once
+
+=== the control run: the tests must be GREEN before any patch ===
+  baseline run: CLEAN (rc=0) Result: 67 passed (1 doctest, 66 tests)
+
+=== c1-plug-reserves (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 twelve passing requests at the cap boundary leave usage at its starting value
+    - I20 usage is unchanged after a passing request
+
+=== c2-missing-tenant-defaults (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 a resolver returning nil halts with 401 and :missing_tenant
+    - I20 a resolver returning nil never resolves the default tenant
+
+=== c3-usage-payload-loses-tenant-key (lib/aurora_meter/broadcaster.ex) ===
+  DIRTY  Result: 13/14 passed
+  failed: 1 test(s)
+    - I20 the usage broadcast carries the tenant_key
+
+=== c4-on-mount-subscribes-on-static (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 25/27 passed (1/1 doctest, 24/26 tests)
+  failed: 2 test(s)
+    - I20 on_mount with an explicit function resolver assigns the tenant and subscribes only when connected
+    - I20 switch_tenant on a disconnected socket only re-assigns
+
+=== c5-switch-tenant-leaks-old-topics (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 26/27 passed (1/1 doctest, 25/26 tests)
+  failed: 1 test(s)
+    - I20 switch_tenant unsubscribes the old topics and subscribes the new ones
+
+=== c6-handle-usage-does-not-filter (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 25/27 passed (1/1 doctest, 24/26 tests)
+  failed: 2 test(s)
+    - I20 a socket switched to a second tenant keeps only the second tenant's value
+    - I20 handle_usage drops a message whose tenant_key is not the socket's
+
+=== c7-bare-on-mount-falls-back (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 25/27 passed (1/1 doctest, 24/26 tests)
+  failed: 2 test(s)
+    - I20 on_mount bare :subscribe resolves through live_view_tenant when it is set
+    - I20 on_mount bare :subscribe without live_view_tenant raises ArgumentError naming the config key
+
+=== c8-denial-callback-need-not-halt (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 an on_denied callback returning a non-conn raises a RuntimeError naming the callback
+    - I20 an on_denied callback that does not halt raises a RuntimeError naming the callback
+
+=== c9-subscribe-leaves-partial (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 26/27 passed (1/1 doctest, 25/26 tests)
+  failed: 1 test(s)
+    - I20 subscribe/2 unsubscribes what it had subscribed when a later topic fails
+
+=== c10-entitled-mode-reads-usage (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 mode :entitled? passes at the hard cap because it never reads usage
+    - I20 mode :entitled? reads no counter, and the same arming makes :check answer 503
+
+=== c11-config-errors-become-503 (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 InvalidPeriodError from a custom period source is re-raised, not turned into 503
+    - I20 an undeclared feature under :raise re-raises UndeclaredFeatureError rather than answering 503
+
+=== c12-live-view-accepts-nil-tenant (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 25/27 passed (1/1 doctest, 24/26 tests)
+  failed: 2 test(s)
+    - I20 subscribe refuses a nil tenant and registers nothing for the empty key
+    - I20 switch_tenant raises on a nil tenant and leaves the old subscription alone
+
+================ summary ================
+  c1-plug-reserves                         discriminated
+  c2-missing-tenant-defaults               discriminated
+  c3-usage-payload-loses-tenant-key        discriminated
+  c4-on-mount-subscribes-on-static         discriminated
+  c5-switch-tenant-leaks-old-topics        discriminated
+  c6-handle-usage-does-not-filter          discriminated
+  c7-bare-on-mount-falls-back              discriminated
+  c8-denial-callback-need-not-halt         discriminated
+  c9-subscribe-leaves-partial              discriminated
+  c10-entitled-mode-reads-usage            discriminated
+  c11-config-errors-become-503             discriminated
+  c12-live-view-accepts-nil-tenant         discriminated
+  12 of 12 discriminated
+[restore] all 3 targets back at their baseline digest
+[lane] core lane released

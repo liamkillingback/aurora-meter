@@ -19,7 +19,10 @@ if Code.ensure_loaded?(Igniter.Test) do
 
     import Igniter.Test
 
+    alias AuroraMeter.Install.Plan
     alias AuroraMeter.Install.Support
+    alias AuroraMeter.Install.Templates
+    alias AuroraMeter.Migration
     alias Igniter.Mix.Task.Info
     alias Mix.Tasks.AuroraMeter.Install, as: InstallTask
 
@@ -58,7 +61,21 @@ if Code.ensure_loaded?(Igniter.Test) do
       assert plans =~ "use AuroraMeter.Plans"
       assert plans =~ "plan :free do"
 
-      assert migration_body(igniter) =~ "AuroraMeter.Migration.up()"
+      # I19, L09b-3: the installer's migration names both ends of the range.
+      # It used to emit `AuroraMeter.Migration.up()`, which runs to whatever
+      # version the installed package has reached on the day it is applied, so
+      # the same committed file produced one schema in the database it was
+      # written against and a different one in a database created after the next
+      # release (`open-findings.md` S1). The generator was fixed in 05c and the
+      # installer was not, so two supported ways of installing this package
+      # produced two different migrations.
+      body = migration_body(igniter)
+      latest = Migration.latest_version()
+
+      assert body =~ "AuroraMeter.Migration.up(from: 1, version: #{latest}"
+      assert body =~ "AuroraMeter.Migration.down(version: #{latest}, to: 1"
+
+      refute_unbounded(body)
     end
 
     test "a second run does not duplicate the policy line" do
@@ -249,6 +266,131 @@ if Code.ensure_loaded?(Igniter.Test) do
         assert row.resolved == nil
         assert row.note =~ "connecting"
       end
+
+      test "I20 the declared floors and mix.exs name the same dependencies" do
+        # Until build unit 09b this comparison was a sentence in a comment in
+        # support.ex naming a test file that did not exist. A rule nothing
+        # enforces is one already being broken (`open-findings.md` X153), and it
+        # was: the matrix listed nine dependencies and mix.exs declared
+        # fourteen, so `--check-support` was silent about phoenix_html, the
+        # dashboard, OpenTelemetry, telemetry_metrics and plug.
+        declared = Support.declared_deps() |> Enum.map(&elem(&1, 0)) |> MapSet.new()
+
+        in_mix =
+          Mix.Project.config()
+          |> Keyword.fetch!(:deps)
+          |> Enum.reject(fn
+            {_app, _requirement, opts} -> Keyword.has_key?(opts, :only)
+            {_app, _requirement} -> false
+          end)
+          |> Enum.map(&elem(&1, 0))
+          |> MapSet.new()
+
+        assert MapSet.subset?(in_mix, declared),
+               "mix.exs declares dependencies the support matrix says nothing about: " <>
+                 inspect(MapSet.to_list(MapSet.difference(in_mix, declared)))
+
+        # The other direction only holds on a build with no AURORA_ switch set:
+        # those switches take dependencies out of mix.exs, and the matrix
+        # describes what the package supports rather than what this leg built.
+        if switched_build?() do
+          :ok
+        else
+          assert MapSet.equal?(in_mix, declared),
+                 "the support matrix names dependencies mix.exs does not: " <>
+                   inspect(MapSet.to_list(MapSet.difference(declared, in_mix)))
+        end
+      end
+
+      test "I20 the phoenix_live_view floor is 1.0.0 and agrees with mix.exs" do
+        # D12 and finding C9: the floor a host is told about and the requirement
+        # Hex resolves have to be the same number, or one of them is a lie.
+        assert {:phoenix_live_view, "1.0.0", :optional} in Support.declared_deps()
+
+        if switched_build?() do
+          :ok
+        else
+          {:phoenix_live_view, requirement, _opts} =
+            Mix.Project.config() |> Keyword.fetch!(:deps) |> List.keyfind(:phoenix_live_view, 0)
+
+          assert requirement == "~> 1.0"
+          assert Version.match?("1.0.0", requirement)
+          refute Version.match?("0.20.17", requirement)
+        end
+      end
+
+      test "I20 a dependency present whose guarded module was not compiled is an error row" do
+        # The stale-build trap, induced through the real row code rather than by
+        # constructing the row a test wants to see: the probe says
+        # phoenix_live_view 1.2.0 is installed and AuroraMeter.Components is not
+        # compiled, which is exactly a host that added the dependency after
+        # aurora_meter was built.
+        rows = Support.rows(probe: stale(:phoenix_live_view))
+        row = Enum.find(rows, &(&1.name == "phoenix_live_view"))
+
+        assert row.verdict == :stale_build
+        assert row.resolved == "1.2.0"
+        assert row.note =~ "AuroraMeter.Components was not compiled"
+        assert row.note =~ "mix deps.compile aurora_meter --force"
+
+        # And that verdict is what makes --check-support exit non-zero.
+        refute Support.supported?(rows)
+        assert Support.report(rows) =~ "NOT COMPILED IN"
+      end
+
+      test "I20 control: the same probe with the module compiled is ok" do
+        # Without this the test above would pass for a probe that reported
+        # :stale_build whatever it was given.
+        rows = Support.rows(probe: compiled(:phoenix_live_view))
+        row = Enum.find(rows, &(&1.name == "phoenix_live_view"))
+
+        assert row.verdict == :ok
+        assert Support.supported?(rows)
+        refute Support.report(rows) =~ "NOT COMPILED IN"
+      end
+
+      test "I20 a dependency below its floor beats the stale-build check to the verdict" do
+        # Order matters: a host on LiveView 0.20 has a version problem, not a
+        # build problem, and telling it to recompile would send it round a loop.
+        rows = Support.rows(probe: fn _app, _guard -> {"0.20.17", false} end)
+        row = Enum.find(rows, &(&1.name == "phoenix_live_view"))
+
+        assert row.verdict == :below_floor
+        refute Support.supported?(rows)
+      end
+
+      test "I20 the abort message names every problem and the command that fixes it" do
+        # What `--check-support` raises with when it refuses. It raises rather
+        # than adding an Igniter issue, because an issue is displayed and the
+        # task still exits 0, and a switch whose whole job is to answer
+        # "is this host supported" has to answer in the exit status too. The
+        # exit codes themselves are proved end to end against a real host
+        # project in `docs/evidence/v1/phase-09/09b-support-matrix.md`.
+        rows = Support.rows(probe: stale(:phoenix_live_view))
+        summary = Support.problem_summary(rows)
+
+        refute Support.supported?(rows)
+        assert summary =~ "not supported on this host"
+        assert summary =~ "phoenix_live_view 1.2.0 is installed but its integration is not"
+        assert summary =~ "mix deps.compile aurora_meter --force"
+
+        # And it says so the other way round when there is nothing wrong, so the
+        # message is not a constant.
+        assert Support.problem_summary(Support.rows()) ==
+                 "Aurora Meter is supported on this host."
+      end
+
+      test "I20 an absent optional dependency is neither an error nor a stale build" do
+        rows = Support.rows(probe: fn _app, _guard -> {nil, false} end)
+
+        for name <- ~w(phoenix_live_view plug igniter oban) do
+          assert Enum.find(rows, &(&1.name == name)).verdict == :absent
+        end
+
+        # The required ones are a different matter, and the report says so.
+        assert Enum.find(rows, &(&1.name == "ecto_sql")).verdict == :below_floor
+        refute Support.supported?(rows)
+      end
     end
 
     describe "--dry-run" do
@@ -268,7 +410,378 @@ if Code.ensure_loaded?(Igniter.Test) do
       end
     end
 
+    describe "--feature-policy" do
+      test "I20 a first run writes :deny with no flag given" do
+        config = source(install(["--repo", "Demo.Repo"]), @config)
+
+        assert config =~ "undeclared_feature_policy: :deny"
+      end
+
+      test "I20 --feature-policy warn writes :warn and not :deny" do
+        config = source(install(["--repo", "Demo.Repo", "--feature-policy", "warn"]), @config)
+
+        assert config =~ "undeclared_feature_policy: :warn"
+        refute config =~ "undeclared_feature_policy: :deny"
+      end
+
+      test "I20 every documented value is accepted and written" do
+        for value <- ~w(allow warn deny raise) do
+          config = source(install(["--repo", "Demo.Repo", "--feature-policy", value]), @config)
+
+          assert config =~ "undeclared_feature_policy: :#{value}",
+                 "--feature-policy #{value} did not write :#{value}"
+        end
+      end
+
+      test "I20 --feature-policy bogus creates no file at all" do
+        igniter = install(["--repo", "Demo.Repo", "--feature-policy", "bogus"])
+
+        # Not merely "the value was not written": the task refused before it
+        # touched anything, so the igniter carries one issue and no change. That
+        # is what Igniter needs in order to write nothing at all.
+        assert_unchanged(igniter)
+        assert [issue] = igniter.issues
+        assert issue =~ "--feature-policy bogus"
+        assert issue =~ "allow, warn, deny, raise"
+        assert issue =~ "Nothing was written."
+      end
+
+      test "I20 a second run keeps a host-edited value and says which one it kept" do
+        applied =
+          ["--repo", "Demo.Repo"]
+          |> install(files: %{@config => host_policy(":warn")})
+          |> apply_igniter!()
+
+        # The host's own value survived the first run, because the key was
+        # already there.
+        assert source(applied, @config) =~ "undeclared_feature_policy: :warn"
+
+        second = Igniter.compose_task(applied, "aurora_meter.install", ["--repo", "Demo.Repo"])
+
+        assert source(second, @config) =~ "undeclared_feature_policy: :warn"
+        refute source(second, @config) =~ ":deny"
+
+        # D04's other half: it reports that it kept the value. An installer that
+        # keeps one silently cannot be told apart from one that wrote it.
+        assert Enum.any?(second.notices, &(&1 =~ "already sets :undeclared_feature_policy")),
+               "no notice said the existing value was kept: #{inspect(second.notices)}"
+
+        kept = Enum.find(second.notices, &(&1 =~ "already sets :undeclared_feature_policy"))
+
+        assert kept =~ "A fresh install would have been given"
+        assert kept =~ ":deny"
+      end
+
+      test "I20 an explicit flag does not override a host's existing value either" do
+        applied =
+          ["--repo", "Demo.Repo"]
+          |> install(files: %{@config => host_policy(":warn")})
+          |> apply_igniter!()
+
+        second =
+          Igniter.compose_task(
+            applied,
+            "aurora_meter.install",
+            ["--repo", "Demo.Repo", "--feature-policy", "deny"]
+          )
+
+        assert source(second, @config) =~ "undeclared_feature_policy: :warn"
+
+        assert Enum.any?(second.notices, &(&1 =~ "You passed --feature-policy deny")),
+               "the notice did not say the flag was ignored: #{inspect(second.notices)}"
+      end
+    end
+
+    describe "--events-source" do
+      test "I20 writes feature_sources with every pair given" do
+        config =
+          ["--repo", "Demo.Repo", "--events-source", "tokens:events"]
+          |> Kernel.++(["--events-source", "requests:buffered"])
+          |> install()
+          |> source(@config)
+
+        assert config =~ "feature_sources:"
+        assert config =~ "tokens: :events"
+        assert config =~ "requests: :buffered"
+      end
+
+      test "I20 one pair writes exactly that pair" do
+        config =
+          source(install(["--repo", "Demo.Repo", "--events-source", "tokens:events"]), @config)
+
+        assert config =~ "feature_sources: %{tokens: :events}"
+      end
+
+      test "I20 no flag writes no feature_sources key at all" do
+        refute source(install(["--repo", "Demo.Repo"]), @config) =~ "feature_sources"
+      end
+
+      test "I20 --events-source tokens:bogus creates no file at all" do
+        igniter = install(["--repo", "Demo.Repo", "--events-source", "tokens:bogus"])
+
+        assert_unchanged(igniter)
+        assert [issue] = igniter.issues
+        assert issue =~ "buffered, events"
+        assert issue =~ "Nothing was written."
+      end
+
+      test "I20 a malformed pair creates no file at all" do
+        igniter = install(["--repo", "Demo.Repo", "--events-source", "tokens"])
+
+        assert_unchanged(igniter)
+        assert [issue] = igniter.issues
+        assert issue =~ "is not `feature:source`"
+      end
+
+      test "I20 a feature that is not a feature name creates no file at all" do
+        igniter = install(["--repo", "Demo.Repo", "--events-source", "Tokens.Bad:events"])
+
+        assert_unchanged(igniter)
+        assert [issue] = igniter.issues
+        assert issue =~ "which is not a feature name"
+      end
+
+      test "I20 the same feature twice creates no file at all" do
+        igniter =
+          install([
+            "--repo",
+            "Demo.Repo",
+            "--events-source",
+            "tokens:events",
+            "--events-source",
+            "tokens:buffered"
+          ])
+
+        assert_unchanged(igniter)
+        assert [issue] = igniter.issues
+        assert issue =~ "names tokens twice"
+      end
+
+      test "I20 a second run keeps a host-edited feature_sources value" do
+        args = ["--repo", "Demo.Repo", "--events-source", "tokens:events"]
+
+        applied =
+          args
+          |> install(files: %{@config => host_sources()})
+          |> apply_igniter!()
+
+        assert source(applied, @config) =~ "tokens: :buffered"
+
+        second = Igniter.compose_task(applied, "aurora_meter.install", args)
+
+        assert source(second, @config) =~ "tokens: :buffered"
+
+        assert Enum.any?(second.notices, &(&1 =~ "already sets :feature_sources")),
+               "no notice said the existing value was kept: #{inspect(second.notices)}"
+      end
+    end
+
+    describe "a second run" do
+      test "G05 I20 a plain second run changes every file not at all, byte by byte" do
+        args = ["--repo", "Demo.Repo"]
+
+        # The first run is applied, so the second starts from a project that
+        # already has what the first wrote, which is what a host running the
+        # task twice actually has. Composing twice into one igniter would leave
+        # the first composition's changes in it and assert nothing.
+        applied = install(args) |> apply_igniter!()
+        second = Igniter.compose_task(applied, "aurora_meter.install", args)
+
+        assert_unchanged(second)
+
+        for path <- [@config, @application, "lib/demo/plans.ex"] do
+          assert source(applied, path) == source(second, path),
+                 "#{path} changed on the second run"
+        end
+
+        assert migration_body(applied) == migration_body(second)
+
+        # A third, because a task that is idempotent once can still drift.
+        third = second |> apply_igniter!() |> Igniter.compose_task("aurora_meter.install", args)
+        assert_unchanged(third)
+      end
+
+      test "G05 I20 a second run with every option changes no file" do
+        args = [
+          "--repo",
+          "Demo.Repo",
+          "--feature-policy",
+          "warn",
+          "--events-source",
+          "tokens:events",
+          "--oban"
+        ]
+
+        applied = install(args) |> apply_igniter!()
+
+        # Everything the options asked for really is in the first run, so the
+        # no-op below is about idempotence and not about a task that did
+        # nothing.
+        config = source(applied, @config)
+        assert config =~ "undeclared_feature_policy: :warn"
+        assert config =~ "tokens: :events"
+        assert config =~ "aurora_meter:"
+        assert config =~ "AuroraMeter.Oban.CreditExpiry"
+
+        second = Igniter.compose_task(applied, "aurora_meter.install", args)
+
+        assert_unchanged(second)
+
+        for path <- [@config, @application, "lib/demo/plans.ex"] do
+          assert source(applied, path) == source(second, path),
+                 "#{path} changed on the second run"
+        end
+      end
+
+      test "I20 a second run adds no duplicate supervision child" do
+        args = ["--repo", "Demo.Repo"]
+
+        application =
+          args
+          |> install()
+          |> apply_igniter!()
+          |> Igniter.compose_task("aurora_meter.install", args)
+          |> source(@application)
+
+        assert occurrences(application, "AuroraMeter") == 1
+      end
+    end
+
+    describe "what the installer will not write" do
+      test "I20 no route, no component import and no LiveView reference anywhere" do
+        # Invariant I20: the optional integrations stay optional. An installer
+        # that imported the components or added a route would make LiveView a
+        # requirement of installing at all, whatever mix.exs said.
+        igniter = install(["--repo", "Demo.Repo", "--oban", "--events-source", "tokens:events"])
+
+        sources =
+          igniter.rewrite
+          |> Rewrite.sources()
+          |> Enum.map(&{&1.path, Rewrite.Source.get(&1, :content)})
+
+        assert length(sources) >= 4, "expected the installer to have written something"
+
+        for {path, content} <- sources,
+            needle <- [
+              "AuroraMeter.Components",
+              "AuroraMeter.LiveView",
+              "AuroraMeter.Plug",
+              "Phoenix.Component",
+              ~s(live "),
+              "aurora_meter_pro",
+              "AuroraMeter.Pro"
+            ] do
+          refute content =~ needle, "#{path} mentions #{needle}"
+        end
+      end
+    end
+
+    describe "the generated migration" do
+      test "I19 the body names an explicit range and never calls up/0 or down/0" do
+        refute_unbounded(migration_body(install(["--repo", "Demo.Repo"])))
+      end
+
+      test "I19 the installer and the generator emit the same body" do
+        # They read one plan (`AuroraMeter.Install.Plan`). Before build unit 09b
+        # the installer wrote `up()` and the generator wrote a pinned range, so
+        # the two supported ways of installing this package produced two
+        # different files and only one of them was reproducible.
+        [file] = Plan.files(package: :core)
+        body = migration_body(install(["--repo", "Demo.Repo"]))
+
+        assert body =~ file.up
+        assert body =~ file.down
+      end
+    end
+
+    describe "the fallback without Igniter" do
+      test "I20 the printed steps carry the config block and the options that were passed" do
+        # The fallback definition of this task is only compiled on a build with
+        # no Igniter, so what is asserted here is the text it prints, which is
+        # the part that can be wrong. `AuroraMeter.HeadlessTest` asserts the
+        # fallback task itself exists on that build.
+        steps =
+          Templates.manual_steps(%{policy: :warn, feature_sources: %{tokens: :events}})
+
+        assert steps =~ "config :aurora_meter"
+        assert steps =~ "undeclared_feature_policy: :warn"
+        assert steps =~ "feature_sources: %{tokens: :events}"
+        assert steps =~ "mix ecto.migrate"
+        assert steps =~ "--events-source"
+        assert steps =~ "--check-support"
+        assert steps =~ "--dry-run"
+
+        # And the default, for a run with no options at all.
+        assert Templates.manual_steps() =~ "undeclared_feature_policy: :deny"
+        refute Templates.manual_steps() =~ "feature_sources"
+      end
+    end
+
     # -- helpers ---------------------------------------------------------------
+
+    # L09b-3. Anchored on the shape of a call with no arguments rather than on
+    # one spelling of it, so a body that reintroduced `up( )` or `up()` with a
+    # space would still be caught.
+    defp refute_unbounded(body) do
+      for call <- ["up", "down"] do
+        refute Regex.match?(~r/AuroraMeter\.Migration\.#{call}\(\s*\)/, body),
+               "the generated migration calls #{call}/0 with no version range:\n#{body}"
+      end
+
+      assert body =~ "from: 1", "the generated up names no lower bound:\n#{body}"
+      assert body =~ "version: ", "the generated body names no upper bound:\n#{body}"
+    end
+
+    # A probe that says one dependency is installed and its guarded module is
+    # not compiled, and tells the truth about every other row.
+    defp stale(app) do
+      fn
+        ^app, _guard -> {"1.2.0", false}
+        other, guard -> real_probe(other, guard)
+      end
+    end
+
+    defp compiled(app) do
+      fn
+        ^app, _guard -> {"1.2.0", true}
+        other, guard -> real_probe(other, guard)
+      end
+    end
+
+    defp real_probe(app, guard) do
+      resolved =
+        case Application.spec(app, :vsn) do
+          nil -> nil
+          vsn -> List.to_string(vsn)
+        end
+
+      {resolved, guard != nil and Code.ensure_loaded?(guard)}
+    end
+
+    defp switched_build? do
+      Enum.any?(
+        ~w(AURORA_HEADLESS AURORA_NO_LIVEVIEW AURORA_NO_METRICS AURORA_NO_DASHBOARD AURORA_NO_OTEL),
+        &(System.get_env(&1) == "1")
+      )
+    end
+
+    defp host_policy(value) do
+      """
+      import Config
+
+      config :aurora_meter,
+        undeclared_feature_policy: #{value}
+      """
+    end
+
+    defp host_sources do
+      """
+      import Config
+
+      config :aurora_meter,
+        feature_sources: %{tokens: :buffered}
+      """
+    end
 
     defp install(args, opts \\ []) do
       [app_name: :demo]

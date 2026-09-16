@@ -187,6 +187,64 @@ defmodule AuroraMeter.Migration do
   def data_loss_versions, do: @data_loss_versions
 
   @doc """
+  Splits a version range into the host migration files it has to become.
+
+  A contiguous run of ordinary versions travels in one file. A concurrent
+  version travels alone, because it creates an index `CONCURRENTLY` and its file
+  has to carry `@disable_ddl_transaction true` and `@disable_migration_lock
+  true`, which are file-level attributes and would then apply to every other
+  version in the same file.
+
+  This is what makes a generated migration reproducible: each entry names both
+  ends of its range, so a file committed today runs exactly the versions it ran
+  the day it was written, whatever version the installed package has reached by
+  the time the history is replayed (finding S1).
+
+  Options: `:from` (default 1) and `:to` (default `latest_version/0`).
+
+  ## Examples
+
+      iex> AuroraMeter.Migration.ranges(from: 7)
+      [
+        %{from: 7, to: 7, concurrent: false},
+        %{from: 8, to: 8, concurrent: true},
+        %{from: 9, to: 10, concurrent: false}
+      ]
+
+      iex> AuroraMeter.Migration.ranges(from: 9)
+      [%{from: 9, to: 10, concurrent: false}]
+
+  """
+  @spec ranges(keyword()) :: [%{from: pos_integer(), to: pos_integer(), concurrent: boolean()}]
+  def ranges(opts \\ []) do
+    from = Keyword.get(opts, :from, 1)
+    to = Keyword.get(opts, :to, @latest)
+
+    range_chunks(from, to, @concurrent_versions)
+  end
+
+  @doc false
+  # Shared by both packages' generators through `AuroraMeter.Install.Plan`, so
+  # Pro's ranges and core's cannot drift into two different shapes.
+  @spec range_chunks(pos_integer(), pos_integer(), [pos_integer()]) :: [
+          %{from: pos_integer(), to: pos_integer(), concurrent: boolean()}
+        ]
+  def range_chunks(from, to, concurrent) when from <= to do
+    from..to//1
+    |> Enum.chunk_by(&(&1 in concurrent))
+    |> Enum.flat_map(fn [head | _] = group ->
+      if head in concurrent, do: Enum.map(group, &[&1]), else: [group]
+    end)
+    |> Enum.map(fn group ->
+      first = List.first(group)
+
+      %{from: first, to: List.last(group), concurrent: first in concurrent}
+    end)
+  end
+
+  def range_chunks(_from, _to, _concurrent), do: []
+
+  @doc """
   Runs the `up` step of every version from `:from` (default 1) to `:version`
   (default the latest). See the module documentation for the options.
 

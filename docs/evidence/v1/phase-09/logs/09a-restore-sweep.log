@@ -1,0 +1,14 @@
+  c1-plug-reserves                         anchor=1  (replacement text seen 0 times)  clean
+  c2-missing-tenant-defaults               anchor=1  (replacement text seen 0 times)  clean
+  c3-usage-payload-loses-tenant-key        anchor=1  (replacement text seen 1 times, a substring of the anchor)  clean
+  c4-on-mount-subscribes-on-static         anchor=1  (replacement text seen 1 times)  clean
+  c5-switch-tenant-leaks-old-topics        anchor=1  (replacement text seen 0 times)  clean
+  c6-handle-usage-does-not-filter          anchor=1  (replacement text seen 0 times)  clean
+  c7-bare-on-mount-falls-back              anchor=1  (replacement text seen 0 times)  clean
+  c8-denial-callback-need-not-halt         anchor=1  (replacement text seen 0 times)  clean
+  c9-subscribe-leaves-partial              anchor=1  (replacement text seen 1 times, a substring of the anchor)  clean
+  c10-entitled-mode-reads-usage            anchor=1  (replacement text seen 0 times)  clean
+  c11-config-errors-become-503             anchor=1  (replacement text seen 0 times)  clean
+  c12-live-view-accepts-nil-tenant         anchor=1  (replacement text seen 0 times)  clean
+
+CLEAN: every control's correct code is present exactly once and no defect is

@@ -148,16 +148,38 @@ defmodule AuroraMeter.Credits do
 
     * `spendable`: what a hold or a debit would actually be allowed to take,
       and exactly the figure `sufficient?/2` compares against. It differs from
-      `available` on a cut-over wallet by two things: credit whose `expires_at`
-      has passed is excluded even before the sweep reaches it, and `debt` is
-      subtracted. It is **not** clamped at zero, because clamping it would make
-      the reported figure and the ledger's own refusal disagree.
-    * `debt`: executed cost the wallet could not fund. Recorded rather than
-      hidden; the next grant repays it before creating availability.
+      `available` on a cut-over wallet by three things: credit whose
+      `expires_at` has passed is excluded even before the sweep reaches it,
+      `debt` is subtracted, and **it is never positive while `debt` is
+      outstanding**, because `hold/4` and `debit/4` refuse outright there
+      (`:debt_outstanding`) however much credit the wallet is holding. Where
+      the debt is larger than what is left it stays negative rather than being
+      clamped, so a reader can see how deep the wallet is.
+    * `debt`: executed cost the wallet could not fund, or money handed back to
+      a payment provider that the wallet had already spent. Recorded rather
+      than hidden; the next grant of any category repays it out of the lot it
+      creates, before any of that lot becomes available. Credit the wallet
+      **already holds** repays it too, unless that credit is promotional: a
+      promotion is never consumed to pay off a debt. So a wallet can report a
+      positive `balance` and a positive `promotional` beside a positive `debt`,
+      and spend none of it until a grant clears the debt, which is why
+      `spendable` and `promotional_spendable` both read zero there.
     * `expired`: value destroyed by expiry, kept apart from value spent so a
       reader is never left inferring which of the two happened.
     * `promotional_spendable`: the part of `spendable` that came from
-      promotional lots.
+      promotional lots, so it answers the same question about the same planner
+      and is zero in the same states. The promotional credit the wallet
+      **holds** is `promotional`, which is not reduced by `debt` and does not
+      move when a debt freezes the wallet.
+
+  **Which of these are claims about spending and which are totals.**
+  `spendable` and `promotional_spendable` report what `hold/4` and `debit/4`
+  would accept, and are the two the planner's own refusal is mirrored into
+  (repair unit R3, findings X357 and X361). `balance`, `promotional`, `held`,
+  `debt` and `expired` report what the wallet holds, owes or has lost, and are
+  not reduced by a refusal. `available` is the arithmetic identity
+  `balance - held` and stays one: it is what `runway_days` divides and what
+  `available/1` returns, and it can be positive on a wallet that may not spend.
 
   On a wallet that has not been cut over to lots (`lots_enabled_at IS NULL`,
   which is every wallet until `mix aurora_meter.credits.migrate_lots` runs)
@@ -313,8 +335,11 @@ defmodule AuroraMeter.Credits do
       expiry sweep has not reached it yet. In 0.4.0 it stayed spendable until
       the next sweep, which made expiry a race rather than bookkeeping.
     * a wallet that owes money cannot spend until an incoming grant has repaid
-      the debt. `hold/4` and `debit/4` follow, so both refuse with
-      `:insufficient_credits` while `debt` is outstanding.
+      the debt. `hold/4` and `debit/4` refuse with `:debt_outstanding` while
+      `debt` is outstanding, whatever credit the wallet is holding, and this
+      function answers `false` for every amount in that state, because
+      `spendable` is never positive there (repair unit R3, findings X357 and
+      X361).
 
   ## Examples
 
@@ -388,9 +413,12 @@ defmodule AuroraMeter.Credits do
   `reference`, to be settled or released later.
 
   Returns `{:error, :insufficient_credits}` when the available balance (plus
-  the overdraft tolerance) does not cover it, and `{:error,
-  :duplicate_reference}` when a hold with that reference already exists.
-  Options: `:metadata`.
+  the overdraft tolerance) does not cover it, `{:error, :debt_outstanding}`
+  when the wallet owes money (see `t:balance/0` and the "Debt" section of
+  `docs/credits.md`: nothing may be held or debited until a grant clears the
+  debt, whatever credit the wallet is holding), and
+  `{:error, :duplicate_reference}` when a hold with that reference already
+  exists. Options: `:metadata`.
 
   ## Examples
 
@@ -400,7 +428,8 @@ defmodule AuroraMeter.Credits do
 
   """
   @spec hold(term(), pos_integer(), String.t(), keyword()) ::
-          {:ok, txn()} | {:error, :insufficient_credits | :duplicate_reference}
+          {:ok, txn()}
+          | {:error, :insufficient_credits | :debt_outstanding | :duplicate_reference}
   def hold(tenant, amount, reference, opts \\ [])
       when is_integer(amount) and amount > 0 and is_binary(reference) do
     Money.assert_range!(amount)
@@ -473,7 +502,9 @@ defmodule AuroraMeter.Credits do
 
   @doc """
   Debits `amount` micro-dollars from `tenant` in one step (no hold), with the
-  same sufficiency and duplicate-reference rules as `hold/4`.
+  same sufficiency, debt and duplicate-reference rules as `hold/4`, so it
+  refuses with `:insufficient_credits`, `:debt_outstanding` or
+  `:duplicate_reference` for the same reasons.
 
   ## Examples
 
@@ -483,7 +514,8 @@ defmodule AuroraMeter.Credits do
 
   """
   @spec debit(term(), pos_integer(), String.t(), map()) ::
-          {:ok, txn()} | {:error, :insufficient_credits | :duplicate_reference}
+          {:ok, txn()}
+          | {:error, :insufficient_credits | :debt_outstanding | :duplicate_reference}
   def debit(tenant, amount, reference, metadata \\ %{})
       when is_integer(amount) and amount > 0 and is_binary(reference) and is_map(metadata) do
     Money.assert_range!(amount)
@@ -504,6 +536,47 @@ defmodule AuroraMeter.Credits do
   does not belong: it never consumes promotional credit (a refunded top-up
   must not quietly spend a sign-up bonus, leaving nothing to expire), and
   `spend_history/2` reports it against grants rather than as spend.
+
+  ## Which credit it takes back
+
+  This is the **wallet-wide** reversal, for a caller with no record of which
+  payment funded what. A caller that has the payment should use
+  `reverse_lot/4`, which is scoped to that payment's own lots and capped by
+  them.
+
+  On a legacy wallet the entry moves `balance` and leaves `promotional` alone,
+  as it always has. On a wallet the allocator owns it takes the credit back off
+  the wallet's **non-promotional** lots, in spend order, draining `available`
+  first, then `consumed`, then `reserved`, and writing `reversed` on each lot it
+  touches:
+
+    * `available` first, so the refund destroys as little as possible;
+    * `consumed` next, which is money already spent and therefore raises `debt`
+      by the same amount;
+    * `reserved` last, because an open hold is work the host believes is still
+      running.
+
+  **A promotional lot is never touched**, however late it was granted and
+  however early it sorts. Where the wallet's paid and adjustment lots cannot
+  cover the amount, the difference becomes `debt`: the call is still never
+  refused, and the balance still falls by the full amount.
+
+  **Nor is that debt repaid out of a promotion afterwards**, which is repair
+  unit R2 and finding X355. The exclusion above used to hold for exactly one
+  transaction: the next `release` or `settle` repaid the debt in spend order,
+  which takes promotional credit first, so the promotion paid for the refund one
+  ordinary event later. A debt is now never repaid out of credit the wallet
+  already holds when that credit is promotional, whatever created the debt. The
+  one repayment that may consume promotional value is the one an incoming
+  **grant** makes out of its own new lot, which is how a wallet left owing money
+  beside a live promotion is unfrozen.
+
+  Until repair unit R1 the lot path did not do this. A reversal on a cut-over
+  wallet was planned as a debit, which drains lots in spend order and so takes
+  **promotional credit first**, and it wrote nothing into `reversed`
+  (`open-findings.md` X250). The sentence above about not consuming promotional
+  credit was true of the legacy writer and false of the allocator; it is now
+  true of both.
 
   ## Its own kind, and its own reference namespace
 
@@ -532,10 +605,11 @@ defmodule AuroraMeter.Credits do
   @doc """
   Takes `amount` back off **the lots one payment funded**, and nothing else.
 
-  The source-scoped reversal. Where `reverse/4` debits the wallet in spend
-  order, this one selects the tenant's lots whose `source.payment_intent_id`
-  matches `opts[:source]`, in spend order, and drains them `available`, then
-  `consumed`, then `reserved`:
+  The source-scoped reversal. Where `reverse/4` reaches every non-promotional
+  lot in the wallet, this one selects the tenant's lots whose
+  `source.payment_intent_id` matches `opts[:source]`, and is capped by what
+  those lots can give back. Both take the same lots in the same spend order and
+  drain them `available`, then `consumed`, then `reserved`:
 
     * `available` first, so a refund destroys as little as possible;
     * `consumed` next, which is money already spent and therefore raises
@@ -544,9 +618,12 @@ defmodule AuroraMeter.Credits do
       running.
 
   **A promotional lot is never touched**, whatever order it sorts in and
-  however late it was granted. A promotion did not come from that payment and
-  cannot be handed back to it, which is the rule `v1-release.md` 10.1 states
-  and the one a wallet-wide reversal breaks.
+  however late it was granted, and the debt this call creates is not repaid out
+  of one afterwards either (repair unit R2, finding X355). A promotion did not
+  come from that payment and cannot be handed back to it, which is the rule
+  `v1-release.md` 10.1 states. Since repair unit R1 the wallet-wide `reverse/4`
+  keeps that rule too, so the difference between the two functions is the cap
+  and the provenance rather than whether a promotion survives.
 
   Options:
 
@@ -787,8 +864,8 @@ defmodule AuroraMeter.Credits do
   exits, the hold is released and the error propagates. Any other return
   value releases the hold and raises `ArgumentError`.
 
-  Returns `{:error, :insufficient_credits}` (or `:duplicate_reference`)
-  without running `fun` when the hold is refused.
+  Returns whatever `hold/4` refused with (`:insufficient_credits`,
+  `:debt_outstanding` or `:duplicate_reference`) without running `fun`.
 
   ## Examples
 
@@ -805,7 +882,8 @@ defmodule AuroraMeter.Credits do
           (-> {:ok, result, non_neg_integer()}
               | {:error, term()})
         ) ::
-          {:ok, result} | {:error, :insufficient_credits | :duplicate_reference | term()}
+          {:ok, result}
+          | {:error, :insufficient_credits | :debt_outstanding | :duplicate_reference | term()}
         when result: term()
   def with_credits(tenant, estimate, reference, fun) when is_function(fun, 0) do
     with {:ok, _hold} <- hold(tenant, estimate, reference) do

@@ -410,7 +410,9 @@ defmodule AuroraMeter.CreditsLotsTest do
     assert lot(tenant, "pay").consumed == 5 * @dollar
 
     refute Credits.sufficient?(tenant, 1)
-    assert {:error, :insufficient_credits} = Credits.hold(tenant, @dollar, "h2")
+    # The refusal names the debt rather than blaming the balance, which is
+    # repair unit R3's half of X357 (finding X361).
+    assert {:error, :debt_outstanding} = Credits.hold(tenant, @dollar, "h2")
 
     {:ok, grant} = Credits.grant(tenant, 3 * @dollar, reference: "top_up")
 
@@ -423,6 +425,89 @@ defmodule AuroraMeter.CreditsLotsTest do
     # went is answerable rather than inferred.
     assert [%{kind: :consume, amount: 2_000_000}] = allocations(tenant, grant.id)
     assert {:ok, _} = Credits.hold(tenant, @dollar, "h3")
+  end
+
+  test "X355 debt outlives promotional availability, which is LI-06a-5 as repair unit R2 amends it" do
+    # **The amended invariant, and the whole cost of R2's decision, on a wallet
+    # that never saw a refund.** The defect X355 names is in
+    # `Allocator.repay_debt/5`, which every settle, release and grant reaches,
+    # so the shape is reachable from an overspend alone: no reversal is needed
+    # and none is used here.
+    #
+    # LI-06a-5 said `debt > 0` implies `SUM(lot.available) = 0`. It now says so
+    # over the wallet's **non-promotional** lots, because the rule that a
+    # promotion is never consumed to repay a debt is the stronger one
+    # (`architecture-map.md` 7.2, amended by R2).
+    tenant = lot_wallet()
+    {:ok, _} = Credits.grant(tenant, 3 * @dollar, reference: "pay")
+    {:ok, _} = Credits.grant(tenant, 4 * @dollar, reference: "promo", category: :promotional)
+
+    # Spend order puts the promotion first, so `h1` reserves the promotion whole
+    # and `h2` reserves the paid lot whole.
+    {:ok, _} = Credits.hold(tenant, 4 * @dollar, "h1")
+    {:ok, _} = Credits.hold(tenant, 3 * @dollar, "h2")
+
+    # `h2` costs 5 USD against a 3 USD reservation, and there is no availability
+    # anywhere to cover the rest: 2 USD of executed cost becomes debt.
+    {:ok, _} = Credits.settle("h2", 5 * @dollar)
+    assert balance_row(tenant).debt == 2 * @dollar
+
+    # The release hands 4 USD of promotional credit back, and the debt stands
+    # beside it. **On the defect** the release repaid out of it: `promo` read
+    # `available: 2_000_000, consumed: 2_000_000` and `debt: 0`.
+    {:ok, _} = Credits.release("h1")
+
+    assert lot(tenant, "promo").available == 4 * @dollar
+    assert lot(tenant, "promo").consumed == 0
+    assert lot(tenant, "pay").available == 0
+    assert balance_row(tenant).debt == 2 * @dollar
+    assert balance_row(tenant).promotional == 4 * @dollar
+    assert Credits.balance(tenant).balance == 2 * @dollar
+
+    # **What it costs, asserted rather than described.** The wallet holds a
+    # positive balance made entirely of promotional credit and still refuses
+    # every hold and debit, because `architecture-map.md` 7.2 says neither may
+    # spend while `debt > 0`. That is X277's one bad shape, and R2 makes it
+    # common rather than rare. Relaxing the refusal to `spendable/3` is a second
+    # amendment and is deliberately not made here, nor by repair unit R3
+    # (finding X361: it is the owner's, and it is commercial).
+    #
+    # **What R3 does change is the two things about this state that were wrong
+    # whichever way that decision goes** (findings X357 and X361). The refusal
+    # now names the debt instead of blaming the balance, and the two figures
+    # that claim spendability report what this refusal will actually do. Before
+    # R3 this wallet reported `spendable: 4_000_000` and
+    # `promotional_spendable: 4_000_000` while refusing a hold of one
+    # micro-dollar, which is the shape a support ticket is made of.
+    assert {:error, :debt_outstanding} = Credits.hold(tenant, @dollar, "h3")
+    assert {:error, :debt_outstanding} = Credits.debit(tenant, @dollar, "d1")
+
+    frozen = Credits.balance(tenant)
+    assert frozen.balance == 2 * @dollar
+    assert frozen.promotional == 4 * @dollar
+    assert frozen.debt == 2 * @dollar
+    assert frozen.spendable == 0
+    assert frozen.promotional_spendable == 0
+    refute Credits.sufficient?(tenant, 1)
+
+    # And the door out, which is why the grant clause keeps repaying out of the
+    # lot it creates whatever its category: any incoming grant clears the debt
+    # and the promotion is then spendable, whole.
+    {:ok, _} = Credits.grant(tenant, 2 * @dollar, reference: "top_up")
+
+    assert balance_row(tenant).debt == 0
+    assert lot(tenant, "top_up").consumed == 2 * @dollar
+    assert lot(tenant, "promo").available == 4 * @dollar
+
+    # And the figures say so before the caller tries: the way out is visible in
+    # `balance/1` and not only in the ledger's answer (R3, X361).
+    cleared = Credits.balance(tenant)
+    assert cleared.spendable == 4 * @dollar
+    assert cleared.promotional_spendable == 4 * @dollar
+    assert Credits.sufficient?(tenant, 4 * @dollar)
+
+    assert {:ok, _} = Credits.debit(tenant, @dollar, "d2")
+    assert lot(tenant, "promo").consumed == @dollar
   end
 
   test "I10 credit past its expires_at is not spendable before the sweep reaches it" do
@@ -560,10 +645,30 @@ defmodule AuroraMeter.CreditsLotsTest do
       assert row.expired == expired, "#{tenant}: #{inspect(commands)}"
       assert row.debt >= 0
 
-      # LI-06a-5: debt and availability are exclusive, because every incoming
-      # value repays debt before it becomes available and every outgoing value
-      # drains availability before it creates debt.
-      if row.debt > 0, do: assert(available == 0, "#{tenant}: #{inspect(commands)}")
+      # **LI-06a-5 as amended by repair unit R2** (findings X277 and X355):
+      # `debt > 0` implies no **non-promotional** availability. Debt and
+      # availability are exclusive because every incoming value repays debt
+      # before it becomes available and every outgoing value drains availability
+      # before it creates debt, and the promotional exclusion in
+      # `architecture-map.md` 7.2 is the stronger rule where the two meet: a
+      # debt is never repaid out of credit the wallet already holds if that
+      # credit is promotional, so where the only availability left is
+      # promotional the debt stands beside it until the next grant repays it.
+      #
+      # This assertion enforced the unamended form until R2, and R2 is the
+      # change that makes the unamended form false on the settle and release
+      # paths as well as on the reversal. Widening it here is the same decision
+      # as the amendment in `architecture-map.md` 7.2 and in 06a's LI-06a-5, and
+      # it is deliberately not silent: the non-promotional half is still
+      # asserted exactly, so the invariant is weakened by precisely the promise
+      # 7.2 makes and by nothing else.
+      purchased_available =
+        lots
+        |> Enum.filter(&(&1.category != :promotional))
+        |> Enum.reduce(0, &(&1.available + &2))
+
+      if row.debt > 0,
+        do: assert(purchased_available == 0, "#{tenant}: #{inspect(commands)}")
 
       # And the ledger's own law, which the flat ledger has always had: the
       # balance is the sum of every entry's amount.

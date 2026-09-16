@@ -144,8 +144,24 @@ defmodule AuroraMeter.MixProject do
       []
     else
       [
-        {:phoenix_live_view, live_view_requirement(), optional: true},
-        {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true},
+        # Optional: powers `AuroraMeter.Plug.EnsureEntitled`, compiled behind
+        # `if Code.ensure_loaded?(Plug.Conn)`.
+        #
+        # The floor is honest about what it is. Nothing the plug calls
+        # (`assign/3`, `put_private/3`, `send_resp/3`, `halt/1`, the `Plug`
+        # behaviour) is newer than Plug 1.0, so there is no API floor to state.
+        # `~> 1.15` is the **tested** floor: it is what `phoenix_live_view ~> 1.0`
+        # requires and what `aurora_meter_pro` already declares, so it is the
+        # oldest line any build in either repository resolves and no Pro host is
+        # asked to move. Declaring the wider range the code would tolerate would
+        # be a support claim nothing tests, which is what decision D12 forbids.
+        #
+        # It is declared here even though `phoenix` already drags `plug` into an
+        # ordinary build, because an undeclared dependency that happens to be
+        # present is not an optional integration, it is a coincidence: a host
+        # that takes LiveView out loses `Plug.Conn` and the guard closes with no
+        # entry in `mix.exs` to explain why (`open-findings.md` X331).
+        {:plug, "~> 1.15", optional: true},
         # Optional: powers the one-step `mix aurora_meter.install`. Hosts without
         # it get the print-the-steps fallback.
         {:igniter, "~> 0.8", optional: true},
@@ -155,7 +171,35 @@ defmodule AuroraMeter.MixProject do
         # `if Code.ensure_loaded?(Oban)`. The floor is the one Aurora Meter Pro
         # already declares, so no existing Pro host is asked to move.
         {:oban, "~> 2.17", optional: true}
-      ] ++ optional_metrics() ++ optional_dashboard() ++ optional_otel()
+      ] ++ optional_live_view() ++ optional_metrics() ++ optional_dashboard() ++ optional_otel()
+    end
+  end
+
+  # The LiveView pair, behind a switch of its own as well as `AURORA_HEADLESS`.
+  #
+  # `AURORA_NO_LIVEVIEW=1` is the `plug_only` leg: a host with an API-only
+  # Phoenix application, which has `Plug.Conn` and mounts
+  # `AuroraMeter.Plug.EnsureEntitled`, and has no LiveView at all. That is a real
+  # deployment rather than a test fixture, and until this switch existed the only
+  # leg without LiveView was `AURORA_HEADLESS`, which removes `plug` with
+  # everything else and therefore says nothing about the plug.
+  #
+  # It removes `phoenix_live_dashboard` TOO, for X331's reason exactly:
+  # `phoenix_live_dashboard 0.8.7` declares `{:phoenix_live_view, "~> 0.19 or
+  # ~> 1.0", optional: false}`, so leaving the dashboard declared would pull
+  # LiveView straight back in and the switch named for removing LiveView would
+  # remove nothing. It removes NOTHING else: `plug`, `oban`, `igniter`,
+  # `telemetry_metrics` and the OpenTelemetry pair all stay, and
+  # `AuroraMeter.OptionalIntegrationsTest` asserts that narrowness by name
+  # (`open-findings.md` X327, X331, X337).
+  defp optional_live_view do
+    if System.get_env("AURORA_NO_LIVEVIEW") == "1" do
+      []
+    else
+      [
+        {:phoenix_live_view, live_view_requirement(), optional: true},
+        {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true}
+      ]
     end
   end
 
@@ -209,9 +253,15 @@ defmodule AuroraMeter.MixProject do
   # pull telemetry_metrics back into the build and the switch named for removing
   # telemetry_metrics would remove nothing (`open-findings.md` X327's shape, one
   # dependency further out).
+  #
+  # AURORA_NO_LIVEVIEW removes it for the same reason one dependency further
+  # out: `phoenix_live_dashboard` declares `phoenix_live_view` as REQUIRED, so
+  # the LiveView switch would otherwise remove one declaration and have the
+  # dependency pulled back in by the other.
   defp optional_dashboard do
     if System.get_env("AURORA_NO_DASHBOARD") == "1" or
-         System.get_env("AURORA_NO_METRICS") == "1" do
+         System.get_env("AURORA_NO_METRICS") == "1" or
+         System.get_env("AURORA_NO_LIVEVIEW") == "1" do
       []
     else
       [{:phoenix_live_dashboard, ">= 0.8.0 and < 0.9.0", optional: true}]
@@ -250,13 +300,37 @@ defmodule AuroraMeter.MixProject do
   # The declared requirement is unchanged. Build unit 09b owns whether the
   # "~> 0.20" half survives (open-findings.md C9); this only lets CI resolve one
   # half at a time so that decision has evidence behind it.
+  # `~> 1.0` and not `~> 0.20 or ~> 1.0` (finding C9, decision D12, build unit
+  # 09b).
+  #
+  # The wider requirement was a false support claim. Every component and
+  # dashboard template in this package is written in LiveView 1.0's curly body
+  # interpolation, and in 0.20 a `{...}` in an element body is not an
+  # interpolation at all: it is literal text. A 0.20 host would have compiled
+  # this package without an error and shipped a page reading `{@label}` to its
+  # own customers, which is worse than a resolution conflict in every way.
+  #
+  # Measured before the decision, rather than assumed: 172 body interpolations
+  # across four files (`components.ex` 17, `live_dashboard/view.ex` 22, and Pro's
+  # two 81 and 52), so honouring 0.20 meant rewriting all four and keeping them
+  # rewritten against a formatter that migrates the syntax back by default.
+  # D12's own test is whether a floor can be supported "without unsafe pinning";
+  # this one can only be supported by freezing four template files against the
+  # syntax the framework has moved to.
+  #
+  # The upgrade route for a 0.20 host is therefore explicit and has two doors:
+  # upgrade LiveView to 1.0, or drop the optional dependency and use Aurora
+  # Meter headless, which costs a host nothing except the components. See
+  # `docs/support-policy.md`.
+  #
+  # `AURORA_LIVEVIEW=1.0` still exists so the CI leg can resolve the newest 1.x
+  # against its own lock file rather than the committed one.
   defp live_view_requirement do
     case System.get_env("AURORA_LIVEVIEW") do
-      nil -> "~> 0.20 or ~> 1.0"
-      "" -> "~> 0.20 or ~> 1.0"
+      nil -> "~> 1.0"
+      "" -> "~> 1.0"
       "1.0" -> "~> 1.0"
-      "0.20" -> "~> 0.20"
-      other -> Mix.raise("AURORA_LIVEVIEW must be \"1.0\" or \"0.20\", got: #{inspect(other)}")
+      other -> Mix.raise("AURORA_LIVEVIEW must be \"1.0\", got: #{inspect(other)}")
     end
   end
 
@@ -322,6 +396,7 @@ defmodule AuroraMeter.MixProject do
         "docs/exporters.md",
         "docs/periods.md",
         "docs/entitlements.md",
+        "docs/phoenix.md",
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
@@ -390,6 +465,8 @@ defmodule AuroraMeter.MixProject do
         "AuroraMeter.Credits.Promotions",
         "AuroraMeter.Credits.Reconciliation",
         "AuroraMeter.Credits.Series",
+        "AuroraMeter.Install.Options",
+        "AuroraMeter.Install.Plan",
         "AuroraMeter.Install.Templates",
         "AuroraMeter.Migration.V1",
         "AuroraMeter.Migration.V2",
@@ -548,6 +625,8 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Events.Backfill,
         AuroraMeter.Events.Canonical,
         AuroraMeter.Events.Gate,
+        AuroraMeter.Install.Options,
+        AuroraMeter.Install.Plan,
         AuroraMeter.Install.Templates,
         AuroraMeter.LiveDashboard.Auth,
         AuroraMeter.LiveDashboard.NotStartedError,

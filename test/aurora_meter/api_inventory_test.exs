@@ -61,6 +61,8 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Events.Backfill,
     AuroraMeter.Events.Canonical,
     AuroraMeter.Events.Gate,
+    AuroraMeter.Install.Options,
+    AuroraMeter.Install.Plan,
     AuroraMeter.Install.Templates,
     AuroraMeter.LiveDashboard.Auth,
     AuroraMeter.LiveDashboard.NotStartedError,
@@ -139,10 +141,19 @@ defmodule AuroraMeter.ApiInventoryTest do
 
   describe "A01 the inventory resolves" do
     test "every function listed in docs/api.md exists", %{regions: regions} do
+      # The skip condition asks about the row's own DEPENDENCY, not about its
+      # module. Those were the same question while every optional integration
+      # was a whole module behind a guard (`Components`, `Oban.*`,
+      # `LiveDashboard.Page`, `OpenTelemetry`, `Telemetry.Metrics`). Build unit
+      # 09a's `AuroraMeter.LiveView` is the first module that is ALWAYS compiled
+      # and puts only four of its functions behind `Code.ensure_loaded?`, so on
+      # a build without LiveView the module is present and the functions are
+      # not, and `module_present?/1` said "require them" for exactly the rows
+      # that are correctly absent. Found by the `plug_only` leg.
       missing =
         for row <- rows(regions, :functions),
             {module, fun, arity} = entry = function_entry!(row),
-            module_present?(module) or not optional_dep?(row),
+            not skip_absent_optional?(row),
             not exported?(module, fun, arity),
             do: {row.line, format_entry(entry)}
 
@@ -150,10 +161,18 @@ defmodule AuroraMeter.ApiInventoryTest do
     end
 
     test "every module listed in docs/api.md exists", %{regions: regions} do
+      # `skip_absent_dependency?/1` rather than `optional_dep?/1` here, because
+      # the **internal** table has two columns and no Class cell, so a row in it
+      # can never carry the `optional-dep` tag. `AuroraMeter.LiveDashboard.View`
+      # is internal AND compiled behind `Code.ensure_loaded?(Phoenix.Component)`,
+      # so this test had been failing on the headless leg since 08b landed the
+      # row, and only the legs run it (`open-findings.md` X246's shape exactly:
+      # the leg is not part of `mix check`, so nothing else says so). Found by
+      # build unit 09a's headless run.
       missing =
         for row <- rows(regions, :modules) ++ rows(regions, :internal),
             module = module_entry!(row),
-            not optional_dep?(row) or module_present?(module),
+            not skip_absent_dependency?(row),
             not module_present?(module),
             do: {row.line, inspect(module)}
 
@@ -186,16 +205,21 @@ defmodule AuroraMeter.ApiInventoryTest do
       # build happened to be: on a leg that removes only the metrics reporter it
       # fails, because Phoenix.Component is loaded and two rows are correctly
       # skipped (`open-findings.md` X326).
+      # And for the same reason, the presence probe is the FUNCTION rather than
+      # its module: `AuroraMeter.LiveView` is compiled on every build and only
+      # four of its functions are guarded, so asking `module_present?/1` about
+      # them answers a question nobody asked.
       wrong =
         for row <- Enum.filter(rows(regions, :functions), &optional_dep?/1),
             dependency = needed_dependency(row),
             dependency != nil,
-            {module, _fun, _arity} = function_entry!(row),
-            module_present?(module) != dependency_present?(dependency),
+            {module, fun, arity} = function_entry!(row),
+            exported?(module, fun, arity) != dependency_present?(dependency),
             do:
               {row.line,
                "#{literal_of(row)} needs #{dependency}: dependency loaded?=" <>
-                 "#{dependency_present?(dependency)} module loaded?=#{module_present?(module)}"}
+                 "#{dependency_present?(dependency)} function exported?=" <>
+                 "#{exported?(module, fun, arity)}"}
 
       assert wrong == [],
              "an optional-dep row is present when its dependency is absent, or absent when " <>
@@ -403,6 +427,7 @@ defmodule AuroraMeter.ApiInventoryTest do
     do: Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
 
   defp dependency_present?("opentelemetry_api"), do: Code.ensure_loaded?(:otel_tracer)
+  defp dependency_present?("plug"), do: Code.ensure_loaded?(Plug.Conn)
 
   defp dependency_present?(other) do
     flunk("docs/api.md names an optional dependency this test has no probe for: #{other}")
@@ -524,6 +549,26 @@ defmodule AuroraMeter.ApiInventoryTest do
   end
 
   defp optional_dep?(row), do: Enum.any?(row.cells, &(&1 == "optional-dep"))
+
+  # Whether a row is allowed to be absent on THIS build: it is tagged
+  # `optional-dep`, it names the dependency it needs, and that dependency is not
+  # here. A row tagged `optional-dep` that names no dependency is not skipped;
+  # the test above it fails such a row by name, so this cannot become a way to
+  # excuse a row nothing can check.
+  defp skip_absent_optional?(row) do
+    optional_dep?(row) and skip_absent_dependency?(row)
+  end
+
+  # Whether the row names a dependency that is not in this build. The name has
+  # to be one `dependency_present?/1` has a probe for, and that function
+  # `flunk`s on a name it does not know, so this cannot become a way to excuse a
+  # row by inventing a dependency.
+  defp skip_absent_dependency?(row) do
+    case needed_dependency(row) do
+      dependency when is_binary(dependency) -> not dependency_present?(dependency)
+      nil -> false
+    end
+  end
 
   # -- reflection ------------------------------------------------------------
 

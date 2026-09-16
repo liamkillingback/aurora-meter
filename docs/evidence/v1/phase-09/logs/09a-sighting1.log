@@ -1,0 +1,12 @@
+baseline sha256: e49a4fa3aaac77f20e1b6c3f4843510354f439800e173077d132cbffd0f9ddc8
+anchor occurrences: 1 (must be 1)
+=== the suite, with c5's defect on disk ===
+  1) test switch_tenant/2 I20 switch_tenant unsubscribes the old topics and subscribes the new ones (AuroraMeter.LiveViewTest)
+     test/aurora_meter/live_view_test.exs:252
+     Assertion with == failed
+     code:  assert registrations(usage_topic(first)) == 0
+     left:  1
+     right: 0
+       test/aurora_meter/live_view_test.exs:263: (test)
+Result: 26/27 passed (1/1 doctest, 25/26 tests)
+restored sha256: e49a4fa3aaac77f20e1b6c3f4843510354f439800e173077d132cbffd0f9ddc8

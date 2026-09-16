@@ -116,7 +116,7 @@ settle the truth.**
 
 | Step | What moves | Fails with |
 |---|---|---|
-| `hold/4` | `held` goes up; `available` goes down | `:insufficient_credits`, `:duplicate_reference` |
+| `hold/4` | `held` goes up; `available` goes down | `:insufficient_credits`, `:debt_outstanding`, `:duplicate_reference` |
 | `settle/3` | `balance` goes down by the real cost; the hold is freed | `:not_found`, `:already_settled` |
 | `release/1` | the hold is freed; nothing is charged | `:not_found`, `:already_settled` |
 
@@ -163,8 +163,9 @@ end)
 This is supported and intended: `config :aurora_meter, repo:` is *your* repo, so
 the ledger call joins your transaction.
 
-Every refusal — `:insufficient_credits`, `:duplicate_reference`,
-`:already_settled` — is decided **before** anything is written and comes back as
+Every refusal (`:insufficient_credits`, `:debt_outstanding`,
+`:duplicate_reference`, `:already_settled`) is decided **before** anything is
+written and comes back as
 `{:error, reason}` with your transaction still open. None of them calls
 `Repo.rollback/1`, deliberately: in a nested transaction a rollback marks the
 *whole* transaction whatever `:mode` you pass, so a duplicate webhook delivery

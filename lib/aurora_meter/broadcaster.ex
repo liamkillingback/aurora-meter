@@ -14,7 +14,7 @@ defmodule AuroraMeter.Broadcaster do
       per tick goes to `AuroraMeter.Cluster` on every other node
     * period counters are broadcast on their tenant topic
       (`"aurora_meter:tenant:" <> tenant_key`) as
-      `{:aurora_meter, :usage, %{feature:, value:, period_start:}}`
+      `{:aurora_meter, :usage, %{tenant_key:, feature:, value:, period_start:}}`
 
   With cluster sync on (the default) tenant broadcasts are **node-local**: every
   node informs its own LiveViews from its own converged view, so a browser
@@ -98,8 +98,21 @@ defmodule AuroraMeter.Broadcaster do
   defp publish_usage({tenant_key, feature, period_start}, cluster?) do
     value = Counter.value(tenant_key, feature, period_start)
 
+    # `tenant_key` is on the payload as well as in the topic because a process
+    # can hold more than one subscription, and because `unsubscribe/2` stops
+    # routing without emptying a mailbox: a message broadcast before the
+    # unsubscribe and delivered after it is otherwise indistinguishable from a
+    # current one, and a usage value is an absolute per-feature total, so a
+    # stale one persists on screen until that feature moves again.
+    # `AuroraMeter.LiveView.handle_usage/2` drops on this key.
     message =
-      {:aurora_meter, :usage, %{feature: feature, value: value, period_start: period_start}}
+      {:aurora_meter, :usage,
+       %{
+         tenant_key: tenant_key,
+         feature: feature,
+         value: value,
+         period_start: period_start
+       }}
 
     if cluster? do
       PubSub.local_broadcast(Config.pubsub(), topic(tenant_key), message)

@@ -44,11 +44,18 @@ AuroraMeter.Credits.balance(org)
   `available/1` returns.
 - `promotional` is the part of the balance that came from promotional grants.
 - `spendable` is what a new hold or debit would actually be allowed to take,
-  and it is the figure `sufficient?/2` compares against.
+  and it is the figure `sufficient?/2` compares against. **It is never positive
+  while `debt` is outstanding**, because nothing may spend then.
 - `promotional_spendable` is the part of `spendable` that came from promotional
-  lots.
-- `debt` is executed cost the wallet could not fund. The next grant repays it
+  lots, so it answers the same question and is zero in the same states. The
+  promotional credit the wallet **holds** is `promotional`, which a debt does
+  not reduce.
+- `debt` is executed cost the wallet could not fund, or money handed back to a
+  payment provider that the wallet had already spent. The next grant repays it
   before creating availability, and nothing may spend while it is outstanding.
+  Credit the wallet already holds repays it too, unless that credit is
+  promotional. See ["Debt"](#debt) for what puts a wallet there, what the
+  figures read while it lasts and what clears it.
 - `expired` is value destroyed by expiry, kept apart from value spent.
 
 `sufficient?(org, amount)` is `spendable + overdraft_tolerance >= amount`, the
@@ -65,8 +72,21 @@ on a wallet the lot engine owns by exactly two things:
 - `debt` is subtracted. A wallet that owes money cannot spend until a grant has
   repaid it.
 
-`spendable` is not clamped at zero: it is the figure the ledger refuses on, and
-clamping it for display would make the reported number and the refusal disagree.
+`spendable` is capped at what the ledger will accept and not clamped for
+display. The two are different promises and the distinction matters:
+
+- it may never be **positive** when a hold or debit would be refused. While
+  `debt` is outstanding every hold and every debit is refused whatever the
+  wallet holds, so `spendable` and `promotional_spendable` both read `0` there;
+- it is not floored at zero either. Where the debt is bigger than what is left,
+  `spendable` goes negative and says how deep the wallet is, which a reader
+  watching it climb out needs to see.
+
+`balance`, `promotional`, `held`, `debt` and `expired` are not claims about
+spending. They report what the wallet holds, owes or has lost, and a debt does
+not reduce them. `available` is the arithmetic `balance - held` and stays one:
+it is what `runway_days` divides, and on a wallet in debt it can be positive
+while nothing at all may be spent.
 
 On a wallet that has **not** been cut over to lots, which is every wallet until
 `mix aurora_meter.credits.migrate_lots` runs, `spendable == available`,
@@ -132,12 +152,17 @@ that query now misses new ones. Use `kind = 'reverse' OR category = 'reversal'`.
 
 ### Reversing the payment's own credit
 
-`reverse/4` is wallet wide: it drains eligible lots in spend order, and spend
-order is promotional first. That is the right answer for a host with no payment
-provenance and the wrong one for a host that has it, because a refunded top-up
-would eat a sign-up bonus that had nothing to do with it.
+`reverse/4` is wallet wide: on a wallet the allocator owns it takes the credit
+back off the wallet's **non-promotional** lots, in spend order, draining
+`available`, then `consumed`, then `reserved`, and records as `debt` whatever
+those lots cannot give back. It never touches a promotional lot, so it is a safe
+answer for a host with no payment provenance. What it does not have is a cap: it
+will take credit off a lot some other payment funded, because nothing tells it
+which payment this refund is for.
 
-A host that stamps `:source` on its grants uses the source-scoped pair instead:
+A host that stamps `:source` on its grants uses the source-scoped pair instead,
+which takes the same lots in the same order but only the ones that payment
+funded, and is capped by them:
 
 ```elixir
 Credits.grant(org, 25_000_000,
@@ -167,10 +192,18 @@ matches, in spend order, and drains them **`available`, then `consumed`, then
     reservation creates its own debt when it settles.
 
 **A promotional lot is never touched, whatever order it sorts in and however
-late it was granted.** Nor is the debt a reversal creates repaid out of one:
-the repayment takes only non-promotional availability, so a payment's refund can
-never erase a promotion. That is the whole point of the pair, and it is the rule
+late it was granted.** Nor is the debt a reversal creates repaid out of one, by
+this call or by any call after it: no debt is ever repaid out of promotional
+credit the wallet already holds, so a payment's refund can never erase a
+promotion. That is the whole point of the pair, and it is the rule
 `AuroraMeter.Credits.Lots` exists to make checkable afterwards.
+
+The "or by any call after it" is not decoration. Until 0.6.0 the exclusion held
+for the refund's own transaction and no longer: the refund correctly left a
+`debt` rather than taking the promotion, and then the next `release` or `settle`
+repaid that debt in spend order, which takes promotional credit first. The
+promotion paid for the refund one ordinary event later, and the allocation row
+it left behind said `consume`, which is what an ordinary spend says.
 
 `restore_lot/4` is the inverse, for a refund that failed or was cancelled and
 for a dispute that was won. It moves `reversed` back to `available` on the same
@@ -447,11 +480,99 @@ can spend:
 ### Debt
 
 A settlement above its hold is executed cost: the work ran and it has to be
-paid for. What the wallet cannot fund becomes `debt`, recorded on the balance
-row rather than hidden in a negative balance nobody can explain. While `debt`
-is outstanding the wallet cannot hold or debit, and the next grant repays it
-before any of the new money becomes available, writing a `consume` allocation
-against the new lot so the repayment is as traceable as a spend.
+paid for. A refund of credit that was already spent is the other source: the
+money has left the payment provider and cannot be taken out of a lot that has
+nothing left in it. Either way what the wallet cannot fund becomes `debt`,
+recorded on the balance row rather than hidden in a negative balance nobody can
+explain. While `debt` is outstanding the wallet cannot hold or debit, and the
+next grant repays it before any of the new money becomes available, writing a
+`consume` allocation against the new lot so the repayment is as traceable as a
+spend.
+
+#### A wallet that owes money, in full
+
+This is the whole state in one place, so a question about it can be answered
+from this page rather than from the source.
+
+**What puts a wallet there.** Any of:
+
+- a `settle/3` above what its hold reserved, with not enough left in the wallet
+  to cover the overrun;
+- a `reverse/4` or `reverse_lot/4` (a refund or a chargeback) larger than the
+  paid credit the wallet still has, which reaches credit already spent;
+- a `debit/4` with `allow_negative: true`, which is how money that has already
+  left the payment provider is recorded.
+
+A wallet **holding a promotion** reaches it on any of those, because a
+promotion is never consumed to repay a debt.
+
+**What the figures read while it lasts.** For example, after a refund of `$5.00`
+on a wallet that had `$1.00` of paid credit left, `$8.00` of promotional credit
+and a `$3.00` hold against it:
+
+```elixir
+AuroraMeter.Credits.balance(org)
+# %{balance: 4_000_000, held: 3_000_000, available: 1_000_000,
+#   promotional: 8_000_000, debt: 4_000_000, expired: 0,
+#   spendable: 0, promotional_spendable: 0, ...}
+```
+
+- `balance`, `available` and `promotional` are positive. The credit is really
+  there and the promotion survives whole: a refund never takes it, and neither
+  does the release or settlement that follows.
+- `debt` says what is owed.
+- `spendable` and `promotional_spendable` are `0`. **Nothing is spendable**,
+  and those two figures are the ones that say so.
+
+**What happens to a call.** Every `hold/4` and every `debit/4` returns
+`{:error, :debt_outstanding}`, whatever the amount, and `sufficient?/2` returns
+`false` for every amount. `:debt_outstanding` is a different reason from
+`:insufficient_credits`, which means the wallet simply has nothing eligible
+left; the split exists so a host can tell a customer which of the two happened.
+`reverse/4`, `restore/4`, `settle/3` and `release/1` are unaffected: a refund
+and the closing of a hold that is already open are never refused.
+
+**What clears it.** A `grant/3` of **any** category, including a promotional
+one. The repayment comes out of the lot the grant is creating, before any of it
+becomes available, so a top-up of the amount owed clears the debt exactly and
+one larger leaves the difference spendable. Nothing else clears it: no release,
+no settlement below its estimate and no expiry sweep, because none of those may
+touch credit the wallet already holds if it is promotional, and by the time a
+wallet is in this state that is usually all it has.
+
+**How to find them.** `debt` on `aurora_meter_credit_balances`:
+
+```sql
+SELECT tenant_key, balance, promotional, debt
+  FROM aurora_meter_credit_balances
+ WHERE debt > 0
+ ORDER BY debt DESC;
+```
+
+**A promotion is never consumed to repay a debt.** Anything else the wallet
+holds is: value a release hands back, and value a settlement below its estimate
+does not use, both repay outstanding debt before becoming spendable again. A
+promotional lot does not, because `reverse_lot/4` and `reverse/4` may not take a
+promotion for a paid refund and a rule one later event defeats is not a rule.
+The cost is worth knowing before you meet it:
+
+- a wallet can hold promotional credit and owe money at the same time, and while
+  it owes money it can spend neither. `balance/1` will report a positive
+  `promotional` beside a positive `debt`, with `spendable` and
+  `promotional_spendable` both `0`, and every hold and debit is refused with
+  `{:error, :debt_outstanding}`;
+- the way out is a grant of any kind. The repayment a grant makes comes out of
+  the lot it is creating, whatever its category, so topping the wallet up (or
+  granting it another promotion) clears the debt and the promotion it was
+  standing beside becomes spendable, whole;
+- a promotion left standing beside a debt until its `expires_at` is destroyed by
+  the sweep like any other unspent promotion. If you grant promotional credit to
+  wallets that may be in debt, watch `debt` on the balance row.
+
+The rule is about repaying, not about spending. Spend order still takes
+promotional credit first for real work, including the extra consumption a
+settlement above its estimate makes: that is the tenant spending a promotion,
+which is what a promotion is for.
 
 ### Conservation
 
@@ -982,9 +1103,10 @@ Safe, and intended: `config :aurora_meter, repo:` is your repo, so a ledger
 call inside your own `Repo.transaction/1` joins it, and settling a job beside
 the row that records its result is one atomic write.
 
-Every refusal — `:insufficient_credits`, `:duplicate_reference`,
-`:already_settled`, a grant a hold has spoken for — is decided **before**
-anything is written and comes back as `{:error, reason}` with your transaction
+Every refusal (`:insufficient_credits`, `:debt_outstanding`,
+`:duplicate_reference`, `:already_settled`, a grant a hold has spoken for) is
+decided **before** anything is written and comes back as `{:error, reason}`
+with your transaction
 still open and still yours to commit. None of them calls `Repo.rollback/1`,
 deliberately: in a nested transaction a rollback marks the *whole* transaction
 whatever `:mode` you passed, so a duplicate webhook delivery would take the

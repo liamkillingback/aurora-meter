@@ -1,0 +1,76 @@
+############ UTC 2026-09-16T19:19:00Z
+############ doc_examples_test.exs, 30 seeds, after the fix
+############ doc_examples: passed=30 FAILED=0 NO_RESULT=0 of 30
+############ the owning test alone, 30 seeds (the deterministic force)
+############ force alone: passed=30 FAILED=0 NO_RESULT=0 of 30
+############ full suite, 5 seeds
+  seed 459043  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 8702  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 638544  Result: 2132/2133 passed (81/81 doctests, 22/22 properties, 2029/2030 tests), 8 excluded
+  1) test a missing tenant I20 a resolver returning nil never resolves the default tenant (AuroraMeter.Plug.EnsureEntitledTest)
+     test/aurora_meter/plug/ensure_entitled_test.exs:65
+     Expected false or nil, got true
+     code: refute :ets.member(:aurora_meter_subscription_cache, "")
+     stacktrace:
+       test/aurora_meter/plug/ensure_entitled_test.exs:82: (test)
+
+.........................................................aurora_meter.credits.migrate_lots:
+  wallets        2
+  migrated       1
+  seed 83170  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 22237  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+############ full suite: clean=4 FAILED=1 NO_RESULT=0 of 5
+############ format (this unit's files) and credo and docs
+[mixlane] core: DB_PORT=5490 mix format --check-formatted test/aurora_meter/optional_deps_test.exs test/aurora_meter/doc_examples_test.exs test/aurora_meter/exported_idiom_test.exs
+** (Mix) mix format failed due to --check-formatted.
+The following files are not formatted:
+
+[1m[31m/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/test/aurora_meter/exported_idiom_test.exs
+[0m
+         |
+168 168  |        node, {safe, found} ->
+169 169  |          case exported_call(node) do
+170     -|            nil -> {node, {safe, found}}
+    170 +|            nil ->
+    171 +|              {node, {safe, found}}
+    172 +|
+171 173  |            {module, line} ->
+172 174  |              if MapSet.member?(safe, node_key(node)),
+         |
+189 191  |
+190 192  |  defp ensure_loaded_of(
+191     -|         {{:., _, [{:__aliases__, _, [:Code]}, :ensure_loaded?]}, _, [{:__aliases__, _, segments}]}
+    193 +|         {{:., _, [{:__aliases__, _, [:Code]}, :ensure_loaded?]}, _,
+    194 +|          [{:__aliases__, _, segments}]}
+192 195  |       )
+193 196  |       when is_list(segments),
+         |
+
+
+
+[mixlane] core exit=1 started=2026-09-16T19:41:48Z finished=2026-09-16T19:41:49Z
+############ format exit=1
+[mixlane] core: DB_PORT=5490 mix credo --strict
+Checking 285 source files (this might take a while) ...
+
+  Refactoring opportunities                                                     
+┃ 
+┃ [F] → Function body is nested too deep (max depth is 2, was 3).
+┃       test/aurora_meter/exported_idiom_test.exs:172:15 #(AuroraMeter.ExportedIdiomTest.bare_calls)
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 2.5 seconds (0.5s to load, 2.0s running 69 checks on 285 files)
+4847 mods/funs, found 1 refactoring opportunity.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+[mixlane] core exit=8 started=2026-09-16T19:41:49Z finished=2026-09-16T19:41:52Z
+############ credo exit=8
+[mixlane] core: DB_PORT=5490 mix docs --warnings-as-errors --output /tmp/tmp.RS3UDqphvn
+Generating docs...
+View html docs at "/tmp/tmp.RS3UDqphvn/index.html"
+[mixlane] core exit=0 started=2026-09-16T19:41:52Z finished=2026-09-16T19:41:54Z
+############ docs exit=0
+############ pro
+############ pro exit=0 Result: 1158 passed (74 doctests, 1084 tests)
+############ UTC 2026-09-16T19:42:13Z

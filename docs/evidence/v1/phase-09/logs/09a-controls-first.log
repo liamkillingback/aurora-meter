@@ -1,0 +1,109 @@
+=== baseline ===
+  lib/aurora_meter/broadcaster.ex                  sha256=3ac8e81cfee6045023a3accbeb1d24c79952869ce963b5d8ae776cc63b7e2232
+  lib/aurora_meter/live_view.ex                    sha256=e49a4fa3aaac77f20e1b6c3f4843510354f439800e173077d132cbffd0f9ddc8
+  lib/aurora_meter/plug/ensure_entitled.ex         sha256=609f9c1b3b3641996e5562152e1cfca88dc7314cbf05b9078ab8c84eb21b6a6e
+  all 12 anchors occur exactly once
+
+=== the control run: the tests must be GREEN before any patch ===
+  baseline run: CLEAN (rc=0) Result: 67 passed (1 doctest, 66 tests)
+
+=== c1-plug-reserves (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 twelve passing requests at the cap boundary leave usage at its starting value
+    - I20 usage is unchanged after a passing request
+
+=== c2-missing-tenant-defaults (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 a resolver returning nil halts with 401 and :missing_tenant
+    - I20 a resolver returning nil never resolves the default tenant
+
+=== c3-usage-payload-loses-tenant-key (lib/aurora_meter/broadcaster.ex) ===
+  DIRTY  Result: 13/14 passed
+  failed: 1 test(s)
+    - I20 the usage broadcast carries the tenant_key
+
+=== c4-on-mount-subscribes-on-static (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 25/27 passed (1/1 doctest, 24/26 tests)
+  failed: 2 test(s)
+    - I20 on_mount with an explicit function resolver assigns the tenant and subscribes only when connected
+    - I20 switch_tenant on a disconnected socket only re-assigns
+
+=== c5-switch-tenant-leaks-old-topics (lib/aurora_meter/live_view.ex) ===
+  NO_RESULT  <no Result line>
+  failed: 0 test(s)
+  !! the suite failed but NOT on the named test(s):
+     - I20 switch_tenant unsubscribes the old topics and subscribes the new ones
+
+=== c6-handle-usage-does-not-filter (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 26/27 passed (1/1 doctest, 25/26 tests)
+  failed: 1 test(s)
+    - I20 handle_usage drops a message whose tenant_key is not the socket's
+  !! the suite failed but NOT on the named test(s):
+     - I20 a socket switched to a second tenant keeps only the second tenant's value
+
+=== c7-bare-on-mount-falls-back (lib/aurora_meter/live_view.ex) ===
+  NO_RESULT  <no Result line>
+  failed: 0 test(s)
+  !! the suite failed but NOT on the named test(s):
+     - I20 on_mount bare :subscribe without live_view_tenant raises ArgumentError naming the config key
+
+=== c8-denial-callback-need-not-halt (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  NO_RESULT  <no Result line>
+  failed: 0 test(s)
+  !! the suite failed but NOT on the named test(s):
+     - I20 an on_denied callback that does not halt raises a RuntimeError naming the callback
+     - I20 an on_denied callback returning a non-conn raises a RuntimeError naming the callback
+
+=== c9-subscribe-leaves-partial (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 26/27 passed (1/1 doctest, 25/26 tests)
+  failed: 1 test(s)
+    - I20 subscribe/2 unsubscribes what it had subscribed when a later topic fails
+
+=== c10-entitled-mode-reads-usage (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  DIRTY  Result: 24/26 passed
+  failed: 2 test(s)
+    - I20 mode :entitled? passes at the hard cap because it never reads usage
+    - I20 mode :entitled? reads no counter, and the same arming makes :check answer 503
+
+=== c11-config-errors-become-503 (lib/aurora_meter/plug/ensure_entitled.ex) ===
+  HARNESS ERROR: the control did not compile, so it tested nothing (X300)
+  [mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plug/ensure_entitled_test.exs --seed 0
+  Compiling 1 file (.ex)
+  [mixlane] core exit=1 started=2026-09-16T15:18:53Z finished=2026-09-16T15:18:54Z
+       error: invalid "rescue" clause. The clause should match on an alias, a variable or be in the "var in [alias]" format. Got: error in [UndeclaredFeatureError] when false
+       │
+   241 │       error in [UndeclaredFeatureError] when false ->
+       │                                                    ^
+       │
+       └─ lib/aurora_meter/plug/ensure_entitled.ex:241:52: AuroraMeter.Plug.EnsureEntitled.decide/2
+  
+  
+  == Compilation error in file lib/aurora_meter/plug/ensure_entitled.ex ==
+  ** (CompileError) lib/aurora_meter/plug/ensure_entitled.ex: cannot compile module AuroraMeter.Plug.EnsureEntitled (errors have been logged)
+      (stdlib 8.0) lists.erl:2673: :lists.mapfoldl_1/3
+      (stdlib 8.0) lists.erl:2673: :lists.mapfoldl_1/3
+      (stdlib 8.0) lists.erl:2674: :lists.mapfoldl_1/3
+
+=== c12-live-view-accepts-nil-tenant (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 25/27 passed (1/1 doctest, 24/26 tests)
+  failed: 2 test(s)
+    - I20 subscribe refuses a nil tenant and registers nothing for the empty key
+    - I20 switch_tenant raises on a nil tenant and leaves the old subscription alone
+
+================ summary ================
+  c1-plug-reserves                         discriminated
+  c2-missing-tenant-defaults               discriminated
+  c3-usage-payload-loses-tenant-key        discriminated
+  c4-on-mount-subscribes-on-static         discriminated
+  c5-switch-tenant-leaks-old-topics        WRONG TEST FAILED
+  c6-handle-usage-does-not-filter          WRONG TEST FAILED
+  c7-bare-on-mount-falls-back              WRONG TEST FAILED
+  c8-denial-callback-need-not-halt         WRONG TEST FAILED
+  c9-subscribe-leaves-partial              discriminated
+  c10-entitled-mode-reads-usage            discriminated
+  c11-config-errors-become-503             HARNESS ERROR
+  c12-live-view-accepts-nil-tenant         discriminated
+  7 of 12 discriminated
+[restore] all 3 targets back at their baseline digest

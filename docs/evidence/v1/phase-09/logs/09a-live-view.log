@@ -1,0 +1,17 @@
+# build unit 09a, core aurora_meter 0.5.0, branch aurorameter-v1
+# started UTC 2026-09-16T16:33:15Z
+# command: mix test test/aurora_meter/live_view_test.exs --seed 0 (DB_PORT=5490, MIX_ENV=test)
+# core HEAD: 7d0264f
+
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/live_view_test.exs --seed 0
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...........................
+Finished in 0.1 seconds (0.00s async, 0.1s sync)
+
+Result: 27 passed (1 doctest, 26 tests)
+[mixlane] core exit=0 started=2026-09-16T16:33:15Z finished=2026-09-16T16:33:16Z
+
+# exit=0
+# finished UTC 2026-09-16T16:33:16Z

@@ -121,6 +121,77 @@ defmodule AuroraMeter.CIContractTest do
     end
   end
 
+  test "I20 every optional-dependency leg is in the matrix, and every one of them blocks" do
+    # Build unit 09b, `open-findings.md` X246 and X356.
+    #
+    # The three legs below are the only things in this repository that build
+    # the package with a dependency deliberately missing, and they are what
+    # invariant I20 rests on. `AURORA_HEADLESS` was red at HEAD for two phases
+    # and nothing said so: the leg exists, it is not `continue-on-error`, and
+    # the workflow has never run (01f section 10, owner blocked). Three units
+    # reported "the leg passes", each accurately describing a run it had
+    # chosen to do by hand.
+    #
+    # This test cannot make CI run. What it can do is refuse the two silent
+    # ways a leg stops being watched: being deleted, and being quietly marked
+    # non-blocking. `docs/evidence/v1/phase-09/09b-optional-deps.md` records
+    # what does run these legs today and why `mix check` is not the place.
+    source = File.read!(@workflow)
+
+    for leg <- ["headless", "plug_only", "liveview-1.0"] do
+      assert source =~ ~r/^\s*- leg: #{Regex.escape(leg)}$/m,
+             "the #{leg} leg is not in #{@workflow}. It is one of the three that " <>
+               "builds this package with a dependency missing, and invariant I20 " <>
+               "is a claim about exactly those builds."
+    end
+
+    # And none of them is `experimental: "yes"`, which is this workflow's
+    # spelling of `continue-on-error`. A leg that cannot fail the run is a leg
+    # that is not in the gate.
+    # Split into one block per leg first. A single regex spanning from
+    # `- leg:` to `experimental: "yes"` is not lazy enough to stay inside one
+    # entry: it matches from the FIRST leg to the first "yes" anywhere after
+    # it, and names the wrong leg. Measured, by flipping `headless` and
+    # watching the failure say `["minimum"]`.
+    experimental =
+      source
+      |> String.split(~r/^\s*- leg: /m)
+      |> Enum.drop(1)
+      |> Enum.filter(&(&1 =~ ~r/^\s*experimental: "yes"$/m))
+      |> Enum.map(&(&1 |> String.split("\n") |> hd() |> String.trim()))
+
+    assert experimental == [],
+           "these legs are non-blocking: #{inspect(experimental)}. A leg is allowed " <>
+             "to be non-blocking for exactly one merge, with the finding it captures " <>
+             "named beside it; if one is here, either it has served its purpose and " <>
+             "should go, or it is a failure nobody is watching."
+  end
+
+  test "I20 every AURORA_ switch a leg sets is one mix.exs actually reads" do
+    # The other half: a leg can also stop testing what it says by naming a
+    # switch nothing reads, which fails open and silently. Every
+    # `AURORA_`-prefixed variable the workflow sets must appear in `mix.exs`,
+    # which is where the switches take dependencies out.
+    workflow = File.read!(@workflow)
+    mix_exs = File.read!("mix.exs")
+
+    switches =
+      ~r/^\s*(AURORA_[A-Z_]+):/m
+      |> Regex.scan(workflow)
+      |> Enum.map(fn [_, name] -> name end)
+      |> Enum.uniq()
+
+    assert "AURORA_HEADLESS" in switches
+    assert "AURORA_NO_LIVEVIEW" in switches
+
+    for switch <- switches do
+      assert String.contains?(mix_exs, switch),
+             "#{@workflow} sets #{switch} and mix.exs never reads it, so the leg " <>
+               "that switch names resolves the ordinary dependency set and tests " <>
+               "nothing it claims to."
+    end
+  end
+
   # Parse test_helper.exs rather than reading ExUnit's runtime configuration:
   # `mix test --only fault` rewrites the runtime exclude list, so a runtime read
   # would answer a different question depending on how the suite was invoked.

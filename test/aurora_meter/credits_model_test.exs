@@ -648,20 +648,59 @@ defmodule AuroraMeter.CreditsModelTest do
   # command that reaches it and the lockstep ends there. Dropping it leaves a
   # legal history (a reversal only removes value).
   #
-  # **06e did not take this filter out, and X250 said it would.** The
-  # correction is worth reading rather than quietly leaving the filter in
-  # place. 06e adds `Credits.reverse_lot/4`, a *second* function scoped to a
-  # payment's own lots, and deliberately leaves `Credits.reverse/4` wallet wide
-  # for hosts with no payment provenance. So the command this generator issues
-  # still takes the spend-order path and still disagrees with a model that
-  # reverses paid lots only; what changed is that the disagreement is now a
-  # documented difference between two public functions rather than a missing
-  # implementation. Comparing the model against the lot-scoped path would need
-  # the generator to mint payment ids, the model's grants to carry a `source`
-  # and `reverse_from/3` to scope by it. That is real work on 01e's oracle, it
-  # is recorded as its own finding in 06e's report, and inventing it here
-  # inside 06e would make the oracle agree with the implementation by
-  # construction, which is the one thing a second implementation must not do.
+  # **Repair unit R1 wired the reversal and the filter still stays, for a
+  # different reason, measured rather than assumed.** R1 makes
+  # `Credits.reverse/4` on a cut-over wallet reverse the wallet's
+  # non-promotional lots in spend order, `available` then `consumed` then
+  # `reserved`, remainder to `debt`. That is 01e's `replay/3` for `{:reverse,
+  # ...}` line for line, written from `architecture-map.md` 7.2 before 06a
+  # existed, so the reversal itself now agrees and the earlier note here (that
+  # the wallet-wide function keeps the spend-order behaviour on purpose) is
+  # false.
+  #
+  # R1 took the filter out and ran it, with `classify/3`'s `:reverse_not_wired`
+  # clause removed so results were compared like any other command. The property
+  # **failed**, and on something real: a promotional lot the model said held
+  # 14,527,949 available read 0. The mechanism is not the reversal. A reversal
+  # that reaches `consumed` creates `debt`; the reversal's own repayment is
+  # non-promotional (X262), so on a wallet whose only remaining availability is
+  # promotional the debt survives the reversal; and the **next release or
+  # settle** repays it through `repay_debt/5`, which takes `eligible/2` in spend
+  # order and therefore takes the promotion. Reproduced deterministically in
+  # `tmp/v1/r1-debt-repayment-probe.exs` on both reversal functions, and
+  # recorded as its own finding.
+  #
+  # So the honest state is: the two oracles agree about the reversal and part
+  # company about what a later release does with the debt it left, which is the
+  # already-classified `:debt_repaid_on_release` divergence reached from a
+  # second source. Taking the filter out needs `debt_reachable?/1` to know that
+  # a reversal created debt, which is model-side state 01e's view does not keep.
+  # That is real work on 01e's oracle and it belongs to a unit whose author is
+  # not the author of the reversal, because an oracle adjusted by the
+  # implementer to make the implementation agree proves nothing (X251).
+  #
+  # **Repair unit R2 fixed X355 and tried again, at five fixed seeds, and the
+  # filter still cannot come out.** The measurement, with the filter and the
+  # `:reverse_not_wired` clause removed (`tmp/v1/r2-oracle.sh`, logs under
+  # `tmp/v1/r2-oracle/`), pre-R2 against post-R2 as compared/diverged:
+  #
+  #     seed     0        1        7             42      1337
+  #     pre-R2   fail 1/0 fail 1/0 FAIL 4/2      pass 14/6 fail 4/2
+  #     post-R2  fail 1/0 fail 1/0 **pass 11/9** pass 14/6 fail 4/2
+  #
+  # Seed 7 turns from a failure to a pass and nearly triples what it compared,
+  # and the failure it used to have was the promotional one. The three that
+  # still fail diverge on a paid or an adjustment lot every time, which is
+  # `:debt_repaid_on_release` and nothing else.
+  #
+  # R2 also measured the obvious widening and it buys nothing: extending
+  # `debt_reachable?/1` to `LedgerModel.projections(model).debt > 0` leaves all
+  # five seeds byte identical, because the failing histories end with the
+  # model's debt back at zero (a later grant repaid it there too) after the
+  # buckets had already parted company. The state the harness needs is "debt was
+  # ever positive", which is what 01e's view does not keep. **The oracle itself
+  # was not edited by R1 or by R2** and must not be edited to make the
+  # implementation agree.
   #
   # `expiry: false` for a subtler reason, and it is the one worth reading.
   # 06a's deliberate compatibility change is that a lot past its `expires_at`
@@ -824,7 +863,7 @@ defmodule AuroraMeter.CreditsModelTest do
   # absorbed into a widened list.
   defp assert_classified!(divergences) do
     for {command, expected, actual, class} <- divergences do
-      assert class in [:eligibility, :reverse_not_wired, :debt_repaid_on_release],
+      assert class in [:eligibility, :reverse_not_wired, :debt_repaid_on_release, :debt_refusal],
              "unclassified divergence on #{inspect(command)}: the model said " <>
                "#{inspect(expected)} and the ledger said #{inspect(actual)}. " <>
                "Two implementations of one design disagree in a way 06a has not " <>
@@ -888,15 +927,14 @@ defmodule AuroraMeter.CreditsModelTest do
 
   defp scoped(tenant, reference), do: tenant <> ":" <> reference
 
-  # `:reverse` is compared for nothing, and the reason is a real gap rather than
-  # a convenience. `Credits.reverse/4` calls `debit/5` with
-  # `allow_negative: true`, so on a cut-over wallet it consumes eligible lots in
-  # spend order, **promotional first**, and writes nothing into `reversed`.
-  # 01e's view models the lot design instead: paid lots only, buckets in the
-  # order available, consumed, reserved. From 06e the lot design is reachable,
-  # but through `Credits.reverse_lot/4` and not through this command, and the
-  # wallet-wide function keeps its behaviour on purpose. See the note on
-  # `comparable_history/0`. Recorded as X250 and corrected in 06e's report.
+  # `:reverse` is compared for nothing, and since repair unit R1 the reason has
+  # changed. It used to be that `Credits.reverse/4` called `debit/5` with
+  # `allow_negative: true`, so on a cut-over wallet it consumed eligible lots in
+  # spend order, **promotional first**, and wrote nothing into `reversed` (X250).
+  # R1 fixed that, and the reversal now matches 01e's view exactly. What is left
+  # is that `comparable_history/0` still filters the command out, so this clause
+  # is unreachable from the property today and is kept only for a history handed
+  # in by hand. The measurement that decided it is on `comparable_history/0`.
   defp classify({:reverse, _reference, _amount}, _expected, _actual), do: :reverse_not_wired
 
   # `expire_due/1` returns a count across **every** tenant in the database, so
@@ -911,7 +949,16 @@ defmodule AuroraMeter.CreditsModelTest do
   # frozen for spending while holding money it owes is worse for the tenant than
   # one that pays itself off. `architecture-map.md` 7.2 says "every incoming
   # **grant** repays outstanding debt first" and should say "every incoming
-  # value" (finding X251).
+  # value" (finding X251). It now says both, amended by repair unit R2.
+  #
+  # **R2 narrows what this divergence can be about, and does not remove it.**
+  # LI-06a-5 as amended reads "no **non-promotional** availability", and the
+  # repayment 06a makes here takes non-promotional availability only (X355), so
+  # the lots the two oracles can now part company over are the paid and
+  # adjustment ones. Measured with the `:reverse` filter removed at five fixed
+  # seeds: before R2 the shrunk divergence at seed 7 was a **promotional** lot
+  # the model said held 22,161,246 reading 0; after R2 seed 7 passes outright
+  # and every remaining divergence at every seed is on a paid or adjustment lot.
   defp classify({:release, _reference}, :ok, {:ok, _txn}), do: :agree
 
   defp classify(_command, expected, actual) do
@@ -922,6 +969,18 @@ defmodule AuroraMeter.CreditsModelTest do
       # is `available > 0` with no expiry test. The ledger refusing something
       # the model accepted is that, and only that.
       match?({:error, :insufficient_credits}, actual) -> :eligibility
+      # **The fourth divergence, and it is older than the clause that names
+      # it** (repair unit R3, findings X357 and X361). 01e's `sufficient?/1` is
+      # `balance - held + tolerance >= amount`, so a wallet holding 5 USD of
+      # availability against a 4 USD debt accepts a 1 USD hold in the model;
+      # 06a's planner refuses every hold and every debit while `debt > 0`
+      # (`architecture-map.md` 7.2), whatever is left beside the debt. That
+      # divergence existed before R3 and was absorbed by the `:eligibility`
+      # clause above, which is documented as being about expiry **and only
+      # that**, so it was being counted as something it is not. R3 gives the
+      # refusal its own atom for the host's sake, which made the
+      # misclassification visible; it is named here rather than folded back in.
+      match?({:error, :debt_outstanding}, actual) -> :debt_refusal
       true -> :unclassified
     end
   end
@@ -929,6 +988,21 @@ defmodule AuroraMeter.CreditsModelTest do
   defp same?(:ok, {:ok, _txn}), do: true
   defp same?({:ok, status}, {:ok, _txn, status}), do: true
   defp same?({:error, reason}, {:error, reason}), do: true
+
+  # **The model has one refusal atom and the ledger now has two.** 01e's view
+  # returns `:insufficient_credits` for every refusal of a hold or a debit;
+  # repair unit R3 splits the ledger's into `:insufficient_credits` (nothing
+  # eligible left) and `:debt_outstanding` (the wallet owes money), because a
+  # host told the first goes looking for a grant that is not missing. Both
+  # sides refused, which is the behaviour being compared, and this pair
+  # classified as `:agree` before R3 through the clause above.
+  #
+  # **This is a vocabulary mapping and not an oracle concession**, and it is
+  # measured rather than asserted: the cross-oracle property was run at five
+  # fixed seeds before and after the rename and the compared/diverged counts
+  # are identical (R3 evidence section 4.6). A model that **accepted** what the
+  # ledger refuses is not covered here and still falls through to `classify/3`.
+  defp same?({:error, :insufficient_credits}, {:error, :debt_outstanding}), do: true
   defp same?(_expected, _actual), do: false
 
   # Lot for lot, by the grant reference both sides key on, every bucket exact.

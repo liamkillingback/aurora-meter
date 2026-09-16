@@ -1,0 +1,16 @@
+[lane] acquired, held for the whole before/after measurement
+baseline test/aurora_meter/doc_examples_test.exs sha256=bf772284f9ccce2252ca6c4d9e57adedcad2d0df35370a5cee7a6098a2bfb12c
+
+=== BEFORE: the bare function_exported?/3 restored ===
+    the owning test alone (deterministic force)    passed=0 FAILED=10 NO_RESULT=0 (of 10)
+    the whole file (where R3 saw ~1 in 3)          passed=6 FAILED=4 NO_RESULT=0 (of 10)
+
+=== AFTER: the fix back in place ===
+    the owning test alone (deterministic force)    passed=10 FAILED=0 NO_RESULT=0 (of 10)
+    the whole file                                 passed=10 FAILED=0 NO_RESULT=0 (of 10)
+
+=== verdict ===
+  the force failed 10 of 10 before and passed 10 of 10 after.
+  the whole file: 4 of 10 failed before, 0 of 10 failed after.
+restored sha256=bf772284f9ccce2252ca6c4d9e57adedcad2d0df35370a5cee7a6098a2bfb12c OK
+[lane] released

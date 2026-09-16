@@ -1482,14 +1482,34 @@ phase 11 evidence below.
 
 - `AuroraMeter.CreditsLotMigrationTest` / `test I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape (X266)`
 
+Build unit 09b, the generated host migrations. A history is only reproducible
+if the files that built it name the versions they ran: an unbounded
+`AuroraMeter.Migration.up()` runs to whatever version the installed package has
+reached on the day it is applied, so the same committed file produces one schema
+in the database it was written against and another in a database created after
+the next release (`open-findings.md` S1). Both installers emitted exactly that
+until this unit; both generators had already been fixed, which is how two
+supported ways of installing one package came to produce two different files.
+
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test the generated migration I19 the body names an explicit range and never calls up/0 or down/0`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test the generated migration I19 the installer and the generator emit the same body`
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test pinned ranges I19 a fresh install pins both ends of the whole range` (pro)
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test pinned ranges I19 an upgrade names both ends of every range it generates` (pro)
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test pinned ranges I19 the range covers every version from --from to the latest` (pro)
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test pinned ranges I19 every generated down names the same bounded range as its up` (pro)
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test pinned ranges I19 it refuses a --from above the latest version` (pro)
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test the shared plan I19 Pro declares no concurrent version, so one range becomes one file` (pro)
+- `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test the shared plan I19 no generated Pro file claims a data-loss confirmation nothing reads` (pro)
+- `Mix.Tasks.AuroraMeterPro.InstallTest` / `test I19 the installer and the generator emit the same migration body` (pro)
+
 **Evidence.** `storefront:docs/evidence/v1/phase-11/i19.md`
 
 ## I20 Optional integrations remain optional and tenant-safe
 
-**Guarantee.** Phoenix LiveView, Phoenix HTML, Igniter, Oban,
+**Guarantee.** Phoenix LiveView, Phoenix HTML, Igniter, Oban, `plug`,
 `telemetry_metrics`, `phoenix_live_dashboard` and `opentelemetry_api` are
 declared optional in `mix.exs`, and the metering, entitlement and credit paths do
-not reference them. Five pieces of code do, and each is compiled behind a guard
+not reference them. Seven pieces of code do, and each is compiled behind a guard
 rather than assumed:
 `lib/aurora_meter/live_dashboard/page.ex` opens with
 `if Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder) do` and
@@ -1506,8 +1526,35 @@ with `if Code.ensure_loaded?(Oban) do`, so on a build without Oban there is no
 public function any scheduler can call; and
 `mix aurora_meter.install` is defined either way, falling back from the Igniter
 one-step installer to a plain Mix task that generates the migration and prints
-the remaining steps. On a build with no optional dependency present, the facade,
-the credit ledger and the migration ladder all still work.
+the remaining steps;
+`lib/aurora_meter/plug/ensure_entitled.ex` opens with
+`if Code.ensure_loaded?(Plug.Conn) do`, so on a build without `plug` there is no
+`AuroraMeter.Plug.EnsureEntitled` and every decision it takes is still a public
+function a host can call in a controller; and
+`lib/aurora_meter/live_view.ex` puts **only** its socket functions
+(`on_mount/4`, `switch_tenant/2`, `handle_usage/2`, `handle_credits/2`) inside
+`if Code.ensure_loaded?(Phoenix.LiveView) do`, leaving `subscribe/1,2`,
+`unsubscribe/1,2` and `topics/1,2` outside it, so a headless host keeps the
+subscription and loses only the socket conveniences. On a build with no optional
+dependency present, the facade, the credit ledger, the migration ladder and
+`AuroraMeter.LiveView.subscribe/1` all still work.
+
+The plug is **advisory**, and that is a correctness claim rather than a caveat.
+It takes no reservation, so it cannot create one that outlives a failed
+controller action (I03) and cannot admit concurrent requests whose controllers
+each reserve again on top of it (I04). The refusal to ship a reserving
+pre-request plug is the protection, `AuroraMeter.with_quota/4` around the work
+itself is the strict admission, and every row of
+`AuroraMeter.Plug.EnsureEntitledTest` records the feature's usage value before
+and after the request and requires them equal.
+
+A missing tenant is never the default tenant. Both the plug and every entry
+point of `AuroraMeter.LiveView` refuse `nil` before `AuroraMeter.Tenant.to_key/1`
+can see it, because `AuroraMeter.Tenant.Default` stringifies what it is given and
+would map `nil` to `""`, which the 0.5.x transition mode still allows with a
+warning (open finding C12). The plug answers 401 and reads nothing; the tests assert the
+absence of an ETS row, a database counter row and a subscription for `""` rather
+than assuming it.
 
 This is asserted in **both** directions, which matters more than it sounds: a
 one-directional assertion would pass for the wrong reason the day an optional
@@ -1523,11 +1570,26 @@ The absence half additionally requires a build made with `AURORA_HEADLESS=1`,
 which is what removes the optional dependencies; its `setup` refuses to run
 otherwise rather than passing vacuously.
 
-**Known limits.** The three absence tests are tagged `:headless` and excluded by
+**Known limits.** The absence tests are tagged `:headless` and excluded by
 default, so an ordinary `mix test` proves only the presence half. The absence half
 is proved on exactly one CI leg. That is a deliberate trade and not a gap, but it
 means a developer who breaks the headless build locally will not learn it until
-CI runs.
+CI runs. Every presence assertion is written as an equality against its own
+dependency rather than as a bare `refute` on the headless leg, so each one is
+also a positive control on every other leg and none of them can pass vacuously.
+
+`plug` was in an ordinary resolved build before it was ever declared, dragged in
+by `phoenix_live_view` through `phoenix` (`open-findings.md` X331's shape), so
+`AURORA_HEADLESS` was the only leg that could have shown the guard closing and
+it removes seven other things at the same time. `AURORA_NO_LIVEVIEW=1` is the
+narrow leg that answers the question about the plug specifically: LiveView, HTML
+and the dashboard out, `plug`, Oban, Igniter and `telemetry_metrics` in, and the
+narrowness is asserted by name rather than claimed.
+
+The LiveView helpers are covered here at the socket level, against a hand-built
+`%Phoenix.LiveView.Socket{}`. Browser-level coverage through a real endpoint,
+router and `Phoenix.LiveViewTest` is build unit 09c's sample, because core adds
+no Phoenix endpoint of its own.
 
 The headless leg proves that the package compiles and that its facade, credits and
 migrations work without the optional dependencies. It does **not** prove that a
@@ -1572,8 +1634,123 @@ CI leg fails by design until 09b settles it.
   caller and has no authorization decision of its own to refuse. The LiveView
   helpers are 09a's. See `open-findings.md` X333.
 - `AuroraMeter.EntitlementsTest` / `test I20 every Noop billing provider callback returns :not_configured`
-- PLANNED (09b): `AuroraMeter.RealtimeTest` / `test I20 every quota kind renders its own wording`
-- PLANNED (09b): `AuroraMeter.RealtimeTest` / `test I20 a single-point and an empty series render without a broken chart`
+- `AuroraMeter.RealtimeTest` / `test I20 every quota kind renders its own wording`
+- `AuroraMeter.RealtimeTest` / `test I20 a single-point and an empty series render without a broken chart`
+
+Build unit 09b, the installer and the support matrix. Two claims about
+optionality that nothing ran until this unit: that the installer never makes a
+host depend on an optional integration by installing one, and that the floors
+`mix aurora_meter.install --check-support` prints are the floors `mix.exs`
+declares. The second was a sentence in a comment naming a test file that did not
+exist, and it was wrong by five dependencies (`open-findings.md` X153).
+
+The stale-build row is the trap the check exists for: a dependency present in a
+host's tree whose guarded module was never compiled, which is what a host gets
+by adding an optional dependency after `aurora_meter` was built. It is induced
+through the real row code rather than by constructing the row a test wants to
+see, and it is paired with a control that runs the same code with the module
+compiled, so the verdict is about the build and not about the probe (X325).
+
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 the declared floors and mix.exs name the same dependencies`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 the phoenix_live_view floor is 1.0.0 and agrees with mix.exs`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 a dependency present whose guarded module was not compiled is an error row`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 control: the same probe with the module compiled is ok`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 a dependency below its floor beats the stale-build check to the verdict`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 the abort message names every problem and the command that fixes it`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 an absent optional dependency is neither an error nor a stale build`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 a first run writes :deny with no flag given`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 --feature-policy warn writes :warn and not :deny`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 every documented value is accepted and written`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 --feature-policy bogus creates no file at all`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 a second run keeps a host-edited value and says which one it kept`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 an explicit flag does not override a host's existing value either`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 writes feature_sources with every pair given`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 one pair writes exactly that pair`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 no flag writes no feature_sources key at all`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 --events-source tokens:bogus creates no file at all`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 a malformed pair creates no file at all`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 a feature that is not a feature name creates no file at all`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 the same feature twice creates no file at all`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test --events-source I20 a second run keeps a host-edited feature_sources value`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test a second run I20 a second run adds no duplicate supervision child`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test what the installer will not write I20 no route, no component import and no LiveView reference anywhere`
+- `Mix.Tasks.AuroraMeter.InstallTest` / `test the fallback without Igniter I20 the printed steps carry the config block and the options that were passed`
+
+And the legs themselves, because a leg that is not in the gate is a leg nobody is
+watching. `AURORA_HEADLESS` was red at `HEAD` for two phases and nothing said so:
+the leg exists, it blocks, and the workflow has never run, while three units each
+reported a hand-run of it accurately (`open-findings.md` X246, X356). These two
+tests cannot make CI run. They refuse the two silent ways a leg stops being
+watched, and both were watched failing before they were trusted passing
+(`docs/evidence/v1/phase-09/09b-optional-deps.md`).
+
+- `AuroraMeter.CIContractTest` / `test I20 every optional-dependency leg is in the matrix, and every one of them blocks`
+- `AuroraMeter.CIContractTest` / `test I20 every AURORA_ switch a leg sets is one mix.exs actually reads`
+
+- Build unit 09a, the Phoenix helpers:
+- `AuroraMeter.LiveViewTest` / `test subscribe/1 and subscribe/2 I20 subscribe/1 still subscribes to the usage topic only`
+- `AuroraMeter.LiveViewTest` / `test subscribe/1 and subscribe/2 I20 subscribe/2 with topics [:usage, :credits] registers on both`
+- `AuroraMeter.LiveViewTest` / `test subscribe/1 and subscribe/2 I20 subscribe/2 receives both message families`
+- `AuroraMeter.LiveViewTest` / `test subscribe/1 and subscribe/2 I20 subscribe/2 unsubscribes what it had subscribed when a later topic fails`
+- `AuroraMeter.LiveViewTest` / `test subscribe/1 and subscribe/2 I20 subscribe refuses a nil tenant and registers nothing for the empty key`
+- `AuroraMeter.LiveViewTest` / `test subscribe/1 and subscribe/2 I20 subscribe refuses a topic it does not know`
+- `AuroraMeter.LiveViewTest` / `test topics/2 and unsubscribe/2 I20 topics/2 returns the canonical strings for both families`
+- `AuroraMeter.LiveViewTest` / `test topics/2 and unsubscribe/2 I20 unsubscribe/2 stops delivery of both topic families`
+- `AuroraMeter.LiveViewTest` / `test topics/2 and unsubscribe/2 I20 unsubscribe/1 leaves a credits subscription the caller did not name`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount with an explicit function resolver assigns the tenant and subscribes only when connected`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount with assign: :current_org reads the assign set by an earlier hook`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount carries topics: through to the subscription`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount halts with :missing_tenant when the resolver returns nil and never subscribes`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount bare :subscribe without live_view_tenant raises ArgumentError naming the config key`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount bare :subscribe resolves through live_view_tenant when it is set`
+- `AuroraMeter.LiveViewTest` / `test on_mount/4 I20 on_mount refuses an argument shape it does not know`
+- `AuroraMeter.LiveViewTest` / `test switch_tenant/2 I20 switch_tenant unsubscribes the old topics and subscribes the new ones`
+- `AuroraMeter.LiveViewTest` / `test switch_tenant/2 I20 switch_tenant with the same tenant is a no-op and does not duplicate the subscription`
+- `AuroraMeter.LiveViewTest` / `test switch_tenant/2 I20 switch_tenant raises on a nil tenant and leaves the old subscription alone`
+- `AuroraMeter.LiveViewTest` / `test switch_tenant/2 I20 switch_tenant on a disconnected socket only re-assigns`
+- `AuroraMeter.LiveViewTest` / `test handle_usage/2 and handle_credits/2 I20 handle_usage records value and period_start per feature`
+- `AuroraMeter.LiveViewTest` / `test handle_usage/2 and handle_credits/2 I20 handle_usage drops a message whose tenant_key is not the socket's`
+- `AuroraMeter.LiveViewTest` / `test handle_usage/2 and handle_credits/2 I20 a socket switched to a second tenant keeps only the second tenant's value`
+- `AuroraMeter.LiveViewTest` / `test handle_usage/2 and handle_credits/2 I20 handle_credits drops a foreign tenant_key and records available, held and low_balance`
+- `AuroraMeter.LiveViewTest` / `test handle_usage/2 and handle_credits/2 I20 a credits message back above the threshold clears low_balance`
+- `AuroraMeter.LiveViewTest` / `test handle_usage/2 and handle_credits/2 I20 an unrelated message leaves the socket untouched`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.Plug.EnsureEntitled is compiled exactly when Plug.Conn is available`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AURORA_NO_LIVEVIEW removes the LiveView pair and the dashboard, and nothing else`
+- `AuroraMeter.HeadlessTest` / `test I20 AuroraMeter.Plug.EnsureEntitled is not compiled without Plug`
+- `AuroraMeter.HeadlessTest` / `test I20 AuroraMeter.LiveView.subscribe/1 works with no Phoenix.LiveView loaded`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a missing tenant I20 a resolver returning nil halts with 401 and :missing_tenant`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a missing tenant I20 a resolver returning nil never resolves the default tenant`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a denial I20 a denied boolean feature halts with 403 and :not_entitled`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a denial I20 a hard limit at the cap halts with 403 and :limit_exceeded`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a denial I20 on_denied {module, function} receives the conn and the reason atom`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a denial I20 an on_denied callback that does not halt raises a RuntimeError naming the callback`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a denial I20 an on_denied callback returning a non-conn raises a RuntimeError naming the callback`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a passing request I20 an allowed request assigns :aurora_meter_quota equal to AuroraMeter.quota/2`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a passing request I20 an allowed request assigns :aurora_meter_tenant with the term the resolver returned`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a passing request I20 a tenant term the host's AuroraMeter.Tenant module refuses propagates, not 503`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test a passing request I20 assign_quota: false skips the quota read and still assigns the tenant`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test the plug never reserves I20 usage is unchanged after a passing request`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test the plug never reserves I20 twelve passing requests at the cap boundary leave usage at its starting value`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test the undeclared-feature policy I20 an undeclared feature under :deny halts with 403 and :not_entitled`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test the undeclared-feature policy I20 an undeclared feature under :allow passes and assigns a quota with kind :undeclared`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test the undeclared-feature policy I20 an undeclared feature under :raise re-raises UndeclaredFeatureError rather than answering 503`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test modes I20 mode :entitled? passes at the hard cap because it never reads usage`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test modes I20 mode :entitled? reads no counter, and the same arming makes :check answer 503`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test failures the plug classifies I20 a storage failure during a cold counter seed halts with 503 and :unavailable`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test failures the plug classifies I20 InvalidPeriodError from a custom period source is re-raised, not turned into 503`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test failures the plug classifies I20 a resolver that raises propagates unchanged`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test init/1 I20 init/1 raises on an unknown option`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test init/1 I20 init/1 raises when :tenant is missing`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test init/1 I20 init/1 raises when :feature is a binary`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test init/1 I20 init/1 raises when :mode is not one of the two`
+- `AuroraMeter.Plug.EnsureEntitledTest` / `test init/1 I20 init/1 accepts a one-argument function and a {module, function} pair`
+- `AuroraMeter.RealtimeTest` / `test I20 the usage broadcast carries the tenant_key`
+- `AuroraMeter.RealtimeTest` / `test I20 a clause matching only the three 0.4.0 keys still matches`
+
+- Build unit 09a, the idiom that made two repair units chase a flake:
+- `AuroraMeter.ExportedIdiomTest` / `test I20 no guarded file asks function_exported?/3 without loading the module first`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 every allow-list entry still matches a real call site`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 the guard sees a bare call, and does not see a wrapped one`
 
 **Evidence.** `docs/evidence/v1/phase-08/i20.md`
 

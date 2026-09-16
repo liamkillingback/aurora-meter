@@ -179,7 +179,8 @@ defmodule AuroraMeter.Credits.Ledger do
   end
 
   @spec hold(String.t(), pos_integer(), String.t(), keyword()) ::
-          {:ok, CreditTransaction.t()} | {:error, :insufficient_credits | :duplicate_reference}
+          {:ok, CreditTransaction.t()}
+          | {:error, :insufficient_credits | :debt_outstanding | :duplicate_reference}
   def hold(tenant_key, amount, reference, opts) do
     transact(fn repo ->
       row = locked_row(repo, tenant_key)
@@ -248,7 +249,8 @@ defmodule AuroraMeter.Credits.Ledger do
   end
 
   @spec debit(String.t(), pos_integer(), String.t(), map(), keyword()) ::
-          {:ok, CreditTransaction.t()} | {:error, :insufficient_credits | :duplicate_reference}
+          {:ok, CreditTransaction.t()}
+          | {:error, :insufficient_credits | :debt_outstanding | :duplicate_reference}
   def debit(tenant_key, amount, reference, metadata, opts \\ []) do
     # `allow_negative` is for money that has already left the payment provider
     # — a refund, a chargeback. Refusing those for want of balance would only
@@ -275,8 +277,14 @@ defmodule AuroraMeter.Credits.Ledger do
           refuse(:duplicate_reference)
 
         lots?(row) ->
-          spend_with_lots(repo, row, amount, reference, Map.new(metadata), :debit, category,
-            allow_negative: allow_negative?
+          debit_with_lots(
+            repo,
+            row,
+            amount,
+            reference,
+            Map.new(metadata),
+            category,
+            allow_negative?
           )
 
         allow_negative? ->
@@ -307,6 +315,17 @@ defmodule AuroraMeter.Credits.Ledger do
     * every reader that used to recognise a reversal by `category` still does,
       because `category: :reversal` is kept. `Schema.CreditTransaction.reversal?/1`
       is the single predicate that knows both shapes.
+
+  ## On a cut-over wallet (repair unit R1)
+
+  It takes the credit back off the wallet's **non-promotional** lots, in spend
+  order, draining `available`, then `consumed`, then `reserved`, and writing
+  `reversed`. That is `reverse_lot/5`'s arithmetic with the payment filter
+  removed, not a second model: see `Allocator.plan/2`'s `{:reverse, :wallet,
+  ...}`.
+
+  Whatever those lots cannot give back becomes `debt`, so the call is still
+  never refused and the balance still falls by the full amount.
   """
   @spec reverse(String.t(), pos_integer(), String.t(), map(), keyword()) ::
           {:ok, CreditTransaction.t()} | {:error, :duplicate_reference}
@@ -321,9 +340,7 @@ defmodule AuroraMeter.Credits.Ledger do
           refuse(:duplicate_reference)
 
         lots?(row) ->
-          spend_with_lots(repo, row, amount, reference, Map.new(metadata), :reverse, :reversal,
-            allow_negative: true
-          )
+          reverse_with_lots(repo, row, amount, reference, Map.new(metadata))
 
         true ->
           apply_entry(repo, row, %{
@@ -1124,6 +1141,11 @@ defmodule AuroraMeter.Credits.Ledger do
   the two differences are deliberate: credit whose `expires_at` has passed is
   not spendable even though the sweep has not reached it yet, and a wallet that
   owes money cannot spend until the debt is repaid.
+
+  It goes through `Allocator.spendable_figure/2`, which is the planner's own
+  `debt > 0` refusal expressed as a number, so this figure and
+  `AuroraMeter.Credits.sufficient?/2` built on it cannot say a wallet may spend
+  something `hold/4` would refuse (repair unit R3, findings X357 and X361).
   """
   @spec spendable(String.t()) :: integer()
   def spendable(tenant_key) do
@@ -1144,10 +1166,29 @@ defmodule AuroraMeter.Credits.Ledger do
   aggregate over the wallet's eligible lots, so `balance/1` costs one extra
   round trip for a wallet that has lots and none for a wallet that has not.
 
-  `promotional_spendable` is not reduced by `debt`, and `spendable` is. They
-  cannot disagree in practice, because every incoming value repays debt out of
-  eligible availability first (LI-06a-5), so an outstanding debt implies no
-  eligible availability of any category and both figures are zero.
+  **Both figures answer the same question about the same planner: what a new
+  hold or debit would be allowed to take.** While `debt > 0` the answer is
+  nothing, because the `{:hold, ...}` and `{:debit, ...}` clauses refuse with
+  `:debt_outstanding` before they look at a lot, so both figures report that
+  and neither can be positive (repair unit R3, findings X357 and X361). They
+  come through `Allocator.spendable_figure/2` and
+  `Allocator.promotional_spendable_figure/2`, which are that refusal written as
+  a number and are the only implementation of it.
+
+  Until repair unit R2 the question could not arise: every incoming value
+  repaid debt out of eligible availability of any category, so an outstanding
+  debt implied no availability at all. R2 stops a debt being repaid out of
+  credit the wallet already holds when that credit is promotional (finding
+  X355), which is what `architecture-map.md` 7.2's promotional rule costs, and
+  it made this state ordinary. Between R2 and R3 a refunded wallet reported
+  `promotional_spendable: 4_000_000` and could spend none of it.
+
+  **What the wallet holds is a different question and is reported elsewhere,
+  unchanged.** `promotional` on the balance row is the promotional credit the
+  wallet still has and has not spent or let expire, and a promotion standing
+  beside a debt survives whole; `debt` says why none of it is spendable, and a
+  grant of any kind clears it. LI-06a-5 as amended: `debt > 0` implies no
+  **non-promotional** eligible availability.
   """
   @spec figures(CreditBalance.t()) :: %{
           spendable: integer(),
@@ -1170,7 +1211,10 @@ defmodule AuroraMeter.Credits.Ledger do
         [row.tenant_key, DateTime.truncate(Clock.db_now(), :second)]
       )
 
-    %{spendable: available - row.debt, promotional_spendable: promotional}
+    %{
+      spendable: Allocator.spendable_figure(available, row.debt),
+      promotional_spendable: Allocator.promotional_spendable_figure(promotional, row.debt)
+    }
   end
 
   # One aggregate rather than the whole book: this runs outside a transaction,
@@ -1191,7 +1235,7 @@ defmodule AuroraMeter.Credits.Ledger do
       )
       |> repo.one()
 
-    available - row.debt
+    Allocator.spendable_figure(available, row.debt)
   end
 
   @spec find(module(), String.t(), CreditTransaction.kind(), String.t()) ::
@@ -1400,21 +1444,19 @@ defmodule AuroraMeter.Credits.Ledger do
     end
   end
 
-  # One function for `:debit` and the **wallet-wide** `:reverse`, because on a
-  # cut-over wallet they take the same planner request: both drain eligible
-  # lots in spend order.
+  # A debit on a cut-over wallet: eligible lots in spend order, promotional
+  # first, which is what a spend is.
   #
-  # The source-scoped reversal is `reverse_lot/5`, which is a different request
-  # (`{:reverse, payment_intent_id, ...}`) and a different function. Both are
-  # public and the choice is the caller's: a host with payment provenance calls
-  # `Credits.reverse_lot/4` and gets the lots that payment funded; a host
-  # without it calls `Credits.reverse/4` and gets spend order, which takes
-  # promotional credit first. Finding X250 is why the cutover gate waited for
-  # the first of those to exist; it is not why the second still does.
-  defp spend_with_lots(repo, row, amount, reference, metadata, kind, category, opts) do
+  # **It plans a debit and it can no longer be handed anything else**
+  # (repair unit R1). Until R1 this function took `kind` and `category` as
+  # arguments and built a `{:debit, ...}` request whatever it had been handed,
+  # and `reverse/5` handed it `:reverse`. So a refund on a cut-over wallet was
+  # planned as a spend: it consumed promotional lots first and wrote nothing
+  # into `reversed` (finding X250). The kind is fixed here rather than passed,
+  # so the same mistake cannot be made again by a fourth caller.
+  defp debit_with_lots(repo, row, amount, reference, metadata, category, allow_negative?) do
     now = lot_instant()
     book = Allocator.book(repo, row.tenant_key)
-    allow_negative? = Keyword.fetch!(opts, :allow_negative)
 
     request =
       {:debit, amount, now, allow_negative?, Config.credits_overdraft_tolerance(), row.debt}
@@ -1428,12 +1470,44 @@ defmodule AuroraMeter.Credits.Ledger do
           repo,
           row,
           book,
-          %{kind: kind, category: category, reference: reference, metadata: metadata},
+          %{kind: :debit, category: category, reference: reference, metadata: metadata},
           plan,
           now,
-          kind
+          :debit
         )
     end
+  end
+
+  # The **wallet-wide** reversal on a cut-over wallet, and the sibling of
+  # `reverse_lot_locked/7` rather than a second model of what a refund is.
+  #
+  # It makes the same planner request with the same bucket order (`available`,
+  # then `consumed`, then `reserved`), the same exclusion of promotional lots
+  # and the same repayment of the debt it creates. One thing differs, and it is
+  # the target set: with no payment to scope by, every non-promotional lot in
+  # the wallet is a target, in spend order. `Allocator.plan/2`'s `{:reverse,
+  # :wallet, ...}` is where that is written down.
+  #
+  # It is never refused, which is `reverse/5`'s whole contract: the money has
+  # already left the payment provider, so what the wallet's paid lots cannot
+  # give back is recorded as `debt`, and `debt` is what a negative balance is
+  # made of on a lot wallet. A wallet holding nothing but promotional credit
+  # therefore takes the entire reversal as debt and keeps the promotion.
+  defp reverse_with_lots(repo, row, amount, reference, metadata) do
+    now = lot_instant()
+    book = Allocator.book(repo, row.tenant_key)
+
+    {:ok, plan} = Allocator.plan(book, {:reverse, :wallet, amount, now, row.debt})
+
+    write_lot_entry(
+      repo,
+      row,
+      book,
+      %{kind: :reverse, category: :reversal, reference: reference, metadata: metadata},
+      plan,
+      now,
+      :reverse
+    )
   end
 
   defp settle_with_lots(repo, row, hold, actual, reference, metadata) do

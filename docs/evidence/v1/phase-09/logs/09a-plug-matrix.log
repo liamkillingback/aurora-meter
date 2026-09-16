@@ -1,0 +1,17 @@
+# build unit 09a, core aurora_meter 0.5.0, branch aurorameter-v1
+# started UTC 2026-09-16T16:33:13Z
+# command: mix test test/aurora_meter/plug/ensure_entitled_test.exs --seed 0 (DB_PORT=5490, MIX_ENV=test)
+# core HEAD: 7d0264f
+
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plug/ensure_entitled_test.exs --seed 0
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+..........................
+Finished in 0.2 seconds (0.00s async, 0.2s sync)
+
+Result: 26 passed
+[mixlane] core exit=0 started=2026-09-16T16:33:13Z finished=2026-09-16T16:33:15Z
+
+# exit=0
+# finished UTC 2026-09-16T16:33:15Z

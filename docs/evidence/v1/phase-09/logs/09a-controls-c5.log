@@ -1,0 +1,16 @@
+=== baseline ===
+  lib/aurora_meter/live_view.ex                    sha256=e49a4fa3aaac77f20e1b6c3f4843510354f439800e173077d132cbffd0f9ddc8
+  all 1 anchors occur exactly once
+
+=== the control run: the tests must be GREEN before any patch ===
+  baseline run: CLEAN (rc=0) Result: 67 passed (1 doctest, 66 tests)
+
+=== c5-switch-tenant-leaks-old-topics (lib/aurora_meter/live_view.ex) ===
+  DIRTY  Result: 26/27 passed (1/1 doctest, 25/26 tests)
+  failed: 1 test(s)
+    - I20 switch_tenant unsubscribes the old topics and subscribes the new ones
+
+================ summary ================
+  c5-switch-tenant-leaks-old-topics        discriminated
+  1 of 1 discriminated
+[restore] all 1 targets back at their baseline digest

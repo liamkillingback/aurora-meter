@@ -17,15 +17,53 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
 
   defp headless?, do: System.get_env("AURORA_HEADLESS") == "1"
   defp no_metrics?, do: System.get_env("AURORA_NO_METRICS") == "1"
+  defp no_live_view?, do: System.get_env("AURORA_NO_LIVEVIEW") == "1"
+
+  # `Code.ensure_loaded?/1` first. `function_exported?/3` answers **false for a
+  # function that exists** when its module has not been loaded, and modules load
+  # on demand, so the bare form asks "has something already called into this
+  # module in this run", which is a question about the seed.
+  #
+  # On a `refute` it is worse than a flake, and that is why every call site in
+  # this file uses the helper: an unloaded module answers `false`, so the
+  # refutation passes whether or not the function is there, and the absence the
+  # leg exists to prove is never actually tested.
+  #
+  # The comment in `I20 the installer prints steps instead of raising without
+  # Igniter` below has recorded this since build unit 03b. Build unit 09a wrote
+  # the bare form anyway, in three places in this file and one in
+  # `doc_examples_test.exs`, which is X153: a rule nothing enforces is one
+  # already being broken. `AuroraMeter.ExportedIdiomTest` enforces it now.
+  defp exported?(module, fun, arity) do
+    Code.ensure_loaded?(module) and function_exported?(module, fun, arity)
+  end
 
   test "I20 the optional integrations are present exactly when they were not switched off" do
-    # The four that only `AURORA_HEADLESS` removes.
-    for module <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban] do
+    # The two that only `AURORA_HEADLESS` removes.
+    for module <- [Igniter, Oban] do
       assert Code.ensure_loaded?(module) == not headless?(),
              "#{inspect(module)} loaded?=#{Code.ensure_loaded?(module)} with " <>
                "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))}. " <>
                "The headless CI leg removes the optional dependencies in mix.exs; " <>
                "every other leg keeps them."
+    end
+
+    # `plug` is removed by `AURORA_HEADLESS` and by nothing else: it is
+    # deliberately NOT removed with the LiveView pair, because the
+    # `AURORA_NO_LIVEVIEW` leg exists precisely to be a build that has Plug and
+    # no LiveView (build unit 09a).
+    assert Code.ensure_loaded?(Plug.Conn) == not headless?(),
+           "Plug.Conn loaded?=#{Code.ensure_loaded?(Plug.Conn)} with " <>
+             "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))}"
+
+    # The LiveView pair has a switch of its own as well (X337's shape: a test
+    # that reads one environment variable is a test about one leg, and a second
+    # switch makes it wrong in whichever direction the build happens to be).
+    for module <- [Phoenix.Component, Phoenix.HTML] do
+      assert Code.ensure_loaded?(module) == not (headless?() or no_live_view?()),
+             "#{inspect(module)} loaded?=#{Code.ensure_loaded?(module)} with " <>
+               "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))} and " <>
+               "AURORA_NO_LIVEVIEW=#{inspect(System.get_env("AURORA_NO_LIVEVIEW"))}"
     end
 
     # `telemetry_metrics` has a narrow switch of its own (`open-findings.md`
@@ -38,6 +76,74 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
            "Telemetry.Metrics loaded?=#{Code.ensure_loaded?(Telemetry.Metrics)} with " <>
              "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))} and " <>
              "AURORA_NO_METRICS=#{inspect(System.get_env("AURORA_NO_METRICS"))}"
+  end
+
+  test "I20 AuroraMeter.Plug.EnsureEntitled is compiled exactly when Plug.Conn is available" do
+    # lib/aurora_meter/plug/ensure_entitled.ex opens with
+    # `if Code.ensure_loaded?(Plug.Conn) do`, the same shape components.ex uses.
+    #
+    # Written as an equality rather than as a `refute` on the headless leg, so
+    # it is non-vacuous on every leg: on an ordinary build it is the positive
+    # control (both true), and the day the module stops compiling for some
+    # unrelated reason this fails everywhere instead of passing quietly on the
+    # one leg that only ever asserts an absence.
+    assert Code.ensure_loaded?(AuroraMeter.Plug.EnsureEntitled) ==
+             Code.ensure_loaded?(Plug.Conn)
+
+    if Code.ensure_loaded?(Plug.Conn) do
+      assert exported?(AuroraMeter.Plug.EnsureEntitled, :init, 1)
+      assert exported?(AuroraMeter.Plug.EnsureEntitled, :call, 2)
+    end
+  end
+
+  test "I20 AURORA_NO_LIVEVIEW removes the LiveView pair and the dashboard, and nothing else" do
+    # The narrow-switch rule (X327, X331). This one has to remove
+    # `phoenix_live_dashboard` as well, because the dashboard declares
+    # `phoenix_live_view` as REQUIRED and leaving it would pull LiveView back in
+    # through the other declaration. `plug` must SURVIVE: that is the whole
+    # point of the leg.
+    if no_live_view?() do
+      refute Code.ensure_loaded?(Phoenix.Component)
+      refute Code.ensure_loaded?(Phoenix.LiveView)
+      refute Code.ensure_loaded?(Phoenix.HTML)
+      refute Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+      refute Code.ensure_loaded?(AuroraMeter.Components)
+      refute Code.ensure_loaded?(AuroraMeter.LiveDashboard.Page)
+
+      for still_here <- [Plug.Conn, Igniter, Oban, Telemetry.Metrics] do
+        assert Code.ensure_loaded?(still_here),
+               "AURORA_NO_LIVEVIEW removed #{inspect(still_here)}, which is not what it is " <>
+                 "for. The leg exists to be a host with Plug and no LiveView; a leg that " <>
+                 "also removed Plug would say nothing about the plug (X327)."
+      end
+
+      # And the half of AuroraMeter.LiveView that needs no LiveView still
+      # WORKS, not merely exists. `test/aurora_meter/live_view_test.exs` is
+      # guarded on `Phoenix.LiveView` and does not compile on this leg, so
+      # without these four lines the leg would assert an export and nothing
+      # about behaviour.
+      tenant = "plugonly_#{System.unique_integer([:positive])}"
+
+      assert :ok = AuroraMeter.LiveView.subscribe(tenant)
+      assert AuroraMeter.LiveView.topics(tenant) == [usage: AuroraMeter.Broadcaster.topic(tenant)]
+      assert :ok = AuroraMeter.LiveView.subscribe(tenant, topics: [:usage, :credits])
+      assert :ok = AuroraMeter.LiveView.unsubscribe(tenant, topics: [:usage, :credits])
+
+      # `exported?/3`, never bare `function_exported?/3`. On a `refute` the bare
+      # form is worse than a flake: an unloaded module answers `false` and the
+      # refutation passes for a reason that has nothing to do with the leg. It
+      # would have passed here even with the four functions compiled.
+      refute exported?(AuroraMeter.LiveView, :on_mount, 4)
+      refute exported?(AuroraMeter.LiveView, :switch_tenant, 2)
+      refute exported?(AuroraMeter.LiveView, :handle_usage, 2)
+    else
+      # X337 once more, and this one was caught by running the headless leg
+      # rather than by reasoning: `AURORA_HEADLESS` removes the LiveView pair
+      # too, so a bare `assert Code.ensure_loaded?(Phoenix.Component)` here
+      # makes this test fail on the headless leg, where its `if` branch does not
+      # run and its `else` branch is wrong.
+      assert Code.ensure_loaded?(Phoenix.Component) == not headless?()
+    end
   end
 
   test "I20 AuroraMeter.Components is compiled exactly when Phoenix.Component is available" do
@@ -103,7 +209,16 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
                  "configuration nobody can be in (open-findings.md X327)."
       end
     else
-      assert Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+      # X337 again, two switches later: AURORA_NO_LIVEVIEW removes the dashboard
+      # too (it declares phoenix_live_view as required) and so does
+      # AURORA_HEADLESS, so this else branch has to name every switch that
+      # reaches the dashboard rather than assert it is always there. Without the
+      # AURORA_NO_LIVEVIEW clause the plug_only leg could never have passed this
+      # file; without the AURORA_HEADLESS clause the headless leg could not,
+      # which is exactly the defect X337 records against the telemetry_metrics
+      # clause and which this line had reintroduced.
+      assert Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder) ==
+               not (no_live_view?() or headless?())
     end
   end
 
@@ -144,11 +259,19 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
       assert length(Bridge.default_events()) == 6
       assert [:aurora_meter, :track] in Bridge.never_by_default()
     else
-      assert Code.ensure_loaded?(:otel_tracer)
-      assert Code.ensure_loaded?(AuroraMeter.OpenTelemetry)
-      assert function_exported?(AuroraMeter.OpenTelemetry, :attach, 1)
-      assert function_exported?(AuroraMeter.OpenTelemetry, :detach, 0)
-      assert function_exported?(AuroraMeter.OpenTelemetry, :detach, 1)
+      # X337's shape, found by build unit 09a's headless run and NOT introduced
+      # by it: `AURORA_HEADLESS` removes the OpenTelemetry pair as well, so this
+      # branch asserted the presence of something the headless leg had correctly
+      # removed, and the headless leg has been red on this test since 08b landed
+      # it. The leg is not part of `mix check`, so nothing said so (X246).
+      assert Code.ensure_loaded?(:otel_tracer) == not headless?()
+      assert Code.ensure_loaded?(AuroraMeter.OpenTelemetry) == not headless?()
+
+      unless headless?() do
+        assert function_exported?(AuroraMeter.OpenTelemetry, :attach, 1)
+        assert function_exported?(AuroraMeter.OpenTelemetry, :detach, 0)
+        assert function_exported?(AuroraMeter.OpenTelemetry, :detach, 1)
+      end
     end
   end
 
@@ -250,6 +373,44 @@ defmodule AuroraMeter.HeadlessTest do
     refute Code.ensure_loaded?(AuroraMeter.Components)
   end
 
+  test "I20 AuroraMeter.Plug.EnsureEntitled is not compiled without Plug" do
+    refute Code.ensure_loaded?(Plug.Conn)
+    refute Code.ensure_loaded?(AuroraMeter.Plug.EnsureEntitled)
+
+    # `plug` was already in an ordinary build before build unit 09a declared it,
+    # dragged in by phoenix -> phoenix_live_view (X331's shape). This asserts
+    # the absence on the leg that removes the lot, so the guard is a fact about
+    # the resolved tree rather than about which dependency happened to carry it.
+    refute Enum.any?(Application.loaded_applications(), &(elem(&1, 0) == :plug))
+  end
+
+  test "I20 AuroraMeter.LiveView.subscribe/1 works with no Phoenix.LiveView loaded" do
+    refute Code.ensure_loaded?(Phoenix.LiveView)
+
+    # The half of the module that needs no LiveView is still here and still
+    # does what 0.4.0 did, which is the whole claim D03 makes about Phoenix DX:
+    # a headless host loses the socket helpers, not the subscription.
+    tenant = unique_tenant("headless")
+
+    assert :ok = AuroraMeter.LiveView.subscribe(tenant)
+    assert AuroraMeter.LiveView.topics(tenant) == [usage: AuroraMeter.Broadcaster.topic(tenant)]
+
+    :ok = AuroraMeter.track(tenant, :ai_generations, 2)
+    :ok = AuroraMeter.Test.broadcast!()
+    assert_receive {:aurora_meter, :usage, %{tenant_key: ^tenant, value: 2}}
+
+    assert :ok = AuroraMeter.LiveView.unsubscribe(tenant)
+
+    # And the socket helpers are genuinely absent rather than merely unused.
+    # `exported?/3` rather than bare `function_exported?/3`: an unloaded module
+    # answers `false` too, and this leg is the one place the absence is the
+    # whole claim, so a refutation that cannot tell "absent" from "not yet
+    # loaded" is asserting nothing.
+    refute exported?(AuroraMeter.LiveView, :on_mount, 4)
+    refute exported?(AuroraMeter.LiveView, :switch_tenant, 2)
+    refute exported?(AuroraMeter.LiveView, :handle_usage, 2)
+  end
+
   test "I20 the AuroraMeter.Oban namespace is absent without Oban" do
     refute Code.ensure_loaded?(Oban)
     refute Code.ensure_loaded?(AuroraMeter.Oban)
@@ -314,5 +475,14 @@ defmodule AuroraMeter.HeadlessTest do
 
     assert is_integer(Migration.latest_version())
     assert Migration.latest_version() >= 1
+  end
+
+  # See the identical helper in `AuroraMeter.OptionalIntegrationsTest` above for
+  # why the bare `function_exported?/3` is never used here. It matters most in
+  # this module: every assertion in it is an absence, and an unloaded module
+  # answers `false` to `function_exported?/3` whether or not the function exists,
+  # so the bare form would let this whole leg pass without proving anything.
+  defp exported?(module, fun, arity) do
+    Code.ensure_loaded?(module) and function_exported?(module, fun, arity)
   end
 end

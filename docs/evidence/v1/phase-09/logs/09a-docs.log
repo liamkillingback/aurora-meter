@@ -1,0 +1,7 @@
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 mix docs --warnings-as-errors --output 
+Compiling 2 files (.ex)
+Generating docs...
+View html docs at "index.html"
+[mixlane] core exit=0 started=2026-09-16T16:31:43Z finished=2026-09-16T16:31:45Z

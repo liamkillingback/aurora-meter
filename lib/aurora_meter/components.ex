@@ -8,7 +8,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     and `aurora-credit-summary__*` classes) so they inherit your app's look; the
     Pro dashboard ships a styled version. Nothing here declares a colour: the
     charts paint with `currentColor`, so they take the text colour your design
-    system already set. There is no JavaScript — the chart is inline SVG and the
+    system already set. There is no JavaScript: the chart is inline SVG and the
     tooltips are `<title>` elements. Pair with `AuroraMeter.LiveView.subscribe/1`
     for live usage updates.
 
@@ -31,7 +31,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @chart_width 1_000
 
     # A zero-spend bucket still draws this many units, so a quiet day reads as
-    # "nothing happened" rather than "no data" — the hole a naive chart leaves.
+    # "nothing happened" rather than "no data", which is the hole a naive chart
+    # leaves.
     @baseline_height 1
 
     # Room at the top of the plot for the grant markers.
@@ -43,7 +44,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     Hard caps show `used / limit`; metered features show `used / included` and
     flag overage; counters show the bare count with no bar (they have no
-    denominator — ADR 0006); boolean features show whether they are enabled;
+    denominator, ADR 0006); boolean features show whether they are enabled;
     integer features show their plan value.
     """
     attr(:tenant, :any, required: true)
@@ -201,7 +202,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     description list.
 
     Held, promotional and granted figures only appear when they are non-zero.
-    `daily_burn` and `runway_days` render as `"—"` when they are `nil` — there is
+    `daily_burn` and `runway_days` render as `"not yet"` when they are `nil`. There is
     no honest number to show for a tenant that has not spent anything, and this
     component will not invent one.
 
@@ -261,11 +262,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # micro-dollars), and `format/2`'s two decimals would render an honest burn
     # as "$0.00". `format_compact/1` keeps it non-zero and still shows dollars.
     @spec burn_text(non_neg_integer() | nil) :: String.t()
-    defp burn_text(nil), do: "—"
+    defp burn_text(nil), do: "not yet"
     defp burn_text(micro), do: Money.format_compact(micro) <> " / day"
 
     @spec runway_text(non_neg_integer() | nil) :: String.t()
-    defp runway_text(nil), do: "—"
+    defp runway_text(nil), do: "not yet"
     defp runway_text(1), do: "1 day"
     defp runway_text(days), do: "#{days} days"
 
@@ -319,7 +320,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec range_text([map()]) :: String.t()
     defp range_text([]), do: ""
     defp range_text([only]), do: "#{only.date}"
-    defp range_text(points), do: "#{hd(points).date} – #{List.last(points).date}"
+    defp range_text(points), do: "#{hd(points).date} to #{List.last(points).date}"
 
     @spec coord(number()) :: String.t()
     defp coord(value), do: :erlang.float_to_binary(value / 1, decimals: 2)

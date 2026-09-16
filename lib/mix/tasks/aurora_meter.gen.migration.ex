@@ -43,7 +43,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
 
   import Mix.Generator
 
-  alias AuroraMeter.Migration
+  alias AuroraMeter.Install.Plan
 
   @switches [from: :integer]
 
@@ -85,92 +85,14 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
     end)
   end
 
-  # A fresh install is one file: there are no rows, so the concurrent version
-  # can build its index inside the transaction like any other statement.
-  defp files(nil) do
-    latest = Migration.latest_version()
-
-    [
-      %{
-        suffix: "add_aurora_meter",
-        module_suffix: "AddAuroraMeter",
-        up: "AuroraMeter.Migration.up(from: 1, version: #{latest}, concurrently: false)",
-        down: "AuroraMeter.Migration.down(version: #{latest}, to: 1, confirm_data_loss: true)",
-        attributes: []
-      }
-    ]
-  end
-
+  # Both the list of files and their bodies come from
+  # `AuroraMeter.Install.Plan`, which `mix aurora_meter.install` reads too, so
+  # the two supported ways of installing this package cannot produce two
+  # different migrations (`open-findings.md` S1).
   defp files(from) do
-    latest = Migration.latest_version()
+    if from, do: Plan.validate_from!(:core, from)
 
-    if from > latest do
-      Mix.raise(
-        "--from #{from} is above the latest Aurora Meter schema version (#{latest}). " <>
-          "Nothing to generate."
-      )
-    end
-
-    from..latest//1
-    |> Enum.to_list()
-    |> chunk()
-    |> Enum.map(&file/1)
-  end
-
-  # Contiguous ordinary versions travel together; each concurrent version
-  # travels alone.
-  defp chunk(versions) do
-    concurrent = Migration.concurrent_versions()
-
-    versions
-    |> Enum.chunk_by(&(&1 in concurrent))
-    |> Enum.flat_map(fn [head | _] = group ->
-      if head in concurrent, do: Enum.map(group, &[&1]), else: [group]
-    end)
-  end
-
-  defp file(group) do
-    first = List.first(group)
-    last = List.last(group)
-    concurrent? = first in Migration.concurrent_versions()
-    loss? = Enum.any?(group, &(&1 in Migration.data_loss_versions()))
-
-    %{
-      suffix: suffix(first, last, concurrent?),
-      module_suffix: module_suffix(first, last, concurrent?),
-      up: "AuroraMeter.Migration.up(from: #{first}, version: #{last})",
-      down: down(first, last, loss?),
-      attributes: attributes(concurrent?)
-    }
-  end
-
-  defp suffix(version, version, true), do: "upgrade_aurora_meter_v#{version}_concurrent"
-  defp suffix(version, version, false), do: "upgrade_aurora_meter_v#{version}"
-  defp suffix(first, last, false), do: "upgrade_aurora_meter_v#{first}_to_v#{last}"
-
-  defp module_suffix(version, version, true), do: "UpgradeAuroraMeterV#{version}Concurrent"
-  defp module_suffix(version, version, false), do: "UpgradeAuroraMeterV#{version}"
-  defp module_suffix(first, last, false), do: "UpgradeAuroraMeterV#{first}ToV#{last}"
-
-  defp down(first, last, true),
-    do: "AuroraMeter.Migration.down(version: #{last}, to: #{first}, confirm_data_loss: true)"
-
-  defp down(first, last, false),
-    do: "AuroraMeter.Migration.down(version: #{last}, to: #{first})"
-
-  defp attributes(false), do: ""
-
-  defp attributes(true) do
-    """
-
-      # This version creates a unique index CONCURRENTLY, which Postgres refuses
-      # inside a transaction block and which cannot hold the Ecto migration lock
-      # either. Both attributes are required; without them
-      # AuroraMeter.Migration.up/1 raises rather than fail halfway through.
-      @disable_ddl_transaction true
-      @disable_migration_lock true
-    """
-    |> String.trim_trailing("\n")
+    Plan.files(package: :core, from: from)
   end
 
   # One second apart per file, so several generated files keep the order the

@@ -75,6 +75,7 @@ jobs:
             otp: "25.3.2.21"
             unlock: "yes"
             headless: "no"
+            no_liveview: "no"
             liveview: ""
             audits: "yes"
             suites: "yes"
@@ -90,6 +91,7 @@ jobs:
             otp: "27.3.4.17"
             unlock: "yes"
             headless: "no"
+            no_liveview: "no"
             liveview: ""
             audits: "yes"
             suites: "yes"
@@ -105,6 +107,7 @@ jobs:
             otp: "29.0.6"
             unlock: "yes"
             headless: "no"
+            no_liveview: "no"
             liveview: ""
             audits: "yes"
             suites: "yes"
@@ -121,6 +124,7 @@ jobs:
             elixir: "1.18.5"
             otp: "27.3.4.17"
             headless: "yes"
+            no_liveview: "no"
             unlock: "no"
             liveview: ""
             audits: "no"
@@ -130,15 +134,29 @@ jobs:
             docs: "no"
             package: "no"
             experimental: "no"
-          # The two halves of the declared LiveView range. These legs resolve a
-          # different dependency set from the same requirements, into their own
-          # lock file, so mix.lock is never rewritten.
-          - leg: liveview-1.0
+          # Invariant I20 from the other side: a host that HAS plug and has no
+          # LiveView. That is a real deployment (an API-only Phoenix
+          # application mounting AuroraMeter.Plug.EnsureEntitled), and until
+          # AURORA_NO_LIVEVIEW existed the only leg without LiveView was
+          # `headless`, which removes plug with everything else and therefore
+          # says nothing about the plug. phoenix_live_view declares plug as a
+          # REQUIRED dependency, so without a switch of its own plug is present
+          # on every leg by coincidence rather than by declaration
+          # (open-findings.md X331).
+          #
+          # Plain `mix test`, not `--include headless`: the absence tests are
+          # tagged :headless and their setup refuses to run without
+          # AURORA_HEADLESS=1, so including them here would fail the leg for a
+          # reason that has nothing to do with the plug. Switch added by 09a,
+          # leg definition verified locally by 09a and 09b, entry added by 09b,
+          # which owns the matrix.
+          - leg: plug_only
             elixir: "1.18.5"
             otp: "27.3.4.17"
-            liveview: "1.0"
-            unlock: "no"
+            no_liveview: "yes"
             headless: "no"
+            liveview: ""
+            unlock: "no"
             audits: "no"
             suites: "no"
             dialyzer: "no"
@@ -146,31 +164,38 @@ jobs:
             docs: "no"
             package: "no"
             experimental: "no"
-          # EXPECTED TO FAIL, and non-blocking for exactly one merge.
-          # open-findings.md C9: lib/aurora_meter/components.ex uses LiveView 1.0
-          # body interpolation, which is literal text in 0.20, while mix.exs
-          # claims "~> 0.20 or ~> 1.0". This leg is the evidence build unit 09b
-          # uses to decide whether to widen the component syntax or drop the
-          # "~> 0.20" clause. When 09b decides, this entry goes away with it.
-          - leg: liveview-0.20
+          # The declared LiveView major. This leg resolves a different
+          # dependency set from the same requirements, into its own lock file,
+          # so mix.lock is never rewritten.
+          #
+          # There was a liveview-0.20 leg here too, non-blocking, carrying the
+          # evidence for open-findings.md C9. Build unit 09b took the decision
+          # it was there to inform: the requirement is now "~> 1.0", so a 0.20
+          # leg would resolve a version this package no longer claims and prove
+          # nothing about a host anybody can be. Its capture is kept in
+          # docs/evidence/v1/phase-01/ci.md section 8.4 and the decision record
+          # in docs/evidence/v1/phase-09/09b-components-liveview.md.
+          - leg: liveview-1.0
             elixir: "1.18.5"
             otp: "27.3.4.17"
-            liveview: "0.20"
+            liveview: "1.0"
             unlock: "no"
             headless: "no"
+            no_liveview: "no"
             audits: "no"
             suites: "no"
             dialyzer: "no"
             coverage: "no"
             docs: "no"
             package: "no"
-            experimental: "yes"
+            experimental: "no"
     env:
       MIX_ENV: test
       # config/config.exs:24 reads DB_PORT (the earlier comment here named
       # config/test.exs, which does not exist in this repository).
       DB_PORT: "5432"
       AURORA_HEADLESS: ${{ matrix.headless == 'yes' && '1' || '' }}
+      AURORA_NO_LIVEVIEW: ${{ matrix.no_liveview == 'yes' && '1' || '' }}
       AURORA_LIVEVIEW: ${{ matrix.liveview || '' }}
     services:
       postgres:
@@ -235,7 +260,7 @@ jobs:
       - name: Show the resolved optional dependencies
         run: |
           set -euo pipefail
-          echo "AURORA_HEADLESS=${AURORA_HEADLESS:-<unset>} AURORA_LIVEVIEW=${AURORA_LIVEVIEW:-<unset>}"
+          echo "AURORA_HEADLESS=${AURORA_HEADLESS:-<unset>} AURORA_NO_LIVEVIEW=${AURORA_NO_LIVEVIEW:-<unset>} AURORA_LIVEVIEW=${AURORA_LIVEVIEW:-<unset>}"
           mix deps | grep -E 'phoenix_live_view|phoenix_html|igniter|oban' || echo "no optional integration is present on this leg"
 
       - name: Check formatting

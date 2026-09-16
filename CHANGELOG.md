@@ -257,6 +257,35 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
   `:allow_partial` (default `false`, which refuses above the cap and writes
   nothing). `reverse/4` stays wallet wide for a host with no payment provenance
   and the documentation says which to use. See [Credits](credits.md).
+- **`AuroraMeter.Credits.reverse/4` takes the lot path on a wallet the allocator
+  owns.** It reverses the wallet's **non-promotional** lots in spend order,
+  `available` first, then `consumed` (which raises `debt`), then `reserved`,
+  writing `reversed` on every lot it touches, and records as `debt` whatever
+  those lots cannot give back, so it is still never refused. Before this it was
+  planned as a debit: a refund on a cut-over wallet drained lots in spend order,
+  which takes **promotional credit first**, destroyed the customer's promotion,
+  left the paid credit that funded the purchase in the wallet and wrote nothing
+  into `reversed`. `reverse_lot/4` remains the right call where the payment is
+  known, because only it is capped by that payment's own lots.
+- **A debt is never repaid out of promotional credit the wallet already holds.**
+  The refund pair above may not take a promotion for a paid refund, and until
+  this change that rule held for the refund's own transaction and no longer: the
+  refund correctly left a `debt` rather than taking the promotion, and then the
+  next `release` or `settle` repaid that debt in spend order, which takes
+  promotional credit first. The customer's promotion paid for their refund one
+  ordinary event later, leaving an allocation row that said `consume` like any
+  spend. There is now one repayment path for every operation and it takes only
+  non-promotional availability.
+
+  **Two consequences worth reading before you upgrade.** A wallet can now hold
+  promotional credit and owe money at the same time, and while it owes money it
+  can spend neither: `balance/1` reports a positive `promotional` beside a
+  positive `debt` and every hold and debit is refused. The way out is a grant of
+  any kind, because the repayment a grant makes comes out of the lot it is
+  creating, whatever its category. A promotion left standing beside a debt until
+  its `expires_at` is destroyed by the expiry sweep like any other unspent
+  promotion, so a host that grants promotional credit to wallets that may be in
+  debt should watch `debt` on the balance row. See [Credits](credits.md).
 - `AuroraMeter.Credits.history/2` takes `:reference_prefix`, for a host that
   mints references in namespaces of its own and needs to total one of them. It
   filters the ledger's **reference namespace**, which is the host's naming, and
@@ -267,8 +296,10 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
   refund path existed, because turning a wallet on without one would have
   exposed it to a refund that consumed promotional credit. `reverse_lot/4` is
   that path, so the check answers `nil` and `mix aurora_meter.credits.migrate_lots
-  --no-shadow` will cut a wallet over. A host that takes refunds must route them
-  through `reverse_lot/4` before it does.
+  --no-shadow` will cut a wallet over. **Both refund calls are lot aware in this
+  release**, so a host that cannot supply a payment id is safe on `reverse/4`
+  too; `reverse_lot/4` is still the one to use where the payment is known,
+  because only it is capped by that payment's own lots.
 - **Recurring credit allowances, capped rollover and downtime catch-up.** A plan
   declares the policy with `AuroraMeter.Plans.recurring_credits/2` (`:amount`,
   `:category`, `:rollover`, `:expires`) and
@@ -489,6 +520,54 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Changed
 
+- **BREAKING: the optional `phoenix_live_view` requirement is now `~> 1.0`.**
+  It was `~> 0.20 or ~> 1.0`.
+
+  **This is breaking at resolution.** If your application has
+  `phoenix_live_view` in its dependencies and it resolves to 0.19 or 0.20, your
+  next `mix deps.get` will **refuse** where it previously succeeded, with a Hex
+  dependency resolution conflict. Nothing installs, nothing compiles, and you
+  see it immediately.
+
+  ```elixir
+  # your mix.exs, before: this resolved
+  {:phoenix_live_view, "~> 0.20"},
+  {:aurora_meter, "~> 0.4"}
+
+  # after: this does not
+  {:phoenix_live_view, "~> 0.20"},
+  {:aurora_meter, "~> 1.0"}
+  ```
+
+  **What to do**, and the second door costs almost nothing:
+
+    1. **Upgrade LiveView to 1.0.** Phoenix's own migration guide covers it, and
+       Aurora Meter needs nothing from you in the process.
+    2. **Remove the optional dependency**, if Aurora Meter was the only thing
+       that wanted it. You lose `AuroraMeter.Components` and
+       `AuroraMeter.LiveDashboard.Page`, and you keep the facade, the credit
+       ledger, the plans DSL, the migrations, telemetry, the Oban workers and
+       `AuroraMeter.LiveView.subscribe/1`, which is deliberately outside the
+       compile guard. A build with no LiveView present runs 1900 of this
+       package's tests.
+
+  **Why it is right, which is not the same as it being invisible.** Every
+  component and dashboard template in this package is written in LiveView 1.0's
+  curly body interpolation, and in 0.20 a `{...}` in an element body is not an
+  interpolation: it renders as the literal characters. 172 of them across four
+  files in the two packages, counted rather than estimated. So a 0.20 host
+  compiled this package without an error and shipped a page reading `{@label}`
+  to its own customers. The wider requirement was a claim that had never worked,
+  and removing it is why `mix deps.get` now refuses rather than installing
+  something broken.
+
+  If you do not have `phoenix_live_view` in your dependencies at all, nothing
+  here affects you.
+
+  `mix aurora_meter.install --check-support` now prints the floor for every
+  dependency, required and optional, and **exits non-zero** when something
+  present is below one or is installed without its integration compiled.
+
 - **`attribution` gains the value `"plan_unresolved"`, and grades the plan as
   well as the period.** An event whose period resolved but whose plan did not
   (the tenant has no subscription, or none that covers `occurred_at`, or the row
@@ -624,6 +703,39 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
   adapters nobody has reviewed.
 
 ### Fixed
+
+- **A wallet that owes money no longer reports credit it will refuse to spend,
+  and the refusal says why.** After a refund or a settlement above its hold, a
+  wallet holding a promotion can owe money and hold visible credit at the same
+  time: the promotion survives, because a promotion is never consumed to repay
+  a debt. `balance/1` and `summary/1` went on reporting that credit as
+  `spendable` and `promotional_spendable` while `hold/4` and `debit/4` refused
+  every amount, so a host reading the figures told the customer one thing and
+  the next call did another.
+
+  Both figures now report what the ledger will actually accept, which is
+  nothing while `debt` is outstanding. `spendable` is still not floored at
+  zero: where the debt exceeds what is left it stays negative, because the
+  depth of the shortfall is real. `available`, `balance`, `promotional`, `held`
+  and `expired` are unchanged and still report what the wallet holds or owes;
+  they are not claims about spending.
+
+  **`hold/4`, `debit/4` and `with_credits/4` refuse with the new
+  `{:error, :debt_outstanding}`** when the wallet owes money, instead of
+  `{:error, :insufficient_credits}`, which is the same word the ledger uses for
+  a wallet that was never funded. The two need different answers to a customer:
+  one is "top this up" and the other is "this is frozen until a grant clears
+  the debt, whatever it is holding".
+
+  **Upgrade note.** The new term is returned only on a wallet that has been cut
+  over to credit lots, which needs schema version 9 and
+  `mix aurora_meter.credits.migrate_lots`; no published version can produce
+  one, and a legacy wallet goes on refusing with `:insufficient_credits`
+  including when its balance is negative. A caller that matches
+  `{:error, :insufficient_credits}` should add `{:error, :debt_outstanding}`
+  before cutting its first wallet over. The whole state, what puts a wallet
+  there, what the figures read and what clears it (a grant of any category,
+  and nothing else) is under "Debt" in `docs/credits.md`.
 
 - **`plan_effective_at` is stamped by the database, not by the node that wrote
   the row.** A fresh `AuroraMeter.subscribe/3` used to take

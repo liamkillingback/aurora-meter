@@ -62,12 +62,15 @@ defmodule AuroraMeter.Credits.LotMigration do
   default: `allow_cutover: true` has to be asked for explicitly on every run
   that writes.
 
-  **What a host owes before cutting a wallet over is now its own refund
-  path**, not this module. A wallet on the allocator must take refunds through
-  `reverse_lot/4` with the payment's `source`; one that keeps calling
-  `reverse/4` on a cut-over wallet gets a wallet-wide reversal in spend order,
-  which is the hazard above with the gate removed rather than the hazard
-  fixed.
+  **Both refund paths are lot aware from repair unit R1**, and that is the
+  correction this paragraph used to need. Opening the gate on `reverse_lot/4`
+  alone left `reverse/4` planning a reversal as a debit, so a host that had no
+  payment provenance, or an `aurora_meter_pro` fallback that could not match
+  one, still took promotional credit first. `reverse/4` now takes the wallet's
+  non-promotional lots in spend order and writes `reversed`, so a cut-over
+  wallet is safe on either call. `reverse_lot/4` remains the right one to use
+  where the payment is known, because only it is capped by that payment's own
+  lots.
 
   ## Ordering
 
@@ -264,6 +267,16 @@ defmodule AuroraMeter.Credits.LotMigration do
   path shipped in build unit 06e and nothing else could have opened it. It
   answers `nil` from that release on, and the clause below is kept so a node
   running an older core still refuses rather than silently cutting wallets over.
+
+  **What the probe cannot tell you**, and it is worth saying rather than
+  leaving for someone to discover: `AuroraMeter.Credits` and this module ship in
+  one package, so within a release the probe can only report that release's own
+  state. It was written to order two build units during development, not to
+  version-check a deployment, and a core that carried `reverse_lot/4` without
+  repair unit R1's wallet-wide fix would have answered `nil` while
+  `AuroraMeter.Credits.reverse/4` was still planning a refund as a debit. No
+  such core was ever published: 06e and R1 are both unreleased at the time of
+  writing, so `reverse_lot/4` and the lot-aware `reverse/4` reach Hex together.
   """
   @spec cutover_blocked() :: %{finding: String.t(), reason: String.t()} | nil
   def cutover_blocked do

@@ -93,6 +93,41 @@ for a pair that is not tested.
   on 15.6.
 - A lane builds and tests with none of the optional dependencies present, so
   "optional" means optional.
+- Optional `phoenix_live_view` is `~> 1.0`, and `~> 1.0` only.
+
+### Phoenix LiveView 1.0, when LiveView is present at all
+
+Aurora Meter 1.0 requires `phoenix_live_view ~> 1.0` **when the optional
+dependency is present**. A host with no LiveView is unaffected: nothing outside
+`AuroraMeter.Components` and the LiveDashboard page needs it, and
+`AuroraMeter.LiveView.subscribe/1` deliberately sits outside the guard so a
+headless host keeps the subscription.
+
+0.4.0 declared `~> 0.20 or ~> 1.0`, and the 0.20 half of that was never true.
+Every component and dashboard template is written in LiveView 1.0's curly body
+interpolation, and in 0.20 a `{...}` in an element body is not an interpolation:
+it is literal text. A 0.20 host compiled this package without an error and
+rendered `{@label}` to its own customers. Narrowing the requirement replaces a
+claim that never worked with one that does, which is why it is a breaking change
+in a major release rather than a bug fix.
+
+If you are on LiveView 0.20, there are two routes and the second costs almost
+nothing:
+
+1. **Upgrade LiveView to 1.0.** Phoenix's own migration guide covers it. Aurora
+   Meter needs nothing from you in the process.
+2. **Drop the optional dependency.** Remove `phoenix_live_view` from your
+   `mix.exs` if Aurora Meter is the only thing that wanted it. You lose
+   `AuroraMeter.Components` and the LiveDashboard page, and keep the facade, the
+   credit ledger, the plans DSL, the migrations, telemetry, the Oban workers and
+   the PubSub subscription.
+
+Hex applies an optional requirement when the dependency **is** present, so a
+0.20 host that keeps LiveView gets a resolution conflict before anything is
+installed rather than a page full of braces afterwards.
+
+`mix aurora_meter.install --check-support` prints the floor for every
+dependency, and exits non-zero when something present is below one.
 
 Dropping a supported pair is a compatibility decision and needs release notes
 that say so before the release that drops it. Raising the floor inside 1.x

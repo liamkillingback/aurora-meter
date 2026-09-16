@@ -12,3 +12,7 @@ erl_crash.dump
 /priv/plts/*.plt.hash
 /demo/_build/
 /demo/deps/
+# Optional-dependency leg builds (AURORA_HEADLESS, AURORA_NO_LIVEVIEW and friends).
+# They are build output, not source, and a leg deliberately builds an incomplete
+# tree (open-findings.md X329), so it must never reach a commit.
+/_build_legs/

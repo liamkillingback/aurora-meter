@@ -45,6 +45,7 @@ treated as Aurora Meter keys.
 | `:credits_low_balance_threshold` | micro-dollars or `nil` | — | `nil` — fire the low-balance event when the available balance drops below it; a tenant's own threshold overrides it |
 | `:credits_low_balance_handler` | `fun/1` or `nil` |  | `nil`. Called with `%{tenant_key, available, spendable, threshold, crossing_id}` after a low-balance crossing commits, in a supervised task, once per crossing |
 | `:credits_low_balance_handler_timeout` | positive integer |  | `5_000`. Milliseconds one handler call may take before it is killed. The caller never waits for it, so the write is neither failed nor delayed |
+| `:live_view_tenant` | `{module, function}` or `nil` | | `nil`. How `on_mount {AuroraMeter.LiveView, :subscribe}` finds the tenant, called with `(session, socket)`. There is no default resolver and the bare form raises without this key: `AuroraMeter.Tenant.Default` stringifies what it is given, so it maps `nil` to `""` and a fallback would put every unresolved tenant on one set of counters ([Phoenix](phoenix.md)) |
 
 ```elixir
 config :aurora_meter,

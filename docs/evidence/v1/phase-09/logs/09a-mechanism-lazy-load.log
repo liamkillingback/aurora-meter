@@ -1,0 +1,35 @@
+[mixlane] core: DB_PORT=5490 env MIX_ENV=test mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/09a/mechanism2.exs
+UTC 2026-09-16T18:47:11.801527Z
+module referenced only through a runtime atom: AuroraMeter.LiveView
+
+BEFORE anything loads it:
+  :code.is_loaded/1        => false
+  function_exported?/3     => false
+
+the beam is on disk the whole time, so the function does exist:
+  :code.which/1            => ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.LiveView.beam"
+
+AFTER Code.ensure_loaded?/1 => true:
+  :code.is_loaded/1        => {:file, ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.LiveView.beam"}
+  function_exported?/3     => true
+
+the export list, which never changed:
+  handle_credits/2
+  handle_usage/2
+  on_mount/4
+  subscribe/1
+  subscribe/2
+  switch_tenant/2
+
+MECHANISM SHOWN.
+
+  `function_exported?(AuroraMeter.LiveView, :switch_tenant, 2)` answered FALSE for a
+  function that exists, on a beam that was on disk the whole time, purely because
+  the module had not been loaded. One `Code.ensure_loaded?/1` later, with nothing
+  else changed, the same call answers TRUE.
+
+  In a test run, whether the module happens to be loaded at that point depends on
+  whether some earlier test in the run called into it, which depends on the seed
+  and on which files are in the run set. That is the flake.
+
+[mixlane] core exit=0 started=2026-09-16T18:47:11Z finished=2026-09-16T18:47:11Z

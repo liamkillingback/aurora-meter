@@ -1,7 +1,17 @@
 defmodule AuroraMeter.CreditsLotReversalTest do
   @moduledoc """
   `AuroraMeter.Credits.reverse_lot/4` and `restore_lot/4` (build unit 06e, V1
-  task 06.06), the source-scoped reversal facade over 06a's allocator.
+  task 06.06), the source-scoped reversal facade over 06a's allocator, and the
+  **wallet-wide** `reverse/4` on a cut-over wallet (repair unit R1, finding
+  X250).
+
+  The `X250 ...` tests are R1's. Until it, `reverse/4` on a wallet the allocator
+  owns was planned as a debit: it drained lots in spend order, which takes
+  promotional credit FIRST, and wrote nothing into `reversed`. A customer's
+  refund destroyed their promotion and left the paid credit that funded the
+  purchase sitting in the wallet. The path is reachable from core and from
+  `aurora_meter_pro`, whose refund fallback takes it on every wallet with no
+  derivable payment provenance.
 
   The arithmetic lives in `AuroraMeter.Credits.Allocator` and is tested against
   the planner in `credits/allocator_test.exs`; what is tested here is the
@@ -56,11 +66,18 @@ defmodule AuroraMeter.CreditsLotReversalTest do
     assert %{reversed: 0, available: 7_000_000} = lot(tenant, "pi_2")
     assert %{reversed: 0, available: 4_000_000} = lot(tenant, "promo")
 
-    # **The difference between the two functions, measured rather than argued.**
-    # The promotional lot sorts FIRST in spend order, so the wallet-wide
-    # reversal takes it, and no figure on the balance row says which lot paid.
+    # **The difference between the two functions, measured rather than argued,
+    # and repair unit R1 changed what it is.** It used to be that the
+    # wallet-wide reversal took the promotional lot, because the promotion sorts
+    # first in spend order and `reverse/4` was planned as a debit (X250). It no
+    # longer is: both functions exclude promotional lots and take the rest in
+    # spend order. What still separates them is the cap and the provenance. This
+    # one is capped by `pi_1`'s own lots; the wallet-wide one reaches `pi_1`
+    # first only because it is the wallet's oldest non-promotional lot.
     {:ok, _} = Credits.reverse(tenant, 1 * @dollar, "wallet_wide")
-    assert %{available: 3_000_000, consumed: 1_000_000} = lot(tenant, "promo")
+    assert %{available: 4_000_000, consumed: 0, reversed: 0} = lot(tenant, "promo")
+    assert %{available: 3_000_000, reversed: 7_000_000} = lot(tenant, "pi_1")
+    assert %{available: 7_000_000, reversed: 0} = lot(tenant, "pi_2")
   end
 
   test "I10 reverse_lot above the cap returns exceeds_source and writes nothing" do
@@ -343,6 +360,240 @@ defmodule AuroraMeter.CreditsLotReversalTest do
     assert row.held == @dollar
     assert row.held == lot(tenant, "pi_1").reserved
     assert row.debt == 3 * @dollar
+  end
+
+  test "X250 a wallet-wide refund on a cut-over wallet takes the paid lot and leaves the promotion" do
+    # **Repair unit R1, and the case forced rather than waited for.** A cut-over
+    # wallet holding both promotional and paid credit, with the PAID lot the one
+    # that funded the purchase, refunded through the wallet-wide path a caller
+    # without payment provenance takes. `aurora_meter_pro`'s refund fallback is
+    # that caller, on any wallet whose provenance the migration could not derive
+    # (finding X263), which is a large minority of real wallets rather than an
+    # edge.
+    tenant = lot_wallet()
+    fund(tenant, "pi_1", 10 * @dollar)
+    {:ok, _} = Credits.debit(tenant, 5 * @dollar, "job_1")
+    {:ok, _} = Credits.grant(tenant, 4 * @dollar, reference: "promo", category: :promotional)
+
+    paid_before = lot(tenant, "pi_1")
+    promo_before = lot(tenant, "promo")
+    before = Credits.balance(tenant)
+
+    assert %{available: 5_000_000, consumed: 5_000_000, reversed: 0} = paid_before
+    assert %{available: 4_000_000, consumed: 0, reversed: 0} = promo_before
+
+    {:ok, txn} = Credits.reverse(tenant, 6 * @dollar, "refund:pi_1:600")
+
+    assert txn.kind == :reverse
+    assert txn.category == :reversal
+    assert txn.amount == -6 * @dollar
+
+    # **The money, lot by lot.** Five out of `available` and one out of
+    # `consumed`, all of it into `reversed`, and the one micro-dollar that had
+    # already been spent becomes debt.
+    assert %{available: 0, consumed: 4_000_000, reversed: 6_000_000} = lot(tenant, "pi_1")
+    assert row(tenant).debt == @dollar
+
+    # **And the promotional lot is identical, field for field.** Measured
+    # against the row read before the refund rather than against a literal, so
+    # nothing about it can have moved and moved back.
+    assert reload(promo_before) == promo_before
+
+    # **What the balance cannot tell you, which is why this test does not stop
+    # at the balance.** The wallet is at 3 USD either way: before repair unit R1
+    # the same call left `promo` at `available: 0, consumed: 4_000_000` and
+    # `pi_1` at `available: 3_000_000, consumed: 7_000_000, reversed: 0` with
+    # `debt: 0`, and the balance was 3 USD then too. Conservation held, every
+    # CHECK held, `held = sum(reserved)` held.
+    assert Credits.balance(tenant).balance == before.balance - 6 * @dollar
+    assert Credits.balance(tenant).balance == 3 * @dollar
+
+    # The `promotional` figure on the balance row moved to zero on the defect
+    # and does not move now, which is what the legacy writer has always done for
+    # a reversal (`Ledger.promotional_delta/2` has a clause for exactly this)
+    # and what the lot path had stopped doing.
+    assert Credits.balance(tenant).promotional == 4 * @dollar
+
+    # No allocation this reversal wrote names the promotional lot at all, and
+    # the ones it did write are `reverse` rather than `consume`: "writes nothing
+    # into `reversed`" was the other half of X250.
+    promo_id = promo_before.id
+    written = allocations(tenant, txn.id)
+    refute Enum.any?(written, &(&1.lot_id == promo_id))
+    assert Enum.map(written, & &1.kind) == [:reverse, :reverse]
+    assert Enum.map(written, & &1.amount) == [5 * @dollar, @dollar]
+  end
+
+  test "X250 a wallet-wide refund a promotional-only wallet cannot fund becomes debt" do
+    # The shape the promotional rule costs something in. There is credit in the
+    # wallet and the refund may not have it, so the wallet ends owing money
+    # beside a live promotion: X277's bounded limit, now reachable from the
+    # wallet-wide path as well as the source-scoped one.
+    tenant = lot_wallet()
+    {:ok, _} = Credits.grant(tenant, 4 * @dollar, reference: "promo", category: :promotional)
+    promo_before = lot(tenant, "promo")
+
+    {:ok, txn} = Credits.reverse(tenant, 3 * @dollar, "refund:unknown:300")
+
+    assert txn.amount == -3 * @dollar
+    assert reload(promo_before) == promo_before
+    assert allocations(tenant, txn.id) == []
+
+    row = row(tenant)
+    assert row.debt == 3 * @dollar
+    assert row.balance == @dollar
+    assert row.promotional == 4 * @dollar
+  end
+
+  test "X250 a wallet-wide refund takes reserved value last and leaves held consistent" do
+    # `reverse_lot/4`'s bucket order, on the wallet-wide path, with the same
+    # reason: an open hold is work the host believes is still running, so it is
+    # the last thing a refund takes.
+    tenant = lot_wallet()
+    fund(tenant, "pi_1", 10 * @dollar)
+    {:ok, _} = Credits.debit(tenant, 3 * @dollar, "job_1")
+    {:ok, _} = Credits.hold(tenant, 2 * @dollar, "job_2")
+
+    # available 5, consumed 3, reserved 2; the reversal asks for nine.
+    {:ok, _} = Credits.reverse(tenant, 9 * @dollar, "refund:pi_1:900")
+
+    assert %{available: 0, consumed: 0, reserved: 1_000_000, reversed: 9_000_000} =
+             lot(tenant, "pi_1")
+
+    row = row(tenant)
+    assert row.held == @dollar
+    assert row.held == lot(tenant, "pi_1").reserved
+    assert row.debt == 3 * @dollar
+  end
+
+  test "X250 a wallet-wide refund is idempotent on its reference and writes once" do
+    tenant = lot_wallet()
+    fund(tenant, "pi_1", 5 * @dollar)
+
+    {:ok, _} = Credits.reverse(tenant, 2 * @dollar, "refund:pi_1:200")
+
+    assert {:error, :duplicate_reference} =
+             Credits.reverse(tenant, 2 * @dollar, "refund:pi_1:200")
+
+    assert %{available: 3_000_000, reversed: 2_000_000} = lot(tenant, "pi_1")
+    assert length(allocations(tenant)) == 1
+  end
+
+  test "X355 the debt a wallet-wide refund leaves is not repaid out of the promotion by the release, the settle or the grant that follow" do
+    # **Repair unit R2, and the whole sequence rather than the single call.**
+    # R1 gave the refund itself the promotional exclusion and proved it per lot.
+    # It held for exactly one transaction: the debt the refund left was repaid
+    # by the next `release` or `settle` through `Allocator.repay_debt/5`, which
+    # took `eligible/2` in spend order and therefore took the promotional lot
+    # FIRST. A hold is released after any failed operation, so that is an
+    # ordinary event and not an exotic one.
+    #
+    # Every step below asserts the promotional lot by struct equality against
+    # the row read before it, so even `updated_at` moving is a failure
+    # (`update_lots!/2` writes only touched lots). The one step that is allowed
+    # to move it is the settlement, and it is allowed to move it only out of
+    # `:reserved`, because that is the tenant spending a promotion on work.
+    tenant = lot_wallet()
+    fund(tenant, "pi_1", 10 * @dollar)
+    {:ok, _} = Credits.debit(tenant, 10 * @dollar, "job_1")
+    {:ok, _} = Credits.grant(tenant, 8 * @dollar, reference: "promo", category: :promotional)
+    {:ok, _} = Credits.hold(tenant, 3 * @dollar, "h_release")
+    {:ok, _} = Credits.hold(tenant, 3 * @dollar, "h_settle")
+
+    # The paid lot is wholly spent and both holds reserved the promotion,
+    # because promotional is what spend order takes first.
+    assert %{available: 0, consumed: 10_000_000} = lot(tenant, "pi_1")
+    assert %{available: 2_000_000, reserved: 6_000_000, consumed: 0} = lot(tenant, "promo")
+
+    # ---- step 1: the refund. R1's fix, re-asserted as this sequence's premise.
+    promo_before = lot(tenant, "promo")
+    {:ok, _} = Credits.reverse(tenant, 10 * @dollar, "refund:pi_1:1000")
+
+    assert %{available: 0, consumed: 0, reversed: 10_000_000} = lot(tenant, "pi_1")
+    assert reload(promo_before) == promo_before
+    assert row(tenant).debt == 10 * @dollar
+    assert row(tenant).promotional == 8 * @dollar
+
+    # ---- step 2: the release. This is X355.
+    promo_before = lot(tenant, "promo")
+    {:ok, _} = Credits.release("h_release")
+
+    # The reservation came back as promotional availability and the debt stands
+    # beside it. **On the defect** this read `available: 0, consumed: 5_000_000`
+    # and `debt: 5_000_000`: the customer's promotion had paid for the refund.
+    assert %{available: 5_000_000, reserved: 3_000_000, consumed: 0} = lot(tenant, "promo")
+    assert lot(tenant, "promo").reversed == 0
+    assert row(tenant).debt == 10 * @dollar
+    assert row(tenant).promotional == 8 * @dollar
+    assert reload(promo_before).consumed == promo_before.consumed
+
+    # ---- step 3: the settle, which MAY spend the promotion and may not repay.
+    {:ok, settle} = Credits.settle("h_settle", @dollar)
+    assert settle.amount == -@dollar
+
+    # One micro-dollar of work consumed out of the reservation, two handed back,
+    # and not one micro-dollar out of `available` towards the debt.
+    assert %{available: 7_000_000, reserved: 0, consumed: 1_000_000} = lot(tenant, "promo")
+    assert row(tenant).debt == 10 * @dollar
+    assert row(tenant).promotional == 7 * @dollar
+
+    # ---- step 4: the grant, which is the one repayment that may take
+    # promotional value, and the only door out of a frozen wallet.
+    promo_before = lot(tenant, "promo")
+    {:ok, _} = Credits.grant(tenant, 4 * @dollar, reference: "top_up", category: :paid)
+
+    assert %{available: 0, consumed: 4_000_000} = lot(tenant, "top_up")
+    assert row(tenant).debt == 6 * @dollar
+    assert reload(promo_before) == promo_before
+
+    # And the wallet's own law after all four, which held on the defect too and
+    # is therefore the one figure here that discriminates nothing.
+    row = row(tenant)
+    assert row.balance == 7 * @dollar - 6 * @dollar
+    assert row.balance == Credits.balance(tenant).balance
+
+    # No allocation written by the release or by the grant names the promotional
+    # lot, and the only one the settle wrote against it came out of `reserved`.
+    promo_id = lot(tenant, "promo").id
+
+    consumes =
+      for a <- allocations(tenant), a.lot_id == promo_id, a.kind == :consume, do: a.amount
+
+    assert consumes == [@dollar]
+  end
+
+  test "X355 reverse_lot/4 leaves the same debt and the release after it does not take the promotion either" do
+    # **The function G06 bullet 5 is asserted against.** X355 is identical
+    # through the source-scoped reversal, because the defect was never in either
+    # reversal: it was in the repayment both of them hand the debt on to. If
+    # this test is the one a reviewer reads, it is because the gate bullet says
+    # "a refund of a spent paid lot does not erase later promotional credit",
+    # and the refund of a spent paid lot is exactly the shape that creates the
+    # debt this is about.
+    tenant = lot_wallet()
+    fund(tenant, "pi_1", 10 * @dollar)
+    {:ok, _} = Credits.debit(tenant, 10 * @dollar, "job_1")
+    {:ok, _} = Credits.grant(tenant, 4 * @dollar, reference: "promo", category: :promotional)
+    {:ok, _} = Credits.hold(tenant, 4 * @dollar, "h1")
+
+    {:ok, _} =
+      Credits.reverse_lot(tenant, 10 * @dollar, "refund:pi_1:1000",
+        source: %{payment_intent_id: "pi_1"}
+      )
+
+    promo_before = lot(tenant, "promo")
+    assert %{available: 0, reserved: 4_000_000, consumed: 0} = promo_before
+    assert row(tenant).debt == 10 * @dollar
+
+    {:ok, _} = Credits.release("h1")
+
+    # On the defect: `available: 0, consumed: 4_000_000` and `debt: 6_000_000`,
+    # which is R1's deterministic reproduction of X355 line for line.
+    assert reload(promo_before).consumed == 0
+    assert %{available: 4_000_000, reserved: 0, consumed: 0} = lot(tenant, "promo")
+    assert row(tenant).debt == 10 * @dollar
+    assert row(tenant).promotional == 4 * @dollar
+    assert Credits.balance(tenant).balance == -6 * @dollar
   end
 
   test "X274 a wallet the migration cut over takes a recurring allowance and still refunds right" do

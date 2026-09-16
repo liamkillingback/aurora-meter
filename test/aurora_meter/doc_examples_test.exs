@@ -179,6 +179,26 @@ defmodule AuroraMeter.DocExamplesTest do
         assert optional_and_absent?("AuroraMeter.Oban")
       end
 
+      # Build unit 09a's two, in both directions for the same reason.
+      if Code.ensure_loaded?(Plug.Conn) do
+        refute optional_and_absent?("AuroraMeter.Plug.EnsureEntitled")
+        assert Code.ensure_loaded?(AuroraMeter.Plug.EnsureEntitled)
+      else
+        assert optional_and_absent?("AuroraMeter.Plug.EnsureEntitled")
+      end
+
+      if Code.ensure_loaded?(Phoenix.LiveView) do
+        refute optional_function_and_absent?("AuroraMeter.LiveView", :switch_tenant)
+        assert exported?(AuroraMeter.LiveView, :switch_tenant, 2)
+      else
+        assert optional_function_and_absent?("AuroraMeter.LiveView", :switch_tenant)
+      end
+
+      # And the skip is narrow: a function on that module that is NOT guarded
+      # is never excused, so a typo in docs/phoenix.md still fails on every leg.
+      refute optional_function_and_absent?("AuroraMeter.LiveView", :subscribe)
+      refute optional_function_and_absent?("AuroraMeter.Credits", :switch_tenant)
+
       if Code.ensure_loaded?(Telemetry.Metrics) do
         refute optional_and_absent?("AuroraMeter.Telemetry.Metrics")
         assert Code.ensure_loaded?(AuroraMeter.Telemetry.Metrics)
@@ -234,6 +254,7 @@ defmodule AuroraMeter.DocExamplesTest do
             not pro?(name),
             module = Module.concat([name]),
             Code.ensure_loaded?(module),
+            not optional_function_and_absent?(name, fun),
             not exported_at_any_arity?(module, fun),
             not type?(module, fun),
             do: "#{block.file}:#{block.line} #{name}.#{fun}"
@@ -491,6 +512,29 @@ defmodule AuroraMeter.DocExamplesTest do
     Enum.any?(exports, fn {name, _arity} -> name == fun end)
   end
 
+  # `Code.ensure_loaded?/1` first, and it is load bearing rather than defensive.
+  #
+  # `function_exported?/3` answers **false for a function that exists** when its
+  # module has not been loaded yet, and modules are loaded on demand. Whether
+  # `AuroraMeter.LiveView` happens to be loaded when a test asks depends on
+  # whether some earlier test in the run called into it, which depends on the
+  # seed and on which files are in the run set.
+  #
+  # Measured, build unit 09a: `mix test test/aurora_meter/doc_examples_test.exs:169`
+  # on its own failed 5 of 5 on `assert function_exported?(AuroraMeter.LiveView,
+  # :switch_tenant, 2)`, and in a full run it failed about 1 in 3. The mechanism
+  # is shown directly in `docs/evidence/v1/phase-09/logs/09a-mechanism-lazy-load.log`:
+  # `false` before the load, `true` after it, with the beam on disk throughout.
+  #
+  # The package already knew this (`test/aurora_meter/optional_deps_test.exs`
+  # records it from build unit 03b, `lib/aurora_meter/oban.ex:289` and
+  # `lib/aurora_meter/exporter_case.ex:730` use this idiom), and a rule nothing
+  # enforces is one already being broken (X153). `AuroraMeter.ExportedIdiomTest`
+  # now enforces it for the call sites 09a introduced.
+  defp exported?(module, fun, arity) do
+    Code.ensure_loaded?(module) and function_exported?(module, fun, arity)
+  end
+
   defp pro?(name), do: String.starts_with?(name, @pro_modules_prefix)
 
   # A guide may legitimately name a module that exists only when an optional
@@ -503,7 +547,23 @@ defmodule AuroraMeter.DocExamplesTest do
   defp optional_and_absent?(name) do
     (String.starts_with?(name, "AuroraMeter.Oban") and not Code.ensure_loaded?(Oban)) or
       (String.starts_with?(name, "AuroraMeter.Telemetry.Metrics") and
-         not Code.ensure_loaded?(Telemetry.Metrics))
+         not Code.ensure_loaded?(Telemetry.Metrics)) or
+      (String.starts_with?(name, "AuroraMeter.Plug") and not Code.ensure_loaded?(Plug.Conn))
+  end
+
+  # The same skip for a FUNCTION rather than a module, which the module-level
+  # version cannot express. `AuroraMeter.LiveView` is compiled on every build
+  # and puts only four of its functions behind `Code.ensure_loaded?`
+  # (`on_mount/4`, `switch_tenant/2`, `handle_usage/2`, `handle_credits/2`,
+  # build unit 09a), so on a build without LiveView the module answers
+  # `Code.ensure_loaded?` and those four do not exist. It is deliberately a
+  # named list rather than "any function on that module": a typo in
+  # `docs/phoenix.md` must still fail.
+  @live_view_guarded ~w(on_mount switch_tenant handle_usage handle_credits)
+
+  defp optional_function_and_absent?(name, fun) do
+    name == "AuroraMeter.LiveView" and Atom.to_string(fun) in @live_view_guarded and
+      not Code.ensure_loaded?(Phoenix.LiveView)
   end
 
   # `AuroraMeter.Exporter.Item.t()` inside a printed `@callback` is a type, and

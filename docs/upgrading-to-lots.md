@@ -23,7 +23,7 @@ Two figures join them, both zero on a legacy wallet:
 
 | Column | Meaning |
 |---|---|
-| `debt` | executed cost the wallet could not fund. Every incoming grant repays it before creating spendable value, and no hold or debit may spend while it is outstanding |
+| `debt` | executed cost the wallet could not fund, or a refund of credit it had already spent. Every incoming grant repays it before creating spendable value, as does credit the wallet already holds **unless that credit is promotional**, and no hold or debit may spend while it is outstanding. A wallet can therefore hold a live promotion and owe money at once, and spend neither until a grant clears the debt. `balance/1` says so in two places: `spendable` and `promotional_spendable` both read `0` while `debt` is outstanding, and `hold/4` and `debit/4` refuse with `{:error, :debt_outstanding}` rather than `:insufficient_credits`. The full state, and what clears it, is under "Debt" in `credits.md` |
 | `expired` | value destroyed by expiry, kept apart from value spent so the two are never confused |
 
 Two behaviours change for a wallet that has been cut over, and both are
@@ -33,6 +33,12 @@ deliberate:
   sweep has not reached it yet. Before, it stayed spendable until the sweep ran.
 - Value a hold was still holding on a lot past its expiry is written off when
   the hold is released, rather than handed back as spendable credit.
+- A cut-over wallet can refuse with a reason a legacy wallet never returns.
+  `hold/4` and `debit/4` answer `{:error, :debt_outstanding}` when the wallet
+  owes money; a legacy wallet has no `debt` and goes on answering
+  `:insufficient_credits`, including when its balance is negative. **A caller
+  that matches `{:error, :insufficient_credits}` has to add the new term before
+  the first wallet is cut over.**
 
 The migration's per-wallet report names every wallet that held such a
 reservation at cutover, under the flag `reserved_on_expiring_lot`.
@@ -142,12 +148,20 @@ the wallet in flight, and re-running skips every wallet that already committed.
 The run exits non-zero if any wallet was blocked, so a runner cannot report
 success while wallets were left behind.
 
-> **This step is refused in the current release.** `AuroraMeter.Credits.reverse/4`
-> does not take the lot path yet, so a paid refund on a cut-over wallet would
-> consume promotional credit that the refund has no claim on. The task says so
-> and stops. Everything above works today: the replay, the reconciliation and
-> the blocked list are all produced by the shadow run, so the whole upgrade can
-> be rehearsed before the switch is available.
+> **This step is permitted from this release, and it was refused before it.**
+> The refusal existed because `AuroraMeter.Credits.reverse/4` did not take the
+> lot path, so a paid refund on a cut-over wallet consumed promotional credit
+> the refund had no claim on. Both refund calls are lot aware now:
+> `reverse_lot/4` is scoped to one payment's lots and capped by them, and
+> `reverse/4` takes the wallet's non-promotional lots in spend order. A cut-over
+> wallet is safe on either.
+>
+> `--no-shadow` is the whole ask at the command line: the task turns it into
+> `allow_cutover: true` for you, because a run that writes is the only thing
+> `--no-shadow` can mean. From `run/1` the two are separate and both are
+> required. Everything above works without either: the replay, the
+> reconciliation and the blocked list are all produced by the shadow run, so the
+> whole upgrade can be rehearsed first.
 
 ### 5. Read the report again
 

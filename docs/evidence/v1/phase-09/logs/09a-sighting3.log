@@ -1,0 +1,13 @@
+[lane] acquired, held for the whole measurement
+baseline test/aurora_meter/plug/ensure_entitled_test.exs sha256=74fd2a59eb0cc53195abe795c38cd3253478f7d91519c65559afbe830705ec07
+
+=== full suite at seed 638544 ===
+  absolute absence       FAILED     Result: 2132/2133 passed (81/81 doctests, 22/22 properties, 2029/2030 tests), 8 excluded
+      failing assertion: refute :ets.member(:aurora_meter_subscription_cache, "")
+  before/after delta     clean      Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+
+=== verdict ===
+  the absolute form FAILS at this seed and the delta form is CLEAN at the same
+  seed, same tree, same module order. That is the fix doing the work.
+restored sha256=74fd2a59eb0cc53195abe795c38cd3253478f7d91519c65559afbe830705ec07 OK
+[lane] released

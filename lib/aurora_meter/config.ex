@@ -222,6 +222,18 @@ defmodule AuroraMeter.Config do
               doc:
                 "Milliseconds one `decide/1` call may take before the reconciler kills it and " <>
                   "keeps the hold."
+            ],
+            live_view_tenant: [
+              type: {:or, [{:tuple, [:atom, :atom]}, nil]},
+              default: nil,
+              doc:
+                "How `on_mount {AuroraMeter.LiveView, :subscribe}` finds the tenant when the " <>
+                  "host passes no resolver: a `{module, function}` pair of arity 2, called " <>
+                  "with the LiveView session and the socket. There is deliberately no " <>
+                  "default. `AuroraMeter.Tenant.Default.to_key/1` maps `nil` to `\"\"`, so a " <>
+                  "fallback would put every tenant the host could not resolve on one set of " <>
+                  "counters; the bare form raises at mount instead, naming this key and the " <>
+                  "two explicit forms."
             ]
           )
 
@@ -654,6 +666,20 @@ defmodule AuroraMeter.Config do
   """
   @spec credits_hold_reconciler_timeout() :: pos_integer()
   def credits_hold_reconciler_timeout, do: get(:credits_hold_reconciler_timeout)
+
+  @doc """
+  The `{module, function}` pair `on_mount {AuroraMeter.LiveView, :subscribe}`
+  calls to resolve the tenant, or `nil` when the host passes a resolver at the
+  mount instead.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.live_view_tenant()
+      nil
+
+  """
+  @spec live_view_tenant() :: {module(), atom()} | nil
+  def live_view_tenant, do: get(:live_view_tenant)
 
   @doc false
   # The retention floor, and it is a correctness floor rather than a taste.

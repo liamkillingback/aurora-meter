@@ -117,12 +117,12 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 | `AuroraMeter.Credits.sufficient?/2` | `(tenant, integer()) :: boolean()` | stable | 0.4.0 | Advisory, like `check/2`. |
 | `AuroraMeter.Credits.grant/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn()} \| {:error, :duplicate_reference \| Ecto.Changeset.t()}` | stable | 0.4.0 | Idempotent on `reference:`. Options `:reference`, `:category` (`:paid`, `:promotional`, `:adjustment`), `:expires_at`, `:metadata`, `:source`. From 0.6.0 a reference already held by **another** tenant answers `{:error, :duplicate_reference}` instead of a raw changeset; every other changeset error is unchanged. |
 | `AuroraMeter.Credits.grant_with_status/3` | `(tenant, pos_integer(), keyword()) :: {:ok, txn(), :new \| :duplicate} \| {:error, :duplicate_reference \| Ecto.Changeset.t()}` | stable | 0.4.0 | Reports new or duplicate from inside the balance row's lock. Same error change as `grant/3`. |
-| `AuroraMeter.Credits.hold/4` | `(tenant, pos_integer(), String.t(), keyword()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty option list. |
+| `AuroraMeter.Credits.hold/4` | `(tenant, pos_integer(), String.t(), keyword()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :debt_outstanding \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty option list. |
 | `AuroraMeter.Credits.settle/3` | `(String.t(), non_neg_integer(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Keyed by the hold's reference, not by tenant. Arity 2 exists through defaults. Option `:tenant` from 0.6.0 asserts the hold belongs to that tenant; without it the behaviour is exactly as before. |
 | `AuroraMeter.Credits.release/2` | `(String.t(), keyword()) :: {:ok, txn()} \| {:error, :not_found \| :already_settled}` | stable | 0.4.0 | Arity 1 exists through defaults and is unchanged. Option `:tenant` from 0.6.0 asserts the hold belongs to that tenant and answers `{:error, :not_found}` when it does not. |
-| `AuroraMeter.Credits.debit/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty metadata map. |
+| `AuroraMeter.Credits.debit/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :insufficient_credits \| :debt_outstanding \| :duplicate_reference}` | stable | 0.4.0 | Arity 3 exists through an empty metadata map. |
 | `AuroraMeter.Credits.reverse/4` | `(tenant, pos_integer(), String.t(), map()) :: {:ok, txn()} \| {:error, :duplicate_reference}` | stable | 0.4.0 | Never refused for want of balance: the balance may go negative, which is the honest record of a debt. From 0.6.0 the entry is `kind: :reverse` (it was `kind: :debit, category: :reversal`), so a reversal and a debit no longer share a reference namespace. Existing rows are unchanged and still read as reversals through `AuroraMeter.Schema.CreditTransaction.reversal?/1`. |
-| `AuroraMeter.Credits.with_credits/4` | `(tenant, pos_integer(), String.t(), (-> {:ok, result, non_neg_integer()} \| {:error, term()})) :: {:ok, result} \| {:error, :insufficient_credits \| :duplicate_reference \| term()}` | stable | 0.4.0 | Holds, runs, then settles or releases, including on a raise. |
+| `AuroraMeter.Credits.with_credits/4` | `(tenant, pos_integer(), String.t(), (-> {:ok, result, non_neg_integer()} \| {:error, term()})) :: {:ok, result} \| {:error, :insufficient_credits \| :debt_outstanding \| :duplicate_reference \| term()}` | stable | 0.4.0 | Holds, runs, then settles or releases, including on a raise. |
 | `AuroraMeter.Credits.pending_holds/1` | `(keyword()) :: [txn()]` | stable | 0.4.0 | Options `:older_than`, `:reference_prefix`, `:limit`, and from 0.6.0 `:tenant` and `:after`. Ordered by `(inserted_at, id)` from 0.6.0, oldest first; before that by `inserted_at` alone, which could skip a same-microsecond row when paging. |
 | `AuroraMeter.Credits.reconcile_holds/1` | `(keyword()) :: {:ok, report()} \| {:error, term()}` | stable | 0.6.0 | Asks `:credits_hold_reconciler` about every hold older than `:older_than` and applies the answer. Options `:older_than` (required), `:limit`, `:tenant`, `:reference_prefix`, `:after`, `:reconciler`. Keeps every hold when nothing is configured. |
 | `AuroraMeter.Credits.history/2` | `(tenant, keyword()) :: [txn()]` | stable | 0.4.0 | Options `:limit` (50), `:kinds`, `:before`, and from 0.6.0 `:cursor`. Holds and releases are hidden unless asked for; `:reverse` joined the default kinds in 0.6.0, which is what keeps the default view unchanged in content. `:before` filters on `inserted_at` and may skip a same-microsecond row; `:cursor` pages on the ordering key and cannot skip or repeat one. Giving both raises `ArgumentError`. |
@@ -249,6 +249,14 @@ in section 2.
 | `AuroraMeter.Flusher.flush/0` | `() :: {:ok, non_neg_integer()} \| {:error, term()}` | stable | 0.1.0 | The operational "flush before you report" hook. An error retains the batch for an idempotent retry (0.4.0). |
 | `AuroraMeter.Broadcaster.topic/1` | `(String.t()) :: String.t()` | stable | 0.1.0 | `"aurora_meter:tenant:" <> tenant_key`. The only entry of `AuroraMeter.Broadcaster` that is supported; the module itself is internal. Read the contract on `AuroraMeter.LiveView`. |
 | `AuroraMeter.LiveView.subscribe/1` | `(tenant) :: :ok \| {:error, term()}` | stable | 0.1.0 | Subscribes the calling process to the tenant's usage topic. |
+| `AuroraMeter.LiveView.subscribe/2` | `(tenant, keyword()) :: :ok \| {:error, term()}` | additive | 1.0.0 | `:topics` is a subset of `[:usage, :credits]`, default `[:usage]`, which is exactly what arity 1 does. A partial failure unsubscribes what the same call had subscribed. Raises on a `nil` tenant. |
+| `AuroraMeter.LiveView.unsubscribe/1` | `(tenant) :: :ok` | additive | 1.0.0 | Stops routing on the usage topic. Messages already in the mailbox are still delivered, so filter on `tenant_key`. |
+| `AuroraMeter.LiveView.unsubscribe/2` | `(tenant, keyword()) :: :ok` | additive | 1.0.0 | Same `:topics` option as `subscribe/2`. |
+| `AuroraMeter.LiveView.topics/2` | `(tenant, keyword()) :: [{:usage \| :credits, String.t()}]` | additive | 1.0.0 | The canonical topic strings, for a host that runs its own `Phoenix.PubSub.subscribe/2`. Arity 1 exists through a default `[]`. |
+| `AuroraMeter.LiveView.on_mount/4` | `(term(), map(), map(), Socket.t()) :: {:cont \| :halt, Socket.t()}` | optional-dep | 1.0.0 | Needs `phoenix_live_view`. `{:subscribe, fun}`, `{:subscribe, assign: :current_org}` or `:subscribe` with the `:live_view_tenant` config key. Subscribes only on the connected mount. A `nil` tenant halts with `:aurora_meter_denial` and never redirects. |
+| `AuroraMeter.LiveView.switch_tenant/2` | `(Socket.t(), tenant) :: Socket.t()` | optional-dep | 1.0.0 | Needs `phoenix_live_view`. Unsubscribes exactly the topics recorded in `:aurora_meter_topics`. Idempotent for the tenant the socket already holds; raises on `nil`. |
+| `AuroraMeter.LiveView.handle_usage/2` | `(term(), Socket.t()) :: Socket.t()` | optional-dep | 1.0.0 | Needs `phoenix_live_view`. Folds a usage message into `:aurora_meter_usage`, dropping a foreign `tenant_key`. Optional: matching the raw message is fully supported. |
+| `AuroraMeter.LiveView.handle_credits/2` | `(term(), Socket.t()) :: Socket.t()` | optional-dep | 1.0.0 | Needs `phoenix_live_view`. Folds a credits or low-balance message into `:aurora_meter_credits`, dropping a foreign `tenant_key`. |
 
 ### 1.10 Configuration accessors
 
@@ -293,6 +301,7 @@ in section 2.
 | `AuroraMeter.Config.credits_low_balance_handler/0` | `() :: (map() -> term()) \| nil` | stable | 0.4.0 | |
 | `AuroraMeter.Config.credits_hold_reconciler/0` | `() :: module() \| {module(), atom()} \| (map() -> term()) \| nil` | stable | 0.6.0 | `nil` by default, which keeps every hold. |
 | `AuroraMeter.Config.credits_hold_reconciler_timeout/0` | `() :: pos_integer()` | stable | 0.6.0 | Milliseconds. |
+| `AuroraMeter.Config.live_view_tenant/0` | `() :: {module(), atom()} \| nil` | additive | 1.0.0 | The resolver `on_mount {AuroraMeter.LiveView, :subscribe}` calls, or `nil`. |
 
 ### 1.11 Billing seam
 
@@ -334,6 +343,22 @@ everything else in this inventory works headless.
 | `AuroraMeter.Components.usage_summary/1` | HEEx component | optional-dep | 0.1.0 | Needs `phoenix_live_view` and `phoenix_html`. |
 | `AuroraMeter.Components.spend_chart/1` | HEEx component | optional-dep | 0.4.0 | Needs `phoenix_live_view` and `phoenix_html`. |
 | `AuroraMeter.Components.credit_summary/1` | HEEx component | optional-dep | 0.4.0 | Needs `phoenix_live_view` and `phoenix_html`. |
+
+### 1.13a The entitlement plug
+
+Compiled only when `Plug.Conn` is loaded. Without `plug` the module does not
+exist at all, which is not an error. **It is advisory**: it takes no
+reservation, so between its decision and the controller's work another request
+on the same node can consume the last unit. The strict admission is
+`AuroraMeter.with_quota/4` around the work itself, and no reserving plug is
+shipped. See [Phoenix](phoenix.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Plug.EnsureEntitled.init/1` | `(keyword()) :: map()` | optional-dep | 1.0.0 | Needs `plug` (`~> 1.15`). Options `:feature` and `:tenant` are required; `:mode` (`:check \| :entitled?`), `:assign_quota`, `:on_missing_tenant`, `:on_denied`, `:on_unavailable`. Validated with NimbleOptions, so a bad option is a compile error in the host's router. |
+| `AuroraMeter.Plug.EnsureEntitled.call/2` | `(Plug.Conn.t(), map()) :: Plug.Conn.t()` | optional-dep | 1.0.0 | Needs `plug`. 401 `:missing_tenant`, 403 `:not_entitled` or `:limit_exceeded`, 503 `:unavailable`, the reason in `conn.private[:aurora_meter_denial]`. Assigns `:aurora_meter_tenant` and `:aurora_meter_quota`. Reserves nothing and writes nothing. |
 
 ### 1.14 Retention
 
@@ -612,7 +637,7 @@ answering.
 **Credits family.** `grant/3` and `grant_with_status/3` return
 `{:error, Ecto.Changeset.t()}`, while `hold/4`, `settle/3`, `release/1`,
 `debit/4`, `reverse/4` and `with_credits/4` return a bare atom reason
-(`:insufficient_credits`, `:duplicate_reference`, `:not_found`,
+(`:insufficient_credits`, `:debt_outstanding`, `:duplicate_reference`, `:not_found`,
 `:already_settled`). **This inconsistency changes in 1.0**: the grant functions
 move to the atom family, and the migration note will name the exact mapping. A
 caller that matches `{:error, %Ecto.Changeset{}}` on a grant today should expect
@@ -677,6 +702,7 @@ never treated as Aurora Meter keys.
 | `:credits_hold_reconciler` | module, `{module, function}`, 1-arity function or `nil`; `nil` | stable | 0.6.0 | How `AuroraMeter.Credits.reconcile_holds/1` decides about a stale hold. `nil` keeps every hold, so upgrading and configuring nothing cannot release money. |
 | `:credits_hold_reconciler_timeout` | positive integer, `5_000` | stable | 0.6.0 | Milliseconds one `decide/1` call may take before it is killed and the hold kept. |
 | `:credits_low_balance_handler_timeout` | positive integer, `5_000` | stable | 0.6.0 | Milliseconds one `:credits_low_balance_handler` call may take before it is killed. The ledger write stands either way: the handler runs in a supervised watcher, so it cannot fail, block, delay or crash the caller. The caller does not wait for it, so `[:aurora_meter, :credits, :low_balance]` arrives after the ledger call returns. |
+| `:live_view_tenant` | `{module, function}` or `nil`; `nil` | additive | 1.0.0 | How `on_mount {AuroraMeter.LiveView, :subscribe}` resolves the tenant, called with `(session, socket)`. No default resolver: the bare form raises without it, because a fallback would resolve an unresolved tenant to `""`. |
 
 ## 6. Telemetry events
 
@@ -772,7 +798,7 @@ on the keys you need rather than on the whole map.
 
 | Message | Topic | Class | Since | Matched in lib/ |
 |---|---|---|---|---|
-| `{:aurora_meter, :usage, %{feature, value, period_start}}` | `AuroraMeter.Broadcaster.topic/1` | stable | 0.1.0 | `{:aurora_meter, :usage,` |
+| `{:aurora_meter, :usage, %{tenant_key, feature, value, period_start}}` | `AuroraMeter.Broadcaster.topic/1` | stable | 0.1.0 | `{:aurora_meter, :usage,` |
 | `{:aurora_meter, :deltas, node(), [{key, delta}]}` | `"aurora_meter:cluster"` | internal | 0.3.0 | `{:aurora_meter, :deltas, node(), deltas}` |
 | `{:aurora_meter, :totals, node(), [{key, total}]}` | `"aurora_meter:cluster"` | internal | 0.3.0 | `{:aurora_meter, :totals, node(), totals}` |
 | `{:aurora_meter, :subscription_changed, tenant_key}` | `"aurora_meter:subscriptions"` | internal | 0.2.0 | `{:aurora_meter, :subscription_changed, key}` |
@@ -925,11 +951,13 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Events.Backfill` | The implementation behind `mix aurora_meter.events.backfill`. Run the task. |
 | `AuroraMeter.Events.Canonical` | The canonical payload encoding behind `payload_hash` (ADR 0009), and the validation `AuroraMeter.record/4` runs before any I/O. |
 | `AuroraMeter.Events.Gate` | The admission counter that bounds concurrent durable writes. Configure `:record_max_concurrency`; there is nothing to call. |
+| `AuroraMeter.Install.Options` | Parses and validates `--feature-policy` and `--events-source` for both definitions of the install task, so the Igniter-less fallback cannot silently ignore a switch. |
+| `AuroraMeter.Install.Plan` | The host migration files an install or an upgrade has to become, for both packages. Both generators and both installers read it, so no two of them can emit a different file. |
 | `AuroraMeter.Install.Templates` | The strings the installer writes. |
 | `AuroraMeter.LiveDashboard.Auth` | The `:authorized_by` contract both dashboard pages are registered with. Register the page; the option is documented on it. |
 | `AuroraMeter.LiveDashboard.NotStartedError` | Raised inside the section readers when a node-local table is absent, and converted into `{:unavailable, :not_started}`. It is never raised out of them. |
 | `AuroraMeter.LiveDashboard.Sections` | The readers behind the core page. They answer `{:ok, data}` or `{:unavailable, class}` and never a zero in place of a value they could not read. |
-| `AuroraMeter.LiveDashboard.View` | The HEEx the core page renders. It reads nothing. |
+| `AuroraMeter.LiveDashboard.View` | The HEEx the core page renders. It reads nothing. Needs `phoenix_live_view`: it opens with `if Code.ensure_loaded?(Phoenix.Component) do`, so on a build without LiveView it does not exist. |
 | `AuroraMeter.Migration.V1` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V2` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V3` | One schema version. Call `AuroraMeter.Migration.up/1`. |

@@ -1,0 +1,108 @@
+############ UTC 2026-09-16T19:58:28Z
+############ full suite, 8 seeds, including 638544 which produced sighting three
+  seed 638544  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 459043  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 8702  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 83170  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 22237  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 1  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 20260916  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+  seed 777  Result: 2133 passed (81 doctests, 22 properties, 2030 tests), 8 excluded
+############ full suite: clean=8 FAILED=0 NO_RESULT=0 of 8
+############ format, this unit's files
+[mixlane] core: DB_PORT=5490 mix format --check-formatted mix.exs lib/aurora_meter/broadcaster.ex lib/aurora_meter/config.ex lib/aurora_meter/live_view.ex lib/aurora_meter/plug/ensure_entitled.ex test/support/aurora_meter/test/failing_seed_storage.ex test/aurora_meter/plug/ensure_entitled_test.exs test/aurora_meter/live_view_test.exs test/aurora_meter/optional_deps_test.exs test/aurora_meter/realtime_test.exs test/aurora_meter/api_inventory_test.exs test/aurora_meter/doc_examples_test.exs test/aurora_meter/exported_idiom_test.exs
+[mixlane] core exit=0 started=2026-09-16T20:32:49Z finished=2026-09-16T20:32:50Z
+############ format exit=0
+[mixlane] core: DB_PORT=5490 mix credo --strict
+Checking 285 source files (this might take a while) ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 2.7 seconds (0.5s to load, 2.2s running 69 checks on 285 files)
+4851 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+[mixlane] core exit=0 started=2026-09-16T20:32:50Z finished=2026-09-16T20:32:53Z
+############ credo exit=0
+[mixlane] core: DB_PORT=5490 mix compile --warnings-as-errors --force
+Compiling 143 files (.ex)
+Generated aurora_meter app
+[mixlane] core exit=0 started=2026-09-16T20:32:53Z finished=2026-09-16T20:32:55Z
+############ compile exit=0
+[mixlane] core: DB_PORT=5490 mix dialyzer
+Finding suitable PLTs
+Checking PLT...
+[:asn1, :aurora_meter, :compiler, :crypto, :db_connection, :decimal, :ecto, :ecto_sql, :eex, :elixir, :ex_ast, :ex_unit, :finch, :floki, :glob_ex, :hpax, :igniter, :inets, :jason, :kernel, :logger, :mime, :mint, :mix, :nimble_options, :nimble_pool, :oban, :opentelemetry, :opentelemetry_api, :owl, :phoenix, :phoenix_html, :phoenix_live_dashboard, :phoenix_live_view, :phoenix_pubsub, :phoenix_template, :phx_new, :plug, :plug_crypto, :postgrex, :public_key, :req, :rewrite, :sourceror, :spitfire, :ssl, :stdlib, :stream_data, :telemetry, :telemetry_metrics, :text_diff, :websock, :websock_adapter]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"priv/plts/dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt",
+  files: [~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Events.Gate.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Clock.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Test.UnresolvedStorage.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Install.Plan.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/_build/test/lib/aurora_meter/ebin/Elixir.AuroraMeter.Test.PeriodSources.FutureWindow.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m5.0s
+done (passed successfully)
+[mixlane] core exit=0 started=2026-09-16T20:32:55Z finished=2026-09-16T20:33:01Z
+############ dialyzer exit=0
+[mixlane] core: DB_PORT=5490 mix docs --warnings-as-errors --output /tmp/tmp.9N8hLS7I9v
+Generating docs...
+View html docs at "/tmp/tmp.9N8hLS7I9v/index.html"
+[mixlane] core exit=0 started=2026-09-16T20:33:01Z finished=2026-09-16T20:33:03Z
+############ docs exit=0
+############ the two optional-dependency legs
+leg=headless rc=0 log=tmp/v1/09a/logs/leg-headless-20260916T203303Z.log
+  phoenix_pubsub 2.3.0
+  telemetry 1.4.2
+  plug                     absent
+  phoenix_live_view        absent
+  phoenix_html             absent
+  phoenix_live_dashboard   absent
+  phoenix                  absent
+  oban                     absent
+  igniter                  absent
+  telemetry_metrics        absent
+################ leg=headless  UTC 2026-09-16T20:33:03Z
+mix.lock sha256 before: d55a81fb21194ad5fb797dd458fe47fcca737a2e4542af4297a55e215d0c7cc0
+compile exit=0
+Result: 1906 passed (76 doctests, 22 properties, 1808 tests)
+test exit=0
+mix.lock UNCHANGED
+################ leg=headless compile=0 test=0 UTC 2026-09-16T20:37:30Z
+############ headless leg: ################ leg=headless compile=0 test=0 UTC 2026-09-16T20:37:30Z
+leg=plug_only rc=0 log=tmp/v1/09a/logs/leg-plug_only-20260916T203730Z.log
+  igniter 0.8.4
+  oban 2.24.1
+  phoenix_pubsub 2.3.0
+  plug 1.20.3
+  plug_crypto 2.2.0
+  telemetry 1.4.2
+  telemetry_metrics 1.2.0
+  plug                     PRESENT
+  phoenix_live_view        absent
+  phoenix_html             absent
+  phoenix_live_dashboard   absent
+  phoenix                  absent
+  oban                     PRESENT
+  igniter                  PRESENT
+  telemetry_metrics        PRESENT
+################ leg=plug_only  UTC 2026-09-16T20:37:30Z
+mix.lock sha256 before: d55a81fb21194ad5fb797dd458fe47fcca737a2e4542af4297a55e215d0c7cc0
+compile exit=0
+Result: 2065 passed (80 doctests, 22 properties, 1963 tests), 8 excluded
+test exit=0
+mix.lock UNCHANGED
+################ leg=plug_only compile=0 test=0 UTC 2026-09-16T20:41:48Z
+############ plug_only leg: ################ leg=plug_only compile=0 test=0 UTC 2026-09-16T20:41:48Z
+############ pro
+############ pro exit=0 Result: 1158 passed (74 doctests, 1084 tests)
+############ mix.lock unchanged?
+############ UTC 2026-09-16T20:42:06Z

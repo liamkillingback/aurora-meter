@@ -107,6 +107,18 @@ defmodule AuroraMeter.Credits.Allocator do
   # A grant creates one lot and then repays outstanding debt out of it before
   # any of it becomes spendable. The lot's id is settled by the caller (it is
   # the row it is about to insert), so the planner is still pure.
+  #
+  # **Out of the new lot only, and of whatever category it is.** This is the one
+  # repayment that may consume promotional value, and it is deliberate (repair
+  # unit R2, finding X355). `architecture-map.md` 7.2 gives it its own sentence,
+  # 01e's independent model implements it the same way, and it is the only door
+  # out of the state `repay_debt/5`'s exclusion creates: a wallet holding a
+  # promotion beside a debt can neither hold nor debit, so if an incoming grant
+  # could not repay either, nothing short of a paid top-up would ever unfreeze
+  # it and a promotion granted to such a wallet would sit there until the sweep
+  # destroyed it. The rule a customer is told is about the credit they already
+  # hold; a new grant being applied to what is outstanding first is the ordinary
+  # behaviour of any account credit and is stated at the moment it happens.
   def plan(book, {:grant, attrs, debt}) do
     repaid = min(attrs.amount, debt)
 
@@ -146,8 +158,16 @@ defmodule AuroraMeter.Credits.Allocator do
       # debit, which 01e's independent lot model caught on a generated history
       # (finding X251): a wallet 17 USD in debt accepted a one-micro-dollar
       # debit because a release had put availability back beside the debt.
+      #
+      # **The reason names the debt** (repair unit R3, findings X357 and X361).
+      # It was `:insufficient_credits` until R3, which sends a support agent
+      # looking for a grant that is not missing: after R2 this wallet can be
+      # holding a visible promotion and still refuse, and the two states want
+      # different answers to the customer. `:debt_outstanding` is refused for a
+      # reason a host can act on and `spendable_figure/2` is the same rule at
+      # the reporting end, so the figures and this clause cannot drift apart.
       debt > 0 and not allow_negative? ->
-        {:error, :insufficient_credits}
+        {:error, :debt_outstanding}
 
       unmet == 0 ->
         {:ok, plan_of(book, movements, 0)}
@@ -173,7 +193,9 @@ defmodule AuroraMeter.Credits.Allocator do
   # non-zero `:credits_overdraft_tolerance`, which defaults to 0.
   def plan(book, {:hold, amount, now, debt}) do
     if debt > 0 do
-      {:error, :insufficient_credits}
+      # Same rule and same reason as the debit clause above: the refusal names
+      # the debt rather than blaming the balance (repair unit R3, X357, X361).
+      {:error, :debt_outstanding}
     else
       {movements, unmet} =
         take(book, amount, eligible(book, now), :available, :reserved, :reserve)
@@ -257,46 +279,71 @@ defmodule AuroraMeter.Credits.Allocator do
     end
   end
 
-  # A refund or a chargeback, scoped to the lots the payment funded.
-  # `available` first so the refund destroys as little as possible, `consumed`
-  # next (which is what raises debt), `reserved` last because an open hold is
-  # work the host believes is still running.
+  # A refund or a chargeback. `available` first so the refund destroys as little
+  # as possible, `consumed` next (which is what raises debt), `reserved` last
+  # because an open hold is work the host believes is still running.
+  #
+  # **One request, two scopes, and the scope is the only difference**
+  # (repair unit R1). A binary `scope` is a `payment_intent_id` and the targets
+  # are the lots that payment funded; `:wallet` is the wallet-wide reversal a
+  # caller with no payment provenance makes, and the targets are every
+  # non-promotional lot in the wallet, in the same spend order. The bucket
+  # order, the promotional exclusion and the debt repayment are one piece of
+  # code for both, because a refund's arithmetic does not change with how much
+  # the caller knows about where the money came from. Before R1 the wallet-wide
+  # path did not come through here at all: it was planned as `{:debit, ...}`,
+  # which drains `eligible/2` and takes promotional lots FIRST (finding X250).
   #
   # **The request carries the debt, and the debt a reversal creates is repaid
-  # out of the wallet's remaining NON-promotional availability** (finding X262).
-  # Without the repayment the book ends with `debt > 0` beside availability
-  # other lots still hold, which LI-06a-5 forbids and which makes `{:hold, ...}`
-  # refuse a hold the legacy ledger accepted. Every other operation that moves
-  # value already repays; `:reverse` was the one request tuple that did not even
-  # carry the debt.
+  # through `repay_debt/5` like every other debt** (finding X262). Without the
+  # repayment the book ends with `debt > 0` beside availability other lots still
+  # hold, which LI-06a-5 forbids and which makes `{:hold, ...}` refuse a hold
+  # the legacy ledger accepted. Every other operation that moves value already
+  # repays; `:reverse` was the one request tuple that did not even carry the
+  # debt.
   #
-  # **Why non-promotional only, and it is not an optimisation.**
+  # **The promotional exclusion is `repay_debt/5`'s, not this clause's, and
+  # that is repair unit R2's change** (finding X355). Until R2 this clause
+  # called a private sibling that excluded promotional lots while the settle and
+  # release clauses called one that did not, so the exclusion held for exactly
+  # one transaction and the next release undid it. There is now one repayment
+  # function and it excludes promotional availability for every caller, which is
+  # the same argument R1 made about the two reversal implementations: the defect
+  # was two implementations of one idea, and the repair is that there is one.
   # `architecture-map.md` 7.2 says "promotional lots are never touched by a paid
-  # reversal", and `v1-release.md` 10.1 says "promotional lots cannot absorb a
-  # paid refund simply because they were created later". Repaying out of
-  # `eligible/2` would take the promotional lots first, because promotional is
-  # what spend order takes first, so the refund would erase exactly the credit
-  # G06 bullet 5 protects. The balance delta is identical either way (the
-  # projection subtracts debt, so moving X from `available` to `consumed` while
-  # debt falls by X is balance neutral); what differs is whether a promotion
-  # survives the refund, and it must.
+  # reversal" and `v1-release.md` 10.1 says "promotional lots cannot absorb a
+  # paid refund simply because they were created later"; a rule that one
+  # ordinary later event defeats is not that rule.
+  #
+  # The balance delta is identical either way (the projection subtracts debt, so
+  # moving X from `available` to `consumed` while debt falls by X is balance
+  # neutral); what differs is whether a promotion survives the refund, and it
+  # must. That is why every assertion about this is per lot.
   #
   # Where the only availability left is promotional, the debt stays and
-  # LI-06a-5 is false for that wallet until the next incoming value repays it.
+  # LI-06a-5 is false for that wallet until the next incoming grant repays it.
   # That is the deliberate cost of the sentence above, it is recorded in the
-  # 06e evidence, and it is why `{:hold, ...}`'s blanket refusal on `debt > 0`
-  # is conservative rather than wrong there: `spendable/3` is negative in every
-  # shape reachable that way except one where availability is promotional and
-  # exceeds the debt.
-  def plan(book, {:reverse, payment_intent_id, amount, now, debt_before}) do
-    targets = funded_by(book, payment_intent_id)
+  # 06e evidence and widened by R2.
+  #
+  # **The one shape that made that conservative refusal a lie to the host is
+  # closed at the reporting end** (repair unit R3, X357 and X361). Where
+  # promotional availability exceeds the debt, `available - debt` was positive
+  # while the planner accepted nothing, so `balance/1` advertised credit that
+  # every `hold/4` then refused. `spendable_figure/2` is now the same rule as
+  # this clause's refusal and reports zero there, and the refusal itself says
+  # `:debt_outstanding` rather than `:insufficient_credits`. **Whether such a
+  # wallet should be allowed to spend its promotion at all is a separate,
+  # commercial question and is the owner's (X361); R3 did not relax the
+  # refusal.**
+  def plan(book, {:reverse, scope, amount, now, debt_before}) do
+    targets = reversal_targets(book, scope)
 
-    if targets == [] do
+    if targets == [] and is_binary(scope) do
       {:error, :no_matching_lot}
     else
       ids = Enum.map(targets, & &1.id)
 
-      {book, movements, _left} =
+      {book, movements, left} =
         Enum.reduce([:available, :consumed, :reserved], {book, [], amount}, fn
           _bucket, {book, moves, 0} ->
             {book, moves, 0}
@@ -309,10 +356,10 @@ defmodule AuroraMeter.Credits.Allocator do
       created =
         movements
         |> Enum.filter(&(&1.from == :consumed))
-        |> Enum.reduce(0, &(&1.amount + &2))
+        |> Enum.reduce(unreachable(scope, left), &(&1.amount + &2))
 
       {book, movements, debt_delta} =
-        repay_from_purchased(book, movements, created, debt_before, now)
+        repay_debt(book, movements, created, debt_before, now)
 
       {:ok,
        %{
@@ -325,7 +372,7 @@ defmodule AuroraMeter.Credits.Allocator do
   end
 
   def plan(book, {:restore, payment_intent_id, amount, _now, debt}) do
-    targets = funded_by(book, payment_intent_id)
+    targets = reversal_targets(book, payment_intent_id)
 
     if targets == [] do
       {:error, :no_matching_lot}
@@ -365,8 +412,46 @@ defmodule AuroraMeter.Credits.Allocator do
     book
     |> Enum.filter(&(&1.id in eligible_ids))
     |> Enum.reduce(0, &(&1.available + &2))
-    |> Kernel.-(debt)
+    |> spendable_figure(debt)
   end
+
+  # **The reporting half of the `debt > 0` refusal, written once** (repair unit
+  # R3, findings X357 and X361). Every figure a host reads that claims
+  # spendability comes through here: `spendable/3` over a planned book,
+  # `Ledger.figures/1` over the `balance/1` and `summary/1` aggregate, and
+  # `Ledger.spendable/1` over the advisory one `sufficient?/2` compares. One
+  # function, for the reason R2 gave for there being one `repay_debt/5`: a rule
+  # with two implementations has one that is wrong.
+  #
+  # The rule is the `{:hold, ...}` and `{:debit, ...}` clauses above, stated as
+  # a number: **while `debt > 0` the planner accepts nothing, so nothing is
+  # spendable.** Until R3 this was `available - debt`, which is negative only
+  # when the debt exceeds eligible availability; a wallet holding 5 USD of
+  # promotional availability against a 4 USD debt reported `spendable:
+  # 1_000_000` and then refused a hold of 1 micro-dollar. After R2 that is an
+  # ordinary wallet rather than a rare one, which is what made it worth fixing.
+  #
+  # **Not clamped to zero, capped at it.** Where the debt exceeds eligible
+  # availability the figure stays negative, because 06c's reason for not
+  # clamping is still right: the depth of the shortfall is real and a reader
+  # watching a wallet climb out of debt needs to see it move. What changed is
+  # only that the figure may never be **positive** while the planner would
+  # refuse, which is the direction a host can be misled in.
+  @doc false
+  @spec spendable_figure(integer(), non_neg_integer()) :: integer()
+  def spendable_figure(available, 0), do: available
+  def spendable_figure(available, debt) when debt > 0, do: min(available - debt, 0)
+
+  # The promotional half of the same figure. `promotional_spendable` is
+  # documented as "the part of `spendable` that came from promotional lots", so
+  # it answers the same question about the same planner and it reads zero in
+  # the same state. The **total** the wallet holds is `promotional`, which is a
+  # different question and is not touched: a promotion standing beside a debt
+  # survives whole (R2, X355) and the figures must go on saying so.
+  @doc false
+  @spec promotional_spendable_figure(non_neg_integer(), non_neg_integer()) :: non_neg_integer()
+  def promotional_spendable_figure(_promotional, debt) when debt > 0, do: 0
+  def promotional_spendable_figure(promotional, _debt), do: promotional
 
   @doc false
   @spec projection([lot()], non_neg_integer()) :: %{
@@ -398,33 +483,52 @@ defmodule AuroraMeter.Credits.Allocator do
   # **Every incoming value repays outstanding debt before it becomes
   # spendable**, and value handed back by an unreserve is incoming value. Without
   # this a release could put availability beside an outstanding debt, which
-  # breaks LI-06a-5 (`debt > 0` implies no availability) and lets a wallet spend
-  # money it owes. A grant has repaid debt since the first draft; 01e's
-  # independent lot model is what showed that the other two doors were open
-  # (finding X251).
+  # breaks LI-06a-5 and lets a wallet spend money it owes. A grant has repaid
+  # debt since the first draft; 01e's independent lot model is what showed that
+  # the other two doors were open (finding X251).
+  #
+  # **The repayment never reaches a promotional lot, whatever created the debt**
+  # (finding X355, repair unit R2). This is one function for every caller, and
+  # it used to be two: `repay_debt/5` over `eligible/2` for settle and release,
+  # and a `repay_from_purchased/5` over `purchased_eligible/2` for the reversal.
+  # The reversal's exclusion was therefore one ordinary event from being
+  # defeated. A refund exhausts the paid lots, correctly leaves `debt` rather
+  # than touching the promotion, and then the next release (a hold released
+  # after any failed operation, which is a common event and not an exotic one)
+  # repaid that same debt out of `eligible/2`, which is spend order, which takes
+  # the promotional lot FIRST. The customer's promotion paid for the refund
+  # after all, one event later, with an allocation row that says `consume` and
+  # nothing that says why.
+  #
+  # The rule is now one sentence: **credit the wallet already holds is never
+  # consumed to repay a debt if it is promotional.** It is deliberately not
+  # conditioned on where the debt came from, because `debt` is one integer on
+  # the balance row with no provenance: nothing here can tell a refund's debt
+  # from an overspend's, and inventing a distinction the data cannot carry would
+  # be a guess wearing a rule's clothes. `docs/evidence/v1/repairs/r2-debt-repayment.md`
+  # section 0 states the cost and what the alternative would have bought.
+  #
+  # **What this rule is not.** It is not "promotional credit is never spent".
+  # Spend order takes promotional first and still does (D07), including the
+  # extra consumption a settlement above its hold makes: that is the tenant
+  # spending a promotion on work, which is what a promotion is for. What is
+  # excluded is repaying a debt, which is not a spend against work.
+  #
+  # **The grant clause is deliberately not covered by it.** `{:grant, ...}`
+  # repays out of the lot it is creating, of whatever category, because
+  # `architecture-map.md` 7.2 says so in its own sentence ("every incoming grant
+  # repays outstanding debt first, by writing a `consume` allocation against the
+  # new lot"), because 01e's independent model implements exactly that, and
+  # because it is the only thing that ends the state this rule creates: a wallet
+  # holding a promotion beside a debt cannot hold or debit until something
+  # repays, and if a promotional grant could not repay either then a host would
+  # have no way to unfreeze the wallet except a paid top-up.
   #
   # Eligible lots only, in spend order. Repaying out of a lot that is past its
   # `expires_at` would turn money that is about to be destroyed into debt
   # relief, which is a different and worse arithmetic: debt repayment is a
   # spend, so it spends what a spend could.
   defp repay_debt(book, movements, debt_delta, debt_before, now) do
-    debt = debt_before + debt_delta
-
-    if debt <= 0 do
-      {book, movements, debt_delta}
-    else
-      {repayments, _unmet} =
-        take(book, debt, eligible(book, now), :available, :consumed, :consume)
-
-      repaid = Enum.reduce(repayments, 0, &(&1.amount + &2))
-      {apply_movements(book, repayments), movements ++ repayments, debt_delta - repaid}
-    end
-  end
-
-  # `repay_debt/5`'s sibling for a reversal: the same repayment, over the
-  # wallet's non-promotional eligible lots only. See the `{:reverse, ...}`
-  # clause for why the exclusion is the contract rather than a preference.
-  defp repay_from_purchased(book, movements, debt_delta, debt_before, now) do
     debt = debt_before + debt_delta
 
     if debt <= 0 do
@@ -573,16 +677,60 @@ defmodule AuroraMeter.Credits.Allocator do
     end)
   end
 
-  # Promotional lots are never touched by a paid reversal, because a promotion
-  # did not come from that payment and cannot be handed back to it.
-  defp funded_by(book, payment_intent_id) do
-    book
-    |> Enum.filter(fn lot ->
-      lot.category != :promotional and
-        Map.get(lot.source || %{}, "payment_intent_id") == payment_intent_id
+  # Which lots a reversal may take from, in spend order.
+  #
+  # **Promotional lots are in neither answer**, and that is the rule rather than
+  # a side effect of the source match: `architecture-map.md` 7.2 says
+  # "promotional lots are never touched by a paid reversal" and `v1-release.md`
+  # 10.1 says "promotional lots cannot absorb a paid refund simply because they
+  # were created later". A promotion did not come from a payment and cannot be
+  # handed back to one, whichever scope the caller had.
+  defp reversal_targets(book, payment_intent_id) when is_binary(payment_intent_id) do
+    Enum.filter(purchased(book), fn lot ->
+      Map.get(lot.source || %{}, "payment_intent_id") == payment_intent_id
     end)
+  end
+
+  defp reversal_targets(book, :wallet), do: purchased(book)
+
+  # Every lot a paid reversal may reach: paid and adjustment, never promotional,
+  # in spend order (earliest expiry first, then oldest grant, then `seq`).
+  #
+  # **Spend order, and it is a choice with a reason.** The source-scoped
+  # reversal already walks a payment's own lots in this order, so the
+  # wallet-wide one inherits it rather than inventing a second rule; and taking
+  # back the credit that expires soonest destroys the least value, because the
+  # long-lived lot the tenant keeps is worth more to it than the one the sweep
+  # was about to take anyway.
+  #
+  # **No expiry filter, unlike `eligible/2`, and that is also deliberate.** A
+  # lot past its `expires_at` that the sweep has not reached still contributes
+  # its `available` to `balance`, so it is where the money honestly comes from.
+  # Skipping it would make the reversal create `debt` for value that is still on
+  # the books, and the sweep would then destroy that value too: the tenant would
+  # end owing credit it never had.
+  defp purchased(book) do
+    book
+    |> Enum.filter(&(&1.category != :promotional))
     |> Enum.sort_by(&spend_key/1)
   end
+
+  # What a reversal could not find a lot for, and whether it becomes debt.
+  #
+  # Source scoped: **not debt**. The amount is capped by that payment's own
+  # lots, and `Ledger.reverse_lot/5` decides what an unmet remainder means
+  # (`:exceeds_source`, or a `shortfall` stamped on the row under
+  # `allow_partial`). Charging the tenant here for a cap the caller may be about
+  # to refuse would take money twice.
+  #
+  # Wallet wide: **all of it**. `reverse/5` is never refused for want of
+  # balance, because the money has already left the payment provider, and on a
+  # lot wallet `debt` is what a negative balance is made of. A wallet whose only
+  # remaining credit is promotional therefore takes the whole reversal as debt
+  # and keeps the promotion, which is the rule above stated in the one shape
+  # where it costs something.
+  defp unreachable(scope, _unmet) when is_binary(scope), do: 0
+  defp unreachable(:wallet, unmet), do: unmet
 
   defp category_rank(:promotional), do: 0
   defp category_rank(_paid_or_adjustment), do: 1
