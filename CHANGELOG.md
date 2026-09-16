@@ -13,6 +13,55 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Added
 
+- **An optional LiveDashboard page, with no default authorization and no tenant
+  data on it.** `AuroraMeter.LiveDashboard.Page` shows what Aurora Meter is
+  doing on this node: what is buffered and how old it is, cluster convergence,
+  the durable-event checkpoints, credit holds and debt in aggregate, checkpoint
+  state grouped by operation, and the observability-relevant configuration, each
+  with its runbook link. It is compiled only when the new optional
+  `phoenix_live_dashboard` dependency is installed.
+
+  `:authorized_by` is **required** and has no default: a library page cannot
+  know who is signed in and will not guess, so adding it to
+  `additional_pages:` by copy-paste raises an `ArgumentError` naming the three
+  accepted forms. The check runs again on every refresh, so a session that loses
+  its marker stops seeing data without waiting for a remount.
+
+  The page renders **no tenant key, feature name, reference or event id**, which
+  is what lets it be shown behind a plain operator marker. A section it could not
+  read renders "unavailable" with an error class, never a `0` and never an empty
+  table: an operator reads both of those as "nothing is wrong", and that is the
+  case the page exists for. A gauge-derived figure whose last sample is older
+  than three `:metrics_interval`s renders as stale with the sample age.
+- **An OpenTelemetry bridge that starts nothing.**
+  `AuroraMeter.OpenTelemetry.attach/1` and `detach/0,1` turn the slow half of
+  the catalogue (the durable write, the flush, a replay batch, a hold
+  reconciliation, and Pro's outbox delivery and provider calls) into spans in
+  **your** SDK. It uses the OpenTelemetry API and only the API: no tracer
+  provider, no exporter, no batch processor, no socket. Compiled only when the
+  new optional `opentelemetry_api` dependency is installed.
+
+  The hot path gets no span and there is no friendly switch that turns it on.
+  `attach/1` is idempotent: five calls leave the handler set one call leaves.
+  Span attributes go through `redact/2`, so no tenant key, reference, object id
+  or provider reference reaches a tracer; an error is carried as `error_class`
+  rather than as its message, and a failing span's status message is empty for
+  the same reason.
+
+  A span pair puts the caller's previous span back when it ends. These handlers
+  run inside processes that live for ever (`AuroraMeter.Flusher` flushes for
+  ever), so a bridge that left an ended span current would parent every later
+  span to a finished one.
+- `AuroraMeter.Telemetry.gauges/0`: the most recent sample of each gauge with
+  how long ago it was taken, **without** emitting one. For a dashboard that
+  refreshes faster than `:metrics_interval` and should not fire a gauge event,
+  and every handler a host attached to it, on every refresh. A gauge that has
+  never sampled contributes no entry rather than a zero.
+- `docs/alerts.md`: five worked alert examples, each with the signal, the
+  derivation of its threshold from a configuration value you control, a severity
+  and a runbook link, plus a "do not alert on this" section for the four signals
+  that look like incidents and are not. They are deployment examples, not
+  service level objectives.
 - **The telemetry contract is data, and every page describing it is guarded.**
   `AuroraMeter.Telemetry.events/0` returns every core event with its real
   measurement and metadata keys, the tags a metric may use, the emitter and the

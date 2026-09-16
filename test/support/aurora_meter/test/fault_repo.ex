@@ -165,6 +165,14 @@ defmodule AuroraMeter.Test.FaultRepo do
   @spec one(term()) :: term() | nil
   def one(queryable), do: guard(:one, :read, queryable, fn -> target().one(queryable) end)
 
+  # `AuroraMeter.LiveDashboard.Sections` bounds every page query with an explicit
+  # `:timeout`, so a slow database becomes "unavailable" rather than a hung
+  # LiveView. That needs the two-argument form (build unit 08b).
+  @doc false
+  @spec one(term(), keyword()) :: term() | nil
+  def one(queryable, opts),
+    do: guard(:one, :read, queryable, fn -> target().one(queryable, opts) end)
+
   @doc false
   @spec one!(term()) :: term()
   def one!(queryable), do: guard(:one!, :read, queryable, fn -> target().one!(queryable) end)

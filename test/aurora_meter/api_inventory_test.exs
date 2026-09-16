@@ -47,6 +47,10 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Events.Canonical,
     AuroraMeter.Events.Gate,
     AuroraMeter.Install.Templates,
+    AuroraMeter.LiveDashboard.Auth,
+    AuroraMeter.LiveDashboard.NotStartedError,
+    AuroraMeter.LiveDashboard.Sections,
+    AuroraMeter.LiveDashboard.View,
     AuroraMeter.Migration.V1,
     AuroraMeter.Migration.V2,
     AuroraMeter.Migration.V3,
@@ -57,6 +61,8 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Migration.V8,
     AuroraMeter.Migration.V9,
     AuroraMeter.Migration.V10,
+    AuroraMeter.OpenTelemetry.Bridge,
+    AuroraMeter.OpenTelemetry.Tracer,
     AuroraMeter.Plans.Snapshot,
     AuroraMeter.Schema.FlushReceipt,
     AuroraMeter.Storage.Ecto,
@@ -95,6 +101,9 @@ defmodule AuroraMeter.ApiInventoryTest do
     {AuroraMeter.Components, :usage_summary, 1, "HEEx function component, as `usage_meter/1`"},
     {AuroraMeter.Components, :spend_chart, 1, "HEEx function component, as `usage_meter/1`"},
     {AuroraMeter.Components, :credit_summary, 1, "HEEx function component, as `usage_meter/1`"},
+    {AuroraMeter.LiveDashboard.Page, :render, 1,
+     "HEEx: the typed contract is `Phoenix.LiveDashboard.PageBuilder`'s `render/1` callback, " <>
+       "and its return type belongs to an optional dependency"},
     {AuroraMeter.Plans, :plan, 2,
      "plans DSL macro: it is usable only inside a module that `use`s `AuroraMeter.Plans`, " <>
        "and a spec would describe the AST it receives rather than the DSL it accepts"},
@@ -374,6 +383,11 @@ defmodule AuroraMeter.ApiInventoryTest do
   defp dependency_present?("phoenix_html"), do: Code.ensure_loaded?(Phoenix.HTML)
   defp dependency_present?("igniter"), do: Code.ensure_loaded?(Igniter)
   defp dependency_present?("telemetry_metrics"), do: Code.ensure_loaded?(Telemetry.Metrics)
+
+  defp dependency_present?("phoenix_live_dashboard"),
+    do: Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+
+  defp dependency_present?("opentelemetry_api"), do: Code.ensure_loaded?(:otel_tracer)
 
   defp dependency_present?(other) do
     flunk("docs/api.md names an optional dependency this test has no probe for: #{other}")

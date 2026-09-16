@@ -331,12 +331,20 @@ defmodule AuroraMeter.ClockTest do
       # billing period rather than seconds, so X100's backwards step cannot
       # invert it. A plan change is one row per tenant per period; `track/4`
       # never reaches this module (07b).
+      #
+      # `live_dashboard/sections.ex` reads it once per dashboard refresh, to age
+      # rows the database stamped: a credit hold's `inserted_at` and a
+      # checkpoint's `updated_at`. Both sides of every subtraction there are the
+      # database's own clock, which is the rule. It decides nothing at all: it
+      # renders a number on an operator's screen. A page a human opens is not a
+      # path, hot or otherwise (08b).
       allowed = [
         "lib/aurora_meter/clock.ex",
         "lib/aurora_meter/credits.ex",
         "lib/aurora_meter/credits/ledger.ex",
         "lib/aurora_meter/credits/lot_migration.ex",
         "lib/aurora_meter/events/replay.ex",
+        "lib/aurora_meter/live_dashboard/sections.ex",
         "lib/aurora_meter/oban/credit_expiry.ex",
         "lib/aurora_meter/subscriptions/transitions.ex",
         "lib/mix/tasks/aurora_meter.events.backfill.ex"

@@ -1486,10 +1486,18 @@ phase 11 evidence below.
 
 ## I20 Optional integrations remain optional and tenant-safe
 
-**Guarantee.** Phoenix LiveView, Phoenix HTML, Igniter and Oban are declared
-optional in `mix.exs`, and the metering, entitlement and credit paths do not
-reference them. Three pieces of code do, and each is compiled behind a guard
+**Guarantee.** Phoenix LiveView, Phoenix HTML, Igniter, Oban,
+`telemetry_metrics`, `phoenix_live_dashboard` and `opentelemetry_api` are
+declared optional in `mix.exs`, and the metering, entitlement and credit paths do
+not reference them. Five pieces of code do, and each is compiled behind a guard
 rather than assumed:
+`lib/aurora_meter/live_dashboard/page.ex` opens with
+`if Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder) do` and
+`lib/aurora_meter/open_telemetry.ex` with `if Code.ensure_loaded?(:otel_tracer) do`,
+and in both cases everything the page or the bridge is judged on lives in a
+module that is **not** guarded (`AuroraMeter.LiveDashboard.Sections`,
+`AuroraMeter.LiveDashboard.Auth`, `AuroraMeter.OpenTelemetry.Bridge`), so a build
+with no optional dependency still compiles and still tests the behaviour;
 `lib/aurora_meter/components.ex` opens with `if Code.ensure_loaded?(Phoenix.Component) do`,
 so on a build without LiveView the components module simply is not defined;
 `lib/aurora_meter/oban.ex` and every file under `lib/aurora_meter/oban/` open
@@ -1543,9 +1551,26 @@ CI leg fails by design until 09b settles it.
 - `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.Telemetry.Metrics is compiled exactly when Telemetry.Metrics is available`
 - `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.Telemetry itself never depends on the optional dependency`
 - `AuroraMeter.HeadlessTest` / `test I20 AuroraMeter.Telemetry.Metrics is absent without telemetry_metrics`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 the LiveDashboard page is compiled exactly when phoenix_live_dashboard is available`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AURORA_NO_DASHBOARD removes the dashboard dependency and nothing else`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.OpenTelemetry is compiled exactly when opentelemetry_api is available`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AURORA_NO_OTEL removes the OpenTelemetry pair and nothing else`
+- `AuroraMeter.HeadlessTest` / `test I20 the dashboard page and the OpenTelemetry bridge are absent without their dependencies`
+- `AuroraMeter.LiveDashboard.PageTest` / `test I20 dashboard page refuses without host auth: init/1 raises ArgumentError when :authorized_by is absent`
+- `AuroraMeter.LiveDashboard.PageTest` / `test I20 dashboard page refuses without host auth: an unrecognised form raises and names the three`
+- `AuroraMeter.LiveDashboard.PageTest` / `test I20 dashboard page refuses without host auth: a check returning false renders the refusal panel and no section data`
+- `AuroraMeter.LiveDashboard.PageTest` / `test I20 dashboard page refuses without host auth: a check that raises is treated as false and logs a warning`
+- `AuroraMeter.LiveDashboard.PageTest` / `test I20 {:assign, key} requires the assign to be exactly true, not truthy`
+- `AuroraMeter.LiveDashboard.PageTest` / `test I20 the core page accepts :host_route, because it renders no tenant-identifying value`
 - `AuroraMeter.RealtimeTest` / `test usage_meter renders the value and progressbar semantics`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test wires config, supervision child, a plans module and the migration`
-- PLANNED (08b): `AuroraMeter.ComponentsAuthTest` / `test I20 a usage component refuses to render without a host resolved tenant`
+- NOT 08b's, and recorded rather than dropped: `AuroraMeter.ComponentsAuthTest` /
+  `test I20 a usage component refuses to render without a host resolved tenant`.
+  This line said PLANNED (08b). 08b's build document scopes the components out
+  by name (it owns the two dashboard pages, the OpenTelemetry bridge and the Pro
+  LiveView tenant fix), and `AuroraMeter.Components` takes the tenant from the
+  caller and has no authorization decision of its own to refuse. The LiveView
+  helpers are 09a's. See `open-findings.md` X333.
 - `AuroraMeter.EntitlementsTest` / `test I20 every Noop billing provider callback returns :not_configured`
 - PLANNED (09b): `AuroraMeter.RealtimeTest` / `test I20 every quota kind renders its own wording`
 - PLANNED (09b): `AuroraMeter.RealtimeTest` / `test I20 a single-point and an empty series render without a broken chart`

@@ -111,6 +111,25 @@ defmodule AuroraMeter.Test.TelemetryCensus do
     end
   end
 
+  # `:telemetry.execute(event, measurements, metadata)` and
+  # `:telemetry.span(event, start_metadata, fun)` do NOT have the same argument
+  # shape, and reading both the same way is how a span's start metadata gets
+  # compared against a catalogue's measurements.
+  #
+  # A span's measurements are `:telemetry.span/3`'s own (`duration`,
+  # `monotonic_time`, `system_time`) and never appear at the site, so the source
+  # cannot state them. Its metadata at the site is the START half only; the stop
+  # half is in the tuple the function returns and the exception half is added by
+  # `:telemetry`. That is why the comparison against a span site is a SUBSET
+  # check in both contract tests rather than an equality (`open-findings.md`
+  # X332). Every core span site happened to pass a variable, so the shape
+  # mismatch was invisible until a site passed a literal.
+  defp stated_measurements(:execute, rest), do: keys(Enum.at(rest, 0))
+  defp stated_measurements(:span, _rest), do: :dynamic
+
+  defp stated_metadata(:execute, rest), do: keys(Enum.at(rest, 1))
+  defp stated_metadata(:span, rest), do: keys(Enum.at(rest, 0))
+
   # Only `@name value` forms, which is what a module attribute holding an event
   # name is. An accumulating attribute or one built by a function is reported
   # unresolved rather than guessed at.
@@ -136,8 +155,8 @@ defmodule AuroraMeter.Test.TelemetryCensus do
           event: event,
           form: form(fun, form),
           attribute: attribute,
-          measurements: keys(Enum.at(rest, 0)),
-          metadata: keys(Enum.at(rest, 1))
+          measurements: stated_measurements(fun, rest),
+          metadata: stated_metadata(fun, rest)
         }
 
       :error ->

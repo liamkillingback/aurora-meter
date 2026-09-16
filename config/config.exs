@@ -35,6 +35,26 @@ if config_env() == :test do
     # the Store, so the timer is proved deliberately rather than incidentally.
     metrics_interval: 0
 
+  # The OpenTelemetry SDK is an `only: :test` dependency of this repository and
+  # of nobody else: it exists so `AuroraMeter.OpenTelemetrySdkTest` can assert
+  # the span shape against a real tracer provider rather than against this
+  # package's own `AuroraMeter.OpenTelemetry.Tracer` seam.
+  #
+  # `simple` rather than the default `batch`, because a batch processor exports
+  # on a timer and a test would be asserting on a race. `traces_exporter: :none`
+  # because the test redirects the processor to `:otel_exporter_pid` itself: the
+  # pid is the test process and is not knowable here. **Nothing leaves the
+  # node** in either configuration.
+  # Guarded by the same switch `mix.exs` uses: with AURORA_NO_OTEL=1 the
+  # application is not in the build at all, and Mix warns about configuring one
+  # that is not there. A configuration block and the dependency it configures
+  # have to be removed by the same switch.
+  if System.get_env("AURORA_NO_OTEL") != "1" do
+    config :opentelemetry,
+      span_processor: :simple,
+      traces_exporter: :none
+  end
+
   config :aurora_meter, AuroraMeter.TestRepo,
     username: "postgres",
     password: "postgres",

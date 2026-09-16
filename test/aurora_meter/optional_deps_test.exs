@@ -11,16 +11,33 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
   """
   use ExUnit.Case, async: true
 
+  alias AuroraMeter.LiveDashboard.Auth
+  alias AuroraMeter.LiveDashboard.Sections
+  alias AuroraMeter.OpenTelemetry.Bridge
+
   defp headless?, do: System.get_env("AURORA_HEADLESS") == "1"
+  defp no_metrics?, do: System.get_env("AURORA_NO_METRICS") == "1"
 
   test "I20 the optional integrations are present exactly when they were not switched off" do
-    for module <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban, Telemetry.Metrics] do
+    # The four that only `AURORA_HEADLESS` removes.
+    for module <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban] do
       assert Code.ensure_loaded?(module) == not headless?(),
              "#{inspect(module)} loaded?=#{Code.ensure_loaded?(module)} with " <>
                "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))}. " <>
                "The headless CI leg removes the optional dependencies in mix.exs; " <>
                "every other leg keeps them."
     end
+
+    # `telemetry_metrics` has a narrow switch of its own (`open-findings.md`
+    # X327), so it is asserted against BOTH. This clause used to read
+    # `== not headless?()` for all five, which meant the `AURORA_NO_METRICS`
+    # leg could never have passed this file: `Telemetry.Metrics` is absent on it
+    # and `headless?()` is false. 08a ran that leg on Pro only, where this test
+    # does not exist, so nothing said so.
+    assert Code.ensure_loaded?(Telemetry.Metrics) == not (headless?() or no_metrics?()),
+           "Telemetry.Metrics loaded?=#{Code.ensure_loaded?(Telemetry.Metrics)} with " <>
+             "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))} and " <>
+             "AURORA_NO_METRICS=#{inspect(System.get_env("AURORA_NO_METRICS"))}"
   end
 
   test "I20 AuroraMeter.Components is compiled exactly when Phoenix.Component is available" do
@@ -54,6 +71,85 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
   test "I20 the install task exists either way, with or without Igniter" do
     assert Code.ensure_loaded?(Mix.Tasks.AuroraMeter.Install)
     assert function_exported?(Mix.Tasks.AuroraMeter.Install, :run, 1)
+  end
+
+  test "I20 the LiveDashboard page is compiled exactly when phoenix_live_dashboard is available" do
+    # lib/aurora_meter/live_dashboard/page.ex opens with
+    # `if Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder) do`.
+    assert Code.ensure_loaded?(AuroraMeter.LiveDashboard.Page) ==
+             Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+
+    # And the behaviour the page is judged on is NOT behind that guard. The data
+    # readers and the authorization contract are plain modules, so a build with
+    # no dashboard dependency still compiles and still tests them.
+    assert Code.ensure_loaded?(Sections)
+    assert Code.ensure_loaded?(Auth)
+    assert is_list(Sections.sections())
+  end
+
+  test "I20 AURORA_NO_DASHBOARD removes the dashboard dependency and nothing else" do
+    # The narrow-switch rule from `open-findings.md` X327: a switch that removes
+    # more than the thing it is named for produces a build no host can have, and
+    # the leg then tests nothing about the thing it is named for. This asserts
+    # the narrowness rather than claiming it.
+    if System.get_env("AURORA_NO_DASHBOARD") == "1" do
+      refute Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+      refute Code.ensure_loaded?(AuroraMeter.LiveDashboard.Page)
+
+      for still_here <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban, Telemetry.Metrics] do
+        assert Code.ensure_loaded?(still_here),
+               "AURORA_NO_DASHBOARD removed #{inspect(still_here)}, which is not what it is " <>
+                 "for. A switch that removes four dependencies a host requires builds a " <>
+                 "configuration nobody can be in (open-findings.md X327)."
+      end
+    else
+      assert Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+    end
+  end
+
+  test "I20 AuroraMeter.OpenTelemetry is compiled exactly when opentelemetry_api is available" do
+    # lib/aurora_meter/open_telemetry.ex opens with
+    # `if Code.ensure_loaded?(:otel_tracer) do`. Everything the bridge actually
+    # DOES lives in AuroraMeter.OpenTelemetry.Bridge, which is never guarded, so
+    # the handler rules and the redaction are tested in a build with no
+    # OpenTelemetry at all.
+    assert Code.ensure_loaded?(AuroraMeter.OpenTelemetry) == Code.ensure_loaded?(:otel_tracer)
+
+    assert Code.ensure_loaded?(Bridge)
+    assert is_list(Bridge.default_events())
+  end
+
+  test "I20 AURORA_NO_OTEL removes the OpenTelemetry pair and nothing else" do
+    # The narrow-switch rule (`open-findings.md` X327, X331). It removes the API
+    # and the test-only SDK; everything else optional stays.
+    if System.get_env("AURORA_NO_OTEL") == "1" do
+      refute Code.ensure_loaded?(:otel_tracer)
+      refute Code.ensure_loaded?(AuroraMeter.OpenTelemetry)
+
+      for still_here <- [
+            Phoenix.Component,
+            Phoenix.HTML,
+            Igniter,
+            Oban,
+            Telemetry.Metrics,
+            Phoenix.LiveDashboard.PageBuilder
+          ] do
+        assert Code.ensure_loaded?(still_here),
+               "AURORA_NO_OTEL removed #{inspect(still_here)}, which is not what it is for"
+      end
+
+      # And every rule the bridge is judged on is still compiled and still
+      # answers, which is the whole point of keeping it out of the guard.
+      assert Code.ensure_loaded?(Bridge)
+      assert length(Bridge.default_events()) == 6
+      assert [:aurora_meter, :track] in Bridge.never_by_default()
+    else
+      assert Code.ensure_loaded?(:otel_tracer)
+      assert Code.ensure_loaded?(AuroraMeter.OpenTelemetry)
+      assert function_exported?(AuroraMeter.OpenTelemetry, :attach, 1)
+      assert function_exported?(AuroraMeter.OpenTelemetry, :detach, 0)
+      assert function_exported?(AuroraMeter.OpenTelemetry, :detach, 1)
+    end
   end
 
   test "I20 AuroraMeter.Telemetry.Metrics is compiled exactly when Telemetry.Metrics is available" do
@@ -119,7 +215,10 @@ defmodule AuroraMeter.HeadlessTest do
 
   alias AuroraMeter.Credits
   alias AuroraMeter.Install.Templates
+  alias AuroraMeter.LiveDashboard.Auth
+  alias AuroraMeter.LiveDashboard.Sections
   alias AuroraMeter.Migration
+  alias AuroraMeter.OpenTelemetry.Bridge
 
   setup do
     assert System.get_env("AURORA_HEADLESS") == "1",
@@ -128,6 +227,22 @@ defmodule AuroraMeter.HeadlessTest do
              "`AURORA_HEADLESS=1 mix test --include headless`."
 
     :ok
+  end
+
+  test "I20 the dashboard page and the OpenTelemetry bridge are absent without their dependencies" do
+    refute Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)
+    refute Code.ensure_loaded?(AuroraMeter.LiveDashboard.Page)
+    refute Code.ensure_loaded?(:otel_tracer)
+    refute Code.ensure_loaded?(AuroraMeter.OpenTelemetry)
+    refute Code.ensure_loaded?(:otel_simple_processor)
+
+    # And the readers, the authorization contract and the bridge itself are all
+    # still here, which is the whole claim: a host with no dashboard and no
+    # tracer loses two adapters, not the behaviour behind them.
+    assert Code.ensure_loaded?(Sections)
+    assert Code.ensure_loaded?(Auth)
+    assert Code.ensure_loaded?(Bridge)
+    assert {:ok, _config} = Sections.read(:configuration)
   end
 
   test "I20 Components are not compiled without Phoenix.Component" do

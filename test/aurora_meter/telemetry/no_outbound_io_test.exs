@@ -110,14 +110,22 @@ defmodule AuroraMeter.NoOutboundIoTest do
              "how one arrives"
   end
 
-  test "D11 the library attaches no telemetry handler of its own" do
+  # The OpenTelemetry bridge, and only it. `attach/1` is called BY THE HOST and
+  # never at boot: nothing in the supervision tree calls it, and the module that
+  # exposes it does not exist unless the host installed `opentelemetry_api`. The
+  # claim this test protects is "the library does not decide what leaves the
+  # node", which a handler the host asked for by name does not break. The file
+  # is named rather than the rule relaxed, so a second file acquiring an attach
+  # still fails.
+  @attach_allowed ["lib/aurora_meter/open_telemetry/bridge.ex"]
+
+  test "D11 the library attaches no telemetry handler of its own except the bridge the host asks for" do
     # G08 bullet 2 asks for attach and detach tests that leave no handler
-    # leaks. The cheapest version of that claim is the one this package can
-    # make absolutely: it attaches nothing, ever, so there is nothing to leak.
-    # Handlers are the host's, and an exporter or a bridge that attached one at
-    # boot would be the library deciding what leaves the node.
+    # leaks. Handlers are the host's, and an exporter or a bridge that attached
+    # one at BOOT would be the library deciding what leaves the node.
     hits =
       for {path, source} <- sources(),
+          path not in @attach_allowed,
           fragment <- [":telemetry.attach(", ":telemetry.attach_many("],
           String.contains?(source, fragment),
           do: "#{path}: #{fragment}"
@@ -125,6 +133,30 @@ defmodule AuroraMeter.NoOutboundIoTest do
     assert hits == [],
            "lib/ attaches a telemetry handler, so the library now owns a subscription " <>
              "the host did not ask for: " <> inspect(hits)
+
+    # Both directions. The allow list is not a hole if the file on it really
+    # does attach, and if nothing starts it on its own.
+    bridge =
+      Enum.find_value(sources(), fn {path, source} -> path in @attach_allowed && source end)
+
+    assert bridge != nil and String.contains?(bridge, ":telemetry.attach("),
+           "the attach allow list names a file that no longer attaches anything, so it is " <>
+             "now a hole rather than an exemption"
+
+    # `lib/aurora_meter/open_telemetry.ex` is the public entry point the host
+    # calls, so it names attach by definition. Anything ELSE naming it would be
+    # the library attaching on the host's behalf.
+    entry_points = @attach_allowed ++ ["lib/aurora_meter/open_telemetry.ex"]
+
+    starters =
+      for {path, source} <- sources(),
+          path not in entry_points,
+          String.contains?(source, "OpenTelemetry.attach") or
+            String.contains?(source, "Bridge.attach"),
+          do: path
+
+    assert starters == [],
+           "something in lib/ calls the bridge's attach for the host: " <> inspect(starters)
 
     # What this deliberately does NOT do is assert on `:telemetry.list_handlers/1`
     # at run time. Half this suite attaches a handler for the length of a test,

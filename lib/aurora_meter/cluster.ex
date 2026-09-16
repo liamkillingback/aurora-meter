@@ -105,6 +105,15 @@ defmodule AuroraMeter.Cluster do
     end
   end
 
+  @doc false
+  @spec lag_sample() :: {map(), integer()} | nil
+  def lag_sample do
+    case Process.whereis(__MODULE__) do
+      nil -> nil
+      _pid -> GenServer.call(__MODULE__, :lag_sample, 2_000)
+    end
+  end
+
   @impl GenServer
   def init(_opts) do
     interval = Config.metrics_interval()
@@ -114,7 +123,9 @@ defmodule AuroraMeter.Cluster do
       schedule_lag(interval)
     end
 
-    {:ok, %{lag_interval: interval, peers: %{}, last_message_ms: nil}}
+    # `last_lag` is `nil` rather than a zero-filled sample: a node that has not
+    # sampled yet has no convergence reading, and zero would read as converged.
+    {:ok, %{lag_interval: interval, peers: %{}, last_message_ms: nil, last_lag: nil}}
   end
 
   @impl GenServer
@@ -138,6 +149,10 @@ defmodule AuroraMeter.Cluster do
   @impl GenServer
   def handle_call(:emit_lag, _from, state) do
     {:reply, :ok, maybe_lag(state)}
+  end
+
+  def handle_call(:lag_sample, _from, state) do
+    {:reply, state.last_lag, state}
   end
 
   def handle_call({:apply, kind, origin, batch}, _from, state) do
@@ -219,7 +234,11 @@ defmodule AuroraMeter.Cluster do
     # The pruned map is written back, not merely counted: a map that is filtered
     # for the report and kept in full in the state reports the right number and
     # grows for ever anyway, which is the leak this prune exists to close.
-    %{state | peers: peers}
+    #
+    # The sample is retained with the monotonic instant it was taken at, so the
+    # dashboard can report the figure AND its age without emitting an event of
+    # its own on every refresh.
+    %{state | peers: peers, last_lag: {measurements, now_ms}}
   rescue
     error ->
       Logger.warning(

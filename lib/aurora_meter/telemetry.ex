@@ -668,4 +668,45 @@ defmodule AuroraMeter.Telemetry do
     if Cluster.enabled?(), do: Cluster.emit_lag()
     :ok
   end
+
+  @doc """
+  The most recent gauge sample of each gauge, with how long ago it was taken.
+
+  For a reader that wants the figure without **emitting** one: a dashboard
+  refreshing every second would otherwise fire a gauge event per refresh per
+  connected operator, and every handler a host has attached would run inside
+  `AuroraMeter.Store` each time.
+
+  Each entry is `%{event: name, measurements: map, age_ms: integer}`. A gauge
+  whose owning process is not running, or that has never sampled, contributes
+  **no entry** rather than a zero-filled one: a gauge that reports zero when
+  nothing is watching is worse than a gauge that reports nothing, because zero
+  looks healthy. The same rule as `emit_gauges/0`.
+
+  `age_ms` is a monotonic span inside this node (`AuroraMeter.Clock.monotonic_ms/0`).
+  It is never persisted and never compared across nodes, which is the one
+  reading that cannot step backwards.
+
+  ## Examples
+
+      iex> is_list(AuroraMeter.Telemetry.gauges())
+      true
+
+  """
+  @spec gauges() :: [%{event: [atom()], measurements: map(), age_ms: non_neg_integer()}]
+  def gauges do
+    now_ms = AuroraMeter.Clock.monotonic_ms()
+
+    [
+      {[:aurora_meter, :store, :gauge], Store.gauge_sample()},
+      {[:aurora_meter, :cluster, :lag], Cluster.lag_sample()}
+    ]
+    |> Enum.flat_map(fn
+      {_event, nil} ->
+        []
+
+      {event, {measurements, at_ms}} ->
+        [%{event: event, measurements: measurements, age_ms: max(now_ms - at_ms, 0)}]
+    end)
+  end
 end

@@ -1,0 +1,41 @@
+snapshotted 8 files into /home/liamk/src/PhxTemplates/tmp/v1/08b-logs/snapshots
+c01-params-tenant-wins: discriminated | Result: 0/6 passed
+c02-absent-session-falls-back: discriminated | Result: 5/6 passed
+c03-subscribe-to-params: discriminated | Result: 5/6 passed
+c04-nothing-is-ever-stale: discriminated | Result: 6/7 passed
+c05-unsampled-gauge-is-zero: PASSED (did not discriminate) | Result: 7 passed
+c06-workers-render-the-checkpoint-name: discriminated | Result: 23/25 passed (7/7 doctests, 16/18 tests)
+c07-truthy-is-authorized: discriminated | Result: 8/9 passed
+c08-authorized-by-has-a-default: discriminated | Result: 8/9 passed
+c09-pro-accepts-host-route: discriminated | Result: 16/17 passed (3/3 doctests, 13/14 tests)
+c10-sections-read-before-the-check: discriminated | Result: 6/9 passed
+c11-attach-does-not-detach-first: discriminated | Result: 14/15 passed
+c12-hot-path-is-instrumented: discriminated | Result: 11/15 passed
+c13-span-attributes-are-not-redacted: discriminated | Result: 11/15 passed
+c14-flat-event-with-no-duration-gets-a-span: discriminated | Result: 14/15 passed
+c15-uncertain-renders-the-error-body: HARNESS ERROR | no Result: line in this control's own log
+c16-provider-result-is-always-ok: discriminated | Result: 6/7 passed
+c17-provider-operations-are-open: discriminated | Result: 6/7 passed
+c18-pro-unavailable-renders-an-empty-table: PASSED (did not discriminate) | Result: 17 passed (3 doctests, 14 tests)
+
+== summary ==
+c01-params-tenant-wins: discriminated | Result: 0/6 passed
+c02-absent-session-falls-back: discriminated | Result: 5/6 passed
+c03-subscribe-to-params: discriminated | Result: 5/6 passed
+c04-nothing-is-ever-stale: discriminated | Result: 6/7 passed
+c05-unsampled-gauge-is-zero: PASSED (did not discriminate) | Result: 7 passed
+c06-workers-render-the-checkpoint-name: discriminated | Result: 23/25 passed (7/7 doctests, 16/18 tests)
+c07-truthy-is-authorized: discriminated | Result: 8/9 passed
+c08-authorized-by-has-a-default: discriminated | Result: 8/9 passed
+c09-pro-accepts-host-route: discriminated | Result: 16/17 passed (3/3 doctests, 13/14 tests)
+c10-sections-read-before-the-check: discriminated | Result: 6/9 passed
+c11-attach-does-not-detach-first: discriminated | Result: 14/15 passed
+c12-hot-path-is-instrumented: discriminated | Result: 11/15 passed
+c13-span-attributes-are-not-redacted: discriminated | Result: 11/15 passed
+c14-flat-event-with-no-duration-gets-a-span: discriminated | Result: 14/15 passed
+c15-uncertain-renders-the-error-body: HARNESS ERROR | no Result: line in this control's own log
+c16-provider-result-is-always-ok: discriminated | Result: 6/7 passed
+c17-provider-operations-are-open: discriminated | Result: 6/7 passed
+c18-pro-unavailable-renders-an-empty-table: PASSED (did not discriminate) | Result: 17 passed (3 doctests, 14 tests)
+
+restore verified: 8 files match their sha256 snapshot

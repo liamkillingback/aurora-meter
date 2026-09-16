@@ -389,6 +389,34 @@ numbers rather than as nothing at all.
 is unbounded, so the shipped preset collapses it to `:settle` and tags the
 result on `kind`, and `outcome` maps onto `result`.
 
+## Alerting, and the OpenTelemetry bridge
+
+Two pages take these events somewhere.
+
+[Alerts](alerts.md) is five worked alert examples, each with the metric name, the
+derivation of its threshold from a configuration value you control, a severity
+and a runbook link, plus a "do not alert on this" section for the four signals
+that look like incidents and are not. They are examples and not service level
+objectives: the thresholds depend on your load and your intervals, which is why
+the arithmetic is shown rather than a number.
+
+`AuroraMeter.OpenTelemetry` turns the slow half of this catalogue into spans in
+**your** SDK. It is compiled only when `opentelemetry_api` is installed, it uses
+the API and only the API, and it starts no tracer provider, no exporter and no
+connection. `attach/1` is idempotent: calling it five times leaves the handler
+set one call leaves.
+
+The hot path gets no span and there is no friendly switch that turns it on:
+`[:aurora_meter, :track]`, `[:aurora_meter, :reserve]`,
+`[:aurora_meter, :broadcast]`, `[:aurora_meter, :cluster, :apply]` and every
+gauge are left alone, because one span per increment would dominate both the hot
+path and your trace budget. A caller who wants one anyway passes the event name
+in `:events` and owns the cost.
+
+Span attributes go through `redact/2`, so no tenant key, reference, object id or
+provider reference reaches a tracer, and an error is carried as `error_class`
+rather than as its message.
+
 ## Attaching a handler directly
 
 ```elixir
@@ -404,6 +432,7 @@ result on `kind`, and `outcome` maps onto `result`.
 
 - [API inventory](api.md): every event with a stability class and a `Since`, plus
   the rest of the public surface.
+- [Alerts](alerts.md): five worked alert examples with their derivations.
 - [Operations](operations.md): what runs, how often, and what to alert on.
 - [Clustering](clustering.md): what the cluster guarantees and what it does not.
 - [Correctness](correctness.md): the invariants these signals are evidence for.

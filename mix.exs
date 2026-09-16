@@ -143,7 +143,7 @@ defmodule AuroraMeter.MixProject do
         # `if Code.ensure_loaded?(Oban)`. The floor is the one Aurora Meter Pro
         # already declares, so no existing Pro host is asked to move.
         {:oban, "~> 2.17", optional: true}
-      ] ++ optional_metrics()
+      ] ++ optional_metrics() ++ optional_dashboard() ++ optional_otel()
     end
   end
 
@@ -172,6 +172,66 @@ defmodule AuroraMeter.MixProject do
       []
     else
       [{:telemetry_metrics, "~> 0.6 or ~> 1.0", optional: true}]
+    end
+  end
+
+  # Optional: powers `AuroraMeter.LiveDashboard.Page`, compiled behind
+  # `if Code.ensure_loaded?(Phoenix.LiveDashboard.PageBuilder)`. The page's data
+  # readers (`AuroraMeter.LiveDashboard.Sections`) and its renderer
+  # (`AuroraMeter.LiveDashboard.View`) are deliberately NOT behind this guard, so
+  # everything the optional-dependency criteria are about stays testable in a
+  # build without it.
+  #
+  # The requirement is the 0.8 line rather than "~> 0.8". For a two-segment
+  # requirement `~> 0.8` means `>= 0.8.0 and < 1.0.0`, which would carry 0.9 as
+  # well, and `Phoenix.LiveDashboard.PageBuilder`'s callback set has changed
+  # across minor versions. Declaring a range wider than the one the matrix
+  # resolves is a support claim nothing tests, which is what decision D12
+  # forbids. The resolved version is recorded in
+  # docs/evidence/v1/phase-08/08b-optional-integrations.md with the callback set
+  # read from its source.
+  #
+  # AURORA_NO_DASHBOARD removes it on its own. AURORA_NO_METRICS removes it TOO,
+  # and that is not tidiness: phoenix_live_dashboard declares
+  # `telemetry_metrics` as a REQUIRED dependency, so leaving it installed would
+  # pull telemetry_metrics back into the build and the switch named for removing
+  # telemetry_metrics would remove nothing (`open-findings.md` X327's shape, one
+  # dependency further out).
+  defp optional_dashboard do
+    if System.get_env("AURORA_NO_DASHBOARD") == "1" or
+         System.get_env("AURORA_NO_METRICS") == "1" do
+      []
+    else
+      [{:phoenix_live_dashboard, ">= 0.8.0 and < 0.9.0", optional: true}]
+    end
+  end
+
+  # Optional: powers `AuroraMeter.OpenTelemetry`, compiled behind
+  # `if Code.ensure_loaded?(:otel_tracer)`. The **API** and only the API: the
+  # bridge starts no tracer provider, no exporter and no batch processor, and
+  # opens no socket (decision D11). With the API present and no SDK configured,
+  # its no-op tracer swallows everything, which is the documented headless
+  # behaviour rather than an error.
+  #
+  # The SDK beside it is `only: :test` and is **not** optional and **not**
+  # shipped: it exists so this repository's `otel` leg can assert the span shape
+  # against a real tracer provider and a real in-memory exporter, rather than
+  # against the `AuroraMeter.OpenTelemetry.Tracer` seam, which is this package's
+  # own code. A consumer who wants spans installs `opentelemetry_api` and
+  # whichever SDK and exporter they already run.
+  #
+  # AURORA_NO_OTEL removes the pair on its own; AURORA_HEADLESS removes them
+  # with everything else. Narrow, and asserted narrow: the leg checks that Oban,
+  # LiveView, Igniter, `telemetry_metrics` and `phoenix_live_dashboard` are all
+  # still there (`open-findings.md` X327, X331).
+  defp optional_otel do
+    if System.get_env("AURORA_NO_OTEL") == "1" do
+      []
+    else
+      [
+        {:opentelemetry_api, "~> 1.2", optional: true},
+        {:opentelemetry, "~> 1.3", only: :test}
+      ]
     end
   end
 
@@ -253,6 +313,7 @@ defmodule AuroraMeter.MixProject do
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
+        "docs/alerts.md",
         "docs/operations.md",
         "docs/retention.md",
         "docs/operations/scheduler.md",
@@ -391,6 +452,13 @@ defmodule AuroraMeter.MixProject do
       # Compiled only when Oban is installed, which is why the group can be
       # empty on a headless build. ExDoc ignores a group whose members are all
       # absent, so the docs build is the same either way.
+      # Compiled only when phoenix_live_dashboard is installed, so this group can
+      # be empty on a build without it. ExDoc ignores a group whose members are
+      # all absent.
+      Observability: [
+        AuroraMeter.LiveDashboard.Page,
+        AuroraMeter.OpenTelemetry
+      ],
       Scheduling: [
         AuroraMeter.Oban,
         AuroraMeter.Oban.CreditExpiry,
@@ -439,6 +507,10 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Events.Canonical,
         AuroraMeter.Events.Gate,
         AuroraMeter.Install.Templates,
+        AuroraMeter.LiveDashboard.Auth,
+        AuroraMeter.LiveDashboard.NotStartedError,
+        AuroraMeter.LiveDashboard.Sections,
+        AuroraMeter.LiveDashboard.View,
         AuroraMeter.Migration.V1,
         AuroraMeter.Migration.V2,
         AuroraMeter.Migration.V3,
@@ -449,6 +521,8 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Migration.V8,
         AuroraMeter.Migration.V9,
         AuroraMeter.Migration.V10,
+        AuroraMeter.OpenTelemetry.Bridge,
+        AuroraMeter.OpenTelemetry.Tracer,
         AuroraMeter.Plans.Snapshot,
         AuroraMeter.Schema.FlushReceipt,
         AuroraMeter.Storage.Ecto,

@@ -454,6 +454,7 @@ the redaction helper and the on-demand gauges. See [Telemetry](telemetry.md).
 | `AuroraMeter.Telemetry.tag_allowed?/2` | `(atom(), boolean()) :: boolean()` | stable | 1.0.0 | The second argument is whether the host has turned the `:feature` tag on. |
 | `AuroraMeter.Telemetry.redact/2` | `(map(), keyword()) :: map()` | stable | 1.0.0 | A copy safe for a log line or a span attribute. Option `:tenant` is `:drop` (default), `:digest` or `:raw`. `error` becomes `error_class`; the message is never carried. |
 | `AuroraMeter.Telemetry.emit_gauges/0` | `() :: :ok` | stable | 1.0.0 | Emits the store and cluster gauges once, synchronously. For a host running `metrics_interval: 0` and its own scheduler. A process that is not running contributes no sample rather than a zero. |
+| `AuroraMeter.Telemetry.gauges/0` | `() :: [%{event: [atom()], measurements: map(), age_ms: non_neg_integer()}]` | stable | 1.0.0 | The most recent sample of each gauge with how long ago it was taken, **without** emitting one. For a dashboard that refreshes faster than the sampling interval. A gauge that has never sampled contributes no entry rather than a zero. `age_ms` is a monotonic span inside this node. |
 
 ### 1.20 `AuroraMeter.Telemetry.Metrics` (optional dependency)
 
@@ -467,6 +468,57 @@ the redaction helper and the on-demand gauges. See [Telemetry](telemetry.md).
 Without `telemetry_metrics` installed the module is not defined at all. Every
 event is still emitted and `AuroraMeter.Telemetry` still works; nothing in
 `lib/` references this module.
+
+### 1.21 `AuroraMeter.LiveDashboard.Page` (optional dependency)
+
+A `Phoenix.LiveDashboard` page showing what Aurora Meter is doing on this node.
+It is registered with `additional_pages:` and it **requires** the
+`:authorized_by` option: there is no default and no implicit allow. The three
+accepted forms, and why the core page accepts `:host_route` while the Pro page
+refuses it, are in `AuroraMeter.LiveDashboard.Auth`.
+
+The page renders no tenant key, feature name, reference or event id: every
+figure on it is a node-local aggregate, a checkpoint position or a
+configuration value. A section it could not read renders the word "unavailable"
+with an error class, never a `0` and never an empty table. A gauge-derived
+figure whose last sample is older than three `:metrics_interval`s renders as
+stale with the sample age.
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.LiveDashboard.Page.init/1` | `(keyword()) :: {:ok, map()}` | optional-dep | 1.0.0 | Needs `phoenix_live_dashboard` (`>= 0.8.0 and < 0.9.0`). Raises `ArgumentError` naming the option and the three accepted forms when `:authorized_by` is absent or unrecognised. |
+| `AuroraMeter.LiveDashboard.Page.menu_link/2` | `(map(), map()) :: {:ok, String.t()} \| {:disabled, String.t()}` | optional-dep | 1.0.0 | Needs `phoenix_live_dashboard`. Disabled with "Aurora Meter: not configured" when `AuroraMeter.Config.validate!/0` raises. |
+| `AuroraMeter.LiveDashboard.Page.mount/3` | `(map(), map(), Phoenix.LiveView.Socket.t()) :: {:ok, Phoenix.LiveView.Socket.t()}` | optional-dep | 1.0.0 | Needs `phoenix_live_dashboard`. Evaluates the configured check before reading anything. |
+| `AuroraMeter.LiveDashboard.Page.handle_refresh/1` | `(Phoenix.LiveView.Socket.t()) :: {:noreply, Phoenix.LiveView.Socket.t()}` | optional-dep | 1.0.0 | Needs `phoenix_live_dashboard`. Re-evaluates the check, so a session that loses its marker stops seeing data without waiting for a remount. |
+| `AuroraMeter.LiveDashboard.Page.render/1` | HEEx | optional-dep | 1.0.0 | Needs `phoenix_live_dashboard`. Read-only: no form, no button, no `phx-click`. |
+
+### 1.22 `AuroraMeter.OpenTelemetry` (optional dependency)
+
+Attaches `:telemetry` handlers that turn Aurora Meter's slow operations into
+OpenTelemetry spans **in the host's own SDK**. It uses the OpenTelemetry API and
+only the API: it starts no tracer provider, no exporter and no batch processor,
+and opens no socket. With the API present and no SDK configured, the no-op
+tracer swallows everything.
+
+The span attributes are redacted (`AuroraMeter.Telemetry.redact/2`), so no
+tenant key, reference, object id or provider reference reaches a tracer, and a
+failure sets the span status with an **empty** message: a status message is
+free-form text and there is nothing safe to put in it.
+
+The hot path is not instrumented: `[:aurora_meter, :track]`,
+`[:aurora_meter, :reserve]`, `[:aurora_meter, :broadcast]`,
+`[:aurora_meter, :cluster, :apply]` and every gauge produce no span unless the
+caller names them in `:events`.
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.OpenTelemetry.attach/1` | `(keyword()) :: :ok` | optional-dep | 1.0.0 | Needs `opentelemetry_api` (`~> 1.2`), the **API** only: no tracer provider, no exporter, no socket. Options `:name`, `:events`, `:tenant`, `:span_prefix`, `:include`. Arity 0 exists through defaults. Calling it n times leaves the handler set one call leaves. With the API present and no SDK configured the no-op tracer swallows everything, which is documented behaviour and not an error. |
+| `AuroraMeter.OpenTelemetry.detach/0` | `() :: :ok` | optional-dep | 1.0.0 | Needs `opentelemetry_api`. Removes every handler attached under the default name and leaves handlers attached by anything else alone. |
+| `AuroraMeter.OpenTelemetry.detach/1` | `(atom()) :: :ok` | optional-dep | 1.0.0 | Needs `opentelemetry_api`. The same for one `:name` namespace. |
 
 ## 2. Behaviours and their callbacks
 
@@ -855,6 +907,10 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Events.Canonical` | The canonical payload encoding behind `payload_hash` (ADR 0009), and the validation `AuroraMeter.record/4` runs before any I/O. |
 | `AuroraMeter.Events.Gate` | The admission counter that bounds concurrent durable writes. Configure `:record_max_concurrency`; there is nothing to call. |
 | `AuroraMeter.Install.Templates` | The strings the installer writes. |
+| `AuroraMeter.LiveDashboard.Auth` | The `:authorized_by` contract both dashboard pages are registered with. Register the page; the option is documented on it. |
+| `AuroraMeter.LiveDashboard.NotStartedError` | Raised inside the section readers when a node-local table is absent, and converted into `{:unavailable, :not_started}`. It is never raised out of them. |
+| `AuroraMeter.LiveDashboard.Sections` | The readers behind the core page. They answer `{:ok, data}` or `{:unavailable, class}` and never a zero in place of a value they could not read. |
+| `AuroraMeter.LiveDashboard.View` | The HEEx the core page renders. It reads nothing. |
 | `AuroraMeter.Migration.V1` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V2` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V3` | One schema version. Call `AuroraMeter.Migration.up/1`. |
@@ -865,6 +921,8 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Migration.V8` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V9` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V10` | One schema version. Call `AuroraMeter.Migration.up/1`. |
+| `AuroraMeter.OpenTelemetry.Bridge` | Everything the OpenTelemetry bridge does, with the tracer as a parameter, so the handler rules are compiled and tested in a build with no OpenTelemetry. Call `AuroraMeter.OpenTelemetry.attach/1`. |
+| `AuroraMeter.OpenTelemetry.Tracer` | The three calls the bridge makes on a tracer. A seam, not a host extension point. |
 | `AuroraMeter.Plans.Snapshot` | The canonical form a plan fingerprint is taken over, and the jsonb encoding of a stored definition. Read a plan through `AuroraMeter.Plans`. |
 | `AuroraMeter.Schema.FlushReceipt` | The idempotent flush receipt row. Bookkeeping for the flusher. |
 | `AuroraMeter.Storage.Ecto` | The bundled adapter. Configure it by name; the callbacks are section 2. |

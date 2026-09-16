@@ -74,6 +74,15 @@ defmodule AuroraMeter.Store do
     end
   end
 
+  @doc false
+  @spec gauge_sample() :: {map(), integer()} | nil
+  def gauge_sample do
+    case Process.whereis(__MODULE__) do
+      nil -> nil
+      _pid -> GenServer.call(__MODULE__, :gauge_sample, 2_000)
+    end
+  end
+
   @doc "The PubSub topic on which subscription changes are announced."
   @spec invalidation_topic() :: String.t()
   def invalidation_topic, do: @invalidation_topic
@@ -99,12 +108,18 @@ defmodule AuroraMeter.Store do
     schedule_gauge(interval)
 
     # The tables above were just created, so the buffer really is empty now.
-    {:ok, %{gauge_interval: interval, empty_since_ms: Clock.monotonic_ms()}}
+    # `last_gauge` is `nil` rather than a zero-filled sample: nothing has been
+    # sampled yet, and a zero would read as a healthy, current reading.
+    {:ok, %{gauge_interval: interval, empty_since_ms: Clock.monotonic_ms(), last_gauge: nil}}
   end
 
   @impl GenServer
   def handle_call(:emit_gauge, _from, state) do
     {:reply, :ok, gauge(state)}
+  end
+
+  def handle_call(:gauge_sample, _from, state) do
+    {:reply, state.last_gauge, state}
   end
 
   def handle_call(:snapshot_flush_batch, _from, state) do
@@ -206,19 +221,22 @@ defmodule AuroraMeter.Store do
     empty_since = empty_since(state.empty_since_ms, dirty, now_ms)
     {batch_age, batch_items} = pending(now_ms)
 
-    :telemetry.execute(
-      [:aurora_meter, :store, :gauge],
-      %{
-        dirty_keys: dirty,
-        counter_keys: :ets.info(@counters, :size) || 0,
-        oldest_pending_age_ms: age(empty_since, now_ms),
-        pending_batch_age_ms: batch_age,
-        pending_batch_items: batch_items
-      },
-      %{node: node()}
-    )
+    measurements = %{
+      dirty_keys: dirty,
+      counter_keys: :ets.info(@counters, :size) || 0,
+      oldest_pending_age_ms: age(empty_since, now_ms),
+      pending_batch_age_ms: batch_age,
+      pending_batch_items: batch_items
+    }
 
-    %{state | empty_since_ms: empty_since}
+    :telemetry.execute([:aurora_meter, :store, :gauge], measurements, %{node: node()})
+
+    # The sample is retained with the monotonic instant it was taken at, so
+    # `AuroraMeter.Telemetry.gauges/0` and the dashboard can report the figure
+    # AND its age without emitting an event of their own on every refresh. It is
+    # written only after the execute, so a handler that raises leaves the
+    # previous sample in place rather than a half-published one.
+    %{state | empty_since_ms: empty_since, last_gauge: {measurements, now_ms}}
   rescue
     error ->
       Logger.warning(

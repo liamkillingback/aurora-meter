@@ -1,0 +1,103 @@
+== before any attach ==
+before: name=:default handlers=0 others=17
+
+== after one attach ==
+after 1: name=:default handlers=12 others=17
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :credits, :hold_reconciliation]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :outbox, :deliver]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :replay, :batch]}
+
+== after five attaches ==
+after 5: name=:default handlers=12 others=17
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :credits, :hold_reconciliation]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :outbox, :deliver]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :replay, :batch]}
+
+== a second name, :reports ==
+after attach(:reports): name=:reports handlers=12 others=17
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :credits, :hold_reconciliation]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :flush, :exception]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :flush, :start]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :flush, :stop]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :outbox, :deliver]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :provider, :exception]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :provider, :start]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :provider, :stop]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :record, :exception]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :record, :start]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :record, :stop]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :replay, :batch]}
+default is untouched: name=:default handlers=12 others=17
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :credits, :hold_reconciliation]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :flush, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :outbox, :deliver]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :pro, :provider, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :exception]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :start]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :record, :stop]}
+    {AuroraMeter.OpenTelemetry, :default, [:aurora_meter, :replay, :batch]}
+
+== detach(:default) ==
+after detach(:default): name=:default handlers=0 others=17
+:reports survives: name=:reports handlers=12 others=17
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :credits, :hold_reconciliation]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :flush, :exception]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :flush, :start]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :flush, :stop]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :outbox, :deliver]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :provider, :exception]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :provider, :start]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :pro, :provider, :stop]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :record, :exception]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :record, :start]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :record, :stop]}
+    {AuroraMeter.OpenTelemetry, :reports, [:aurora_meter, :replay, :batch]}
+
+== detach(:reports) ==
+after detach(:reports): name=:reports handlers=0 others=17
+
+== detach when nothing is attached ==
+after a second detach: name=:default handlers=0 others=17
+
+== the unrelated handler ==
+still attached: [unrelated: :probe]
+
+== the instrumented event names ==
+[:aurora_meter, :record] (span): 3 name(s)
+[:aurora_meter, :flush] (span): 3 name(s)
+[:aurora_meter, :replay, :batch] (flat): 1 name(s)
+[:aurora_meter, :credits, :hold_reconciliation] (flat): 1 name(s)
+[:aurora_meter, :pro, :provider] (span): 3 name(s)
+[:aurora_meter, :pro, :outbox, :deliver] (flat): 1 name(s)
+
+== never instrumented by default ==
+  [:aurora_meter, :track]
+  [:aurora_meter, :reserve]
+  [:aurora_meter, :broadcast]
+  [:aurora_meter, :cluster, :apply]
+  [:aurora_meter, :store, :gauge]
+  [:aurora_meter, :cluster, :lag]
+  [:aurora_meter, :pro, :outbox, :gauge]
+  [:aurora_meter, :pro, :credits, :gauge]
