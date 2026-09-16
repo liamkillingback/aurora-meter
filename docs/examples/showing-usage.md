@@ -243,15 +243,33 @@ the ones you will actually want:
 
 ```elixir
 def metrics do
+  AuroraMeter.Telemetry.Metrics.metrics(include: [:metering, :quotas, :flush, :credits])
+end
+```
+
+The shipped presets already tag on the right things and on nothing else. If you
+would rather write the list yourself, this is the shape:
+
+```elixir
+def metrics do
   [
-    Telemetry.Metrics.sum("aurora_meter.track.count", tags: [:feature]),
-    Telemetry.Metrics.counter("aurora_meter.reserve.qty", tags: [:feature, :result]),
-    Telemetry.Metrics.sum("aurora_meter.credits.settle.amount", tags: [:tenant_key]),
+    Telemetry.Metrics.sum("aurora_meter.track.count"),
+    Telemetry.Metrics.counter("aurora_meter.reserve.qty", tags: [:result]),
+    Telemetry.Metrics.sum("aurora_meter.credits.settle.amount"),
     Telemetry.Metrics.counter("aurora_meter.credits.low_balance.available"),
-    Telemetry.Metrics.summary("aurora_meter.flush.count")
+    Telemetry.Metrics.summary("aurora_meter.flush.stop.duration",
+      unit: {:native, :millisecond},
+      tags: [:result]
+    )
   ]
 end
 ```
+
+Note what is not there. Tagging the settle metric on the tenant key buys one
+time series per tenant, for ever, and this page used to show exactly that. The
+kind is already in the metric name, and `feature` is available behind
+`metrics_feature_label: true` when you have counted your features and decided
+you want them. See [Telemetry](../telemetry.md).
 
 Two of those are worth alerting on rather than graphing:
 

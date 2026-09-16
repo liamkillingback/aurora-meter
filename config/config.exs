@@ -25,7 +25,15 @@ if config_env() == :test do
     # `Storage.load_counter/3` and fails somewhere unrelated
     # (`open-findings.md` X241, X264). Reproduced deterministically at 120 ms.
     flush_interval: 3_600_000,
-    broadcast_interval: 60_000
+    broadcast_interval: 60_000,
+    # `0` for the same reason the two above are an hour and a minute, and not
+    # because the gauges are unimportant. A gauge tick takes no database
+    # connection, so it cannot reproduce X241 directly, but a timer that fires
+    # twenty times at arbitrary points in a 220 second run is a telemetry event
+    # arriving inside a test that was counting events. The gauge tests set the
+    # interval themselves and drive `AuroraMeter.Store.emit_gauge/0` or restart
+    # the Store, so the timer is proved deliberately rather than incidentally.
+    metrics_interval: 0
 
   config :aurora_meter, AuroraMeter.TestRepo,
     username: "postgres",

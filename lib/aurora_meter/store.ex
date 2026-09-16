@@ -24,6 +24,8 @@ defmodule AuroraMeter.Store do
 
   use GenServer
 
+  require Logger
+
   alias AuroraMeter.Clock
   alias AuroraMeter.Config
   alias AuroraMeter.Counter
@@ -63,6 +65,15 @@ defmodule AuroraMeter.Store do
   @spec snapshot_flush_batch() :: map() | nil
   def snapshot_flush_batch, do: GenServer.call(__MODULE__, :snapshot_flush_batch)
 
+  @doc false
+  @spec emit_gauge() :: :ok
+  def emit_gauge do
+    case Process.whereis(__MODULE__) do
+      nil -> :ok
+      _pid -> GenServer.call(__MODULE__, :emit_gauge)
+    end
+  end
+
   @doc "The PubSub topic on which subscription changes are announced."
   @spec invalidation_topic() :: String.t()
   def invalidation_topic, do: @invalidation_topic
@@ -84,10 +95,18 @@ defmodule AuroraMeter.Store do
 
     :ok = Phoenix.PubSub.subscribe(Config.pubsub(), @invalidation_topic)
 
-    {:ok, %{}}
+    interval = Config.metrics_interval()
+    schedule_gauge(interval)
+
+    # The tables above were just created, so the buffer really is empty now.
+    {:ok, %{gauge_interval: interval, empty_since_ms: Clock.monotonic_ms()}}
   end
 
   @impl GenServer
+  def handle_call(:emit_gauge, _from, state) do
+    {:reply, :ok, gauge(state)}
+  end
+
   def handle_call(:snapshot_flush_batch, _from, state) do
     # Taking deltas and publishing their batch belong to the ETS owner. Killing
     # only the Flusher must not strand deltas between these two operations.
@@ -132,12 +151,20 @@ defmodule AuroraMeter.Store do
       # database on the path that exists to keep the database off it. What the
       # value is compared against, and the bound that comparison relies on, is
       # `AuroraMeter.Retention`'s to state, and it does.
+      #
+      # `taken_at_ms` is the same instant read with the other clock, and both
+      # are here on purpose. `snapshot_at` is compared against rows the
+      # database stamped, so it is wall shaped. `taken_at_ms` is only ever
+      # subtracted from another reading taken in this node's memory, which is
+      # what `pending_batch_age_ms` is, and a wall clock that steps backwards
+      # 439 ms (open-findings X100) would make that age negative or absurd.
       batch = %{
         id: Ecto.UUID.generate(),
         counters: counters,
         history: history,
         taken: taken,
-        snapshot_at: Clock.now()
+        snapshot_at: Clock.now(),
+        taken_at_ms: Clock.monotonic_ms()
       }
 
       :ets.insert(@flush_batches, {:pending, batch})
@@ -151,5 +178,91 @@ defmodule AuroraMeter.Store do
     {:noreply, state}
   end
 
+  def handle_info(:gauge, state) do
+    {:noreply, gauge(state)}
+  after
+    # In an `after` so a raise inside `gauge/1` cannot stop the gauges for good.
+    # A missed sample is a missing point on a graph; a dead timer is a gauge
+    # that reports nothing for ever and looks exactly like a quiet system.
+    schedule_gauge(state.gauge_interval)
+  end
+
   def handle_info(_other, state), do: {:noreply, state}
+
+  # -- the gauge --------------------------------------------------------------
+
+  defp schedule_gauge(0), do: :ok
+
+  defp schedule_gauge(interval) when interval > 0,
+    do: Process.send_after(self(), :gauge, interval)
+
+  # Three `:ets.info/2` reads and one `:ets.lookup/2`, all constant time. It
+  # never calls `AuroraMeter.Counter.dirty_keys/0`, which materialises the whole
+  # table: this runs in the process that answers `:snapshot_flush_batch`, so its
+  # cost is the flush path's cost.
+  defp gauge(state) do
+    now_ms = Clock.monotonic_ms()
+    dirty = :ets.info(@dirty, :size) || 0
+    empty_since = empty_since(state.empty_since_ms, dirty, now_ms)
+    {batch_age, batch_items} = pending(now_ms)
+
+    :telemetry.execute(
+      [:aurora_meter, :store, :gauge],
+      %{
+        dirty_keys: dirty,
+        counter_keys: :ets.info(@counters, :size) || 0,
+        oldest_pending_age_ms: age(empty_since, now_ms),
+        pending_batch_age_ms: batch_age,
+        pending_batch_items: batch_items
+      },
+      %{node: node()}
+    )
+
+    %{state | empty_since_ms: empty_since}
+  rescue
+    error ->
+      Logger.warning(
+        "AuroraMeter.Store could not emit its gauge; the next tick will try again: " <>
+          Exception.message(error)
+      )
+
+      state
+  end
+
+  # `empty_since_ms` is when the dirty set was last **observed** empty, which is
+  # exactly what `oldest_pending_age_ms` reports time since. A tick that finds
+  # it empty moves the mark to now; a tick that finds work leaves the mark where
+  # it was, so the age is measured from the last moment the buffer was known to
+  # be clear rather than from the moment somebody first noticed it was not.
+  #
+  # It is seeded at `init/1` because the tables are created empty in the same
+  # function, so "the buffer was clear when this process started" is a fact and
+  # not an assumption.
+  #
+  # There is no per-key timestamp and there deliberately never will be: adding
+  # one would put a clock read and a wider tuple write into the counter
+  # increment, which is the hot path, to buy precision nobody needs at a ten
+  # second sampling interval. This understates a true age by up to one interval,
+  # so it is a lower bound, and `docs/telemetry.md` says so.
+  defp empty_since(_previous, 0, now_ms), do: now_ms
+  defp empty_since(previous, _dirty, _now_ms), do: previous
+
+  defp age(since_ms, now_ms), do: max(now_ms - since_ms, 0)
+
+  defp batch_age(nil, _now_ms), do: 0
+  defp batch_age(taken_at_ms, now_ms), do: age(taken_at_ms, now_ms)
+
+  defp pending(now_ms) do
+    case :ets.lookup(@flush_batches, :pending) do
+      [{:pending, batch}] ->
+        # `0` and not a guess when the key is absent: a batch snapshotted by an
+        # older release and carried across a hot upgrade has no `taken_at_ms`,
+        # and inventing an age for it would be a made-up number on a graph an
+        # operator is about to act on.
+        {batch_age(Map.get(batch, :taken_at_ms), now_ms), length(batch.taken)}
+
+      [] ->
+        {0, 0}
+    end
+  end
 end

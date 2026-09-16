@@ -295,12 +295,20 @@ defmodule AuroraMeter.Operations do
     end)
   end
 
-  # The literal event name rather than the module attribute, so the inventory
-  # guard that greps `lib/` for emit sites can see it (A05). The attribute is
-  # kept because the moduledoc interpolates it, and a test asserts the two agree.
+  # `@telemetry`, and the moduledoc interpolates the same attribute, so the name
+  # lives in exactly one place.
+  #
+  # It used to be written out longhand here as well, because the inventory guard
+  # found emit sites by grepping `lib/` for a literal event name and an
+  # attribute was invisible to it (`open-findings.md` X222). That cost one name
+  # in two places and a test to keep the copies agreeing. Build unit 08a
+  # replaced the grep with `AuroraMeter.Test.TelemetryCensus`, which reads the
+  # parsed source and resolves the attribute, so the duplication has no reason
+  # left and this site is now the one place in core that proves the resolution
+  # works on production code rather than on a test fixture.
   defp emit(name, batch, started, result) do
     :telemetry.execute(
-      [:aurora_meter, :operations, :batch],
+      @telemetry,
       %{items: items(batch), duration_ms: Clock.monotonic_ms() - started},
       %{name: name, result: result}
     )

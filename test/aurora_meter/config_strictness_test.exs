@@ -407,6 +407,7 @@ defmodule AuroraMeter.ConfigStrictnessTest do
 
   defp accessor(:history), do: :history?
   defp accessor(:cluster_sync), do: :cluster_sync?
+  defp accessor(:metrics_feature_label), do: :metrics_feature_label?
   defp accessor(key), do: key
 
   defp forget_warnings do

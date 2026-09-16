@@ -120,6 +120,13 @@ durable feature.
 - `AuroraMeter.RetentionTest` / `test I01 forget_node/1 refuses a node it has never heard of`
 - `AuroraMeter.RetentionTest` / `test I01 a retry of a batch whose receipt was pruned would double count`
 - `AuroraMeter.RetentionTest` / `test I01 a retry of a batch whose receipt was protected does not double count`
+- `AuroraMeter.StoreGaugeTest` / `test I01 store.gauge reports dirty_keys equal to the dirty table size, and 0 with none`
+- `AuroraMeter.StoreGaugeTest` / `test I01 oldest_pending_age_ms is zero while the dirty set is empty and grows once it is not`
+- `AuroraMeter.StoreGaugeTest` / `test I01 pending_batch_age_ms grows while a batch is retained and returns to zero on commit`
+- `AuroraMeter.StoreGaugeTest` / `test I01 pending_batch_age_ms is zero for a batch map carried across a release with no taken_at_ms`
+- `AuroraMeter.FlusherSpanTest` / `test I01 a committed flush emits start, stop with result ok, and the legacy event once each`
+- `AuroraMeter.FlusherSpanTest` / `test I01 a flush that fails once and succeeds on retry emits stop result error, then stop result ok`
+- `AuroraMeter.FlusherSpanTest` / `test I01 storage that raises emits exception and then the legacy error event`
 
 **Evidence.** `docs/evidence/v1/phase-01/i01.md`
 
@@ -335,6 +342,12 @@ netsplit or a real rejoin; a multi-node harness is 11d's.
 - `AuroraMeter.ClusterTest` / `test configuration publishing with sync off is a no-op`
 - `AuroraMeter.FeatureSourceTest` / `test projection, seeding and the cluster I05 a peer's projected delta moves this node's value and a cold reseed corrects it`
 - `AuroraMeter.FeatureSourceTest` / `test projection, seeding and the cluster I05 a peer's totals announcement never rebases an events-source key`
+- `AuroraMeter.ClusterLagTest` / `test I05 cluster.lag reports peers seen and since_last_message_ms after remote batches`
+- `AuroraMeter.ClusterLagTest` / `test I05 a peer not heard from for ten broadcast intervals leaves the peer map`
+- `AuroraMeter.ClusterLagTest` / `test I05 a pruned peer is removed from the state and not merely from the report`
+- `AuroraMeter.ClusterLagTest` / `test I05 unreconciled_keys counts keys carrying peer value and falls to zero after a rebase`
+- `AuroraMeter.ClusterLagTest` / `test I05 unreconciled_keys is omitted above the scan ceiling, never reported as zero`
+- `AuroraMeter.ClusterLagTest` / `test I05 no lag event is emitted at all when cluster_sync is false`
 
 The last two are build unit 03c's contribution, and the convergence story for an
 events-source feature is the easier one: the durable total is shared state, so a
@@ -1527,6 +1540,9 @@ CI leg fails by design until 09b settles it.
 - `AuroraMeter.HeadlessTest` / `test I20 Components are not compiled without Phoenix.Component`
 - `AuroraMeter.HeadlessTest` / `test I20 the installer prints steps instead of raising without Igniter`
 - `AuroraMeter.HeadlessTest` / `test I20 the facade, credits and migrations work with no optional dependency present`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.Telemetry.Metrics is compiled exactly when Telemetry.Metrics is available`
+- `AuroraMeter.OptionalIntegrationsTest` / `test I20 AuroraMeter.Telemetry itself never depends on the optional dependency`
+- `AuroraMeter.HeadlessTest` / `test I20 AuroraMeter.Telemetry.Metrics is absent without telemetry_metrics`
 - `AuroraMeter.RealtimeTest` / `test usage_meter renders the value and progressbar semantics`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test wires config, supervision child, a plans module and the migration`
 - PLANNED (08b): `AuroraMeter.ComponentsAuthTest` / `test I20 a usage component refuses to render without a host resolved tenant`

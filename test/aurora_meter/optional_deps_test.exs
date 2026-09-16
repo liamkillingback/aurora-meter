@@ -14,7 +14,7 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
   defp headless?, do: System.get_env("AURORA_HEADLESS") == "1"
 
   test "I20 the optional integrations are present exactly when they were not switched off" do
-    for module <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban] do
+    for module <- [Phoenix.Component, Phoenix.HTML, Igniter, Oban, Telemetry.Metrics] do
       assert Code.ensure_loaded?(module) == not headless?(),
              "#{inspect(module)} loaded?=#{Code.ensure_loaded?(module)} with " <>
                "AURORA_HEADLESS=#{inspect(System.get_env("AURORA_HEADLESS"))}. " <>
@@ -54,6 +54,52 @@ defmodule AuroraMeter.OptionalIntegrationsTest do
   test "I20 the install task exists either way, with or without Igniter" do
     assert Code.ensure_loaded?(Mix.Tasks.AuroraMeter.Install)
     assert function_exported?(Mix.Tasks.AuroraMeter.Install, :run, 1)
+  end
+
+  test "I20 AuroraMeter.Telemetry.Metrics is compiled exactly when Telemetry.Metrics is available" do
+    # lib/aurora_meter/telemetry/metrics.ex opens with
+    # `if Code.ensure_loaded?(Telemetry.Metrics) do`, the same shape
+    # components.ex and the Oban namespace use.
+    assert Code.ensure_loaded?(AuroraMeter.Telemetry.Metrics) ==
+             Code.ensure_loaded?(Telemetry.Metrics)
+  end
+
+  test "I20 AuroraMeter.Telemetry itself never depends on the optional dependency" do
+    # The catalogue, the tag rules and the redaction helper are the contract;
+    # the presets are a convenience over it. A host without `telemetry_metrics`
+    # loses the list and not a single signal, and `lib/` must not reference the
+    # preset module anywhere or the guard above would be decorative.
+    assert Code.ensure_loaded?(AuroraMeter.Telemetry)
+    assert is_list(AuroraMeter.Telemetry.events())
+    assert AuroraMeter.Telemetry.redact(%{tenant_key: "org_synthetic"}) == %{}
+
+    # The AST, not a substring. Both modules are named in prose all over the
+    # documentation, and a text search cannot tell a sentence about
+    # `AuroraMeter.Telemetry.Metrics.metrics/1` from a call to it.
+    referencing =
+      for path <- Path.wildcard("lib/**/*.ex"),
+          path != "lib/aurora_meter/telemetry/metrics.ex",
+          references_metrics?(File.read!(path)),
+          do: path
+
+    assert referencing == [],
+           "lib/ references the optional preset module outside its own guarded " <>
+             "file: #{inspect(referencing)}"
+  end
+
+  defp references_metrics?(source) do
+    {:ok, tree} = Code.string_to_quoted(source)
+
+    {_tree, found} =
+      Macro.prewalk(tree, false, fn
+        {:__aliases__, _, segments} = node, acc when is_list(segments) ->
+          {node, acc or Enum.take(segments, -2) == [:Telemetry, :Metrics]}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found
   end
 end
 
@@ -99,6 +145,22 @@ defmodule AuroraMeter.HeadlessTest do
     # claim: a host with another scheduler loses the wrappers, not the work.
     assert function_exported?(Credits, :expire_due, 1)
     assert function_exported?(Credits, :reconcile_holds, 1)
+  end
+
+  test "I20 AuroraMeter.Telemetry.Metrics is absent without telemetry_metrics" do
+    refute Code.ensure_loaded?(Telemetry.Metrics)
+    refute Code.ensure_loaded?(AuroraMeter.Telemetry.Metrics)
+
+    # And the contract is entirely here: every event, the tag rules and the
+    # redaction helper. A host with no reporter loses the preset list, which is
+    # a convenience, and not a signal.
+    assert length(AuroraMeter.Telemetry.events()) > 15
+    assert AuroraMeter.Telemetry.tag_allow_list() == [:result, :kind, :exporter, :state, :worker]
+
+    assert AuroraMeter.Telemetry.redact(%{tenant_key: "org_synthetic", result: :ok}) ==
+             %{result: :ok}
+
+    assert :ok = AuroraMeter.Telemetry.emit_gauges()
   end
 
   test "I20 the installer prints steps instead of raising without Igniter" do

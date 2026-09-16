@@ -34,6 +34,9 @@ treated as Aurora Meter keys.
 | `:record_max_concurrency` | positive integer | — | `64`. How many callers may hold an open record transaction at once |
 | `:flush_interval` | ms | — | `5_000` |
 | `:broadcast_interval` | ms | — | `1_000` |
+| `:metrics_interval` | ms | | `10_000`. How often the store and cluster gauges are sampled; `0` switches the internal timers off and you drive `AuroraMeter.Telemetry.emit_gauges/0` yourself ([telemetry](telemetry.md)) |
+| `:metrics_feature_label` | boolean | | `false`. Whether `AuroraMeter.Telemetry.Metrics.metrics/1` tags on `:feature`. One time series per feature per metric, so it is opt-in |
+| `:metrics_scan_ceiling` | rows | | `50_000`. The largest counters table the cluster lag gauge scans for `unreconciled_keys`; above it the measurement is omitted rather than reported as zero |
 | `:history` | boolean | — | `true` — keep UTC day buckets for `AuroraMeter.history/3` |
 | `:subscription_cache_ttl` | ms | — | `5_000` — how long a plan lookup is cached; `0` disables |
 | `:cluster_sync` | boolean | — | `true` — exchange deltas and flushed totals between nodes so counters are cluster-wide ([clustering](clustering.md)) |

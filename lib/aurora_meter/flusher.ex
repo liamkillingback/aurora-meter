@@ -97,8 +97,40 @@ defmodule AuroraMeter.Flusher do
     end
   end
 
+  # One span around the storage write, and the two existing events left exactly
+  # as they were. A host attached to `[:aurora_meter, :flush]` or
+  # `[:aurora_meter, :flush, :error]` sees no change at all; a host that wants
+  # flush *latency*, which is the single most useful operational number the
+  # buffered path has, attaches to `[:aurora_meter, :flush, :stop]`.
+  #
+  # An `{:error, reason}` from storage is a result and not an exception, so it
+  # is `:stop` with `result: :error` rather than `:exception`. A raise is
+  # `:exception`, re-raised by `:telemetry.span/3` into `do_flush/1`'s rescue,
+  # which emits the legacy error event as it always did.
+  defp flush_batch(batch) do
+    metadata = %{
+      batch_id: batch.id,
+      counter_rows: length(batch.counters),
+      history_rows: length(batch.history)
+    }
+
+    :telemetry.span([:aurora_meter, :flush], metadata, fn ->
+      result = Storage.flush_batch(batch.id, batch.counters, batch.history)
+
+      measurements = %{
+        count: length(batch.taken),
+        delta_sum: Enum.sum(Enum.map(batch.taken, &elem(&1, 1)))
+      }
+
+      {result, measurements, Map.put(metadata, :result, span_result(result))}
+    end)
+  end
+
+  defp span_result({:ok, _}), do: :ok
+  defp span_result(_error), do: :error
+
   defp persist(batch, state) do
-    case Storage.flush_batch(batch.id, batch.counters, batch.history) do
+    case flush_batch(batch) do
       {:ok, %{counters: counters, history: history}} ->
         originals = Map.new(batch.taken, fn {key, _} -> {triple(key), key} end)
         totals = Enum.map(counters ++ history, &{Map.fetch!(originals, triple(&1)), &1.value})

@@ -179,8 +179,19 @@ defmodule AuroraMeter.DocExamplesTest do
         assert optional_and_absent?("AuroraMeter.Oban")
       end
 
+      if Code.ensure_loaded?(Telemetry.Metrics) do
+        refute optional_and_absent?("AuroraMeter.Telemetry.Metrics")
+        assert Code.ensure_loaded?(AuroraMeter.Telemetry.Metrics)
+      else
+        assert optional_and_absent?("AuroraMeter.Telemetry.Metrics")
+      end
+
       refute optional_and_absent?("AuroraMeter.Credits"),
              "the skip must not reach a module that is not optional"
+
+      refute optional_and_absent?("AuroraMeter.Telemetry"),
+             "the skip must not reach the always-compiled contract module, which is the " <>
+               "whole point of the presets being a separate module"
     end
 
     test "every Pro module a core guide names is absent from core, which is the boundary" do
@@ -490,7 +501,9 @@ defmodule AuroraMeter.DocExamplesTest do
   # had been red at HEAD since the guide landed, because it is not part of
   # `mix check` and nothing else runs it.
   defp optional_and_absent?(name) do
-    String.starts_with?(name, "AuroraMeter.Oban") and not Code.ensure_loaded?(Oban)
+    (String.starts_with?(name, "AuroraMeter.Oban") and not Code.ensure_loaded?(Oban)) or
+      (String.starts_with?(name, "AuroraMeter.Telemetry.Metrics") and
+         not Code.ensure_loaded?(Telemetry.Metrics))
   end
 
   # `AuroraMeter.Exporter.Item.t()` inside a printed `@callback` is a type, and

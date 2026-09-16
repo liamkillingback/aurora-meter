@@ -143,7 +143,35 @@ defmodule AuroraMeter.MixProject do
         # `if Code.ensure_loaded?(Oban)`. The floor is the one Aurora Meter Pro
         # already declares, so no existing Pro host is asked to move.
         {:oban, "~> 2.17", optional: true}
-      ]
+      ] ++ optional_metrics()
+    end
+  end
+
+  # `telemetry_metrics` has a switch of its own as well as being swept away by
+  # AURORA_HEADLESS, and the reason is Aurora Meter Pro rather than core.
+  #
+  # Pro requires Oban and ships LiveView components, so "Pro installed, core
+  # built without Oban" is not a deployment anybody can have: AURORA_HEADLESS is
+  # read by THIS file too, and core is Pro's path dependency, so setting it for
+  # a Pro build strips core's four optional dependencies and Pro's own modules
+  # then reference `AuroraMeter.Oban.*` and `AuroraMeter.Components`, which are
+  # no longer compiled. Pro's headless leg could not compile at all, and the
+  # incoherence was invisible until somebody ran it (`open-findings.md` X327).
+  #
+  # AURORA_NO_METRICS removes only this one, which IS a real configuration in
+  # both packages: a host with a scheduler and a dashboard and no metrics
+  # reporter. That is the configuration decision D12 and invariant I20 are about.
+  #
+  # `AuroraMeter.Telemetry.Metrics` is compiled behind
+  # `if Code.ensure_loaded?(Telemetry.Metrics)`. Every event is emitted with or
+  # without it; what a host loses is the preset list, not a signal. Both
+  # supported majors are declared because hosts are split across them and
+  # neither is deprecated.
+  defp optional_metrics do
+    if System.get_env("AURORA_NO_METRICS") == "1" do
+      []
+    else
+      [{:telemetry_metrics, "~> 0.6 or ~> 1.0", optional: true}]
     end
   end
 
@@ -326,7 +354,9 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Flusher,
         AuroraMeter.Migration,
         AuroraMeter.LiveView,
-        AuroraMeter.Components
+        AuroraMeter.Components,
+        AuroraMeter.Telemetry,
+        AuroraMeter.Telemetry.Metrics
       ],
       # The seams a host implements, with their reference implementations and
       # their conformance suites beside them. `AuroraMeter.Storage` and

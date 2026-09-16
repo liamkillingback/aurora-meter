@@ -828,8 +828,12 @@ defmodule AuroraMeter.Events.Replay do
     }
   end
 
-  # The literal event names rather than module attributes, so the inventory
-  # guard that greps `lib/` for emit sites can see them (A05).
+  # The literal event name at the call site, which is a readability choice and
+  # no longer a requirement: it was written out longhand because the inventory
+  # guard grepped `lib/` for a literal and could not see a module attribute
+  # (`open-findings.md` X222). Build unit 08a's census reads the parsed source
+  # and resolves attributes, so either shape is fine here; a name used once
+  # reads better beside the call than in an attribute at the top of the file.
   defp emit_phase(phase, state, duration, metadata) do
     :telemetry.execute(
       [:aurora_meter, :replay, :phase],

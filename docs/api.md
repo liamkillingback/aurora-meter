@@ -278,6 +278,9 @@ in section 2.
 | `AuroraMeter.Config.record_max_concurrency/0` | `() :: pos_integer()` | additive | 1.0.0 | |
 | `AuroraMeter.Config.flush_interval/0` | `() :: pos_integer()` | stable | 0.1.0 | |
 | `AuroraMeter.Config.broadcast_interval/0` | `() :: pos_integer()` | stable | 0.1.0 | |
+| `AuroraMeter.Config.metrics_interval/0` | `() :: non_neg_integer()` | additive | 1.0.0 | Milliseconds between gauge samples. `0` means no internal timers. |
+| `AuroraMeter.Config.metrics_feature_label?/0` | `() :: boolean()` | additive | 1.0.0 | Whether the presets tag on `:feature`. |
+| `AuroraMeter.Config.metrics_scan_ceiling/0` | `() :: non_neg_integer()` | additive | 1.0.0 | The counters-table size above which `unreconciled_keys` is omitted. |
 | `AuroraMeter.Config.flush_receipt_retention/0` | `() :: pos_integer()` | additive | 1.0.0 | Days. |
 | `AuroraMeter.Config.replay_checkpoint_retention/0` | `() :: pos_integer()` | additive | 1.0.0 | Days. |
 | `AuroraMeter.Config.flush_node_id/0` | `() :: String.t() \| nil` | additive | 1.0.0 | `nil` means `to_string(node())`; `AuroraMeter.Retention.node_id/0` resolves it. |
@@ -433,6 +436,38 @@ declares none grants nothing. Pause it with
 | `AuroraMeter.Credits.Recurrences.namespace/0` | `() :: String.t()` | stable | 0.6.0 | `"recurring:"`, the one reserved reference prefix. |
 | `AuroraMeter.Credits.Recurrences.operation/0` | `() :: String.t()` | stable | 0.6.0 | `"credits_recurrences:global"`, the `AuroraMeter.Operations` name. |
 
+### 1.19 `AuroraMeter.Telemetry`
+
+The telemetry contract: the event catalogue as data, the closed tag allow list,
+the redaction helper and the on-demand gauges. See [Telemetry](telemetry.md).
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Telemetry.events/0` | `() :: [AuroraMeter.Telemetry.event_doc()]` | stable | 1.0.0 | Every core event, with its real measurement and metadata keys, the tags a preset may use, the emitter and the version it arrived in. Checked against `lib/`, `docs/api.md` and `docs/telemetry.md` on every run. |
+| `AuroraMeter.Telemetry.event_names/0` | `() :: [[atom()]]` | stable | 1.0.0 | Every concrete event name, with a family expanded and a span's three suffixes listed. |
+| `AuroraMeter.Telemetry.tag_allow_list/0` | `() :: [atom()]` | stable | 1.0.0 | `[:result, :kind, :exporter, :state, :worker]`. Closed. |
+| `AuroraMeter.Telemetry.feature_tag/0` | `() :: atom()` | stable | 1.0.0 | `:feature`, the opt-in tag behind `:metrics_feature_label`. |
+| `AuroraMeter.Telemetry.forbidden_tags/0` | `() :: [atom()]` | stable | 1.0.0 | Names that must never be a metric tag, listed one by one. |
+| `AuroraMeter.Telemetry.forbidden_tag_suffixes/0` | `() :: [String.t()]` | stable | 1.0.0 | `["_key", "_id", "_secret", "_token", "_ref"]`. |
+| `AuroraMeter.Telemetry.tag_allowed?/2` | `(atom(), boolean()) :: boolean()` | stable | 1.0.0 | The second argument is whether the host has turned the `:feature` tag on. |
+| `AuroraMeter.Telemetry.redact/2` | `(map(), keyword()) :: map()` | stable | 1.0.0 | A copy safe for a log line or a span attribute. Option `:tenant` is `:drop` (default), `:digest` or `:raw`. `error` becomes `error_class`; the message is never carried. |
+| `AuroraMeter.Telemetry.emit_gauges/0` | `() :: :ok` | stable | 1.0.0 | Emits the store and cluster gauges once, synchronously. For a host running `metrics_interval: 0` and its own scheduler. A process that is not running contributes no sample rather than a zero. |
+
+### 1.20 `AuroraMeter.Telemetry.Metrics` (optional dependency)
+
+<!-- inventory:functions -->
+
+| Entry | Signature and return | Class | Since | Notes |
+|---|---|---|---|---|
+| `AuroraMeter.Telemetry.Metrics.metrics/1` | `(keyword()) :: [Telemetry.Metrics.t()]` | optional-dep | 1.0.0 | Needs `telemetry_metrics` (`~> 0.6 or ~> 1.0`). Options `:feature_label` and `:include`. Arity 0 exists through defaults. Every tag is on the allow list. |
+| `AuroraMeter.Telemetry.Metrics.groups/0` | `() :: [atom()]` | optional-dep | 1.0.0 | Needs `telemetry_metrics`. The groups `:include` accepts. |
+
+Without `telemetry_metrics` installed the module is not defined at all. Every
+event is still emitted and `AuroraMeter.Telemetry` still works; nothing in
+`lib/` references this module.
+
 ## 2. Behaviours and their callbacks
 
 A host or an extension implements these. Adding a required callback to one of
@@ -574,6 +609,9 @@ never treated as Aurora Meter keys.
 | `:record_max_concurrency` | positive integer, `64` | additive | 1.0.0 | Callers that may hold an open record transaction at once. Beyond it, `{:error, {:unavailable, :overloaded}}`; never a fallback to buffered tracking. |
 | `:flush_interval` | positive integer, `5_000` | stable | 0.1.0 | Milliseconds. |
 | `:broadcast_interval` | positive integer, `1_000` | stable | 0.1.0 | Milliseconds. |
+| `:metrics_interval` | non-negative integer, `10_000` | additive | 1.0.0 | Milliseconds between gauge samples. `0` switches the internal timers off; drive `AuroraMeter.Telemetry.emit_gauges/0` yourself instead. |
+| `:metrics_feature_label` | boolean, `false` | additive | 1.0.0 | Whether `AuroraMeter.Telemetry.Metrics.metrics/1` tags on `:feature`. One series per feature per metric, so the host prices it. |
+| `:metrics_scan_ceiling` | non-negative integer, `50_000` | additive | 1.0.0 | The largest counters table the cluster lag gauge scans for `unreconciled_keys`. Above it the measurement is omitted, never zero. |
 | `:flush_receipt_retention` | positive integer, `30` | additive | 1.0.0 | Days a flush receipt is kept before `AuroraMeter.Retention` may delete it. Floor 1 day, refused at boot below it. Age alone never deletes one. |
 | `:replay_checkpoint_retention` | positive integer, `365` | additive | 1.0.0 | Days a finished `"events_replay:<generation>"` checkpoint row is kept. Floor 1 day. |
 | `:flush_node_id` | string or `nil`, `nil` | additive | 1.0.0 | This node's identity in its `"flush:<node>"` heartbeat row. `nil` means `to_string(node())`. |
@@ -591,8 +629,11 @@ never treated as Aurora Meter keys.
 ## 6. Telemetry events
 
 Event names, measurement keys and metadata keys are covered by SemVer. The
-`Matched in lib/` column holds the exact source text the inventory test greps
-for, so a renamed event fails the build.
+`Matched in lib/` column holds the event name as `AuroraMeter.Test.TelemetryCensus`
+reads it out of the parsed source, so a renamed event fails the build. A name
+whose last segment is computed is written with the computed segment's own name
+(`[:aurora_meter, :credits, kind]`), and the family it stands for is enumerated
+by `AuroraMeter.Telemetry.events/0`.
 
 <!-- inventory:literal -->
 
@@ -602,9 +643,12 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :reserve]` | `qty` | `tenant_key`, `feature`, `result`, `declared` | stable | 0.2.0 | `[:aurora_meter, :reserve]` |
 | `[:aurora_meter, :flush]` | `count`, `delta_sum` | none | stable | 0.1.0 | `[:aurora_meter, :flush]` |
 | `[:aurora_meter, :flush, :error]` | `count` | `error` | stable | 0.3.0 | `[:aurora_meter, :flush, :error]` |
+| `[:aurora_meter, :flush, :start \| :stop \| :exception]` | `duration`, `count`, `delta_sum` | `batch_id`, `counter_rows`, `history_rows`, `result`, and `kind`, `reason`, `stacktrace` on `:exception` | stable | 1.0.0 | `[:aurora_meter, :flush]` |
 | `[:aurora_meter, :broadcast]` | `count`, `deltas` | none | stable | 0.1.0 | `[:aurora_meter, :broadcast]` |
 | `[:aurora_meter, :cluster, :apply]` | `count` | `kind`, `origin` | stable | 0.3.0 | `[:aurora_meter, :cluster, :apply]` |
-| `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after`, `spendable_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun`, `deferred` | stable | 0.4.0 | `[:aurora_meter, :credits, txn.kind]` |
+| `[:aurora_meter, :cluster, :lag]` | `peers`, `since_last_message_ms`, `unreconciled_keys` | `node` | stable | 1.0.0 | `[:aurora_meter, :cluster, :lag]` |
+| `[:aurora_meter, :store, :gauge]` | `dirty_keys`, `counter_keys`, `oldest_pending_age_ms`, `pending_batch_age_ms`, `pending_batch_items` | `node` | stable | 1.0.0 | `[:aurora_meter, :store, :gauge]` |
+| `[:aurora_meter, :credits, kind]` | `amount`, `balance_after`, `available_after`, `spendable_after` | `tenant_key`, `reference`, `category`, `duplicate`, `overrun`, `deferred` | stable | 0.4.0 | `[:aurora_meter, :credits, kind]` |
 | `[:aurora_meter, :credits, :low_balance]` | `available`, `spendable`, `threshold` | `tenant_key`, `crossing_id`, `handler` | stable | 0.4.0 | `[:aurora_meter, :credits, :low_balance]` |
 | `[:aurora_meter, :credits, :hold_reconciliation]` | `amount`, `age_seconds`, `duration` | `tenant_key`, `reference`, `decision`, `outcome` | stable | 0.6.0 | `[:aurora_meter, :credits, :hold_reconciliation]` |
 | `[:aurora_meter, :credits, :conservation_error]` | `balance_delta`, `held_delta`, `promotional_delta`, `expired_delta` | `tenant_key`, `operation`, `reference` | stable | 0.6.0 | `[:aurora_meter, :credits, :conservation_error]` |
@@ -650,7 +694,22 @@ which is the shape a dashboard should alert on.
 `:debit` or `:expire`. `duplicate: true` marks an idempotent grant replay (with
 `amount: 0`); `overrun: true` marks a settlement above its hold.
 
-`tenant_key` is metadata, never a metric tag: the cardinality is unbounded.
+`tenant_key` is metadata, never a metric tag: the cardinality is unbounded. The
+closed set of names a metric may tag on, the names it may never tag on and the
+reason for each are in [Telemetry](telemetry.md), and
+`AuroraMeter.Telemetry.tag_allowed?/2` answers the question in code.
+
+The flush span sits alongside the flat `[:aurora_meter, :flush]` event rather
+than replacing it: a host attached to the flat name is unaffected, and a host
+that wants flush latency attaches to `[:aurora_meter, :flush, :stop]`. An
+`{:error, reason}` from storage is `:stop` with `result: :error`; a raise is
+`:exception`. Both are followed by the unchanged `[:aurora_meter, :flush, :error]`.
+
+The two gauges are sampled every `:metrics_interval` inside `AuroraMeter.Store`
+and `AuroraMeter.Cluster`. No gauge event is emitted when `metrics_interval` is
+`0`, and none is emitted for the cluster when `cluster_sync` is `false`.
+`unreconciled_keys` is omitted above `:metrics_scan_ceiling` rather than
+reported as zero.
 
 ## 7. PubSub messages
 

@@ -13,6 +13,50 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Added
 
+- **The telemetry contract is data, and every page describing it is guarded.**
+  `AuroraMeter.Telemetry.events/0` returns every core event with its real
+  measurement and metadata keys, the tags a metric may use, the emitter and the
+  version it arrived in; `event_names/0` flattens it. The suite compares it
+  against the emit sites in `lib/`, against `docs/api.md` and against
+  `docs/telemetry.md`, in both directions each time, so a new undocumented event
+  and a documented event nothing emits both fail the build.
+- **A closed tag allow list, because cardinality is an outage.**
+  `AuroraMeter.Telemetry.tag_allow_list/0` is
+  `[:result, :kind, :exporter, :state, :worker]`, with `:feature` behind the new
+  `metrics_feature_label` option. `forbidden_tags/0`, `forbidden_tag_suffixes/0`
+  and `tag_allowed?/2` are the other half. A metric tagged on `tenant_key` is
+  one time series per tenant for ever, and this page used to show one:
+  `docs/telemetry.md` and `docs/examples/showing-usage.md` both did, and both
+  are fixed. **If you copied either, delete the tag.**
+- `AuroraMeter.Telemetry.redact/2`: a copy of event metadata safe for a log line
+  or a span attribute. Every identifier dropped, `error` reduced to
+  `error_class` with no message, and `tenant: :digest` for a stable pseudonymous
+  digest that the documentation is explicit is **not** anonymous.
+- `AuroraMeter.Telemetry.Metrics.metrics/1` and `groups/0`: `Telemetry.Metrics`
+  presets over the whole catalogue, compiled only when the new optional
+  `telemetry_metrics` dependency is installed. Without it the module does not
+  exist, every event is still emitted, and nothing in `lib/` references it.
+- **Flush latency, at last.** `:telemetry.span/3` around the storage write emits
+  `[:aurora_meter, :flush, :start | :stop | :exception]`. The existing
+  `[:aurora_meter, :flush]` and `[:aurora_meter, :flush, :error]` events are
+  **unchanged**, so a host attached to either sees no difference; `:stop`
+  carries `duration` and `result`.
+- **Two gauges**, sampled every `metrics_interval` (default 10 s, `0` to switch
+  the internal timers off) inside processes that already exist, with no new
+  supervised process. `[:aurora_meter, :store, :gauge]` reports `dirty_keys`,
+  `counter_keys`, `oldest_pending_age_ms`, `pending_batch_age_ms` and
+  `pending_batch_items`; `[:aurora_meter, :cluster, :lag]` reports `peers`,
+  `since_last_message_ms` and `unreconciled_keys`. Both ages are monotonic spans
+  inside one node, never a wall clock. `AuroraMeter.Telemetry.emit_gauges/0`
+  drives them from `telemetry_poller` or your own scheduler.
+- Configuration keys `metrics_interval`, `metrics_feature_label` and
+  `metrics_scan_ceiling`. The last bounds the counters-table scan behind
+  `unreconciled_keys`: above it the measurement is **omitted**, never reported
+  as zero, because a zero there reads as "the cluster has converged".
+- `docs/telemetry.md` is rewritten around a generated event table, the exact
+  meaning of each gauge, and a failure-mode to signal to runbook table covering
+  every state the library can be in.
+
 - **Occurrence-plan attribution on every recorded event.**
   `AuroraMeter.Plans.effective_for/2` answers which `{plan_id, version}` a
   tenant was on at an instant, from the subscription for an instant inside the

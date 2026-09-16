@@ -101,6 +101,31 @@ defmodule AuroraMeter.Config do
             ],
             flush_interval: [type: :pos_integer, default: 5_000],
             broadcast_interval: [type: :pos_integer, default: 1_000],
+            metrics_interval: [
+              type: :non_neg_integer,
+              default: 10_000,
+              doc:
+                "Milliseconds between gauge samples (`[:aurora_meter, :store, :gauge]` and " <>
+                  "`[:aurora_meter, :cluster, :lag]`). `0` switches the internal timers off " <>
+                  "entirely; call `AuroraMeter.Telemetry.emit_gauges/0` from your own " <>
+                  "scheduler instead."
+            ],
+            metrics_feature_label: [
+              type: :boolean,
+              default: false,
+              doc:
+                "Whether `AuroraMeter.Telemetry.Metrics.metrics/1` tags on `:feature`. Off by " <>
+                  "default: the bound on its value set is the host's own plan definitions, " <>
+                  "and one time series per feature per metric is a cost only the host can price."
+            ],
+            metrics_scan_ceiling: [
+              type: :non_neg_integer,
+              default: 50_000,
+              doc:
+                "The largest counters table `[:aurora_meter, :cluster, :lag]` will scan for " <>
+                  "`unreconciled_keys`. Above it the measurement is **omitted**, never " <>
+                  "reported as zero. `0` omits it always."
+            ],
             flush_receipt_retention: [
               type: {:custom, __MODULE__, :retention_days, [:flush_receipt_retention]},
               default: 30,
@@ -476,6 +501,43 @@ defmodule AuroraMeter.Config do
   @doc "Milliseconds between live PubSub broadcasts of touched counters."
   @spec broadcast_interval() :: pos_integer()
   def broadcast_interval, do: get(:broadcast_interval)
+
+  @doc """
+  Milliseconds between gauge samples, or `0` for no internal timers.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.metrics_interval()
+      10_000
+
+  """
+  @spec metrics_interval() :: non_neg_integer()
+  def metrics_interval, do: get(:metrics_interval)
+
+  @doc """
+  Whether the metrics presets tag on `:feature` (default `false`).
+
+  ## Examples
+
+      iex> AuroraMeter.Config.metrics_feature_label?()
+      false
+
+  """
+  @spec metrics_feature_label?() :: boolean()
+  def metrics_feature_label?, do: get(:metrics_feature_label)
+
+  @doc """
+  The largest counters table the cluster lag gauge will scan for
+  `unreconciled_keys`; above it the measurement is omitted rather than zeroed.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.metrics_scan_ceiling()
+      50_000
+
+  """
+  @spec metrics_scan_ceiling() :: non_neg_integer()
+  def metrics_scan_ceiling, do: get(:metrics_scan_ceiling)
 
   @doc """
   Days a flush receipt is kept before `AuroraMeter.Retention` may delete it

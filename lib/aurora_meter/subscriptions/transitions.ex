@@ -852,9 +852,11 @@ defmodule AuroraMeter.Subscriptions.Transitions do
       broadcast(transition)
     end
 
-    # The event name is written out here rather than held in an attribute: the
-    # inventory guard reads `docs/api.md` against the literal at the call site,
-    # and an attribute hides the name from it.
+    # The event name at the call site, which is a readability choice and no
+    # longer a requirement. It was written out longhand because the inventory
+    # guard matched a literal and an attribute hid the name from it
+    # (`open-findings.md` X222); 08a's census resolves attributes, so this is
+    # now simply where a name used once is clearest.
     :telemetry.execute(
       [:aurora_meter, :plans, :transition],
       %{count: 1},

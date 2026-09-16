@@ -922,9 +922,11 @@ defmodule AuroraMeter.Retention do
     end
   end
 
-  # The literal event name rather than the module attribute, so the inventory
-  # guard that greps `lib/` for emit sites can see it (A05, and the same reason
-  # `AuroraMeter.Events.Replay` writes its two out in full).
+  # The literal event name at the call site. There is no module attribute to
+  # hold it, and the old justification for writing it out ("so the inventory
+  # guard's grep can see it", `open-findings.md` X222) stopped being true when
+  # build unit 08a replaced that grep with a census that reads the parsed
+  # source. Kept because a name used once is clearest beside its call.
   defp emit(table, deleted, duration, blocked) do
     :telemetry.execute(
       [:aurora_meter, :retention, :prune],

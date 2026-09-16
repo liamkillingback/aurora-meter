@@ -1,0 +1,668 @@
+{
+  "catalogue": "AuroraMeter.Telemetry",
+  "events": [
+    {
+      "description": "One buffered increment. `declared` is false when no plan declares the feature.",
+      "emitter": "AuroraMeter",
+      "event": "[:aurora_meter, :track]",
+      "form": "execute",
+      "measurements": [
+        "count"
+      ],
+      "metadata": [
+        "declared",
+        "feature",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "track"
+        ]
+      ],
+      "since": "0.1.0",
+      "tags": []
+    },
+    {
+      "description": "One entitlement reservation. `result` is `:ok`, `:limit_exceeded` or `:not_entitled`.",
+      "emitter": "AuroraMeter.Entitlements",
+      "event": "[:aurora_meter, :reserve]",
+      "form": "execute",
+      "measurements": [
+        "qty"
+      ],
+      "metadata": [
+        "declared",
+        "feature",
+        "result",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "reserve"
+        ]
+      ],
+      "since": "0.2.0",
+      "tags": [
+        "result"
+      ]
+    },
+    {
+      "description": "One committed flush batch. Kept unchanged beside the span below.",
+      "emitter": "AuroraMeter.Flusher",
+      "event": "[:aurora_meter, :flush]",
+      "form": "execute",
+      "measurements": [
+        "count",
+        "delta_sum"
+      ],
+      "metadata": [],
+      "names": [
+        [
+          "aurora_meter",
+          "flush"
+        ]
+      ],
+      "since": "0.1.0",
+      "tags": []
+    },
+    {
+      "description": "The database write failed and the same batch is retained for an idempotent retry.",
+      "emitter": "AuroraMeter.Flusher",
+      "event": "[:aurora_meter, :flush, :error]",
+      "form": "execute",
+      "measurements": [
+        "count"
+      ],
+      "metadata": [
+        "error"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "flush",
+          "error"
+        ]
+      ],
+      "since": "0.3.0",
+      "tags": []
+    },
+    {
+      "description": "A span around the storage write. `:stop` carries `duration` and `result` (`:ok` or `:error`); `:exception` carries `kind`. `batch_id` is metadata for correlation and never a tag.",
+      "emitter": "AuroraMeter.Flusher",
+      "event": "[:aurora_meter, :flush]",
+      "form": "span",
+      "measurements": [
+        "count",
+        "delta_sum",
+        "duration",
+        "monotonic_time",
+        "system_time"
+      ],
+      "metadata": [
+        "batch_id",
+        "counter_rows",
+        "history_rows",
+        "kind",
+        "reason",
+        "result",
+        "stacktrace"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "flush",
+          "start"
+        ],
+        [
+          "aurora_meter",
+          "flush",
+          "stop"
+        ],
+        [
+          "aurora_meter",
+          "flush",
+          "exception"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": [
+        "result",
+        "kind"
+      ]
+    },
+    {
+      "description": "One PubSub broadcast tick of touched counters.",
+      "emitter": "AuroraMeter.Broadcaster",
+      "event": "[:aurora_meter, :broadcast]",
+      "form": "execute",
+      "measurements": [
+        "count",
+        "deltas"
+      ],
+      "metadata": [],
+      "names": [
+        [
+          "aurora_meter",
+          "broadcast"
+        ]
+      ],
+      "since": "0.1.0",
+      "tags": []
+    },
+    {
+      "description": "Deltas or totals applied from another node. `origin` is a node name, which rotates over a deployment's life: metadata only, never a tag.",
+      "emitter": "AuroraMeter.Cluster",
+      "event": "[:aurora_meter, :cluster, :apply]",
+      "form": "execute",
+      "measurements": [
+        "count"
+      ],
+      "metadata": [
+        "kind",
+        "origin"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "cluster",
+          "apply"
+        ]
+      ],
+      "since": "0.3.0",
+      "tags": [
+        "kind"
+      ]
+    },
+    {
+      "description": "Node-local convergence state, sampled every `:metrics_interval`. `unreconciled_keys` is omitted, not zeroed, above the scan ceiling.",
+      "emitter": "AuroraMeter.Cluster",
+      "event": "[:aurora_meter, :cluster, :lag]",
+      "form": "execute",
+      "measurements": [
+        "peers",
+        "since_last_message_ms",
+        "unreconciled_keys"
+      ],
+      "metadata": [
+        "node"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "cluster",
+          "lag"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": []
+    },
+    {
+      "description": "What is buffered and how old it is, sampled every `:metrics_interval`. Both ages are monotonic spans measured inside one node.",
+      "emitter": "AuroraMeter.Store",
+      "event": "[:aurora_meter, :store, :gauge]",
+      "form": "execute",
+      "measurements": [
+        "counter_keys",
+        "dirty_keys",
+        "oldest_pending_age_ms",
+        "pending_batch_age_ms",
+        "pending_batch_items"
+      ],
+      "metadata": [
+        "node"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "store",
+          "gauge"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": []
+    },
+    {
+      "description": "One per committed ledger entry; the kind is the last segment of the event name, so a preset needs no tag for it. `reference` is the caller's idempotency key and in a Pro deployment it carries payment identifiers: metadata only, never a tag and never an unredacted log.",
+      "emitter": "AuroraMeter.Credits.Ledger",
+      "event": "[:aurora_meter, :credits, kind]",
+      "form": "family",
+      "measurements": [
+        "amount",
+        "available_after",
+        "balance_after",
+        "spendable_after"
+      ],
+      "metadata": [
+        "category",
+        "deferred",
+        "duplicate",
+        "overrun",
+        "reference",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "credits",
+          "grant"
+        ],
+        [
+          "aurora_meter",
+          "credits",
+          "hold"
+        ],
+        [
+          "aurora_meter",
+          "credits",
+          "settle"
+        ],
+        [
+          "aurora_meter",
+          "credits",
+          "release"
+        ],
+        [
+          "aurora_meter",
+          "credits",
+          "debit"
+        ],
+        [
+          "aurora_meter",
+          "credits",
+          "expire"
+        ],
+        [
+          "aurora_meter",
+          "credits",
+          "reverse"
+        ]
+      ],
+      "since": "0.4.0",
+      "tags": []
+    },
+    {
+      "description": "The available balance crossed below the threshold, once per crossing.",
+      "emitter": "AuroraMeter.Credits.Ledger",
+      "event": "[:aurora_meter, :credits, :low_balance]",
+      "form": "execute",
+      "measurements": [
+        "available",
+        "spendable",
+        "threshold"
+      ],
+      "metadata": [
+        "crossing_id",
+        "handler",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "credits",
+          "low_balance"
+        ]
+      ],
+      "since": "0.4.0",
+      "tags": []
+    },
+    {
+      "description": "One per hold `AuroraMeter.Credits.reconcile_holds/1` examined. `decision` is `:keep`, `:release`, `:none` or `{:settle, amount}`: the tuple makes it unbounded, so the preset maps it onto `kind` and keeps only the tag. `outcome` maps onto `result` the same way.",
+      "emitter": "AuroraMeter.Credits.Reconciliation",
+      "event": "[:aurora_meter, :credits, :hold_reconciliation]",
+      "form": "execute",
+      "measurements": [
+        "age_seconds",
+        "amount",
+        "duration"
+      ],
+      "metadata": [
+        "decision",
+        "outcome",
+        "reference",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "credits",
+          "hold_reconciliation"
+        ]
+      ],
+      "since": "0.6.0",
+      "tags": []
+    },
+    {
+      "description": "A wallet column moved by an amount the ledger cannot account for.",
+      "emitter": "AuroraMeter.Credits.Allocator",
+      "event": "[:aurora_meter, :credits, :conservation_error]",
+      "form": "execute",
+      "measurements": [
+        "balance_delta",
+        "expired_delta",
+        "held_delta",
+        "promotional_delta"
+      ],
+      "metadata": [
+        "operation",
+        "reference",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "credits",
+          "conservation_error"
+        ]
+      ],
+      "since": "0.6.0",
+      "tags": []
+    },
+    {
+      "description": "One batch of the lot cutover. `shadow: true` is a dry run.",
+      "emitter": "AuroraMeter.Credits.LotMigration",
+      "event": "[:aurora_meter, :credits, :lot_migration]",
+      "form": "execute",
+      "measurements": [
+        "blocked",
+        "deferred",
+        "duration_ms",
+        "migrated",
+        "rows",
+        "wallets"
+      ],
+      "metadata": [
+        "shadow",
+        "state"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "credits",
+          "lot_migration"
+        ]
+      ],
+      "since": "0.6.0",
+      "tags": [
+        "state"
+      ]
+    },
+    {
+      "description": "One recurring grant period. `period_start` grows one series per period for ever, so it is metadata only.",
+      "emitter": "AuroraMeter.Credits.Recurrences",
+      "event": "[:aurora_meter, :credits, :recurrence]",
+      "form": "execute",
+      "measurements": [
+        "amount",
+        "rollover_amount"
+      ],
+      "metadata": [
+        "name",
+        "period_start",
+        "plan_id",
+        "plan_version",
+        "reason",
+        "result",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "credits",
+          "recurrence"
+        ]
+      ],
+      "since": "0.6.0",
+      "tags": [
+        "result"
+      ]
+    },
+    {
+      "description": "One applied or refused plan transition.",
+      "emitter": "AuroraMeter.Subscriptions.Transitions",
+      "event": "[:aurora_meter, :plans, :transition]",
+      "form": "execute",
+      "measurements": [
+        "count"
+      ],
+      "metadata": [
+        "from_plan_id",
+        "from_version",
+        "ref",
+        "result",
+        "tenant_key",
+        "to_plan_id",
+        "to_version"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "plans",
+          "transition"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": [
+        "result"
+      ]
+    },
+    {
+      "description": "One committed batch of `mix aurora_meter.events.backfill`; `cursor` is the `seq` an interrupted run resumes from.",
+      "emitter": "AuroraMeter.Events.Backfill",
+      "event": "[:aurora_meter, :events, :backfill, :batch]",
+      "form": "execute",
+      "measurements": [
+        "batches",
+        "scanned",
+        "updated"
+      ],
+      "metadata": [
+        "cursor"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "events",
+          "backfill",
+          "batch"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": []
+    },
+    {
+      "description": "One span per durable write. `result` distinguishes `:inserted`, `:duplicate`, `:conflict`, `:invalid`, `:unavailable` and `:unsupported`; `kind` is `:usage` or `:correction`.",
+      "emitter": "AuroraMeter.Events",
+      "event": "[:aurora_meter, :record]",
+      "form": "span",
+      "measurements": [
+        "count",
+        "duration",
+        "monotonic_time",
+        "system_time"
+      ],
+      "metadata": [
+        "batch_size",
+        "durability",
+        "feature",
+        "kind",
+        "projection",
+        "result",
+        "tenant_key"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "record",
+          "start"
+        ],
+        [
+          "aurora_meter",
+          "record",
+          "stop"
+        ],
+        [
+          "aurora_meter",
+          "record",
+          "exception"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": [
+        "result",
+        "kind"
+      ]
+    },
+    {
+      "description": "One committed batch of a projection rebuild.",
+      "emitter": "AuroraMeter.Events.Replay",
+      "event": "[:aurora_meter, :replay, :batch]",
+      "form": "execute",
+      "measurements": [
+        "duration",
+        "keys",
+        "scanned"
+      ],
+      "metadata": [
+        "cursor",
+        "generation",
+        "phase"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "replay",
+          "batch"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": []
+    },
+    {
+      "description": "One per rebuild phase (`:announce`, `:drain`, `:compare`, `:activate`). `phase` is bounded but is not an allow-listed tag name, so the preset maps it onto `kind`.",
+      "emitter": "AuroraMeter.Events.Replay",
+      "event": "[:aurora_meter, :replay, :phase]",
+      "form": "execute",
+      "measurements": [
+        "duration"
+      ],
+      "metadata": [
+        "differences",
+        "drained",
+        "generation",
+        "phase",
+        "resumed",
+        "seeded"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "replay",
+          "phase"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": []
+    },
+    {
+      "description": "One committed batch of any operation run through `AuroraMeter.Operations.run_batches/3`. `name` is the operation name and its scope (`\"credit_expiry:global\"`), so it is bounded by the host's tenants and is metadata only.",
+      "emitter": "AuroraMeter.Operations",
+      "event": "[:aurora_meter, :operations, :batch]",
+      "form": "execute",
+      "measurements": [
+        "duration_ms",
+        "items"
+      ],
+      "metadata": [
+        "name",
+        "result"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "operations",
+          "batch"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": [
+        "result"
+      ]
+    },
+    {
+      "description": "One per table `AuroraMeter.Retention.prune/1` examined. `table` is bounded by the retention allow list, so the preset maps it onto `kind`.",
+      "emitter": "AuroraMeter.Retention",
+      "event": "[:aurora_meter, :retention, :prune]",
+      "form": "execute",
+      "measurements": [
+        "deleted",
+        "duration"
+      ],
+      "metadata": [
+        "blocked",
+        "table"
+      ],
+      "names": [
+        [
+          "aurora_meter",
+          "retention",
+          "prune"
+        ]
+      ],
+      "since": "1.0.0",
+      "tags": []
+    }
+  ],
+  "feature_tag": "feature",
+  "forbidden_tag_suffixes": [
+    "_key",
+    "_id",
+    "_secret",
+    "_token",
+    "_ref"
+  ],
+  "forbidden_tags": [
+    "tenant_key",
+    "tenant",
+    "reference",
+    "origin",
+    "node",
+    "error",
+    "reason",
+    "stacktrace",
+    "dimensions",
+    "metadata",
+    "payload",
+    "period_start",
+    "customer",
+    "email",
+    "cursor",
+    "generation",
+    "name",
+    "table",
+    "handler",
+    "decision",
+    "outcome",
+    "attempts",
+    "watermark",
+    "subject",
+    "subject_ref",
+    "plan_id",
+    "plan_version",
+    "from_plan_id",
+    "to_plan_id",
+    "from_version",
+    "to_version",
+    "ref"
+  ],
+  "generated_by": "build unit 08a",
+  "package": "aurora_meter",
+  "tag_allow_list": [
+    "result",
+    "kind",
+    "exporter",
+    "state",
+    "worker"
+  ]
+}

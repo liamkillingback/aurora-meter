@@ -24,6 +24,8 @@ defmodule AuroraMeter.ApiInventoryTest do
   """
   use ExUnit.Case, async: true
 
+  alias AuroraMeter.Test.TelemetryCensus
+
   @inventory "docs/api.md"
 
   # The internal set fixed by `api-change-map.md` section 1.8 and section 6.2,
@@ -134,27 +136,47 @@ defmodule AuroraMeter.ApiInventoryTest do
       assert missing == [], "docs/api.md names modules that do not exist:\n" <> lines(missing)
     end
 
-    test "optional-dependency rows are tagged, and skipped only when the module is absent",
+    test "every optional-dependency row names the dependency it needs",
          %{regions: regions} do
       optional = Enum.filter(rows(regions, :functions), &optional_dep?/1)
 
       assert optional != [],
              "no row in docs/api.md is tagged optional-dep, so the tag has rotted away"
 
-      skipped =
-        Enum.reject(optional, fn row ->
-          {module, _, _} = function_entry!(row)
-          module_present?(module)
-        end)
+      unnamed =
+        for row <- optional, needed_dependency(row) == nil, do: {row.line, literal_of(row)}
 
-      if Code.ensure_loaded?(Phoenix.Component) do
-        assert skipped == [],
-               "Phoenix.Component is loaded, so no optional-dep row should have been skipped"
-      else
-        assert skipped != [],
-               "this is a headless build (no Phoenix.Component) and no optional-dep row " <>
-                 "was skipped, so the skip path is not being exercised"
-      end
+      assert unnamed == [],
+             "these rows are tagged optional-dep and do not say which dependency they need, " <>
+               "so nothing can check when they are allowed to be absent:
+" <> lines(unnamed)
+    end
+
+    test "each optional-dependency row is present exactly when ITS OWN dependency is",
+         %{regions: regions} do
+      # Not "when Phoenix.Component is loaded". That is what this assertion used
+      # to say, and it was true only while every optional row needed LiveView or
+      # Oban and one environment variable removed both together. The moment a
+      # second, independently removable optional dependency arrived
+      # (`telemetry_metrics`), the test became wrong in whichever direction the
+      # build happened to be: on a leg that removes only the metrics reporter it
+      # fails, because Phoenix.Component is loaded and two rows are correctly
+      # skipped (`open-findings.md` X326).
+      wrong =
+        for row <- Enum.filter(rows(regions, :functions), &optional_dep?/1),
+            dependency = needed_dependency(row),
+            dependency != nil,
+            {module, _fun, _arity} = function_entry!(row),
+            module_present?(module) != dependency_present?(dependency),
+            do:
+              {row.line,
+               "#{literal_of(row)} needs #{dependency}: dependency loaded?=" <>
+                 "#{dependency_present?(dependency)} module loaded?=#{module_present?(module)}"}
+
+      assert wrong == [],
+             "an optional-dep row is present when its dependency is absent, or absent when " <>
+               "its dependency is present:
+" <> lines(wrong)
     end
 
     test "every documented configuration key is in the schema", %{regions: regions} do
@@ -312,14 +334,55 @@ defmodule AuroraMeter.ApiInventoryTest do
          %{regions: regions} do
       literals = regions |> rows(:literal) |> Enum.map(&literal!/1)
 
-      telemetry = Enum.count(literals, &String.starts_with?(&1, "[:aurora_meter"))
       pubsub = Enum.count(literals, &String.starts_with?(&1, "{:aurora_meter"))
 
-      assert telemetry == length(telemetry_sites()),
-             "docs/api.md documents #{telemetry} telemetry events but lib/ emits " <>
-               "#{length(telemetry_sites())}"
+      # Distinct names, in both directions, rather than a count of emit sites.
+      # A count is satisfied by any two numbers that happen to agree, and it
+      # broke the moment one event acquired a second emit site: the flush span
+      # and the flat flush event share a name, which is two sites and one
+      # contract.
+      documented =
+        literals |> Enum.filter(&String.starts_with?(&1, "[:aurora_meter")) |> MapSet.new()
+
+      emitted = MapSet.new(telemetry_sites())
+
+      assert MapSet.difference(emitted, documented) |> MapSet.to_list() == [],
+             "lib/ emits telemetry events docs/api.md does not list"
+
+      assert MapSet.difference(documented, emitted) |> MapSet.to_list() == [],
+             "docs/api.md lists telemetry events lib/ does not emit"
 
       assert pubsub >= 6, "docs/api.md documents only #{pubsub} PubSub messages"
+    end
+  end
+
+  # The dependency an optional-dep row names in its Notes ("Needs `oban`"). The
+  # row has to say, because a tag that means "optional somehow" cannot be
+  # checked against anything.
+  defp needed_dependency(row) do
+    case Regex.run(~r/Needs `([a-z_0-9]+)`/, row.raw) do
+      [_, name] -> name
+      nil -> nil
+    end
+  end
+
+  # One probe module per dependency this package declares as optional. A
+  # dependency that arrives without an entry here fails the test above rather
+  # than being silently treated as present.
+  defp dependency_present?("oban"), do: Code.ensure_loaded?(Oban)
+  defp dependency_present?("phoenix_live_view"), do: Code.ensure_loaded?(Phoenix.LiveView)
+  defp dependency_present?("phoenix_html"), do: Code.ensure_loaded?(Phoenix.HTML)
+  defp dependency_present?("igniter"), do: Code.ensure_loaded?(Igniter)
+  defp dependency_present?("telemetry_metrics"), do: Code.ensure_loaded?(Telemetry.Metrics)
+
+  defp dependency_present?(other) do
+    flunk("docs/api.md names an optional dependency this test has no probe for: #{other}")
+  end
+
+  defp literal_of(row) do
+    case Regex.run(~r/^\|\s*`([^`]+)`/, row.raw) do
+      [_, text] -> text
+      nil -> String.slice(row.raw, 0, 60)
     end
   end
 
@@ -462,16 +525,17 @@ defmodule AuroraMeter.ApiInventoryTest do
     end)
   end
 
-  # `execute` and `span` both. A span is one emit site that produces three
-  # events, and docs/api.md documents it as one row under its prefix, so the
-  # counts line up. Reading only `execute` would have made the `record` span
-  # invisible to this guard on the very run that introduced it.
+  # The AST, not a regular expression over the source text. The expression this
+  # replaces could only see a LITERAL event name, so an event emitted through a
+  # module attribute was invisible to it in both directions: it could not be
+  # found, and documenting it failed the check above with "documented in
+  # docs/api.md but not emitted anywhere in lib/" (`open-findings.md` X222).
+  # Three emit sites in this package still carry a comment saying the name is
+  # written out longhand to keep that expression happy.
   defp telemetry_sites do
-    lib_code()
-    |> Enum.flat_map(
-      &Regex.scan(~r/:telemetry\.(?:execute|span)\(\s*(\[:aurora_meter[^\]]*\])/, &1)
-    )
-    |> Enum.map(&Enum.at(&1, 1))
+    lib_root()
+    |> TelemetryCensus.sites()
+    |> Enum.map(&TelemetryCensus.render(&1.event))
   end
 
   # A telemetry literal must be an emit site, not merely text: a documented
