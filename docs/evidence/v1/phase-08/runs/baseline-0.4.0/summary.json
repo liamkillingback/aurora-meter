@@ -1,0 +1,52 @@
+{
+  "schema": "aurora-v1-bench-summary/1",
+  "generated_at": "2026-09-16T11:28:50.911Z",
+  "directory": "/home/liamk/src/PhxTemplates/tmp/v1/bench/baseline-0.4.0",
+  "package": {
+    "name": "aurora_meter",
+    "version": "0.4.0",
+    "git_sha": null,
+    "git_dirty": false
+  },
+  "runtime": {},
+  "machine": {},
+  "modes": {
+    "spread": {
+      "kind": "micro",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 4782812,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 4400334,
+      "max_throughput_ops_per_sec": 5088379,
+      "spread_percent": 13.52,
+      "workload": {
+        "procs": 8,
+        "per_proc": 500000,
+        "operations": 4000000,
+        "rounds": 1,
+        "seed": null,
+        "batch_size": null,
+        "keys": 8,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench 8 500000",
+      "run_ids": [
+        "baseline-v0.4.0-1",
+        "baseline-v0.4.0-2",
+        "baseline-v0.4.0-3",
+        "baseline-v0.4.0-4",
+        "baseline-v0.4.0-5"
+      ],
+      "files": [
+        "spread-1.json",
+        "spread-2.json",
+        "spread-3.json",
+        "spread-4.json",
+        "spread-5.json"
+      ]
+    }
+  }
+}

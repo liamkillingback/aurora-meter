@@ -66,7 +66,17 @@ defmodule AuroraMeter.MixProject do
         # Mix tasks are exercised by their own tests under test/mix. The install
         # task needs Igniter, which is optional, so it is zero on the headless
         # leg and would make the floor depend on the optional-dependency matrix.
-        ~r/^Mix\.Tasks\./
+        ~r/^Mix\.Tasks\./,
+        # The benchmark suite (build unit 08c). It is a measuring instrument,
+        # not a library path: its end-to-end modes need the separate
+        # aurora_meter_bench database and its cluster modes need real peer
+        # nodes, so `mix test` runs the micro modes and the guards and cannot
+        # run the rest. Counting it here would make this library's coverage
+        # floor a statement about a benchmark's coverage, which is a different
+        # claim. What it IS covered by is
+        # docs/evidence/v1/phase-08/08c-results.md: every mode, five runs,
+        # correctness asserted on each.
+        ~r/^AuroraMeter\.Bench\./
       ]
     ]
   end
@@ -77,6 +87,8 @@ defmodule AuroraMeter.MixProject do
         check: :test,
         coverage: :test,
         "test.setup": :test,
+        "bench.setup": :test,
+        "aurora_meter.bench": :test,
         "v1.migrations": :test,
         "v1.faults": :test
       ]
@@ -357,6 +369,21 @@ defmodule AuroraMeter.MixProject do
       # group below.
       skip_code_autolink_to: [
         "AuroraMeter.BootChecks",
+        "AuroraMeter.Bench.DelayStorage",
+        "AuroraMeter.Bench.MemoryStorage",
+        "AuroraMeter.Bench.Mode",
+        "AuroraMeter.Bench.Modes",
+        "AuroraMeter.Bench.Modes.Cluster",
+        "AuroraMeter.Bench.Modes.Counters",
+        "AuroraMeter.Bench.Modes.Durable",
+        "AuroraMeter.Bench.Modes.Faults",
+        "AuroraMeter.Bench.Modes.Flush",
+        "AuroraMeter.Bench.Modes.Quota",
+        "AuroraMeter.Bench.Modes.Wallet",
+        "AuroraMeter.Bench.Plans",
+        "AuroraMeter.Bench.Report",
+        "AuroraMeter.Bench.Runner",
+        "AuroraMeter.Bench.Stats",
         "AuroraMeter.Config.Schema",
         "AuroraMeter.Credits.Allocator",
         "AuroraMeter.Credits.Ledger",
@@ -494,6 +521,21 @@ defmodule AuroraMeter.MixProject do
       ],
       Internal: [
         AuroraMeter.BootChecks,
+        AuroraMeter.Bench.DelayStorage,
+        AuroraMeter.Bench.MemoryStorage,
+        AuroraMeter.Bench.Mode,
+        AuroraMeter.Bench.Modes,
+        AuroraMeter.Bench.Modes.Cluster,
+        AuroraMeter.Bench.Modes.Counters,
+        AuroraMeter.Bench.Modes.Durable,
+        AuroraMeter.Bench.Modes.Faults,
+        AuroraMeter.Bench.Modes.Flush,
+        AuroraMeter.Bench.Modes.Quota,
+        AuroraMeter.Bench.Modes.Wallet,
+        AuroraMeter.Bench.Plans,
+        AuroraMeter.Bench.Report,
+        AuroraMeter.Bench.Runner,
+        AuroraMeter.Bench.Stats,
         AuroraMeter.Broadcaster,
         AuroraMeter.Cluster,
         AuroraMeter.Config.Schema,
@@ -579,7 +621,18 @@ defmodule AuroraMeter.MixProject do
       # test/aurora_meter/ci_contract_test.exs asserts exactly that.
       "v1.migrations": ["test --only migration"],
       "v1.faults": ["test --only fault --seed 0"],
-      "test.setup": ["ecto.create --quiet", "ecto.migrate --quiet"]
+      "test.setup": ["ecto.create --quiet", "ecto.migrate --quiet"],
+      # The benchmark's own database. It is the SAME two commands as
+      # `test.setup`, and what makes it a different database is AURORA_BENCH=1,
+      # which config/config.exs reads: without it the repo resolves to
+      # aurora_meter_test with the Ecto sandbox, and `mix aurora_meter.bench`
+      # refuses both. So this alias is only ever useful as
+      #
+      #     AURORA_BENCH=1 mix bench.setup
+      #
+      # and running it without the variable creates nothing new, which is the
+      # safe direction.
+      "bench.setup": ["ecto.create --quiet", "ecto.migrate --quiet"]
     ]
   end
 end

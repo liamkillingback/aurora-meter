@@ -1,0 +1,298 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": {
+      "arrival_rate_per_sec": 1530797.64,
+      "buffered_when_load_stopped": 1243292,
+      "drain_faster_than_arrival": true,
+      "drain_ms": 708.9,
+      "drain_rate_per_sec": 1753825.53,
+      "increments_issued": 30614894,
+      "load_stopped_monotonic_ms": -576460730634,
+      "persisted_when_load_stopped": 29371602,
+      "recovery_faster_than_arrival": true,
+      "recovery_rate_per_sec": 2010318.05
+    },
+    "pending_batch_items_at_end": 0,
+    "timeline": [
+      {
+        "at": "2026-09-16T11:16:47.987148Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 1001,
+        "monotonic_ms": -576460749633,
+        "pending_batch_items": 0,
+        "persisted": 950270
+      },
+      {
+        "at": "2026-09-16T11:16:48.999000Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 2013,
+        "monotonic_ms": -576460748621,
+        "pending_batch_items": 4000,
+        "persisted": 950270
+      },
+      {
+        "at": "2026-09-16T11:16:50.004166Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 3018,
+        "monotonic_ms": -576460747616,
+        "pending_batch_items": 0,
+        "persisted": 2845763
+      },
+      {
+        "at": "2026-09-16T11:16:51.008195Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 4022,
+        "monotonic_ms": -576460746612,
+        "pending_batch_items": 0,
+        "persisted": 4769481
+      },
+      {
+        "at": "2026-09-16T11:16:52.011181Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 5025,
+        "monotonic_ms": -576460745609,
+        "pending_batch_items": 0,
+        "persisted": 6608666
+      },
+      {
+        "at": "2026-09-16T11:16:53.014102Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 6028,
+        "monotonic_ms": -576460744606,
+        "pending_batch_items": 0,
+        "persisted": 8475631
+      },
+      {
+        "at": "2026-09-16T11:16:54.016067Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 7030,
+        "monotonic_ms": -576460743604,
+        "pending_batch_items": 4000,
+        "persisted": 8475631
+      },
+      {
+        "at": "2026-09-16T11:16:55.022111Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 8036,
+        "monotonic_ms": -576460742598,
+        "pending_batch_items": 0,
+        "persisted": 10399026
+      },
+      {
+        "at": "2026-09-16T11:16:56.024228Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 9038,
+        "monotonic_ms": -576460741596,
+        "pending_batch_items": 0,
+        "persisted": 12328550
+      },
+      {
+        "at": "2026-09-16T11:16:57.027223Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 10041,
+        "monotonic_ms": -576460740593,
+        "pending_batch_items": 0,
+        "persisted": 14138576
+      },
+      {
+        "at": "2026-09-16T11:16:58.030247Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 11044,
+        "monotonic_ms": -576460739590,
+        "pending_batch_items": 0,
+        "persisted": 16003977
+      },
+      {
+        "at": "2026-09-16T11:16:59.034259Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 12048,
+        "monotonic_ms": -576460738586,
+        "pending_batch_items": 4000,
+        "persisted": 16003977
+      },
+      {
+        "at": "2026-09-16T11:17:00.039111Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 13053,
+        "monotonic_ms": -576460737581,
+        "pending_batch_items": 0,
+        "persisted": 17917459
+      },
+      {
+        "at": "2026-09-16T11:17:01.042167Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 14056,
+        "monotonic_ms": -576460736578,
+        "pending_batch_items": 0,
+        "persisted": 19767939
+      },
+      {
+        "at": "2026-09-16T11:17:02.045210Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 15059,
+        "monotonic_ms": -576460735575,
+        "pending_batch_items": 0,
+        "persisted": 21784288
+      },
+      {
+        "at": "2026-09-16T11:17:03.049125Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 16063,
+        "monotonic_ms": -576460734571,
+        "pending_batch_items": 0,
+        "persisted": 23742424
+      },
+      {
+        "at": "2026-09-16T11:17:04.052127Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 17066,
+        "monotonic_ms": -576460733568,
+        "pending_batch_items": 0,
+        "persisted": 25658789
+      },
+      {
+        "at": "2026-09-16T11:17:05.055213Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 18069,
+        "monotonic_ms": -576460732565,
+        "pending_batch_items": 4000,
+        "persisted": 25658789
+      },
+      {
+        "at": "2026-09-16T11:17:06.061127Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 19075,
+        "monotonic_ms": -576460731559,
+        "pending_batch_items": 0,
+        "persisted": 27617471
+      },
+      {
+        "at": "2026-09-16T11:17:07.064094Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 20078,
+        "monotonic_ms": -576460730556,
+        "pending_batch_items": 0,
+        "persisted": 29371602
+      },
+      {
+        "at": "2026-09-16T11:17:07.696473Z",
+        "dirty_keys": 0,
+        "elapsed_ms": 20710,
+        "monotonic_ms": -576460729924,
+        "pending_batch_items": 0,
+        "persisted": 30614894
+      }
+    ]
+  },
+  "command": "mix aurora_meter.bench db_delay --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/db_delay-1.json --label db_delay",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 1000,
+    "history": true,
+    "seed": 8066,
+    "storage": "AuroraMeter.Bench.DelayStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 19999.31,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T11:17:07.705146Z",
+  "kind": "end_to_end",
+  "label": "db_delay",
+  "latency_us": {
+    "max": null,
+    "method": "nearest_rank",
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 0
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 3902064,
+      "ets": 19717952,
+      "processes": 53149672,
+      "total": 123780520
+    },
+    "after_warmup": {
+      "binary": 66390352,
+      "ets": 3695336,
+      "processes": 19364040,
+      "total": 135684464
+    },
+    "before": {
+      "binary": 66383144,
+      "ets": 3693208,
+      "processes": 19401232,
+      "total": 135711832
+    },
+    "counters_table_bytes": 1785672
+  },
+  "mode": "db_delay",
+  "notes": [
+    "db_delay puts 50000 us in front of every storage callback through AuroraMeter.Bench.DelayStorage. A slow database is not an absent one: the flusher keeps succeeding and the dirty set grows because it cannot keep up.",
+    "duration driven: 8 workers incremented 2000 rotating keys for 19999.31 ms, then the load stopped and the drain took 708.9 ms. latency_us is null throughout, because this mode measures backlog and drain and not per-operation latency.",
+    "persisted total after the drain: 30614894 (expected 30614894)",
+    "dirty keys after the drain: 0 (expected 0)",
+    "pending batch items after the drain: 0 (expected 0)",
+    "latency_us.p50, p95, p99 and max are null: this mode took no per-operation timing sample. Its unit of work is not an operation in a loop, so a percentile over operations would be a number with no referent."
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "ee8eee05-b732-486a-bb0e-7f5a2d1090c1",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:16:46.984288Z",
+  "throughput_ops_per_sec": 1530797.64,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "duration_ms": 20000,
+    "history": true,
+    "keys": 2000,
+    "operations": 30614894,
+    "per_proc": 2000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 8066,
+    "storage_delay_us": 50000,
+    "tenants": 2000,
+    "warmed_keys": 4000
+  }
+}

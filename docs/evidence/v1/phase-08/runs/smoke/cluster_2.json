@@ -1,0 +1,156 @@
+{
+  "backlog": {
+    "cluster": {
+      "admitted": 20000,
+      "admitted_after_one_settling_window": 0,
+      "bound_formula": "(nodes - 1) x ceil(per_node_reservation_rate x broadcast_interval_ms / 1000), from architecture-map.md section 3: the overshoot is what the other nodes admitted within one broadcast_interval, and inside that window a node admits everything it attempts",
+      "broadcast_interval_ms": 1000,
+      "converged": true,
+      "denied": 20000,
+      "flush_interval_ms": 3600000,
+      "limit": 10000,
+      "node_values_after_flush": {
+        "aurora_bench_3586@DESKTOP-8R659B3": 20000,
+        "aurora_bench_peer_a5d784f8_1@DESKTOP-8R659B3": 20000
+      },
+      "nodes": [
+        "aurora_bench_3586@DESKTOP-8R659B3",
+        "aurora_bench_peer_a5d784f8_1@DESKTOP-8R659B3"
+      ],
+      "overshoot": 10000,
+      "overshoot_bound": 99715,
+      "per_node": {
+        "aurora_bench_3586@DESKTOP-8R659B3": {
+          "denied": 10000,
+          "admitted": 10000
+        },
+        "aurora_bench_peer_a5d784f8_1@DESKTOP-8R659B3": {
+          "denied": 10000,
+          "admitted": 10000
+        }
+      },
+      "per_node_reservation_rate": 99714.66,
+      "persisted_total": 20000,
+      "reservations_per_node": 20000,
+      "run_spans_broadcast_intervals": 0.201,
+      "settling_window_ms": 3000
+    },
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench cluster_2 --per 20000 --json docs/evidence/v1/phase-08/runs/smoke/cluster_2.json --quiet",
+  "config": {
+    "broadcast_interval": 1000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 3522,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 200.57,
+  "errors": {
+    "by_tag": {
+      "limit_exceeded": 20000
+    },
+    "rate": 0.5,
+    "total": 20000
+  },
+  "finished_at": "2026-09-16T10:53:14.442910Z",
+  "kind": "end_to_end",
+  "label": "cluster_2",
+  "latency_us": {
+    "max": null,
+    "method": "nearest_rank",
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 0
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 668856,
+      "ets": 1975528,
+      "processes": 19406304,
+      "total": 70069424
+    },
+    "after_warmup": {
+      "binary": 8538488,
+      "ets": 1880088,
+      "processes": 19600104,
+      "total": 76362016
+    },
+    "before": {
+      "binary": 8531240,
+      "ets": 1877960,
+      "processes": 19592720,
+      "total": 76337112
+    },
+    "counters_table_bytes": 119616
+  },
+  "mode": "cluster_2",
+  "notes": [
+    "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
+    "every node reserves against one shared key with a hard limit of 10000. The overshoot is the admissions above that limit, and the bound it is asserted against is computed from the configured broadcast_interval and the measured per-node rate, not from a constant.",
+    "cluster_2 ran on 2 real BEAM nodes started with :peer, each with its own supervision tree and connection pool against one database and one distributed PubSub. This is not a simulation.",
+    "the whole burst finished in 20.1 percent of one broadcast_interval, so NO gossip tick occurred during it and every node admitted up to the hard limit independently. That is the worst case the guarantee allows and not a steady-state figure; admitted_after_one_settling_window is what shows convergence.",
+    "persisted total after a flush on every node: 20000 (expected 20000)",
+    "overshoot 10000 against the computed bound 99715",
+    "admitted plus denied: 40000 (expected 40000)",
+    "admitted after one settling window: 0 (expected 0)",
+    "latency_us.p50, p95, p99 and max are null: this mode took no per-operation timing sample. Its unit of work is not an operation in a loop, so a percentile over operations would be a number with no referent."
+  ],
+  "package": {
+    "git_dirty": null,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "a5d784f8-8b1b-4550-ad10-e8b343541289",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:53:07.628797Z",
+  "throughput_ops_per_sec": 199429.31,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "contended": true,
+    "keys": 1,
+    "limit": 10000,
+    "nodes": 2,
+    "operations": 40000,
+    "per_proc": 20000,
+    "procs": 2,
+    "rounds": 5,
+    "seed": 3522,
+    "tenants": 1
+  }
+}

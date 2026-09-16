@@ -882,8 +882,12 @@ reset callbacks; see [Testing](testing.md).
 
 These are compiled, public in the Erlang sense, and documented so the guides and
 the ADRs can link to them. They are **not** part of the supported surface. Each
-carries a stability banner at the top of its module docs, and each renders under
-the "Internal" group in the generated documentation.
+that renders a page carries a stability banner at the top of its module docs and
+appears under the "Internal" group in the generated documentation; the
+`AuroraMeter.Bench.*` modules carry `@moduledoc false` instead and render no page
+at all, because they are the benchmark's own machinery rather than anything a
+guide links to. They are listed here for the same reason as the rest: a boundary
+you cannot name is not a boundary.
 
 The inventory test holds this list as a module attribute and fails when a module
 on it appears anywhere in the tables above, and when this list and the
@@ -893,6 +897,21 @@ on it appears anywhere in the tables above, and when this list and the
 
 | Entry | Why it is internal |
 |---|---|
+| `AuroraMeter.Bench.DelayStorage` | An `AuroraMeter.Storage` that delays every callback, for the `db_delay` bench mode. |
+| `AuroraMeter.Bench.MemoryStorage` | An `AuroraMeter.Storage` holding one subscription and nothing else, so the micro bench modes have no database anywhere in their path. |
+| `AuroraMeter.Bench.Mode` | The behaviour every bench mode implements, and the monotonic timer they share. |
+| `AuroraMeter.Bench.Modes` | The bench mode table: name, kind, whether it reaches Postgres, and which module implements it. |
+| `AuroraMeter.Bench.Modes.Cluster` | The `cluster_2` and `cluster_4` bench modes, on real peer nodes. |
+| `AuroraMeter.Bench.Modes.Counters` | The `spread`, `hot` and `cluster_2_sim` bench modes. |
+| `AuroraMeter.Bench.Modes.Durable` | The `record`, `record_batch`, `correct` and `replay` bench modes. |
+| `AuroraMeter.Bench.Modes.Faults` | The `db_delay` and `db_recovery` bench modes. |
+| `AuroraMeter.Bench.Modes.Flush` | The `flush_1k`, `flush_10k` and `flush_100k` bench modes. |
+| `AuroraMeter.Bench.Modes.Quota` | The `reserve` and `with_quota` bench modes. |
+| `AuroraMeter.Bench.Modes.Wallet` | The `credits_debit` and `credits_hot_wallet` bench modes. |
+| `AuroraMeter.Bench.Plans` | The plans `mix aurora_meter.bench` measures against. Not a fixture a host should copy. |
+| `AuroraMeter.Bench.Report` | The machine-readable record one bench run produces. |
+| `AuroraMeter.Bench.Runner` | Sets a bench mode up, warms it, measures it, checks it and assembles its record. |
+| `AuroraMeter.Bench.Stats` | Nearest-rank percentiles and medians for the bench. |
 | `AuroraMeter.BootChecks` | The boot-time child that runs `AuroraMeter.Credits.assert_currency!/0`. Call the public function. |
 | `AuroraMeter.Broadcaster` | The PubSub fan-out process. Only `topic/1` is supported, and it is listed in section 1.8. |
 | `AuroraMeter.Cluster` | The delta and total gossip protocol between nodes. `apply/3` stays documented because `AuroraMeter.Test.simulate_node/3` calls it; use the test helper, not this. |

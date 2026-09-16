@@ -1,0 +1,6 @@
+tag=v0.4.0
+runs=5
+procs=8 per=500000
+source_repo_dirty_paths_before=25
+source_repo_dirty_paths_after=25
+finished_utc=2026-09-16T11:28:50Z

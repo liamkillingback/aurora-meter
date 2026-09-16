@@ -1,0 +1,117 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench record_batch --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/record_batch-5.json --label record_batch",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{ops: :events}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 8005,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 9089.21,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T11:02:14.362716Z",
+  "kind": "end_to_end",
+  "label": "record_batch",
+  "latency_us": {
+    "max": 820710.7,
+    "method": "nearest_rank",
+    "p50": 19375.9,
+    "p95": 140840.81,
+    "p99": 370414.89,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 1600
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 1325040,
+      "ets": 6758016,
+      "processes": 19677736,
+      "total": 75504192
+    },
+    "after_warmup": {
+      "binary": 4532688,
+      "ets": 6095800,
+      "processes": 52410440,
+      "total": 110565904
+    },
+    "before": {
+      "binary": 24160040,
+      "ets": 2067136,
+      "processes": 19251616,
+      "total": 92681848
+    },
+    "counters_table_bytes": 118800
+  },
+  "mode": "record_batch",
+  "notes": [
+    "record_batch cycles the batch sizes [1, 10, 100, 500] across operation indices, 500 being the documented maximum. One operation is one record_batch/2 call, so workload.operations counts calls and not events; workload.events counts events.",
+    "projected total: 537680 (expected 537680)",
+    "rows in aurora_meter_events: 268840"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "069801bd-0dcd-4772-9bf1-22552e46be7e",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:02:03.591453Z",
+  "throughput_ops_per_sec": 176.03,
+  "warmup": {
+    "duration_ms": 1593.77,
+    "operations": 160
+  },
+  "workload": {
+    "batch_size": 500,
+    "batch_sizes": [
+      1,
+      10,
+      100,
+      500
+    ],
+    "keys": null,
+    "operations": 1600,
+    "per_proc": 200,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 8005,
+    "tenants": 8
+  }
+}

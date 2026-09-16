@@ -1,0 +1,498 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": {
+      "arrival_rate_per_sec": 1517926.04,
+      "buffered_when_load_stopped": 596032,
+      "drain_faster_than_arrival": false,
+      "drain_ms": 909.61,
+      "drain_rate_per_sec": 655260.98,
+      "increments_issued": 91074200,
+      "load_stopped_monotonic_ms": -576460690883,
+      "persisted_when_load_stopped": 90478168,
+      "recovery_faster_than_arrival": true,
+      "recovery_rate_per_sec": 34811861.42
+    },
+    "pending_batch_items_at_end": 0,
+    "timeline": [
+      {
+        "at": "2026-09-16T11:25:26.868705Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 1002,
+        "monotonic_ms": -576460749881,
+        "pending_batch_items": 4000,
+        "persisted": 0
+      },
+      {
+        "at": "2026-09-16T11:25:27.882821Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 2016,
+        "monotonic_ms": -576460748867,
+        "pending_batch_items": 0,
+        "persisted": 1395535
+      },
+      {
+        "at": "2026-09-16T11:25:28.884878Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 3018,
+        "monotonic_ms": -576460747865,
+        "pending_batch_items": 0,
+        "persisted": 3306237
+      },
+      {
+        "at": "2026-09-16T11:25:29.887935Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 4021,
+        "monotonic_ms": -576460746862,
+        "pending_batch_items": 0,
+        "persisted": 5024054
+      },
+      {
+        "at": "2026-09-16T11:25:30.889825Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 5023,
+        "monotonic_ms": -576460745860,
+        "pending_batch_items": 0,
+        "persisted": 6963770
+      },
+      {
+        "at": "2026-09-16T11:25:31.892807Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 6026,
+        "monotonic_ms": -576460744857,
+        "pending_batch_items": 0,
+        "persisted": 8858638
+      },
+      {
+        "at": "2026-09-16T11:25:32.894883Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 7028,
+        "monotonic_ms": -576460743855,
+        "pending_batch_items": 4000,
+        "persisted": 8858638
+      },
+      {
+        "at": "2026-09-16T11:25:33.899796Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 8033,
+        "monotonic_ms": -576460742850,
+        "pending_batch_items": 0,
+        "persisted": 10758571
+      },
+      {
+        "at": "2026-09-16T11:25:34.902926Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 9036,
+        "monotonic_ms": -576460741847,
+        "pending_batch_items": 0,
+        "persisted": 12599713
+      },
+      {
+        "at": "2026-09-16T11:25:35.905759Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 10039,
+        "monotonic_ms": -576460740844,
+        "pending_batch_items": 0,
+        "persisted": 14289009
+      },
+      {
+        "at": "2026-09-16T11:25:36.907994Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 11041,
+        "monotonic_ms": -576460739842,
+        "pending_batch_items": 0,
+        "persisted": 16132294
+      },
+      {
+        "at": "2026-09-16T11:25:37.910810Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 12044,
+        "monotonic_ms": -576460738839,
+        "pending_batch_items": 0,
+        "persisted": 17978312
+      },
+      {
+        "at": "2026-09-16T11:25:38.913873Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 13047,
+        "monotonic_ms": -576460737836,
+        "pending_batch_items": 0,
+        "persisted": 19692965
+      },
+      {
+        "at": "2026-09-16T11:25:39.917109Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 14050,
+        "monotonic_ms": -576460736833,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:25:40.922833Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 15056,
+        "monotonic_ms": -576460735827,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:25:41.929784Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 16063,
+        "monotonic_ms": -576460734820,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:25:48.460892Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 22594,
+        "monotonic_ms": -576460728289,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:25:52.460668Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 26594,
+        "monotonic_ms": -576460724289,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:25:56.460789Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 30594,
+        "monotonic_ms": -576460720289,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:26:00.460580Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 34593,
+        "monotonic_ms": -576460716290,
+        "pending_batch_items": 4000,
+        "persisted": null
+      },
+      {
+        "at": "2026-09-16T11:26:01.978860Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 36112,
+        "monotonic_ms": -576460714771,
+        "pending_batch_items": 4000,
+        "persisted": 19692965
+      },
+      {
+        "at": "2026-09-16T11:26:02.986937Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 37120,
+        "monotonic_ms": -576460713763,
+        "pending_batch_items": 0,
+        "persisted": 21487622
+      },
+      {
+        "at": "2026-09-16T11:26:03.989821Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 38123,
+        "monotonic_ms": -576460712760,
+        "pending_batch_items": 0,
+        "persisted": 56403919
+      },
+      {
+        "at": "2026-09-16T11:26:04.993862Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 39127,
+        "monotonic_ms": -576460711756,
+        "pending_batch_items": 0,
+        "persisted": 58164271
+      },
+      {
+        "at": "2026-09-16T11:26:05.995808Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 40129,
+        "monotonic_ms": -576460710754,
+        "pending_batch_items": 0,
+        "persisted": 59844199
+      },
+      {
+        "at": "2026-09-16T11:26:06.997865Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 41131,
+        "monotonic_ms": -576460709752,
+        "pending_batch_items": 0,
+        "persisted": 61620914
+      },
+      {
+        "at": "2026-09-16T11:26:07.999819Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 42133,
+        "monotonic_ms": -576460708750,
+        "pending_batch_items": 4000,
+        "persisted": 61620914
+      },
+      {
+        "at": "2026-09-16T11:26:09.005846Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 43139,
+        "monotonic_ms": -576460707744,
+        "pending_batch_items": 0,
+        "persisted": 63484684
+      },
+      {
+        "at": "2026-09-16T11:26:10.007754Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 44141,
+        "monotonic_ms": -576460706742,
+        "pending_batch_items": 0,
+        "persisted": 65319256
+      },
+      {
+        "at": "2026-09-16T11:26:11.009763Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 45143,
+        "monotonic_ms": -576460705740,
+        "pending_batch_items": 0,
+        "persisted": 67154723
+      },
+      {
+        "at": "2026-09-16T11:26:12.012819Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 46146,
+        "monotonic_ms": -576460704737,
+        "pending_batch_items": 0,
+        "persisted": 69035947
+      },
+      {
+        "at": "2026-09-16T11:26:13.015804Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 47149,
+        "monotonic_ms": -576460703734,
+        "pending_batch_items": 0,
+        "persisted": 70859915
+      },
+      {
+        "at": "2026-09-16T11:26:14.018822Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 48152,
+        "monotonic_ms": -576460702731,
+        "pending_batch_items": 0,
+        "persisted": 72749883
+      },
+      {
+        "at": "2026-09-16T11:26:15.022805Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 49156,
+        "monotonic_ms": -576460701727,
+        "pending_batch_items": 4000,
+        "persisted": 72749883
+      },
+      {
+        "at": "2026-09-16T11:26:16.026867Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 50160,
+        "monotonic_ms": -576460700723,
+        "pending_batch_items": 0,
+        "persisted": 74508979
+      },
+      {
+        "at": "2026-09-16T11:26:17.028956Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 51162,
+        "monotonic_ms": -576460699721,
+        "pending_batch_items": 0,
+        "persisted": 76314189
+      },
+      {
+        "at": "2026-09-16T11:26:18.032039Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 52165,
+        "monotonic_ms": -576460698718,
+        "pending_batch_items": 0,
+        "persisted": 78091278
+      },
+      {
+        "at": "2026-09-16T11:26:19.035820Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 53169,
+        "monotonic_ms": -576460697714,
+        "pending_batch_items": 0,
+        "persisted": 79910762
+      },
+      {
+        "at": "2026-09-16T11:26:20.039899Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 54173,
+        "monotonic_ms": -576460696710,
+        "pending_batch_items": 0,
+        "persisted": 81630447
+      },
+      {
+        "at": "2026-09-16T11:26:21.042891Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 55176,
+        "monotonic_ms": -576460695707,
+        "pending_batch_items": 4000,
+        "persisted": 81630447
+      },
+      {
+        "at": "2026-09-16T11:26:22.047840Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 56181,
+        "monotonic_ms": -576460694702,
+        "pending_batch_items": 0,
+        "persisted": 83392111
+      },
+      {
+        "at": "2026-09-16T11:26:23.050866Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 57184,
+        "monotonic_ms": -576460693699,
+        "pending_batch_items": 0,
+        "persisted": 85130189
+      },
+      {
+        "at": "2026-09-16T11:26:24.053916Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 58187,
+        "monotonic_ms": -576460692696,
+        "pending_batch_items": 0,
+        "persisted": 86801822
+      },
+      {
+        "at": "2026-09-16T11:26:25.056913Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 59190,
+        "monotonic_ms": -576460691693,
+        "pending_batch_items": 0,
+        "persisted": 88601385
+      },
+      {
+        "at": "2026-09-16T11:26:26.060793Z",
+        "dirty_keys": 4000,
+        "elapsed_ms": 60194,
+        "monotonic_ms": -576460690689,
+        "pending_batch_items": 0,
+        "persisted": 90478168
+      },
+      {
+        "at": "2026-09-16T11:26:26.778791Z",
+        "dirty_keys": 0,
+        "elapsed_ms": 60912,
+        "monotonic_ms": -576460689971,
+        "pending_batch_items": 0,
+        "persisted": 91074200
+      }
+    ]
+  },
+  "command": "mix aurora_meter.bench db_recovery --json /home/liamk/src/PhxTemplates/tmp/v1/bench/outage/runs/db_recovery-3.json --label db_recovery --duration 60000 --backlog-keys 2000 --drain-timeout 300000",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 1000,
+    "history": true,
+    "seed": 5443,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 59999.1,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T11:26:26.786592Z",
+  "kind": "end_to_end",
+  "label": "db_recovery",
+  "latency_us": {
+    "max": null,
+    "method": "nearest_rank",
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 0
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 4464880,
+      "ets": 26946464,
+      "processes": 65261704,
+      "total": 143874440
+    },
+    "after_warmup": {
+      "binary": 66365968,
+      "ets": 3695168,
+      "processes": 19679880,
+      "total": 135984904
+    },
+    "before": {
+      "binary": 66358968,
+      "ets": 3693040,
+      "processes": 19684624,
+      "total": 135972440
+    },
+    "counters_table_bytes": 1785672
+  },
+  "mode": "db_recovery",
+  "notes": [
+    "db_recovery expects a REAL outage, orchestrated by scripts/v1/bench.sh, inside its 60000 ms load window. Run without one it is a plain sustained-load measurement, which is what its smoke run is, and the evidence says which it was.",
+    "duration driven: 8 workers incremented 2000 rotating keys for 59999.1 ms, then the load stopped and the drain took 909.61 ms. latency_us is null throughout, because this mode measures backlog and drain and not per-operation latency.",
+    "persisted total after the drain: 91074200 (expected 91074200)",
+    "dirty keys after the drain: 0 (expected 0)",
+    "pending batch items after the drain: 0 (expected 0)",
+    "latency_us.p50, p95, p99 and max are null: this mode took no per-operation timing sample. Its unit of work is not an operation in a loop, so a percentile over operations would be a number with no referent."
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "28b13d9b-8ddb-4c89-a40b-5123533e743b",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:25:25.865449Z",
+  "throughput_ops_per_sec": 1517926.04,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "duration_ms": 60000,
+    "history": true,
+    "keys": 2000,
+    "operations": 91074200,
+    "per_proc": 2000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 5443,
+    "storage_delay_us": 0,
+    "tenants": 2000,
+    "warmed_keys": 4000
+  }
+}

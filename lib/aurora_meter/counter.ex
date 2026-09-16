@@ -402,6 +402,25 @@ defmodule AuroraMeter.Counter do
     end
   end
 
+  # Seeds a counter row at a known value without reading storage.
+  #
+  # Internal, `@doc false`, and it exists so that nothing outside this module
+  # has to know the row's shape. `mix aurora_meter.bench` warmed its keys with
+  # `:ets.insert(Store.counters_table(), {key, 0, 0, 0})`, a four-element tuple
+  # that was correct for 0.3 and has been wrong since 0.4.0 added `remote` and
+  # `reserved`. `ensure_seeded/1` finds the key present and does not repair it,
+  # so the increments succeeded and the first `value/3` raised `MatchError` on
+  # the six-element pattern in `read/1` (`open-findings.md` C7). Widening the
+  # tuple at the call site would only have moved the next drift; the duplicate
+  # definition is the defect, so the row is built here, once, by the same
+  # private function `ensure_seeded/1` uses.
+  @doc false
+  @spec warm(key(), integer()) :: :ok
+  def warm(key, value \\ 0) do
+    :ets.insert(table(), row(key, value))
+    :ok
+  end
+
   @doc "Marks a counter key dirty (pending flush) and touched (pending broadcast)."
   @spec mark_dirty(key()) :: :ok
   def mark_dirty(key) do
@@ -473,10 +492,15 @@ defmodule AuroraMeter.Counter do
     if :ets.member(table(), key) do
       :ok
     else
-      :ets.insert_new(table(), {key, stored_value(key) || 0, 0, 0, 0, 0})
+      :ets.insert_new(table(), row(key, stored_value(key) || 0))
       :ok
     end
   end
+
+  # The one definition of a counter row. `warm/2` and `ensure_seeded/1` are its
+  # only callers, which is the whole point: C7 was a second definition.
+  @spec row(key(), integer()) :: tuple()
+  defp row(key, value), do: {key, value, 0, 0, 0, 0}
 
   # Where a cold key gets its first value. A day bucket comes from the history
   # table; a period counter comes from whichever source the feature reports

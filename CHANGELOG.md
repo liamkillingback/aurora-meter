@@ -13,6 +13,47 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Added
 
+- **`mix aurora_meter.bench <mode>`: eighteen modes, a machine-readable record
+  and a correctness assertion on every run.** The task measured one shape and
+  crashed printing it: it seeded a four column ETS row and the runtime reads a
+  six column one, so every run since 0.4.0 did the work and then raised a
+  `MatchError` at its own summary line. It now measures the hot path
+  (`spread`, `hot`), the entitlement arithmetic (`reserve`, `with_quota`), the
+  durable event path (`record`, `record_batch`, `correct`, `replay`), the credit
+  ledger (`credits_debit`, `credits_hot_wallet`), the flusher at 1k, 10k and
+  100k dirty keys, a slow database and a real outage (`db_delay`,
+  `db_recovery`), and convergence and hard-limit overshoot on **real** peer
+  nodes (`cluster_2`, `cluster_4`).
+
+  Every run ends with a correctness assertion, records `correct: true|false`,
+  and **exits non-zero when it is false**: a throughput measured while the
+  arithmetic was wrong is a different system, not a slower correct one. Every
+  run writes a JSON record with the machine, the OS, the runtime, the database,
+  the exact command, the warm-up, the workload, p50, p95, p99, throughput,
+  memory, backlog and error rate, and a field whose source was unavailable is
+  `null` **with a note saying why**, never a zero. Each record carries `kind`,
+  `"micro"` or `"end_to_end"`, because the two differ by three orders of
+  magnitude.
+
+  `mix aurora_meter.bench 8 500000` still runs, as `spread`, and prints a
+  deprecation notice naming the new form. It is removed in 2.0.
+
+  End-to-end modes run against their own database, whose name must end in
+  `_bench`, with an ordinary pool; a repo configured with the Ecto sandbox is
+  refused outright, because the sandbox's single owned connection is not the
+  pool a host runs and the run would be measuring the sandbox.
+
+- **The README's throughput table is now a measurement.** Every figure it
+  carries was produced by this suite on a named machine and toolchain on a named
+  date, is the median of five runs each in a fresh BEAM, is labelled micro or
+  end to end, and links
+  `docs/evidence/v1/phase-08/08c-results.md`. The figures it carried before were
+  measured against the 0.3 counter row that 0.4.0 replaced, and the headline one
+  is **lower** now, not higher: the spread-key figure the page used to carry was
+  about a third above what this machine measures today. A figure that is lower
+  and true is worth more than one that is higher and unverifiable. A test fails
+  if a superseded figure reappears in any document that makes a claim.
+
 - **An optional LiveDashboard page, with no default authorization and no tenant
   data on it.** `AuroraMeter.LiveDashboard.Page` shows what Aurora Meter is
   doing on this node: what is buffered and how old it is, cluster convergence,

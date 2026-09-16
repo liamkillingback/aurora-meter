@@ -1,0 +1,167 @@
+{
+  "backlog": {
+    "cluster": {
+      "admitted": 14193,
+      "admitted_after_one_settling_window": 0,
+      "bound_formula": "(nodes - 1) x ceil(per_node_reservation_rate x broadcast_interval_ms / 1000), from architecture-map.md section 3: the overshoot is what the other nodes admitted within one broadcast_interval, and inside that window a node admits everything it attempts",
+      "broadcast_interval_ms": 25,
+      "converged": true,
+      "denied": 65807,
+      "flush_interval_ms": 3600000,
+      "limit": 10000,
+      "node_values_after_flush": {
+        "aurora_bench_8130@DESKTOP-8R659B3": 14193,
+        "aurora_bench_peer_e52e425d_1@DESKTOP-8R659B3": 14193,
+        "aurora_bench_peer_e52e425d_2@DESKTOP-8R659B3": 14193,
+        "aurora_bench_peer_e52e425d_3@DESKTOP-8R659B3": 14193
+      },
+      "nodes": [
+        "aurora_bench_8130@DESKTOP-8R659B3",
+        "aurora_bench_peer_e52e425d_3@DESKTOP-8R659B3",
+        "aurora_bench_peer_e52e425d_2@DESKTOP-8R659B3",
+        "aurora_bench_peer_e52e425d_1@DESKTOP-8R659B3"
+      ],
+      "overshoot": 4193,
+      "overshoot_bound": 6258,
+      "per_node": {
+        "aurora_bench_8130@DESKTOP-8R659B3": {
+          "denied": 14503,
+          "admitted": 5497
+        },
+        "aurora_bench_peer_e52e425d_1@DESKTOP-8R659B3": {
+          "denied": 17119,
+          "admitted": 2881
+        },
+        "aurora_bench_peer_e52e425d_2@DESKTOP-8R659B3": {
+          "denied": 16665,
+          "admitted": 3335
+        },
+        "aurora_bench_peer_e52e425d_3@DESKTOP-8R659B3": {
+          "denied": 17520,
+          "admitted": 2480
+        }
+      },
+      "per_node_reservation_rate": 83439.85,
+      "persisted_total": 14193,
+      "reservations_per_node": 20000,
+      "run_spans_broadcast_intervals": 9.588,
+      "settling_window_ms": 3000
+    },
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench cluster_4 --json /home/liamk/src/PhxTemplates/tmp/v1/bench/cluster-gossip/runs/cluster_4-2.json --label cluster_4 --broadcast-interval 25",
+  "config": {
+    "broadcast_interval": 25,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 8066,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 239.69,
+  "errors": {
+    "by_tag": {
+      "limit_exceeded": 65807
+    },
+    "rate": 0.822588,
+    "total": 65807
+  },
+  "finished_at": "2026-09-16T11:22:52.097940Z",
+  "kind": "end_to_end",
+  "label": "cluster_4",
+  "latency_us": {
+    "max": null,
+    "method": "nearest_rank",
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 0
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 638296,
+      "ets": 1977056,
+      "processes": 19474568,
+      "total": 70154472
+    },
+    "after_warmup": {
+      "binary": 8563712,
+      "ets": 1881728,
+      "processes": 19557304,
+      "total": 76366320
+    },
+    "before": {
+      "binary": 8556936,
+      "ets": 1879600,
+      "processes": 19548472,
+      "total": 76332552
+    },
+    "counters_table_bytes": 119616
+  },
+  "mode": "cluster_4",
+  "notes": [
+    "every node reserves against one shared key with a hard limit of 10000. The overshoot is the admissions above that limit, and the bound it is asserted against is computed from the configured broadcast_interval and the measured per-node rate, not from a constant.",
+    "cluster_4 ran on 4 real BEAM nodes started with :peer, each with its own supervision tree and connection pool against one database and one distributed PubSub. This is not a simulation.",
+    "the burst spanned 9.588 broadcast intervals, so gossip ticked during it and the overshoot is what the other nodes admitted inside those windows.",
+    "persisted total after a flush on every node: 14193 (expected 14193)",
+    "overshoot 4193 against the computed bound 6258",
+    "admitted plus denied: 80000 (expected 80000)",
+    "admitted after one settling window: 0 (expected 0)",
+    "latency_us.p50, p95, p99 and max are null: this mode took no per-operation timing sample. Its unit of work is not an operation in a loop, so a percentile over operations would be a number with no referent."
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "e52e425d-2458-42c5-b071-b5eb3065855e",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:22:44.096079Z",
+  "throughput_ops_per_sec": 333759.39,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "contended": true,
+    "keys": 1,
+    "limit": 10000,
+    "nodes": 4,
+    "operations": 80000,
+    "per_proc": 20000,
+    "procs": 4,
+    "rounds": 5,
+    "seed": 8066,
+    "tenants": 1
+  }
+}

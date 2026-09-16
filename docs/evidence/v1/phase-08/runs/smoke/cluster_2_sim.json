@@ -1,0 +1,113 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench cluster_2_sim --procs 2 --per 200 --warmup 20 --sample-every 10 --json docs/evidence/v1/phase-08/runs/smoke/cluster_2_sim.json --quiet",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 8067,
+    "storage": "AuroraMeter.Bench.MemoryStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": null,
+    "database": null,
+    "host": null,
+    "pool_size": null,
+    "port": null,
+    "server_version": null,
+    "used": false
+  },
+  "duration_ms": 2.9,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:52:18.351271Z",
+  "kind": "micro",
+  "label": "cluster_2_sim",
+  "latency_us": {
+    "max": 15.57,
+    "method": "nearest_rank",
+    "p50": 6.68,
+    "p95": 12.86,
+    "p99": 15.57,
+    "sample_every": 10,
+    "sampled": true,
+    "samples": 40
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 457248,
+      "ets": 1501992,
+      "processes": 19409512,
+      "total": 63423888
+    },
+    "after_warmup": {
+      "binary": 396976,
+      "ets": 1489336,
+      "processes": 19386360,
+      "total": 63245688
+    },
+    "before": {
+      "binary": 302720,
+      "ets": 1464744,
+      "processes": 19369208,
+      "total": 62804704
+    },
+    "counters_table_bytes": 119792
+  },
+  "mode": "cluster_2_sim",
+  "notes": [
+    "database.used is false, and database.server_version, host, port, database, container and pool_size are all null for that reason: this is a micro mode and no database was opened. Naming the configured one would invite a reader to believe Postgres was in the measured path.",
+    "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
+    "cluster_2_sim is a single VM simulation of gossip apply cost through AuroraMeter.Test.simulate_node/3. It is kind: micro and it is NOT a cluster measurement; cluster_2 and cluster_4 are the only source of a cluster claim.",
+    "sum of keys: 440 (expected 440)"
+  ],
+  "package": {
+    "git_dirty": null,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "eab30bd4-f02a-4ce4-952d-f9c4f807d236",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:52:18.329765Z",
+  "throughput_ops_per_sec": 137980.47,
+  "warmup": {
+    "duration_ms": 9.75,
+    "operations": 40
+  },
+  "workload": {
+    "batch_size": 500,
+    "keys": 2,
+    "operations": 400,
+    "peers": 1,
+    "per_proc": 200,
+    "procs": 2,
+    "rounds": 5,
+    "seed": 8067,
+    "tenants": 2
+  }
+}

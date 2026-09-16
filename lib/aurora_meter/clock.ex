@@ -98,6 +98,26 @@ defmodule AuroraMeter.Clock do
   @spec monotonic_ms() :: integer()
   def monotonic_ms, do: AuroraMeter.Config.clock().monotonic_ms()
 
+  @doc false
+  @spec monotonic_native() :: integer()
+  # The raw monotonic reading, in `:native` units, and **deliberately not
+  # through the configured clock**.
+  #
+  # It exists for `mix aurora_meter.bench`, which times operations that take
+  # less than a microsecond: `monotonic_ms/0` is milliseconds and would report
+  # every ETS increment as zero. It does not go through `Config.clock()`,
+  # because a benchmark run under `AuroraMeter.Clock.Fixed` would then measure
+  # a clock that does not move and report an infinite throughput, which is the
+  # one number a benchmark must never be able to produce.
+  #
+  # It is here rather than in the bench because P07 is that every clock read
+  # under `lib/` lives in this file, and that rule is worth more than the
+  # convenience of an inline `System.monotonic_time/0` elsewhere. It is a
+  # reading and never a comparison: `AuroraMeter.Bench.Mode.time/1` subtracts
+  # two of these inside one process, which is what a monotonic clock is for
+  # (`open-findings.md` X100).
+  def monotonic_native, do: System.monotonic_time()
+
   @doc """
   The database's current instant, from the configured clock.
 

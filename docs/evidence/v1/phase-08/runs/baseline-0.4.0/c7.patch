@@ -1,0 +1,13 @@
+diff --git a/lib/mix/tasks/aurora_meter.bench.ex b/lib/mix/tasks/aurora_meter.bench.ex
+index 2824405..6859c20 100644
+--- a/lib/mix/tasks/aurora_meter.bench.ex
++++ b/lib/mix/tasks/aurora_meter.bench.ex
+@@ -37,7 +37,7 @@ defmodule Mix.Tasks.AuroraMeter.Bench do
+     # Warm one distinct key per worker so the seeding path never touches the
+     # (absent) database and workers do not contend on a single ETS row.
+     for i <- 1..procs,
+-        do: :ets.insert(Store.counters_table(), {{tenant(i), @feature, @period}, 0, 0, 0})
++        do: :ets.insert(Store.counters_table(), {{tenant(i), @feature, @period}, 0, 0, 0, 0, 0})
+ 
+     {micros, :ok} = :timer.tc(fn -> hammer(procs, per) end)
+ 

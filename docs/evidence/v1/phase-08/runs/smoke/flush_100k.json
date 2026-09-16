@@ -1,0 +1,128 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 100000,
+    "timeline": [
+      {
+        "duration_us": 2497332.52,
+        "error": "\"postgresql protocol can not handle 700000 parameters, the maximum is 65535\"",
+        "keys_built": 100000,
+        "persisted": 0,
+        "result": "error",
+        "round": 1,
+        "rows_per_second": 0.0
+      }
+    ]
+  },
+  "command": "mix aurora_meter.bench flush_100k --procs 1 --rounds 2 --json docs/evidence/v1/phase-08/runs/smoke/flush_100k.json --quiet",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 3522,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": false,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 2497.33,
+  "errors": {
+    "by_tag": {
+      "flush_failed": 1
+    },
+    "rate": 0.0,
+    "total": 1
+  },
+  "finished_at": "2026-09-16T10:53:54.762443Z",
+  "kind": "end_to_end",
+  "label": "flush_100k",
+  "latency_us": {
+    "max": 2497332.52,
+    "method": "nearest_rank",
+    "p50": 2497332.52,
+    "p95": 2497332.52,
+    "p99": 2497332.52,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 1
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 11904512,
+      "ets": 194072400,
+      "processes": 398226664,
+      "total": 651269688
+    },
+    "after_warmup": {
+      "binary": 65972696,
+      "ets": 1993712,
+      "processes": 19642920,
+      "total": 133816768
+    },
+    "before": {
+      "binary": 66012368,
+      "ets": 1991584,
+      "processes": 19951384,
+      "total": 134147008
+    },
+    "counters_table_bytes": 50523720
+  },
+  "mode": "flush_100k",
+  "notes": [
+    "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
+    "each round makes 100000 distinct dirty counter keys with Counter.incr/4 and then times one synchronous Flusher.flush/0. duration_ms is the sum of the flushes only; building the dirty set is outside the clock. History is off, because a day bucket would be a second dirty key per increment and the mode's name would be wrong.",
+    "the flush of 100000 dirty keys FAILED, so this run measures nothing: [\"\\\"postgresql protocol can not handle 700000 parameters, the maximum is 65535\\\"\"]. A failed flush retains its batch for an idempotent retry, so the remaining rounds were not run: they would have built more dirty keys on top of a batch that cannot be written.",
+    "persisted total: 0 (expected 0)",
+    "dirty keys at the end: 0 (expected 0)",
+    "pending batch items at the end: 100000 (expected 0)",
+    "flush receipts: 0 (one per successful round, 2 rounds requested)"
+  ],
+  "package": {
+    "git_dirty": null,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "b5251764-6bd7-45f6-8369-2679c4371c0e",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:53:28.172697Z",
+  "throughput_ops_per_sec": 0.0,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "dirty_keys": 100000,
+    "keys": 100000,
+    "operations": 0,
+    "per_proc": 2000,
+    "procs": 1,
+    "rounds": 2,
+    "seed": 3522,
+    "tenants": 100000
+  }
+}

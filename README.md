@@ -44,15 +44,32 @@ interval and once more on shutdown, and a broadcaster fans live values out over
 `Phoenix.PubSub`. The database is touched by the flusher and by a one-time seed
 when a counter is first read, never on the write path.
 
-Measured with the bundled benchmark (`mix aurora_meter.bench 8 500000`, dev
-laptop, Elixir 1.20 / OTP 29):
+Measured with the bundled benchmark (`mix aurora_meter.bench <mode>`) on
+2026-09-16 on WSL Ubuntu 24.04.4, AMD Ryzen 9 7900X, 24 logical CPUs, 19.5 GiB,
+Elixir 1.20.1 / OTP 29 (ERTS 17.0.1), Postgres 16.13. Each figure is the
+**median of five runs**, each in a fresh BEAM.
 
-| Load shape | Throughput |
-|---|---|
-| 8 processes, distinct counters (realistic) | ~5.5M increments/s (0.3, cluster-wide rows; 7.9M in 0.2) |
-| 8 processes, one hot counter (worst case) | ~53k increments/s |
+**micro** means the measurement isolates an in-memory path with no database
+anywhere in it. **end-to-end** means every write reaches Postgres through the
+real adapter. They differ by three orders of magnitude, so read the kind before
+the number.
 
-The full run is in [docs/evidence/phase-03/bench.md](https://github.com/liamkillingback/aurora-meter/blob/main/docs/evidence/phase-03/bench.md).
+| Load shape | Kind | Median throughput | Median p95 |
+|---|---|---|---|
+| 8 processes, distinct counters | micro | 3,418,407 increments/s | 3.38 us |
+| 8 processes, one hot counter | micro | 70,513 increments/s | 198.72 us |
+| 8 processes, `with_quota/4` | micro | 423,658 ops/s | 27.14 us |
+| 8 processes, durable `record/4` | end-to-end | 1,804 events/s | 6,035.22 us |
+| 8 processes, `Credits.debit/4` | end-to-end | 1,091 ops/s | 9,241.27 us |
+| 1 process, flush of 1,000 dirty keys | end-to-end | 21,659 rows/s | 58,413.57 us |
+
+Every mode, its workload, its run-to-run spread and its raw records are in
+[docs/evidence/v1/phase-08/08c-results.md](https://github.com/liamkillingback/aurora-meter/blob/main/docs/evidence/v1/phase-08/08c-results.md),
+which is the only artifact any claim about performance cites. The figures this
+table used to carry were measured against a counter row 0.4.0 replaced, and the
+spread-key number is **lower** now on this machine, not higher; the measurement
+and the reason are in that file.
+
 Plan lookups are cached in ETS and evicted on every subscription write, on every
 node, so the entitlement check is also database-free per request.
 

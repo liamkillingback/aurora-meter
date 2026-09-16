@@ -1,0 +1,8 @@
+started_utc=2026-09-16T10:53:55Z
+modes=spread hot reserve with_quota cluster_2_sim record record_batch correct replay credits_debit credits_hot_wallet flush_1k flush_10k flush_100k db_delay db_recovery cluster_2 cluster_4
+runs=5
+container=aurora-meter-pro-testdb
+outage_seconds=none
+extra=
+failed_runs=10
+finished_utc=2026-09-16T11:21:52Z

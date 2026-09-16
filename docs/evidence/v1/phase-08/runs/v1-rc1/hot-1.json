@@ -1,0 +1,112 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 1,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench hot --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/hot-1.json --label hot",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 7874,
+    "storage": "AuroraMeter.Bench.MemoryStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": null,
+    "database": null,
+    "host": null,
+    "pool_size": null,
+    "port": null,
+    "server_version": null,
+    "used": false
+  },
+  "duration_ms": 56726.94,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:55:08.169500Z",
+  "kind": "micro",
+  "label": "hot",
+  "latency_us": {
+    "max": 574.47,
+    "method": "nearest_rank",
+    "p50": 126.61,
+    "p95": 213.54,
+    "p99": 283.89,
+    "sample_every": 1000,
+    "sampled": true,
+    "samples": 4000
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 379768,
+      "ets": 1486944,
+      "processes": 19318272,
+      "total": 63094120
+    },
+    "after_warmup": {
+      "binary": 321336,
+      "ets": 1474288,
+      "processes": 19186136,
+      "total": 62819760
+    },
+    "before": {
+      "binary": 282600,
+      "ets": 1461744,
+      "processes": 19338464,
+      "total": 62726120
+    },
+    "counters_table_bytes": 119296
+  },
+  "mode": "hot",
+  "notes": [
+    "database.used is false, and database.server_version, host, port, database, container and pool_size are all null for that reason: this is a micro mode and no database was opened. Naming the configured one would invite a reader to believe Postgres was in the measured path.",
+    "every worker increments one shared ETS row, which :ets.update_counter/3 serialises. The figure is contention, not aggregate throughput.",
+    "hot key value: 4400000 (expected 4400000)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "2dd7c245-3526-4169-91e2-b08cdd8e3e2c",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:54:05.598284Z",
+  "throughput_ops_per_sec": 70513.24,
+  "warmup": {
+    "duration_ms": 5834.17,
+    "operations": 400000
+  },
+  "workload": {
+    "batch_size": 500,
+    "contended": true,
+    "keys": 1,
+    "operations": 4000000,
+    "per_proc": 500000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 7874,
+    "tenants": 1
+  }
+}

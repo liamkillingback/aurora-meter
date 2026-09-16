@@ -1,5 +1,21 @@
 # Phase 3 — metering throughput benchmark
 
+> **Historical.** Measured against the 0.3 four-column counter row
+> `{key, value, pending_flush, pending_gossip}`, which 0.4.0 replaced with a six
+> column row when it added `remote` and `reserved`. The task that produced these
+> figures then crashed at its own summary line in every release afterwards,
+> because it seeded the old row shape and read the new one (`open-findings.md`
+> C7), so nothing on this page has been reproducible since 0.4.0. The figures
+> here are **not** current results, and they are quoted nowhere that makes a
+> claim.
+>
+> Superseded by `docs/evidence/v1/phase-08/` (build unit 08c), which measures
+> every path on a named machine and toolchain and labels every figure micro or
+> end to end. This page is kept rather than deleted because it is the clearest
+> surviving explanation of why the old number existed and why it no longer
+> applies.
+
+
 Machine: WSL Ubuntu-24.04 (dev laptop) · Elixir 1.20 / OTP 29 (Homebrew).
 Command: `mix aurora_meter.bench 8 500000`
 

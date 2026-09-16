@@ -1,0 +1,113 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench correct --procs 2 --per 20 --warmup 4 --json docs/evidence/v1/phase-08/runs/smoke/correct.json --quiet",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{ops: :events}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 2434,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 120.86,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:52:22.602377Z",
+  "kind": "end_to_end",
+  "label": "correct",
+  "latency_us": {
+    "max": 8606.33,
+    "method": "nearest_rank",
+    "p50": 6268.8,
+    "p95": 7385.38,
+    "p99": 8606.33,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 40
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 745032,
+      "ets": 2245472,
+      "processes": 19695544,
+      "total": 70262160
+    },
+    "after_warmup": {
+      "binary": 734472,
+      "ets": 2226920,
+      "processes": 19723888,
+      "total": 70238648
+    },
+    "before": {
+      "binary": 718456,
+      "ets": 2200408,
+      "processes": 19721088,
+      "total": 70134264
+    },
+    "counters_table_bytes": 118800
+  },
+  "mode": "correct",
+  "notes": [
+    "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
+    "correct seeds procs x (warmup + per) originals of quantity 2 before the clock starts and reduces each by 1, so no correction can reach its original's cumulative bound and the measurement is the correction path rather than a refusal path.",
+    "net quantity: 48 (expected 48)"
+  ],
+  "package": {
+    "git_dirty": null,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "8b7fa3c9-0ff3-498d-ac32-f2189a60b1b6",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:52:22.442022Z",
+  "throughput_ops_per_sec": 330.95,
+  "warmup": {
+    "duration_ms": 33.19,
+    "operations": 8
+  },
+  "workload": {
+    "batch_size": 500,
+    "keys": null,
+    "operations": 40,
+    "original_quantity": 2,
+    "originals": 48,
+    "per_proc": 20,
+    "procs": 2,
+    "rounds": 5,
+    "seed": 2434,
+    "tenants": 2
+  }
+}

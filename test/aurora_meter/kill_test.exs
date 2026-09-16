@@ -69,6 +69,106 @@ defmodule AuroraMeter.KillTest do
     {:ok, tenant: tenant, counts_before: counts_before, period: Period.current(tenant).start}
   end
 
+  @test_root Path.expand("../..", __DIR__)
+  @self "test/aurora_meter/kill_test.exs"
+  @budget 3
+
+  # The moduledoc above says this module spends the whole restart budget. It
+  # said so before today too, and `store_gauge_test.exs` spent a fourth anyway,
+  # which took `AuroraMeter.Supervisor` down mid-suite whenever the seed placed
+  # the two `async: false` modules close together. A rule nothing enforces is one
+  # already being broken (`open-findings.md` X153, X347, X349).
+  #
+  # So the moduledoc is now an assertion. A test that needs a child of
+  # `AuroraMeter.Supervisor` to run `init/1` again should use
+  # `Supervisor.terminate_child/2` plus `Supervisor.restart_child/2`, which runs
+  # the same code and is not charged against restart intensity.
+  test "this module is the only one that spends AuroraMeter.Supervisor's restart budget" do
+    names = supervised_names()
+
+    automatic =
+      for path <- test_files(),
+          {line, number} <- numbered_lines(path),
+          automatic_restart?(line, names),
+          do: {relative(path), number, String.trim(line)}
+
+    {mine, others} = Enum.split_with(automatic, &(elem(&1, 0) == @self))
+
+    assert others == [],
+           "a supervised child of AuroraMeter.Supervisor is killed and left to restart " <>
+             "automatically outside #{@self}: #{inspect(others)}. The supervisor is " <>
+             "one_for_one with OTP's defaults, three restarts in five seconds, and this " <>
+             "module spends all three, so that is a FOURTH: it takes the tree down and " <>
+             "every later test with it whenever the seed runs the two modules close " <>
+             "together. Use Supervisor.terminate_child/2 plus Supervisor.restart_child/2, " <>
+             "which runs init/1 on the same path and is not charged against intensity."
+
+    assert length(mine) == @budget,
+           "#{@self} makes #{length(mine)} automatic restarts and the budget is " <>
+             "#{@budget}: #{inspect(mine)}. Spending fewer is fine only if this number " <>
+             "and the moduledoc are changed together; spending more is the same fault as " <>
+             "spending one elsewhere."
+  end
+
+  defp test_files, do: Path.wildcard(Path.join(@test_root, "test/**/*.exs"))
+
+  defp numbered_lines(path) do
+    path |> File.read!() |> String.split("\n") |> Enum.with_index(1)
+  end
+
+  defp relative(path), do: Path.relative_to(path, @test_root)
+
+  # The registered names of everything AuroraMeter.Supervisor is currently
+  # supervising, read from the running tree rather than from a list kept here: a
+  # child added by a later unit is covered without anyone remembering to.
+  defp supervised_names do
+    names =
+      AuroraMeter.Supervisor
+      |> Supervisor.which_children()
+      |> Enum.flat_map(fn {id, pid, _type, _modules} -> [id | registered_name(pid)] end)
+      |> Enum.map(&short_name/1)
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    # A detector that can quietly match nothing is the failure mode this suite
+    # keeps finding (X325). If the tree ever stops answering, say so here.
+    refute Enum.empty?(names),
+           "AuroraMeter.Supervisor reported no supervised children, so this guard would " <>
+             "pass by matching nothing."
+
+    names
+  end
+
+  # `Module.split/1` raises on an atom that is not an Elixir module, which a
+  # child id is allowed to be.
+  defp short_name(name) when is_atom(name) and name not in [nil, :undefined] do
+    name |> Module.split() |> List.last()
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp short_name(_other), do: nil
+
+  defp registered_name(pid) when is_pid(pid) do
+    case Process.info(pid, :registered_name) do
+      {:registered_name, name} when is_atom(name) -> [name]
+      _other -> []
+    end
+  end
+
+  defp registered_name(_other), do: []
+
+  # `await_restart!` waits for a *supervisor* to put a replacement in the
+  # registry, so a call naming a child of AuroraMeter.Supervisor is one
+  # automatic restart. A call carrying `supervisor:` names a different tree and
+  # spends a different budget, which is what the harness's own tests do.
+  defp automatic_restart?(line, names) do
+    case Regex.run(~r/await_restart!\(\s*(?:[A-Z][\w.]*\.)?([A-Z]\w*)/, line) do
+      [_match, name] -> MapSet.member?(names, name) and not String.contains?(line, "supervisor:")
+      nil -> false
+    end
+  end
+
   test "I03 a with_quota caller killed with :kill is never billed and leaves a documented reservation",
        context do
     %{tenant: tenant, period: period} = context

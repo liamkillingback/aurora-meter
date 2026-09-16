@@ -1,0 +1,132 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": [
+      {
+        "duration_us": 53966.32,
+        "keys_built": 1000,
+        "persisted": 1000,
+        "result": "ok",
+        "round": 1,
+        "rows_per_second": 18530.08
+      },
+      {
+        "duration_us": 41372.32,
+        "keys_built": 1000,
+        "persisted": 1000,
+        "result": "ok",
+        "round": 2,
+        "rows_per_second": 24170.75
+      }
+    ]
+  },
+  "command": "mix aurora_meter.bench flush_1k --procs 1 --rounds 2 --json docs/evidence/v1/phase-08/runs/smoke/flush_1k.json --quiet",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 8066,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 95.34,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:52:28.288796Z",
+  "kind": "end_to_end",
+  "label": "flush_1k",
+  "latency_us": {
+    "max": 53966.32,
+    "method": "nearest_rank",
+    "p50": 41372.32,
+    "p95": 53966.32,
+    "p99": 53966.32,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 2
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 771272,
+      "ets": 4699792,
+      "processes": 30953528,
+      "total": 83391528
+    },
+    "after_warmup": {
+      "binary": 65981552,
+      "ets": 1993904,
+      "processes": 19697976,
+      "total": 133877864
+    },
+    "before": {
+      "binary": 66021856,
+      "ets": 1991776,
+      "processes": 19959888,
+      "total": 134169808
+    },
+    "counters_table_bytes": 1129288
+  },
+  "mode": "flush_1k",
+  "notes": [
+    "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
+    "each round makes 1000 distinct dirty counter keys with Counter.incr/4 and then times one synchronous Flusher.flush/0. duration_ms is the sum of the flushes only; building the dirty set is outside the clock. History is off, because a day bucket would be a second dirty key per increment and the mode's name would be wrong.",
+    "persisted total: 2000 (expected 2000)",
+    "dirty keys at the end: 0 (expected 0)",
+    "pending batch items at the end: 0 (expected 0)",
+    "flush receipts: 2 (one per successful round, 2 rounds requested)"
+  ],
+  "package": {
+    "git_dirty": null,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "ad64b9db-91f9-425a-be07-7ef8ed2af9f3",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:52:27.670465Z",
+  "throughput_ops_per_sec": 20977.85,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "dirty_keys": 1000,
+    "keys": 1000,
+    "operations": 2000,
+    "per_proc": 2000,
+    "procs": 1,
+    "rounds": 2,
+    "seed": 8066,
+    "tenants": 1000
+  }
+}

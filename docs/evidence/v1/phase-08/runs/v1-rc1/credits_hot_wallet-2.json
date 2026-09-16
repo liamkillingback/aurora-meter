@@ -1,0 +1,117 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench credits_hot_wallet --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/credits_hot_wallet-2.json --label credits_hot_wallet",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 5827,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 85337.42,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T11:08:44.343047Z",
+  "kind": "end_to_end",
+  "label": "credits_hot_wallet",
+  "latency_us": {
+    "max": 71014.52,
+    "method": "nearest_rank",
+    "p50": 42231.28,
+    "p95": 46437.93,
+    "p99": 51188.84,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 16000
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 424216,
+      "ets": 2212472,
+      "processes": 19892008,
+      "total": 70161256
+    },
+    "after_warmup": {
+      "binary": 408432,
+      "ets": 2199960,
+      "processes": 19031048,
+      "total": 69224000
+    },
+    "before": {
+      "binary": 61119056,
+      "ets": 2054656,
+      "processes": 19425640,
+      "total": 130084224
+    },
+    "counters_table_bytes": 118800
+  },
+  "mode": "credits_hot_wallet",
+  "notes": [
+    "every worker debits one shared wallet, which the ledger serialises on one balance row lock. This figure is contention, not aggregate ledger throughput.",
+    "the wallet has lots enabled (AuroraMeter.Credits.Ledger.enable_lots!/1), so this is the V1 allocator and not the legacy wallet arithmetic. workload.lots is how many lots each wallet held during the measured phase, because the allocator reads and locks the whole book per write and its cost is bounded by that count (open-findings.md X248).",
+    "balance: 999982400 (expected 999982400)",
+    "held: 0 (expected 0)",
+    "debt: 0 (expected 0)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "c9d4def3-a208-454f-a845-67ac6e72e01c",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:07:10.189175Z",
+  "throughput_ops_per_sec": 187.49,
+  "warmup": {
+    "duration_ms": 8807.66,
+    "operations": 1600
+  },
+  "workload": {
+    "batch_size": 500,
+    "contended": true,
+    "grant_micro_dollars": 1000000000,
+    "keys": null,
+    "lots": 1,
+    "operations": 16000,
+    "per_proc": 2000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 5827,
+    "tenants": 1,
+    "wallets": 1
+  }
+}

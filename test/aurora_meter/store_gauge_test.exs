@@ -16,7 +16,6 @@ defmodule AuroraMeter.StoreGaugeTest do
   alias AuroraMeter.Store
   alias AuroraMeter.Telemetry
   alias AuroraMeter.Test.Config
-  alias AuroraMeter.Test.Kill
   alias AuroraMeter.Test.RefusingStorage
 
   @event [:aurora_meter, :store, :gauge]
@@ -209,9 +208,25 @@ defmodule AuroraMeter.StoreGaugeTest do
     attach()
 
     Config.with_config([{:aurora_meter, :metrics_interval, 50}], fn ->
-      pid = Process.whereis(Store)
-      Process.exit(pid, :kill)
-      Kill.await_restart!(Store, from: pid)
+      # **A manual restart, and not a kill (`open-findings.md` X349).** What
+      # this test needs is `AuroraMeter.Store.init/1` running again with the
+      # interval above in the environment, and `terminate_child/2` plus
+      # `restart_child/2` gives exactly that: the tables die with their owner
+      # and `init/1` creates them again and arms the timer, the same code on
+      # the same path.
+      #
+      # What it does **not** give is a charge against restart intensity.
+      # `AuroraMeter.Supervisor` is `one_for_one` with OTP's defaults, three
+      # restarts in five seconds, and `AuroraMeter.KillTest` spends all three
+      # by design and says so in its moduledoc. A kill here was the fourth: two
+      # `async: false` modules, placed adjacently by the seed, and the tree
+      # goes down mid-suite taking every later test with it. Running the two
+      # files together reproduced it at five seeds out of five.
+      #
+      # `AuroraMeter.FlusherTest` and `AuroraMeter.LiveDashboard.SectionsTest`
+      # already restart children this way for the same reason.
+      :ok = Supervisor.terminate_child(AuroraMeter.Supervisor, Store)
+      {:ok, _pid} = Supervisor.restart_child(AuroraMeter.Supervisor, Store)
 
       # A timer that fires once proves `init/1` armed it; a second sample with no
       # further help proves `handle_info/2` re-arms. The values are asserted
@@ -225,12 +240,10 @@ defmodule AuroraMeter.StoreGaugeTest do
       assert_receive {:gauge, _second, _meta}, 2_000
     end)
 
-    # Back to the suite's `metrics_interval: 0`, without a second kill: the
-    # supervisor allows three restarts in five seconds and a test that spends
-    # two of them is a test that can take the tree down when it runs beside
-    # `AuroraMeter.KillTest`. Replacing the interval in the running state is
-    # enough, because `handle_info(:gauge, ...)` re-arms from the state it was
-    # handed, so the tick already in flight is the last one.
+    # Back to the suite's `metrics_interval: 0`, without a second restart:
+    # replacing the interval in the running state is enough, because
+    # `handle_info(:gauge, ...)` re-arms from the state it was handed, so the
+    # tick already in flight is the last one.
     :sys.replace_state(Store, &%{&1 | gauge_interval: 0})
 
     # One tick may already be in the mailbox or in flight. Draining first is the

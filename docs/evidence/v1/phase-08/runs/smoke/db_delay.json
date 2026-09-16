@@ -1,0 +1,163 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": {
+      "arrival_rate_per_sec": 624379.66,
+      "buffered_when_load_stopped": 111499,
+      "drain_faster_than_arrival": false,
+      "drain_ms": 1009.32,
+      "drain_rate_per_sec": 110469.22,
+      "increments_issued": 1872904,
+      "load_stopped_monotonic_ms": -576460747631,
+      "persisted_when_load_stopped": 1761405,
+      "recovery_faster_than_arrival": true,
+      "recovery_rate_per_sec": 690842.32
+    },
+    "pending_batch_items_at_end": 0,
+    "timeline": [
+      {
+        "at": "2026-09-16T10:52:59.310799Z",
+        "dirty_keys": 400,
+        "elapsed_ms": 1001,
+        "monotonic_ms": -576460749630,
+        "pending_batch_items": 0,
+        "persisted": 411363
+      },
+      {
+        "at": "2026-09-16T10:53:00.319764Z",
+        "dirty_keys": 400,
+        "elapsed_ms": 2010,
+        "monotonic_ms": -576460748621,
+        "pending_batch_items": 0,
+        "persisted": 1069181
+      },
+      {
+        "at": "2026-09-16T10:53:01.321769Z",
+        "dirty_keys": 400,
+        "elapsed_ms": 3012,
+        "monotonic_ms": -576460747619,
+        "pending_batch_items": 0,
+        "persisted": 1761405
+      },
+      {
+        "at": "2026-09-16T10:53:02.320808Z",
+        "dirty_keys": 0,
+        "elapsed_ms": 4011,
+        "monotonic_ms": -576460746620,
+        "pending_batch_items": 0,
+        "persisted": 1872904
+      }
+    ]
+  },
+  "command": "mix aurora_meter.bench db_delay --procs 2 --duration 3000 --delay-us 50000 --backlog-keys 200 --json docs/evidence/v1/phase-08/runs/smoke/db_delay.json --quiet",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 1000,
+    "history": true,
+    "seed": 195,
+    "storage": "AuroraMeter.Bench.DelayStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 2999.62,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:53:02.327183Z",
+  "kind": "end_to_end",
+  "label": "db_delay",
+  "latency_us": {
+    "max": null,
+    "method": "nearest_rank",
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 0
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 654896,
+      "ets": 2699120,
+      "processes": 25672688,
+      "total": 76019864
+    },
+    "after_warmup": {
+      "binary": 66073992,
+      "ets": 2180608,
+      "processes": 19723616,
+      "total": 134213024
+    },
+    "before": {
+      "binary": 66066784,
+      "ets": 2178480,
+      "processes": 19460072,
+      "total": 133932016
+    },
+    "counters_table_bytes": 300488
+  },
+  "mode": "db_delay",
+  "notes": [
+    "package.git_dirty is null: answering it needs git, which this library never runs (decision D11). scripts/v1/bench.sh sets AURORA_BENCH_GIT_DIRTY.",
+    "db_delay puts 50000 us in front of every storage callback through AuroraMeter.Bench.DelayStorage. A slow database is not an absent one: the flusher keeps succeeding and the dirty set grows because it cannot keep up.",
+    "duration driven: 2 workers incremented 200 rotating keys for 2999.62 ms, then the load stopped and the drain took 1009.32 ms. latency_us is null throughout, because this mode measures backlog and drain and not per-operation latency.",
+    "persisted total after the drain: 1872904 (expected 1872904)",
+    "dirty keys after the drain: 0 (expected 0)",
+    "pending batch items after the drain: 0 (expected 0)",
+    "latency_us.p50, p95, p99 and max are null: this mode took no per-operation timing sample. Its unit of work is not an operation in a loop, so a percentile over operations would be a number with no referent."
+  ],
+  "package": {
+    "git_dirty": null,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "e2e10ff7-b95a-48a3-897f-9e61e1cd6b60",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:52:58.308424Z",
+  "throughput_ops_per_sec": 624379.66,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "duration_ms": 3000,
+    "history": true,
+    "keys": 200,
+    "operations": 1872904,
+    "per_proc": 2000,
+    "procs": 2,
+    "rounds": 5,
+    "seed": 195,
+    "storage_delay_us": 50000,
+    "tenants": 200,
+    "warmed_keys": 400
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 16,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench reserve --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/reserve-5.json --label reserve",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 8068,
+    "storage": "AuroraMeter.Bench.MemoryStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": null,
+    "database": null,
+    "host": null,
+    "pool_size": null,
+    "port": null,
+    "server_version": null,
+    "used": false
+  },
+  "duration_ms": 1439.42,
+  "errors": {
+    "by_tag": {
+      "limit_exceeded": 240000
+    },
+    "rate": 0.6,
+    "total": 240000
+  },
+  "finished_at": "2026-09-16T10:59:29.032351Z",
+  "kind": "micro",
+  "label": "reserve",
+  "latency_us": {
+    "max": 80.27,
+    "method": "nearest_rank",
+    "p50": 25.61,
+    "p95": 43.84,
+    "p99": 52.89,
+    "sample_every": 1000,
+    "sampled": true,
+    "samples": 400
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 303664,
+      "ets": 1551848,
+      "processes": 18926232,
+      "total": 63171240
+    },
+    "after_warmup": {
+      "binary": 246488,
+      "ets": 1539192,
+      "processes": 19146280,
+      "total": 63242176
+    },
+    "before": {
+      "binary": 341272,
+      "ets": 1482120,
+      "processes": 19350720,
+      "total": 63131336
+    },
+    "counters_table_bytes": 126736
+  },
+  "mode": "reserve",
+  "notes": [
+    "database.used is false, and database.server_version, host, port, database, container and pool_size are all null for that reason: this is a micro mode and no database was opened. Naming the configured one would invite a reader to believe Postgres was in the measured path.",
+    "each operation is two AuroraMeter.reserve/3 calls: one against a key with the whole limit ahead of it and one against a key warmed to limit minus 25000, so half of each worker's second pass crosses the hard limit. limit_exceeded is counted in errors.by_tag because it is the expected outcome of those calls, not a fault.",
+    "admitted plus denied: 880000 (expected 880000)",
+    "denied: 240000 (expected 240000)",
+    "the denial branch ran 240000 times"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "8a9ce16e-0d77-4eb0-b61c-5cfd96b39334",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:59:27.426727Z",
+  "throughput_ops_per_sec": 277890.05,
+  "warmup": {
+    "duration_ms": 160.78,
+    "operations": 40000
+  },
+  "workload": {
+    "batch_size": 500,
+    "headroom_per_worker": 25000,
+    "keys": 16,
+    "limit": 1000000000,
+    "operations": 400000,
+    "passes": 2,
+    "per_proc": 50000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 8068,
+    "tenants": 16
+  }
+}

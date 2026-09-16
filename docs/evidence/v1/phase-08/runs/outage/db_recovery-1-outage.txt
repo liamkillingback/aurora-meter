@@ -1,0 +1,12 @@
+container=aurora-meter-pro-testdb
+load_started_utc=2026-09-16T11:23:19Z
+seconds_before_outage=15
+outage_seconds=20
+docker_stop_utc=2026-09-16T11:23:34Z
+aurora-meter-pro-testdb
+stopped_utc=2026-09-16T11:23:36Z
+docker_start_utc=2026-09-16T11:23:56Z
+aurora-meter-pro-testdb
+started_utc=2026-09-16T11:23:56Z
+task_exit=0
+finished_utc=2026-09-16T11:24:22Z

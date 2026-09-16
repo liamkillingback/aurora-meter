@@ -1,0 +1,112 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 8,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench with_quota --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/with_quota-5.json --label with_quota",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 8066,
+    "storage": "AuroraMeter.Bench.MemoryStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": null,
+    "database": null,
+    "host": null,
+    "pool_size": null,
+    "port": null,
+    "server_version": null,
+    "used": false
+  },
+  "duration_ms": 920.79,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:59:37.654539Z",
+  "kind": "micro",
+  "label": "with_quota",
+  "latency_us": {
+    "max": 107.04,
+    "method": "nearest_rank",
+    "p50": 16.22,
+    "p95": 27.14,
+    "p99": 31.84,
+    "sample_every": 1000,
+    "sampled": true,
+    "samples": 400
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 291840,
+      "ets": 1533896,
+      "processes": 18931408,
+      "total": 63146784
+    },
+    "after_warmup": {
+      "binary": 234720,
+      "ets": 1521240,
+      "processes": 19136728,
+      "total": 63202264
+    },
+    "before": {
+      "binary": 331192,
+      "ets": 1478248,
+      "processes": 19328664,
+      "total": 63094816
+    },
+    "counters_table_bytes": 122768
+  },
+  "mode": "with_quota",
+  "notes": [
+    "database.used is false, and database.server_version, host, port, database, container and pool_size are all null for that reason: this is a micro mode and no database was opened. Naming the configured one would invite a reader to believe Postgres was in the measured path.",
+    "with_quota reserves, runs a no-op callback and commits the deferred reservation. The verification asserts that no reservation is left standing, which is what separates a commit from a leak.",
+    "committed work: 440000 (expected 440000)",
+    "reservations left standing: 0 (expected 0)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "4e5ce576-ce9a-4d53-bec0-599029399f96",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:59:36.618540Z",
+  "throughput_ops_per_sec": 434407.71,
+  "warmup": {
+    "duration_ms": 109.77,
+    "operations": 40000
+  },
+  "workload": {
+    "batch_size": 500,
+    "keys": 8,
+    "operations": 400000,
+    "per_proc": 50000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 8066,
+    "tenants": 8
+  }
+}

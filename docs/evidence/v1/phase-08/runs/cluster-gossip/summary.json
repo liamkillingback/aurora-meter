@@ -1,0 +1,108 @@
+{
+  "schema": "aurora-v1-bench-summary/1",
+  "generated_at": "2026-09-16T11:23:19.641Z",
+  "directory": "/home/liamk/src/PhxTemplates/tmp/v1/bench/cluster-gossip",
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "modes": {
+    "cluster_2": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": false,
+      "incorrect_runs": [
+        "1131ce15-c774-42a0-bdde-d76a02d50469"
+      ],
+      "median_throughput_ops_per_sec": 201359.34,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 185245.24,
+      "max_throughput_ops_per_sec": 212861.56,
+      "spread_percent": 12.97,
+      "workload": {
+        "batch_size": 500,
+        "contended": true,
+        "keys": 1,
+        "limit": 10000,
+        "nodes": 2,
+        "operations": 40000,
+        "per_proc": 20000,
+        "procs": 2,
+        "rounds": 5,
+        "seed": 8066,
+        "tenants": 1
+      },
+      "command": "mix aurora_meter.bench cluster_2 --json /home/liamk/src/PhxTemplates/tmp/v1/bench/cluster-gossip/runs/cluster_2-1.json --label cluster_2 --broadcast-interval 25",
+      "run_ids": [
+        "93ff1503-af67-4a4c-b52f-b4d48e1da26c",
+        "29499d47-cc40-44be-8dc6-9d17d645a6bf",
+        "1d9f70d3-9914-44d2-89ea-e25e7020a7e5",
+        "1131ce15-c774-42a0-bdde-d76a02d50469",
+        "d09e9651-f4bd-4cdf-b896-cabe1d1a399c"
+      ],
+      "files": [
+        "cluster_2-1.json",
+        "cluster_2-2.json",
+        "cluster_2-3.json",
+        "cluster_2-4.json",
+        "cluster_2-5.json"
+      ]
+    },
+    "cluster_4": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 358247.56,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 259281.44,
+      "max_throughput_ops_per_sec": 394316.6,
+      "spread_percent": 34.25,
+      "workload": {
+        "batch_size": 500,
+        "contended": true,
+        "keys": 1,
+        "limit": 10000,
+        "nodes": 4,
+        "operations": 80000,
+        "per_proc": 20000,
+        "procs": 4,
+        "rounds": 5,
+        "seed": 8069,
+        "tenants": 1
+      },
+      "command": "mix aurora_meter.bench cluster_4 --json /home/liamk/src/PhxTemplates/tmp/v1/bench/cluster-gossip/runs/cluster_4-1.json --label cluster_4 --broadcast-interval 25",
+      "run_ids": [
+        "e2ce6532-9546-44f9-afed-d068183f3349",
+        "e52e425d-2458-42c5-b071-b5eb3065855e",
+        "d72b76b2-59b1-448f-840e-beabcc9a1e92",
+        "167d6e84-6af2-4818-84ce-961b8db45b0f",
+        "443ab339-1630-42eb-a64b-64baea70409b"
+      ],
+      "files": [
+        "cluster_4-1.json",
+        "cluster_4-2.json",
+        "cluster_4-3.json",
+        "cluster_4-4.json",
+        "cluster_4-5.json"
+      ]
+    }
+  }
+}

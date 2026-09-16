@@ -1,0 +1,177 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "aurora-meter-bench-report/1",
+  "description": "One run of `mix aurora_meter.bench`. Written by AuroraMeter.Bench.Report and checked by test/aurora_meter/bench/report_test.exs. It is a TEST FIXTURE and not a runtime dependency: nothing under lib/ reads it, and priv/bench is not in the Hex package. A field whose source the host could not supply is null AND carries a line in `notes` saying so; it is never a zero, and it is never omitted, because an omitted key reads as a schema that changed and a zero reads as a measurement.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "label",
+    "mode",
+    "kind",
+    "started_at",
+    "finished_at",
+    "package",
+    "runtime",
+    "machine",
+    "database",
+    "command",
+    "config",
+    "workload",
+    "warmup",
+    "latency_us",
+    "throughput_ops_per_sec",
+    "duration_ms",
+    "memory",
+    "backlog",
+    "errors",
+    "correct",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string" },
+    "label": { "type": "string" },
+    "mode": { "type": "string" },
+    "kind": {
+      "enum": ["micro", "end_to_end"],
+      "description": "micro isolates an in-memory path with stubbed or absent persistence; end_to_end reaches Postgres through the real adapter on every write. No figure may be published without it."
+    },
+    "started_at": { "type": "string" },
+    "finished_at": { "type": "string" },
+    "package": {
+      "type": "object",
+      "required": ["name", "version", "git_sha", "git_dirty"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "git_sha": { "type": ["string", "null"] },
+        "git_dirty": { "type": ["boolean", "null"] }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["elixir", "otp", "erts", "schedulers_online"],
+      "properties": {
+        "elixir": { "type": "string" },
+        "otp": { "type": "string" },
+        "erts": { "type": "string" },
+        "schedulers_online": { "type": "integer" }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "required": ["os", "distribution", "cpu_model", "logical_cpus", "total_memory_bytes"],
+      "properties": {
+        "os": { "type": ["string", "null"] },
+        "distribution": { "type": ["string", "null"] },
+        "cpu_model": { "type": ["string", "null"] },
+        "logical_cpus": { "type": ["integer", "null"] },
+        "total_memory_bytes": { "type": ["integer", "null"] }
+      }
+    },
+    "database": {
+      "type": "object",
+      "required": ["used", "server_version", "host", "port", "database", "container", "pool_size"],
+      "properties": {
+        "used": { "type": "boolean" },
+        "server_version": { "type": ["string", "null"] },
+        "host": { "type": ["string", "null"] },
+        "port": { "type": ["integer", "null"] },
+        "database": { "type": ["string", "null"] },
+        "container": { "type": ["string", "null"] },
+        "pool_size": { "type": ["integer", "null"] }
+      }
+    },
+    "command": { "type": "string" },
+    "config": {
+      "type": "object",
+      "required": ["history", "flush_interval", "broadcast_interval", "storage", "feature_sources", "seed"]
+    },
+    "workload": {
+      "type": "object",
+      "required": ["procs", "per_proc", "operations", "rounds", "seed", "batch_size", "keys", "tenants"],
+      "properties": {
+        "procs": { "type": "integer" },
+        "per_proc": { "type": "integer" },
+        "operations": { "type": "integer" },
+        "rounds": { "type": "integer" },
+        "seed": { "type": "integer" },
+        "batch_size": { "type": ["integer", "null"] },
+        "keys": { "type": ["integer", "null"] },
+        "tenants": { "type": ["integer", "null"] }
+      }
+    },
+    "warmup": {
+      "type": "object",
+      "required": ["operations", "duration_ms"],
+      "properties": {
+        "operations": { "type": "integer" },
+        "duration_ms": { "type": "number" }
+      }
+    },
+    "latency_us": {
+      "type": "object",
+      "required": ["sampled", "sample_every", "samples", "p50", "p95", "p99", "max", "method"],
+      "properties": {
+        "sampled": {
+          "type": "boolean",
+          "description": "true when only one operation in `sample_every` was timed, which is how micro modes are measured: timing a sub-microsecond ETS write individually costs more than the write."
+        },
+        "sample_every": { "type": ["integer", "null"] },
+        "samples": { "type": "integer" },
+        "p50": { "type": ["number", "null"] },
+        "p95": { "type": ["number", "null"] },
+        "p99": { "type": ["number", "null"] },
+        "max": { "type": ["number", "null"] },
+        "method": {
+          "const": "nearest_rank",
+          "description": "sort ascending and take the element at ceil(p * n), one based. No interpolation, so every reported percentile is a sample that was observed."
+        }
+      }
+    },
+    "throughput_ops_per_sec": { "type": "number" },
+    "duration_ms": { "type": "number" },
+    "memory": {
+      "type": "object",
+      "required": ["before", "after_warmup", "after", "counters_table_bytes"],
+      "properties": {
+        "before": { "type": "object" },
+        "after_warmup": { "type": "object" },
+        "after": { "type": "object" },
+        "counters_table_bytes": { "type": ["integer", "null"] }
+      }
+    },
+    "backlog": {
+      "type": "object",
+      "required": ["dirty_keys_at_end", "pending_batch_items_at_end", "timeline", "drain", "cluster"],
+      "properties": {
+        "dirty_keys_at_end": { "type": ["integer", "null"] },
+        "pending_batch_items_at_end": { "type": ["integer", "null"] },
+        "timeline": { "type": "array" },
+        "drain": {
+          "type": ["object", "null"],
+          "description": "the duration-driven modes only. G08 bullet 3 is drain_rate_per_sec against arrival_rate_per_sec, and drain_faster_than_arrival is the comparison written out."
+        },
+        "cluster": {
+          "type": ["object", "null"],
+          "description": "the cluster modes only. Carries reason: distribution_unavailable when real peer nodes could not be started, and never a simulated substitute."
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "required": ["rate", "total", "by_tag"],
+      "properties": {
+        "rate": { "type": "number" },
+        "total": { "type": "integer" },
+        "by_tag": { "type": "object" }
+      }
+    },
+    "correct": {
+      "type": "boolean",
+      "description": "the mode's own correctness assertion. false is a failed run and the task exits non-zero: a throughput measured while the arithmetic was wrong is a different system, not a slower correct one."
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

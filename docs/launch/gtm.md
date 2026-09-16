@@ -13,7 +13,9 @@ metering, and plan-gating as a few function calls, on the BEAM.
 > Every SaaS meters usage, gates features by plan, and bills for overage. On
 > Phoenix you hand-roll all of it. Aurora Meter is a free, MIT library that does
 > the three jobs — **count, gate, bill** — with an ETS hot path that sustains
-> ~5.5M increments/sec and never touches your database on the write path.
+> **3.4M increments/sec** (micro, median of five runs) and never touches your
+> database on the write path. Every figure and its workload:
+> [docs/evidence/v1/phase-08/08c-results.md](../evidence/v1/phase-08/08c-results.md).
 >
 > ```elixir
 > AuroraMeter.track(org, :ai_generations)
@@ -33,7 +35,8 @@ metering, and plan-gating as a few function calls, on the BEAM.
 > Phoenix SaaS, and there was no library for it (OpenMeter ships SDKs for
 > Node/Python/Go but not Elixir). So I extracted Aurora Meter.
 >
-> - **Meter**: ETS-backed counters, ~5.5M incr/sec, nothing on the DB hot path.
+> - **Meter**: ETS-backed counters, 3.4M incr/sec measured (micro, median of
+>   five runs; 1,804 durable events/sec end to end), nothing on the DB hot path.
 > - **Entitle**: `check/2` and an atomic `with_quota/4` (correct hard limits under
 >   concurrency).
 > - **Plans**: a small compile-time DSL.

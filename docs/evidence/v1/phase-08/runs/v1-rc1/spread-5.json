@@ -1,0 +1,110 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 8,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench spread --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/spread-5.json --label spread",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{}",
+    "flush_interval": 3600000,
+    "history": false,
+    "seed": 194,
+    "storage": "AuroraMeter.Bench.MemoryStorage"
+  },
+  "correct": true,
+  "database": {
+    "container": null,
+    "database": null,
+    "host": null,
+    "pool_size": null,
+    "port": null,
+    "server_version": null,
+    "used": false
+  },
+  "duration_ms": 1193.11,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T10:54:04.930526Z",
+  "kind": "micro",
+  "label": "spread",
+  "latency_us": {
+    "max": 57.86,
+    "method": "nearest_rank",
+    "p50": 1.94,
+    "p95": 3.39,
+    "p99": 4.89,
+    "sample_every": 1000,
+    "sampled": true,
+    "samples": 4000
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 371496,
+      "ets": 1496976,
+      "processes": 19343960,
+      "total": 63127160
+    },
+    "after_warmup": {
+      "binary": 314336,
+      "ets": 1484320,
+      "processes": 19389088,
+      "total": 63028584
+    },
+    "before": {
+      "binary": 273696,
+      "ets": 1465280,
+      "processes": 19335728,
+      "total": 62720792
+    },
+    "counters_table_bytes": 122768
+  },
+  "mode": "spread",
+  "notes": [
+    "database.used is false, and database.server_version, host, port, database, container and pool_size are all null for that reason: this is a micro mode and no database was opened. Naming the configured one would invite a reader to believe Postgres was in the measured path.",
+    "sum of keys: 4400000 (expected 4400000)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "84f660bd-abd5-41c6-87e1-91ad9ae84f0f",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T10:54:03.599227Z",
+  "throughput_ops_per_sec": 3352583.98,
+  "warmup": {
+    "duration_ms": 128.35,
+    "operations": 400000
+  },
+  "workload": {
+    "batch_size": 500,
+    "keys": 8,
+    "operations": 4000000,
+    "per_proc": 500000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 194,
+    "tenants": 8
+  }
+}

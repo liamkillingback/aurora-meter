@@ -1,0 +1,742 @@
+{
+  "schema": "aurora-v1-bench-summary/1",
+  "generated_at": "2026-09-16T11:21:52.265Z",
+  "directory": "/home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1",
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "modes": {
+    "cluster_2": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 196500.18,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 122556.01,
+      "max_throughput_ops_per_sec": 208839.18,
+      "spread_percent": 41.32,
+      "workload": {
+        "batch_size": 500,
+        "contended": true,
+        "keys": 1,
+        "limit": 10000,
+        "nodes": 2,
+        "operations": 40000,
+        "per_proc": 20000,
+        "procs": 2,
+        "rounds": 5,
+        "seed": 3522,
+        "tenants": 1
+      },
+      "command": "mix aurora_meter.bench cluster_2 --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/cluster_2-1.json --label cluster_2",
+      "run_ids": [
+        "853868aa-5a84-47c5-b5ff-97743ae37e1b",
+        "887d7f06-7e9c-4ee7-a75f-33ecf54bf62d",
+        "0918c7f1-165b-4193-b048-7b5b06d2b631",
+        "86021934-8e67-46dd-abba-5970f5474f0c",
+        "f448b064-5169-4c8f-be25-509d6a44954d"
+      ],
+      "files": [
+        "cluster_2-1.json",
+        "cluster_2-2.json",
+        "cluster_2-3.json",
+        "cluster_2-4.json",
+        "cluster_2-5.json"
+      ]
+    },
+    "cluster_2_sim": {
+      "kind": "micro",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 480621.02,
+      "median_p50_us": 15.15,
+      "median_p95_us": 28.91,
+      "min_throughput_ops_per_sec": 463934.92,
+      "max_throughput_ops_per_sec": 498036.97,
+      "spread_percent": 6.85,
+      "workload": {
+        "batch_size": 500,
+        "keys": 8,
+        "operations": 4000000,
+        "peers": 1,
+        "per_proc": 500000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8069,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench cluster_2_sim --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/cluster_2_sim-1.json --label cluster_2_sim",
+      "run_ids": [
+        "3642d6dc-23e6-480b-8132-b311145ec526",
+        "a16cf9e7-96f2-469d-b512-569ea252a5c2",
+        "badf066e-8f13-4c81-a86c-08ed4d80dfa3",
+        "d3374fda-97c8-4b01-b30f-d41bf1245b62",
+        "3cfe4f2c-ef2f-41f8-a90f-215ab87459f7"
+      ],
+      "files": [
+        "cluster_2_sim-1.json",
+        "cluster_2_sim-2.json",
+        "cluster_2_sim-3.json",
+        "cluster_2_sim-4.json",
+        "cluster_2_sim-5.json"
+      ]
+    },
+    "cluster_4": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 337656.46,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 289737.99,
+      "max_throughput_ops_per_sec": 381242.38,
+      "spread_percent": 24,
+      "workload": {
+        "batch_size": 500,
+        "contended": true,
+        "keys": 1,
+        "limit": 10000,
+        "nodes": 4,
+        "operations": 80000,
+        "per_proc": 20000,
+        "procs": 4,
+        "rounds": 5,
+        "seed": 7874,
+        "tenants": 1
+      },
+      "command": "mix aurora_meter.bench cluster_4 --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/cluster_4-1.json --label cluster_4",
+      "run_ids": [
+        "fd978331-25ca-486c-968e-9a0c4a15ac43",
+        "98e5fb39-33b0-4f48-9938-225ae8d42de7",
+        "384f2eb3-2a9b-49fb-8980-65b4e2ff67a9",
+        "7a621d48-8d38-4c24-86c3-f0cec05e1a22",
+        "7a72d250-00f1-4256-82bd-7c0fd2f96168"
+      ],
+      "files": [
+        "cluster_4-1.json",
+        "cluster_4-2.json",
+        "cluster_4-3.json",
+        "cluster_4-4.json",
+        "cluster_4-5.json"
+      ]
+    },
+    "correct": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 1217.64,
+      "median_p50_us": 6534.75,
+      "median_p95_us": 7603.65,
+      "min_throughput_ops_per_sec": 851.99,
+      "max_throughput_ops_per_sec": 1228.4,
+      "spread_percent": 30.64,
+      "workload": {
+        "batch_size": 500,
+        "keys": null,
+        "operations": 8000,
+        "original_quantity": 2,
+        "originals": 8800,
+        "per_proc": 1000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8066,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench correct --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/correct-1.json --label correct",
+      "run_ids": [
+        "3715e2c9-3988-4f4b-89bd-cee3d18bcfc8",
+        "5780569f-947c-421e-8499-83ececd5ce32",
+        "e72f8db3-4419-4d94-9d80-97957967a771",
+        "799a7a4c-29fe-47a9-9777-6c64f8fcdfd9",
+        "3dc67e6a-140c-4003-aa14-df610e797764"
+      ],
+      "files": [
+        "correct-1.json",
+        "correct-2.json",
+        "correct-3.json",
+        "correct-4.json",
+        "correct-5.json"
+      ]
+    },
+    "credits_debit": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 1091.03,
+      "median_p50_us": 6814.68,
+      "median_p95_us": 9241.27,
+      "min_throughput_ops_per_sec": 583.62,
+      "max_throughput_ops_per_sec": 1122.48,
+      "spread_percent": 48.01,
+      "workload": {
+        "batch_size": 500,
+        "grant_micro_dollars": 1000000000,
+        "keys": null,
+        "lots": 1,
+        "operations": 16000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 3544,
+        "tenants": 8,
+        "wallets": 8
+      },
+      "command": "mix aurora_meter.bench credits_debit --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/credits_debit-1.json --label credits_debit",
+      "run_ids": [
+        "dfc43880-0fd9-422c-900f-81583359c71a",
+        "7509dfd4-8e50-4774-916a-6b7befbbec6b",
+        "bfbec9ca-b673-41ae-afd3-711af3231382",
+        "750ba5f6-95b9-4b5e-90d5-ad706e98ef85",
+        "42bbe080-9a61-4ee7-abd5-06f8c9002a55"
+      ],
+      "files": [
+        "credits_debit-1.json",
+        "credits_debit-2.json",
+        "credits_debit-3.json",
+        "credits_debit-4.json",
+        "credits_debit-5.json"
+      ]
+    },
+    "credits_hot_wallet": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 186.81,
+      "median_p50_us": 42541.99,
+      "median_p95_us": 46661.68,
+      "min_throughput_ops_per_sec": 151.49,
+      "max_throughput_ops_per_sec": 187.86,
+      "spread_percent": 19.36,
+      "workload": {
+        "batch_size": 500,
+        "contended": true,
+        "grant_micro_dollars": 1000000000,
+        "keys": null,
+        "lots": 1,
+        "operations": 16000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 7492,
+        "tenants": 1,
+        "wallets": 1
+      },
+      "command": "mix aurora_meter.bench credits_hot_wallet --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/credits_hot_wallet-1.json --label credits_hot_wallet",
+      "run_ids": [
+        "589bbcce-ab8b-4229-b399-639c3e1e48ad",
+        "c9d4def3-a208-454f-a845-67ac6e72e01c",
+        "e9d79a00-7009-4558-a69f-ba9bf73fd0fc",
+        "af9da0ec-d0e5-4626-9d1f-34503615c20d",
+        "374dac3b-8e46-4bb6-ad10-335a487f787a"
+      ],
+      "files": [
+        "credits_hot_wallet-1.json",
+        "credits_hot_wallet-2.json",
+        "credits_hot_wallet-3.json",
+        "credits_hot_wallet-4.json",
+        "credits_hot_wallet-5.json"
+      ]
+    },
+    "db_delay": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 1544940.46,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 1530797.64,
+      "max_throughput_ops_per_sec": 1613000.15,
+      "spread_percent": 5.1,
+      "workload": {
+        "batch_size": 500,
+        "duration_ms": 20000,
+        "history": true,
+        "keys": 2000,
+        "operations": 30614894,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8066,
+        "storage_delay_us": 50000,
+        "tenants": 2000,
+        "warmed_keys": 4000
+      },
+      "command": "mix aurora_meter.bench db_delay --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/db_delay-1.json --label db_delay",
+      "run_ids": [
+        "ee8eee05-b732-486a-bb0e-7f5a2d1090c1",
+        "91b4c13d-0ea7-4f27-a3b7-25b95e64454c",
+        "33d10d3d-8216-4465-9634-a7b50e676471",
+        "4f2190cb-dd72-43a1-a959-d55444b63ac0",
+        "b15dd9da-d684-45ee-aca0-0fd00824564b"
+      ],
+      "files": [
+        "db_delay-1.json",
+        "db_delay-2.json",
+        "db_delay-3.json",
+        "db_delay-4.json",
+        "db_delay-5.json"
+      ]
+    },
+    "db_recovery": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 1517524.56,
+      "median_p50_us": null,
+      "median_p95_us": null,
+      "min_throughput_ops_per_sec": 1424476.18,
+      "max_throughput_ops_per_sec": 1573542.75,
+      "spread_percent": 9.47,
+      "workload": {
+        "batch_size": 500,
+        "duration_ms": 20000,
+        "history": true,
+        "keys": 2000,
+        "operations": 30137016,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8066,
+        "storage_delay_us": 0,
+        "tenants": 2000,
+        "warmed_keys": 4000
+      },
+      "command": "mix aurora_meter.bench db_recovery --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/db_recovery-1.json --label db_recovery",
+      "run_ids": [
+        "11d94673-ade7-49ec-9a36-e775380577e7",
+        "8c6a936b-764f-4d28-97e6-633382e6e3c7",
+        "44df036b-e4cf-4350-82b8-fe5b25312392",
+        "73199726-bc1d-4683-a3fe-5fe26efc35cb",
+        "45a8658f-b641-4885-b6c5-2b7b88461d4a"
+      ],
+      "files": [
+        "db_recovery-1.json",
+        "db_recovery-2.json",
+        "db_recovery-3.json",
+        "db_recovery-4.json",
+        "db_recovery-5.json"
+      ]
+    },
+    "flush_100k": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": false,
+      "incorrect_runs": [
+        "812ff484-8b7d-4873-ad21-245dc8e6b27f",
+        "49029316-a80b-4dca-8ec6-fdf8645642a4",
+        "252d639b-f9c7-499d-8053-60f7e65fa7ad",
+        "c4357dea-dc7a-495d-a5b9-73a072f3e543",
+        "bebef5a1-8efc-4b82-bec3-b355ea79f35e"
+      ],
+      "median_throughput_ops_per_sec": 0,
+      "median_p50_us": 2565796.71,
+      "median_p95_us": 2565796.71,
+      "min_throughput_ops_per_sec": 0,
+      "max_throughput_ops_per_sec": 0,
+      "spread_percent": null,
+      "workload": {
+        "batch_size": 500,
+        "dirty_keys": 100000,
+        "keys": 100000,
+        "operations": 0,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 4546,
+        "tenants": 100000
+      },
+      "command": "mix aurora_meter.bench flush_100k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/flush_100k-1.json --label flush_100k",
+      "run_ids": [
+        "812ff484-8b7d-4873-ad21-245dc8e6b27f",
+        "49029316-a80b-4dca-8ec6-fdf8645642a4",
+        "252d639b-f9c7-499d-8053-60f7e65fa7ad",
+        "c4357dea-dc7a-495d-a5b9-73a072f3e543",
+        "bebef5a1-8efc-4b82-bec3-b355ea79f35e"
+      ],
+      "files": [
+        "flush_100k-1.json",
+        "flush_100k-2.json",
+        "flush_100k-3.json",
+        "flush_100k-4.json",
+        "flush_100k-5.json"
+      ]
+    },
+    "flush_10k": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": false,
+      "incorrect_runs": [
+        "51bdab60-56ef-49e5-93b3-2a5f50e4ff30",
+        "8231a77c-2b2f-44e1-8173-0fe8d79a1b70",
+        "10d74c19-0df5-4b9e-a569-f1430786ad0d",
+        "fcf5774f-88aa-4151-bcf3-897a2156dcae",
+        "c0e0d7e4-0149-4a8c-96e4-7697f5d2d3fb"
+      ],
+      "median_throughput_ops_per_sec": 0,
+      "median_p50_us": 290959.48,
+      "median_p95_us": 290959.48,
+      "min_throughput_ops_per_sec": 0,
+      "max_throughput_ops_per_sec": 0,
+      "spread_percent": null,
+      "workload": {
+        "batch_size": 500,
+        "dirty_keys": 10000,
+        "keys": 10000,
+        "operations": 0,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8066,
+        "tenants": 10000
+      },
+      "command": "mix aurora_meter.bench flush_10k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/flush_10k-1.json --label flush_10k",
+      "run_ids": [
+        "51bdab60-56ef-49e5-93b3-2a5f50e4ff30",
+        "8231a77c-2b2f-44e1-8173-0fe8d79a1b70",
+        "10d74c19-0df5-4b9e-a569-f1430786ad0d",
+        "fcf5774f-88aa-4151-bcf3-897a2156dcae",
+        "c0e0d7e4-0149-4a8c-96e4-7697f5d2d3fb"
+      ],
+      "files": [
+        "flush_10k-1.json",
+        "flush_10k-2.json",
+        "flush_10k-3.json",
+        "flush_10k-4.json",
+        "flush_10k-5.json"
+      ]
+    },
+    "flush_1k": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 21658.59,
+      "median_p50_us": 42515.36,
+      "median_p95_us": 58413.57,
+      "min_throughput_ops_per_sec": 21218.86,
+      "max_throughput_ops_per_sec": 22231.4,
+      "spread_percent": 4.55,
+      "workload": {
+        "batch_size": 500,
+        "dirty_keys": 1000,
+        "keys": 1000,
+        "operations": 5000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 4738,
+        "tenants": 1000
+      },
+      "command": "mix aurora_meter.bench flush_1k --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/flush_1k-1.json --label flush_1k",
+      "run_ids": [
+        "a4a4cfc6-b62b-44f1-a27f-a3c60d376d2b",
+        "44bd8d7d-8d34-459c-a4ab-c5373e98fea3",
+        "a4ade8d4-611c-481f-8cbd-0d28ebbf7149",
+        "86a1b04a-e54e-4c2e-bbd0-560aa4eaf8ca",
+        "c9cf3be5-b44f-49c4-86ce-95e1b195fcf7"
+      ],
+      "files": [
+        "flush_1k-1.json",
+        "flush_1k-2.json",
+        "flush_1k-3.json",
+        "flush_1k-4.json",
+        "flush_1k-5.json"
+      ]
+    },
+    "hot": {
+      "kind": "micro",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 70513.24,
+      "median_p50_us": 119.86,
+      "median_p95_us": 198.72,
+      "min_throughput_ops_per_sec": 67947.6,
+      "max_throughput_ops_per_sec": 75502.16,
+      "spread_percent": 10.01,
+      "workload": {
+        "batch_size": 500,
+        "contended": true,
+        "keys": 1,
+        "operations": 4000000,
+        "per_proc": 500000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 7874,
+        "tenants": 1
+      },
+      "command": "mix aurora_meter.bench hot --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/hot-1.json --label hot",
+      "run_ids": [
+        "2dd7c245-3526-4169-91e2-b08cdd8e3e2c",
+        "a5460160-21ba-41e9-8468-9daae43fea67",
+        "257ca259-20c7-46ab-bfd9-0156752723d7",
+        "e72f8870-2a3e-4cae-ab42-a094d3cc9ff6",
+        "b1a9baa3-a274-42e4-878a-e5c77493c3f2"
+      ],
+      "files": [
+        "hot-1.json",
+        "hot-2.json",
+        "hot-3.json",
+        "hot-4.json",
+        "hot-5.json"
+      ]
+    },
+    "record": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 1804.25,
+      "median_p50_us": 4230.09,
+      "median_p95_us": 6035.22,
+      "min_throughput_ops_per_sec": 1719.11,
+      "max_throughput_ops_per_sec": 1814.1,
+      "spread_percent": 5.24,
+      "workload": {
+        "batch_size": 1,
+        "keys": null,
+        "operations": 16000,
+        "per_proc": 2000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 3522,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench record --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/record-1.json --label record",
+      "run_ids": [
+        "d5c8a3be-0803-40da-90a6-cf1db0bd08ac",
+        "2d67ec79-bdb2-4fab-8720-f28d6f7cdf9d",
+        "06cb2fdc-4745-48c2-8736-51fa13cc57a4",
+        "4447bb47-46b1-4209-8200-67b1016ad47a",
+        "e9579afa-19e1-47c5-8732-d860f62acd94"
+      ],
+      "files": [
+        "record-1.json",
+        "record-2.json",
+        "record-3.json",
+        "record-4.json",
+        "record-5.json"
+      ]
+    },
+    "record_batch": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 201.96,
+      "median_p50_us": 16059.64,
+      "median_p95_us": 126655.28,
+      "min_throughput_ops_per_sec": 131.33,
+      "max_throughput_ops_per_sec": 337.63,
+      "spread_percent": 61.1,
+      "workload": {
+        "batch_size": 500,
+        "batch_sizes": [
+          1,
+          10,
+          100,
+          500
+        ],
+        "keys": null,
+        "operations": 1600,
+        "per_proc": 200,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8066,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench record_batch --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/record_batch-1.json --label record_batch",
+      "run_ids": [
+        "44aec917-7ae2-4786-a777-fa9789ba89df",
+        "507ad94d-8bfa-4cd1-8cb2-8cc3109fc738",
+        "070ac6c0-cdb5-4566-b0fd-f8d12378a021",
+        "33b6d55f-ef05-4bb4-90f6-2fb318b7b6f7",
+        "069801bd-0dcd-4772-9bf1-22552e46be7e"
+      ],
+      "files": [
+        "record_batch-1.json",
+        "record_batch-2.json",
+        "record_batch-3.json",
+        "record_batch-4.json",
+        "record_batch-5.json"
+      ]
+    },
+    "replay": {
+      "kind": "end_to_end",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 51223.83,
+      "median_p50_us": 77618.5,
+      "median_p95_us": 82741.25,
+      "min_throughput_ops_per_sec": 47023.23,
+      "max_throughput_ops_per_sec": 55391.12,
+      "spread_percent": 15.11,
+      "workload": {
+        "batch_size": 500,
+        "events": 4000,
+        "keys": null,
+        "operations": 20000,
+        "per_proc": 500,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 8066,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench replay --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/replay-1.json --label replay",
+      "run_ids": [
+        "a4018c51-b7b4-455b-8ac4-25f3a283779f",
+        "f93ea86e-88b5-4c56-8881-d1d276113634",
+        "5ab3c0d2-256e-4beb-8f1c-55eac03fb70c",
+        "931f5702-f7bd-4bdd-a816-01cd070f9d4a",
+        "dcdacd93-fab4-467c-8566-946578266f48"
+      ],
+      "files": [
+        "replay-1.json",
+        "replay-2.json",
+        "replay-3.json",
+        "replay-4.json",
+        "replay-5.json"
+      ]
+    },
+    "reserve": {
+      "kind": "micro",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 266216.16,
+      "median_p50_us": 26.19,
+      "median_p95_us": 43.84,
+      "min_throughput_ops_per_sec": 241473.63,
+      "max_throughput_ops_per_sec": 277890.05,
+      "spread_percent": 13.1,
+      "workload": {
+        "batch_size": 500,
+        "headroom_per_worker": 25000,
+        "keys": 16,
+        "limit": 1000000000,
+        "operations": 400000,
+        "passes": 2,
+        "per_proc": 50000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 4226,
+        "tenants": 16
+      },
+      "command": "mix aurora_meter.bench reserve --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/reserve-1.json --label reserve",
+      "run_ids": [
+        "e3414282-30e4-43a8-8a70-940d94721232",
+        "bcbf9b41-ddad-42d8-a9a7-6df7eede620e",
+        "a9025a07-c685-4c0e-a5aa-3dc9308d0b14",
+        "555e5fe8-7fa2-463e-8579-f1a7520376f1",
+        "8a9ce16e-0d77-4eb0-b61c-5cfd96b39334"
+      ],
+      "files": [
+        "reserve-1.json",
+        "reserve-2.json",
+        "reserve-3.json",
+        "reserve-4.json",
+        "reserve-5.json"
+      ]
+    },
+    "spread": {
+      "kind": "micro",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 3418407.02,
+      "median_p50_us": 1.93,
+      "median_p95_us": 3.38,
+      "min_throughput_ops_per_sec": 3264692.57,
+      "max_throughput_ops_per_sec": 3717718.35,
+      "spread_percent": 12.19,
+      "workload": {
+        "batch_size": 500,
+        "keys": 8,
+        "operations": 4000000,
+        "per_proc": 500000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 5826,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench spread --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/spread-1.json --label spread",
+      "run_ids": [
+        "91f109a5-32fa-424d-ba80-e44ad0e8eca7",
+        "e7093fdc-7ee0-499a-8be8-b6766006bd20",
+        "ec19f577-edb2-4f76-9c28-79e34ab0b974",
+        "b6608053-7a9e-477f-94e6-99d06ee4c0ae",
+        "84f660bd-abd5-41c6-87e1-91ad9ae84f0f"
+      ],
+      "files": [
+        "spread-1.json",
+        "spread-2.json",
+        "spread-3.json",
+        "spread-4.json",
+        "spread-5.json"
+      ]
+    },
+    "with_quota": {
+      "kind": "micro",
+      "runs": 5,
+      "correct_every_run": true,
+      "incorrect_runs": [],
+      "median_throughput_ops_per_sec": 423658.21,
+      "median_p50_us": 16.36,
+      "median_p95_us": 27.14,
+      "min_throughput_ops_per_sec": 414295.94,
+      "max_throughput_ops_per_sec": 434407.71,
+      "spread_percent": 4.63,
+      "workload": {
+        "batch_size": 500,
+        "keys": 8,
+        "operations": 400000,
+        "per_proc": 50000,
+        "procs": 8,
+        "rounds": 5,
+        "seed": 3970,
+        "tenants": 8
+      },
+      "command": "mix aurora_meter.bench with_quota --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/with_quota-1.json --label with_quota",
+      "run_ids": [
+        "4d0249ee-42c3-4d79-a69e-340f18be38ec",
+        "754b33c4-9dcb-454b-8fd2-4aa9898d20f1",
+        "9988681d-1c22-4cd1-a247-feed10b6f0a1",
+        "1da01266-9951-44b6-80e4-c24fc97e112c",
+        "4e5ce576-ce9a-4d53-bec0-599029399f96"
+      ],
+      "files": [
+        "with_quota-1.json",
+        "with_quota-2.json",
+        "with_quota-3.json",
+        "with_quota-4.json",
+        "with_quota-5.json"
+      ]
+    }
+  }
+}

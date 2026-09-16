@@ -1,0 +1,112 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench correct --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/correct-5.json --label correct",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{ops: :events}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 5381,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 6527.72,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T11:03:24.852095Z",
+  "kind": "end_to_end",
+  "label": "correct",
+  "latency_us": {
+    "max": 11938.19,
+    "method": "nearest_rank",
+    "p50": 6724.61,
+    "p95": 7650.71,
+    "p99": 8062.47,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 8000
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 751672,
+      "ets": 2281176,
+      "processes": 19751040,
+      "total": 70383456
+    },
+    "after_warmup": {
+      "binary": 739168,
+      "ets": 2271864,
+      "processes": 19471296,
+      "total": 70045368
+    },
+    "before": {
+      "binary": 724808,
+      "ets": 2234200,
+      "processes": 19390104,
+      "total": 69851568
+    },
+    "counters_table_bytes": 118800
+  },
+  "mode": "correct",
+  "notes": [
+    "correct seeds procs x (warmup + per) originals of quantity 2 before the clock starts and reduces each by 1, so no correction can reach its original's cumulative bound and the measurement is the correction path rather than a refusal path.",
+    "net quantity: 8800 (expected 8800)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "3dc67e6a-140c-4003-aa14-df610e797764",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:03:17.636630Z",
+  "throughput_ops_per_sec": 1225.54,
+  "warmup": {
+    "duration_ms": 674.65,
+    "operations": 800
+  },
+  "workload": {
+    "batch_size": 500,
+    "keys": null,
+    "operations": 8000,
+    "original_quantity": 2,
+    "originals": 8800,
+    "per_proc": 1000,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 5381,
+    "tenants": 8
+  }
+}

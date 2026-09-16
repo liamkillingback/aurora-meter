@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "run_id": "baseline-v0.4.0-2",
+  "label": "spread@v0.4.0",
+  "mode": "spread",
+  "kind": "micro",
+  "correct": true,
+  "throughput_ops_per_sec": 4400334,
+  "duration_ms": 909,
+  "latency_us": {
+    "sampled": false,
+    "sample_every": null,
+    "samples": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null,
+    "method": "nearest_rank"
+  },
+  "workload": {
+    "procs": 8,
+    "per_proc": 500000,
+    "operations": 4000000,
+    "rounds": 1,
+    "seed": null,
+    "batch_size": null,
+    "keys": 8,
+    "tenants": 8
+  },
+  "package": {
+    "name": "aurora_meter",
+    "version": "0.4.0",
+    "git_sha": null,
+    "git_dirty": false
+  },
+  "runtime": {},
+  "machine": {},
+  "database": {
+    "used": false
+  },
+  "command": "mix aurora_meter.bench 8 500000",
+  "notes": [
+    "Parsed from the 0.4.0 task's printed output, which writes no JSON. Only the C7 warm-shape fix was applied to the clone; the patch is c7.patch beside this file.",
+    "latency is null throughout: the 0.4.0 task measured no latency at all, only an aggregate elapsed time and a derived rate."
+  ]
+}

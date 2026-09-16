@@ -1,0 +1,113 @@
+{
+  "backlog": {
+    "cluster": null,
+    "dirty_keys_at_end": 0,
+    "drain": null,
+    "pending_batch_items_at_end": 0,
+    "timeline": []
+  },
+  "command": "mix aurora_meter.bench replay --json /home/liamk/src/PhxTemplates/tmp/v1/bench/v1-rc1/runs/replay-3.json --label replay",
+  "config": {
+    "broadcast_interval": 3600000,
+    "feature_sources": "%{ops: :events}",
+    "flush_interval": 3600000,
+    "history": true,
+    "seed": 196,
+    "storage": "AuroraMeter.Storage.Ecto"
+  },
+  "correct": true,
+  "database": {
+    "container": "aurora-meter-pro-testdb",
+    "database": "aurora_meter_bench",
+    "host": "localhost",
+    "pool_size": 30,
+    "port": 5490,
+    "server_version": "PostgreSQL 16.13 (Debian 16.13-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "used": true
+  },
+  "duration_ms": 392.2,
+  "errors": {
+    "by_tag": {},
+    "rate": 0.0,
+    "total": 0
+  },
+  "finished_at": "2026-09-16T11:03:36.456282Z",
+  "kind": "end_to_end",
+  "label": "replay",
+  "latency_us": {
+    "max": 84542.07,
+    "method": "nearest_rank",
+    "p50": 80630.77,
+    "p95": 84542.07,
+    "p99": 84542.07,
+    "sample_every": null,
+    "sampled": false,
+    "samples": 5
+  },
+  "machine": {
+    "cpu_model": "AMD Ryzen 9 7900X 12-Core Processor",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "logical_cpus": 24,
+    "os": "unix/linux 6.6.87",
+    "total_memory_bytes": 20969582592
+  },
+  "memory": {
+    "after": {
+      "binary": 431872,
+      "ets": 2269192,
+      "processes": 19103544,
+      "total": 69444216
+    },
+    "after_warmup": {
+      "binary": 720296,
+      "ets": 2236760,
+      "processes": 19319872,
+      "total": 69791280
+    },
+    "before": {
+      "binary": 713088,
+      "ets": 2234632,
+      "processes": 21867024,
+      "total": 72328992
+    },
+    "counters_table_bytes": 118800
+  },
+  "mode": "replay",
+  "notes": [
+    "replay seeds procs x per events and then rebuilds the projection over them 5 times with compare: :require_match, so a rebuilt generation that disagreed with the live one would refuse to activate and the run would be incorrect.",
+    "each sample is one AuroraMeter.Events.Replay.run/1 over the whole seeded population. operations counts events replayed across 5 rounds, and the percentiles come from 5 samples, which is stated here because 5 is a small number to take a p99 from.",
+    "projected total after replay: 4000 (expected 4000)",
+    "rows in aurora_meter_events: 4000 (expected 4000)"
+  ],
+  "package": {
+    "git_dirty": true,
+    "git_sha": "34c188dbaa896562416aef21a4840872ba857e60",
+    "name": "aurora_meter",
+    "version": "0.5.0"
+  },
+  "run_id": "5ab3c0d2-256e-4beb-8f1c-55eac03fb70c",
+  "runtime": {
+    "elixir": "1.20.1",
+    "erts": "17.0.1",
+    "otp": "29",
+    "schedulers_online": 24
+  },
+  "schema_version": 1,
+  "started_at": "2026-09-16T11:03:36.050766Z",
+  "throughput_ops_per_sec": 50994.91,
+  "warmup": {
+    "duration_ms": 0.0,
+    "operations": 0
+  },
+  "workload": {
+    "batch_size": 500,
+    "events": 4000,
+    "keys": null,
+    "operations": 20000,
+    "per_proc": 500,
+    "procs": 8,
+    "rounds": 5,
+    "seed": 196,
+    "tenants": 8
+  }
+}
