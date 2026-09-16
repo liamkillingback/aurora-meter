@@ -1,0 +1,39 @@
+=== 07c final gates ===
+2026-09-16T03:47:41Z
+core HEAD: 03f200843c64a2c76ceea40397fc6b58e74c9b04
+pro  HEAD: d8cf7e2d313fbb2897aed27335086ac15536a8f9
+removed Pro's PLT and its copy of the core's beams
+aurora_meter_pro
+bunt
+certifi
+credo
+db_connection
+decimal
+dialyxir
+earmark_parser
+ecto
+ecto_sql
+erlex
+ex_ast
+ex_doc
+file_system
+finch
+floki
+glob_ex
+h2
+hackney
+hpax
+core mix check exit=0
+Result: 1832 passed (73 doctests, 20 properties, 1739 tests), 4 excluded
+pro mix check exit=0
+Result: 1058 passed (69 doctests, 989 tests)
+pro mix deps.unlock --check-unused exit=0
+pro mix deps.audit exit=0
+pro mix hex.audit exit=0
+pro mix hex.build exit=1
+pro AURORA_METER_FROM_HEX=1 mix hex.build exit=0
+core mix deps.unlock --check-unused exit=0
+core mix deps.audit exit=0
+core mix hex.audit exit=0
+core mix hex.build exit=0
+done 2026-09-16T03:54:01Z

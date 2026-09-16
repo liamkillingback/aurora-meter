@@ -98,6 +98,44 @@ defmodule AuroraMeter.Test do
   def unique_tenant(prefix \\ "org"), do: "#{prefix}_#{System.unique_integer([:positive])}"
 
   @doc """
+  Subscribes `tenant` to `plan` with the assignment **starting at** `since`, and
+  drops the cached row.
+
+  `AuroraMeter.subscribe/3` starts the assignment at the database's clock, which
+  is right for a real subscription and wrong for a test whose usage is dated in
+  the past: every such event would be attributed before the contract existed and
+  stamped `attribution: :plan_unresolved` (build unit 07c). This writes the row
+  with an explicit `plan_effective_at` instead, which is a supported field of
+  `AuroraMeter.Storage.put_subscription/1`, so a test about something other than
+  attribution can have the tenant a real host would have.
+
+  Options: `:version` (default the effective one) and `:status`
+  (default `"active"`).
+
+      subscribe_since!("org_1", :pro, ~U[2026-01-01 00:00:00Z])
+
+  """
+  @spec subscribe_since!(term(), atom(), DateTime.t(), keyword()) ::
+          AuroraMeter.Schema.Subscription.t()
+  def subscribe_since!(tenant, plan, %DateTime{} = since, opts \\ []) do
+    version = Keyword.get(opts, :version) || AuroraMeter.Plans.get(plan).version
+    definition = AuroraMeter.Plans.get(plan, version)
+
+    {:ok, subscription} =
+      AuroraMeter.Storage.put_subscription(%{
+        tenant_key: AuroraMeter.Tenant.to_key(tenant),
+        plan_id: Atom.to_string(plan),
+        status: Keyword.get(opts, :status, "active"),
+        plan_version: version,
+        plan_fingerprint: definition && definition.fingerprint,
+        plan_effective_at: DateTime.truncate(since, :second)
+      })
+
+    AuroraMeter.Subscriptions.invalidate(tenant)
+    subscription
+  end
+
+  @doc """
   Starts an `Ecto.Adapters.SQL.Sandbox` owner on the configured repo (shared
   unless the test is async) and stops it on exit. Use only when your own case
   template does not already do this.

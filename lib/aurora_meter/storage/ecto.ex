@@ -1313,6 +1313,15 @@ defmodule AuroraMeter.Storage.Ecto do
   defp eligibility(%AuroraMeter.Event{attribution: :unresolved}),
     do: {:ineligible, :attribution_unresolved}
 
+  # Build unit 07c. A real period with no resolvable plan is its own state and
+  # not a milder kind of `:attribution_unresolved`: the period on the row is a
+  # fact, the contract is what is missing, and an operator fixes the two by
+  # doing different things. Core stages the item and names the reason; what an
+  # implementation does with it (Aurora Meter Pro quarantines it) is the
+  # implementation's decision.
+  defp eligibility(%AuroraMeter.Event{attribution: :plan_unresolved}),
+    do: {:ineligible, :plan_unresolved}
+
   defp eligibility(%AuroraMeter.Event{feature: feature} = event) do
     if Config.feature_source(feature) == :buffered and event.kind == :usage do
       {:ineligible, :feature_buffered}
@@ -1654,6 +1663,16 @@ defmodule AuroraMeter.Storage.Ecto do
   # other recorded event's.
   defp correction_eligibility(%AuroraMeter.Event{kind: :correction, attribution: :unresolved}),
     do: {:ineligible, :original_ineligible}
+
+  # `:plan_unresolved` on a correction means the same thing one step along: the
+  # correction copied the original's stamp (L17.12), so the row without a
+  # contract is the original's, and the reason has to say so rather than send an
+  # operator looking at the correction.
+  defp correction_eligibility(%AuroraMeter.Event{
+         kind: :correction,
+         attribution: :plan_unresolved
+       }),
+       do: {:ineligible, :original_ineligible}
 
   defp correction_eligibility(%AuroraMeter.Event{kind: :correction} = event) do
     if Config.feature_source(event.feature) == :buffered do

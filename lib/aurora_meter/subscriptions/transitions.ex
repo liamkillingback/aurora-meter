@@ -61,10 +61,26 @@ defmodule AuroraMeter.Subscriptions.Transitions do
           | {:idempotent, PlanTransition.t(), [effect()]}
           | {:error, {atom(), term()}}
 
+  @typedoc """
+  What `schedule/3`, `cancel/3` and `confirm/3` return, **after** `transact/1`
+  has announced the effects and dropped them.
+
+  It is deliberately not `t:outcome/0`, which is the shape the inner functions
+  hand to `transact/1` and whose success arms are three-tuples. Spec'ing these
+  three as `outcome()` said they return a three-tuple on success, and
+  `AuroraMeter.Subscriptions`' own specs say two. Dialyzer intersects the two
+  and concludes the success arm is impossible, so **every caller that matches
+  `{:ok, _}` on `schedule_transition/3`, `cancel_transition/3` or
+  `confirm_transition/3` is a `pattern_match` error**. Nothing in this package's
+  `lib/` matches on one, which is why the core's own dialyzer was green and
+  Aurora Meter Pro's was not (`open-findings.md` X304).
+  """
+  @type result :: {:ok, PlanTransition.t()} | {:error, {atom(), term()}}
+
   # -- schedule ---------------------------------------------------------------
 
   @doc false
-  @spec schedule(term(), atom() | String.t(), keyword()) :: outcome()
+  @spec schedule(term(), atom() | String.t(), keyword()) :: result()
   def schedule(tenant, to_plan, opts) do
     key = Tenant.to_key(tenant)
 
@@ -289,7 +305,7 @@ defmodule AuroraMeter.Subscriptions.Transitions do
   # -- cancel -----------------------------------------------------------------
 
   @doc false
-  @spec cancel(term(), String.t(), map()) :: outcome()
+  @spec cancel(term(), String.t(), map()) :: result()
   def cancel(tenant, ref, detail \\ %{}) do
     key = Tenant.to_key(tenant)
 
@@ -357,7 +373,7 @@ defmodule AuroraMeter.Subscriptions.Transitions do
   # -- confirm ----------------------------------------------------------------
 
   @doc false
-  @spec confirm(term(), String.t(), keyword()) :: outcome()
+  @spec confirm(term(), String.t(), keyword()) :: result()
   def confirm(tenant, ref, opts) do
     key = Tenant.to_key(tenant)
 

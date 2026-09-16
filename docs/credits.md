@@ -685,6 +685,39 @@ plan_id, plan_version, period_start, result, reason}`. `result` is `:granted`,
 (`:up_to_date`) or refused by the unique index inside the balance row's lock
 (`:conflict`), which is the only branch two schedulers racing take.
 
+
+### Which version a period is granted under
+
+The version is resolved per period, from
+`AuroraMeter.Plans.effective_for/2` at the period's start, so a catch-up across
+an upgrade grants each period at its own contract rather than all of them at
+today's. It is in the recurrence key and in the stored policy snapshot:
+
+```
+recurring:<name>:<plan_id>:<plan_version>:<period_start>
+```
+
+Two consequences worth stating.
+
+**Deploying a new version does not change what an existing tenant is paid.** The
+engine resolves the tenant's **own** version rather than the version effective
+now, so a tenant on version 1 keeps version 1's amount, cap and expiry when
+version 2 ships.
+
+**Keys written before 1.0 are not granted a second time.** A tenant on version 1
+resolves to `"1"`, which is the literal the pre-1.0 engine wrote, so the key is
+byte for byte the same string. And "already granted" is decided by the
+**period**, not by the key: the newest recurrence row for the entitlement is
+what says which periods are still owed, and the `UNIQUE (tenant_key, key)` index
+is the racing-schedulers guard underneath that.
+
+Two narrower limits follow from resolving per period. The entitlement names a
+run considers are the ones the tenant's **current** version declares, so an
+allowance that existed only in a retired version is not back-paid. And a version
+that resolves to neither compiled code nor a stored snapshot keeps the current
+version's policy, because withdrawing an allowance a live contract declares
+would be a worse answer than paying it.
+
 ## Money series
 
 Charting the ledger takes three reads, all of them keyed by the same tenant

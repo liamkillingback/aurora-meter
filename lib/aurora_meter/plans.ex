@@ -38,6 +38,8 @@ defmodule AuroraMeter.Plans do
   at compile time (duplicate features, invalid modes, negative numbers all raise).
   """
 
+  import Ecto.Query, only: [from: 2]
+
   require Logger
 
   alias AuroraMeter.Clock
@@ -46,6 +48,7 @@ defmodule AuroraMeter.Plans do
   alias AuroraMeter.Plan
   alias AuroraMeter.Plans.Snapshot
   alias AuroraMeter.PlanVersionConflictError
+  alias AuroraMeter.Schema.PlanTransition
   alias AuroraMeter.Storage
 
   # The entitlement name and the plan id both become part of a recurrence key,
@@ -518,6 +521,145 @@ defmodule AuroraMeter.Plans do
   end
 
   def versions(_id), do: []
+
+  @doc """
+  The `{plan_id, version}` a tenant was on at `instant`, or `{:error, :unresolved}`.
+
+  This is the **attribution** question, not the entitlement one. `get/1` answers
+  "what may this tenant do now"; this answers "which commercial contract was
+  this usage sold under", and the two differ for every backdated fact. A
+  recorded event keeps the answer it was given here (D05, L17.12): no later
+  process recomputes it, so a plan redeploy or a plan change cannot reprice
+  history.
+
+  Resolution, in order:
+
+    1. No subscription row: `{:error, :unresolved}`. There is no assignment to
+       attribute to, and the default plan is a fallback for **entitlement**, not
+       a commercial fact.
+    2. A row whose `plan_version` is still NULL (the window between core schema
+       version 10 and the first `register!/0`): `{:error, :unresolved}`, for the
+       same reason `schedule_transition/3` refuses one.
+    3. `instant` at or after the row's `plan_effective_at`: the row's own pair.
+       This is the overwhelming majority of calls and costs **zero queries**.
+    4. Otherwise the applied history in `aurora_meter_plan_transitions`: the
+       latest applied transition whose `effective_at` is at or before `instant`
+       gives its `to` pair, and failing that the earliest applied transition
+       after `instant` gives its `from` pair, because before the first recorded
+       change the tenant was on what that change moved them off.
+    5. Nothing covers the instant: `{:error, :unresolved}`. An instant before any
+       recorded plan history is a state, never a guess at today's plan (L17.13).
+
+  ## Examples
+
+      AuroraMeter.Plans.effective_for("org_1", ~U[2026-02-14 09:00:00Z])
+      #=> {:ok, {:pro, "1"}}
+
+      AuroraMeter.Plans.effective_for("never_subscribed", ~U[2026-02-14 09:00:00Z])
+      #=> {:error, :unresolved}
+
+  Not a doctest: it reads the tenant's subscription and, for a backdated
+  instant, the applied transition history, so it needs a database. It is
+  covered by `test/aurora_meter/plans_test.exs`.
+  """
+  @spec effective_for(term(), DateTime.t()) :: {:ok, {atom(), String.t()}} | {:error, :unresolved}
+  def effective_for(tenant, %DateTime{} = instant) do
+    case AuroraMeter.Subscriptions.get(tenant) do
+      nil -> {:error, :unresolved}
+      subscription -> effective_for_assignment(subscription, instant)
+    end
+  end
+
+  defp effective_for_assignment(subscription, instant) do
+    with {:ok, pair} <- assignment_pair(subscription) do
+      if backdated?(subscription.plan_effective_at, instant),
+        do: historic(subscription, instant),
+        else: {:ok, pair}
+    end
+  end
+
+  # A row with no `plan_effective_at` at all says nothing about when the
+  # assignment started, so nothing about the instant is backdated relative to
+  # it and the assignment answers.
+  defp backdated?(nil, _instant), do: false
+
+  defp backdated?(%DateTime{} = started, instant),
+    do: DateTime.compare(instant, started) == :lt
+
+  defp assignment_pair(%{plan_id: plan_id, plan_version: version})
+       when is_binary(plan_id) and is_binary(version) do
+    case plan_atom(plan_id) do
+      nil -> {:error, :unresolved}
+      atom -> {:ok, {atom, version}}
+    end
+  end
+
+  defp assignment_pair(_row), do: {:error, :unresolved}
+
+  # One indexed, single-row read, and only for a backdated instant. The index
+  # `(state, effective_at)` created by core schema version 10 serves both
+  # directions of this; the tenant predicate keeps it to one tenant's rows.
+  defp historic(subscription, instant) do
+    case latest_applied_at_or_before(subscription.tenant_key, instant) do
+      %{to_plan_id: plan_id, to_version: version} ->
+        pair_or_unresolved(plan_id, version)
+
+      nil ->
+        case earliest_applied_after(subscription.tenant_key, instant) do
+          %{from_plan_id: plan_id, from_version: version} -> pair_or_unresolved(plan_id, version)
+          nil -> {:error, :unresolved}
+        end
+    end
+  rescue
+    error in [DBConnection.ConnectionError] ->
+      Logger.debug(
+        "AuroraMeter.Plans.effective_for: storage unreachable: #{Exception.message(error)}"
+      )
+
+      {:error, :unresolved}
+  catch
+    :exit, _reason -> {:error, :unresolved}
+  end
+
+  defp pair_or_unresolved(plan_id, version) when is_binary(plan_id) and is_binary(version) do
+    case plan_atom(plan_id) do
+      nil -> {:error, :unresolved}
+      atom -> {:ok, {atom, version}}
+    end
+  end
+
+  defp pair_or_unresolved(_plan_id, _version), do: {:error, :unresolved}
+
+  defp latest_applied_at_or_before(tenant_key, instant) do
+    Config.repo().one(
+      from(t in PlanTransition,
+        where:
+          t.tenant_key == ^tenant_key and t.state == "applied" and t.effective_at <= ^instant,
+        order_by: [desc: t.effective_at, desc: t.inserted_at],
+        limit: 1,
+        select: %{to_plan_id: t.to_plan_id, to_version: t.to_version}
+      )
+    )
+  end
+
+  defp earliest_applied_after(tenant_key, instant) do
+    Config.repo().one(
+      from(t in PlanTransition,
+        where: t.tenant_key == ^tenant_key and t.state == "applied" and t.effective_at > ^instant,
+        order_by: [asc: t.effective_at, asc: t.inserted_at],
+        limit: 1,
+        select: %{from_plan_id: t.from_plan_id, from_version: t.from_version}
+      )
+    )
+  end
+
+  # Never `String.to_atom/1`: a plan id read out of a row or a provider payload
+  # is untrusted input, and the atom table is not garbage collected.
+  defp plan_atom(plan_id) do
+    String.to_existing_atom(plan_id)
+  rescue
+    ArgumentError -> nil
+  end
 
   @doc """
   Every plan id the configured plans module declares.

@@ -1,0 +1,368 @@
+files:
+  test/aurora_meter/cluster_test.exs
+  test/aurora_meter/credits/allocator_test.exs
+  test/aurora_meter/credits_figures_test.exs
+  test/aurora_meter/credits_lot_migration_property_test.exs
+  test/aurora_meter/credits_lots_test.exs
+  test/aurora_meter/credits_model_test.exs
+  test/aurora_meter/credits_test.exs
+  test/aurora_meter/metering_test.exs
+  test/aurora_meter/oban_concurrency_test.exs
+  test/aurora_meter/plan_versions_property_test.exs
+  test/aurora_meter/record_test.exs
+=== seed 0 ===
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/cluster_test.exs test/aurora_meter/credits/allocator_test.exs test/aurora_meter/credits_figures_test.exs test/aurora_meter/credits_lot_migration_property_test.exs test/aurora_meter/credits_lots_test.exs test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_test.exs test/aurora_meter/metering_test.exs test/aurora_meter/oban_concurrency_test.exs test/aurora_meter/plan_versions_property_test.exs test/aurora_meter/record_test.exs --seed 0
+==> oban
+Compiling 70 files (.ex)
+Generated oban app
+==> aurora_meter
+Compiling 110 files (.ex)
+Generated aurora_meter app
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+...............     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+.................................................................................................[06b replay property] compared: 14, refused: 7, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 1, expire_reserved_grant: 3, promotional_divergence_settle: 2, promotional_divergence_debit: 1}
+....................................................[06a cross-oracle] compared: 11, diverged: 1
+............................
+12:55:20.460 [warning] AuroraMeter.Tenant.Default.to_key/1 returned an empty tenant key. Every tenant it cannot resolve then shares one set of counters. Return a non-empty String.t(), or refuse the term. This version keeps the old behaviour and warns once per node; Aurora Meter 1.0 raises. See the AuroraMeter.Tenant documentation.
+.........
+12:55:20.508 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....
+12:55:20.541 [error] AuroraMeter: the in-memory projection of event "unresolved" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_44354" instant=~U[2026-09-16 02:55:20.541338Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.
+12:55:20.546 [error] AuroraMeter: the in-memory projection of event "ineligible" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_22918" instant=~U[2026-09-16 02:55:20.545960Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+...........
+Finished in 17.0 seconds (1.6s async, 15.4s sync)
+
+Result: 217 passed (42 doctests, 20 properties, 155 tests)
+[mixlane] core exit=0 started=2026-09-16T02:55:01Z finished=2026-09-16T02:55:20Z
+seed 0     exit=0   Result: 217 passed (42 doctests, 20 properties, 155 tests)
+=== seed 1 ===
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/cluster_test.exs test/aurora_meter/credits/allocator_test.exs test/aurora_meter/credits_figures_test.exs test/aurora_meter/credits_lot_migration_property_test.exs test/aurora_meter/credits_lots_test.exs test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_test.exs test/aurora_meter/metering_test.exs test/aurora_meter/oban_concurrency_test.exs test/aurora_meter/plan_versions_property_test.exs test/aurora_meter/record_test.exs --seed 1
+Running ExUnit with seed: 1, max_cases: 48
+Excluding tags: [:headless]
+
+     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+...............     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+.     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+................................................................................................[06b replay property] compared: 19, refused: 2, skipped: 0, reordered by seq: 0, refusals: %{expire_reserved_grant: 1, promotional_divergence_debit: 1}
+....................................................[06a cross-oracle] compared: 10, diverged: 2
+....................
+12:55:42.513 [warning] AuroraMeter.Tenant.Default.to_key/1 returned an empty tenant key. Every tenant it cannot resolve then shares one set of counters. Return a non-empty String.t(), or refuse the term. This version keeps the old behaviour and warns once per node; Aurora Meter 1.0 raises. See the AuroraMeter.Tenant documentation.
+.....
+12:55:42.550 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.......
+12:55:42.598 [error] AuroraMeter: the in-memory projection of event "unresolved" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_7299" instant=~U[2026-09-16 02:55:42.598509Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.............
+12:55:42.665 [error] AuroraMeter: the in-memory projection of event "ineligible" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_24706" instant=~U[2026-09-16 02:55:42.665172Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+........
+Finished in 20.9 seconds (1.8s async, 19.0s sync)
+
+Result: 217 passed (42 doctests, 20 properties, 155 tests)
+[mixlane] core exit=0 started=2026-09-16T02:55:20Z finished=2026-09-16T02:55:42Z
+seed 1     exit=0   Result: 217 passed (42 doctests, 20 properties, 155 tests)
+=== seed 7 ===
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/cluster_test.exs test/aurora_meter/credits/allocator_test.exs test/aurora_meter/credits_figures_test.exs test/aurora_meter/credits_lot_migration_property_test.exs test/aurora_meter/credits_lots_test.exs test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_test.exs test/aurora_meter/metering_test.exs test/aurora_meter/oban_concurrency_test.exs test/aurora_meter/plan_versions_property_test.exs test/aurora_meter/record_test.exs --seed 7
+Running ExUnit with seed: 7, max_cases: 48
+Excluding tags: [:headless]
+
+     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+...............     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+.................................................................................................[06b replay property] compared: 16, refused: 5, skipped: 0, reordered by seq: 0, refusals: %{expire_reserved_grant: 2, promotional_divergence_debit: 1, promotional_divergence_settle: 2}
+....................................................[06a cross-oracle] compared: 9, diverged: 3
+........................
+12:56:05.788 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+..........
+12:56:05.844 [error] AuroraMeter: the in-memory projection of event "unresolved" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_2691" instant=~U[2026-09-16 02:56:05.844745Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.....
+12:56:05.870 [error] AuroraMeter: the in-memory projection of event "ineligible" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_3334" instant=~U[2026-09-16 02:56:05.870141Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+......
+12:56:05.900 [warning] AuroraMeter.Tenant.Default.to_key/1 returned an empty tenant key. Every tenant it cannot resolve then shares one set of counters. Return a non-empty String.t(), or refuse the term. This version keeps the old behaviour and warns once per node; Aurora Meter 1.0 raises. See the AuroraMeter.Tenant documentation.
+........
+Finished in 22.0 seconds (1.6s async, 20.4s sync)
+
+Result: 217 passed (42 doctests, 20 properties, 155 tests)
+[mixlane] core exit=0 started=2026-09-16T02:55:42Z finished=2026-09-16T02:56:05Z
+seed 7     exit=0   Result: 217 passed (42 doctests, 20 properties, 155 tests)
+=== seed 42 ===
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/cluster_test.exs test/aurora_meter/credits/allocator_test.exs test/aurora_meter/credits_figures_test.exs test/aurora_meter/credits_lot_migration_property_test.exs test/aurora_meter/credits_lots_test.exs test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_test.exs test/aurora_meter/metering_test.exs test/aurora_meter/oban_concurrency_test.exs test/aurora_meter/plan_versions_property_test.exs test/aurora_meter/record_test.exs --seed 42
+Running ExUnit with seed: 42, max_cases: 48
+Excluding tags: [:headless]
+
+     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+...............     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+.................................................................................................[06b replay property] compared: 11, refused: 10, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 2, expire_reserved_grant: 2, promotional_divergence_debit: 4, promotional_divergence_reverse: 1, promotional_divergence_settle: 1}
+....................................................[06a cross-oracle] compared: 8, diverged: 4
+...............................
+12:56:24.666 [warning] AuroraMeter.Tenant.Default.to_key/1 returned an empty tenant key. Every tenant it cannot resolve then shares one set of counters. Return a non-empty String.t(), or refuse the term. This version keeps the old behaviour and warns once per node; Aurora Meter 1.0 raises. See the AuroraMeter.Tenant documentation.
+......
+12:56:24.688 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+..
+12:56:24.709 [error] AuroraMeter: the in-memory projection of event "ineligible" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_9540" instant=~U[2026-09-16 02:56:24.709273Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.....
+12:56:24.736 [error] AuroraMeter: the in-memory projection of event "unresolved" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_9796" instant=~U[2026-09-16 02:56:24.736548Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.........
+Finished in 17.7 seconds (1.6s async, 16.0s sync)
+
+Result: 217 passed (42 doctests, 20 properties, 155 tests)
+[mixlane] core exit=0 started=2026-09-16T02:56:05Z finished=2026-09-16T02:56:24Z
+seed 42    exit=0   Result: 217 passed (42 doctests, 20 properties, 155 tests)
+=== seed 1337 ===
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/cluster_test.exs test/aurora_meter/credits/allocator_test.exs test/aurora_meter/credits_figures_test.exs test/aurora_meter/credits_lot_migration_property_test.exs test/aurora_meter/credits_lots_test.exs test/aurora_meter/credits_model_test.exs test/aurora_meter/credits_test.exs test/aurora_meter/metering_test.exs test/aurora_meter/oban_concurrency_test.exs test/aurora_meter/plan_versions_property_test.exs test/aurora_meter/record_test.exs --seed 1337
+Running ExUnit with seed: 1337, max_cases: 48
+Excluding tags: [:headless]
+
+     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+...............     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+.     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+.     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+...............................................................................................[06b replay property] compared: 16, refused: 5, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 1, expire_reserved_grant: 2, promotional_divergence_debit: 2}
+....................................................[06a cross-oracle] compared: 11, diverged: 1
+.....................
+12:56:44.178 [error] AuroraMeter: the in-memory projection of event "ineligible" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_25858" instant=~U[2026-09-16 02:56:44.178869Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+..
+12:56:44.194 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+...............
+12:56:44.256 [error] AuroraMeter: the in-memory projection of event "unresolved" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_9219" instant=~U[2026-09-16 02:56:44.256062Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+......
+12:56:44.280 [warning] AuroraMeter.Tenant.Default.to_key/1 returned an empty tenant key. Every tenant it cannot resolve then shares one set of counters. Return a non-empty String.t(), or refuse the term. This version keeps the old behaviour and warns once per node; Aurora Meter 1.0 raises. See the AuroraMeter.Tenant documentation.
+.........
+Finished in 18.4 seconds (1.6s async, 16.7s sync)
+
+Result: 217 passed (42 doctests, 20 properties, 155 tests)
+[mixlane] core exit=0 started=2026-09-16T02:56:24Z finished=2026-09-16T02:56:44Z
+seed 1337  exit=0   Result: 217 passed (42 doctests, 20 properties, 155 tests)

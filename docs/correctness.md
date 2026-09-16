@@ -399,6 +399,7 @@ the current behaviour for the phase 03 guarantee.
 - `AuroraMeter.EventsReplayLargeTest` / `test I06 100,000 facts and corrections replay to exact totals after a kill and a restart`
 - `AuroraMeter.EventsReplayLargeTest` / `test I06 a replay interleaved with 12 concurrent recorders reproduces exact totals`
 - `AuroraMeter.EventsReplayLargeTest` / `test I06 a replay interrupted at the activation leaves a consistent state either way`
+- `AuroraMeter.PlanAttributionTest` / `test I06 a retry of one event_id across a plan change is a duplicate and keeps the first stamp`
 
 **Evidence.** `docs/evidence/v1/phase-03/i06.md`
 
@@ -566,6 +567,7 @@ are not supported in 1.0.
 - `AuroraMeter.CorrectConcurrencyTest` / `test twelve correctors of one original I09 the lock that serialises correctors is the one on the original row`
 - `AuroraMeter.EventsReplayTest` / `test the scan I09 a correction contributes a negative quantity and a positive event count`
 - `AuroraMeter.EventsReplayTest` / `test a correction while a generation is building I09 a correction for an unscanned original commits and lands in both generations`
+- `AuroraMeter.PlanAttributionTest` / `test I09 a correction copies the original's plan_id, plan_version and attribution`
 
 The provider half of I09, "a correction after the provider window opens a
 reconciliation item instead of silently diverging", is Aurora Meter Pro's and is
@@ -1058,6 +1060,19 @@ proven here: the changed definition, and the explicit scheduled migration. The
 third, a stale provider notification that cannot move the version, is Aurora
 Meter Pro's and is proven in 07c.
 
+**Attribution (build unit 07c).** A recorded event carries the
+`(plan_id, plan_version)` in force when the usage **occurred**, resolved once by
+`AuroraMeter.Plans.effective_for/2` at record time and never recomputed. A
+correction copies its original's stamp rather than resolving it again, so a
+credit issued after an upgrade is priced as the fact it reverses was. An instant
+no recorded assignment or applied transition covers is stored as
+`attribution: "plan_unresolved"` with both plan columns NULL, and its export
+intent is staged `{:ineligible, :plan_unresolved}`: an unattributable fact is a
+state, never a guess at today's plan. The stamp is deliberately **not** part of
+`payload_hash`: it is derived rather than supplied, and including it would turn
+an ordinary retry that straddles a plan change into a conflict rather than the
+duplicate it is (finding X302).
+
 A scheduled transition is the **only** thing in the package that rewrites
 `plan_version` on a subscription that already has one, and it is explicit,
 referenced by the caller, audited in `aurora_meter_plan_transitions`, and
@@ -1143,7 +1158,7 @@ took effect at rather than the instant a worker noticed.
 - `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition with a provider that returns an error keeps the diff`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a cancellation wins over a sync that also names the scheduled target`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a cancelled transition is never applied by a later run`
-- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync naming the plan id without the version cancels rather than applies`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test X296 a provider naming the plan id without the version cancels, and Aurora Meter Pro no longer produces that shape`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync that does not change the plan leaves the transition pending`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync to a different plan cancels the pending transition`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync to exactly the scheduled target applies the transition early`
@@ -1201,6 +1216,22 @@ took effect at rather than the instant a worker noticed.
 - `AuroraMeter.PlanTransitionsTest` / `test I17 the same ref with identical parameters returns the existing transition`
 - `AuroraMeter.PlanTransitionsTest` / `test I17 usage recorded before the boundary stays in its period after the transition applies`
 - PLANNED (07c): `AuroraMeter.Pro.PlanAttributionTest` / `test I17 a stale provider notification cannot move the version`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I17 deploying version 2 leaves a tenant on version 1 with an unchanged allowance`
+- `AuroraMeter.PlanAttributionTest` / `test I17 a plan definition redeployed under a tenant does not change a recorded stamp`
+- `AuroraMeter.PlanAttributionTest` / `test I17 an unresolved period is not asked for a plan at all`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for answers the current assignment for an instant inside it`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for costs no query at all for an instant inside the current assignment`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for ignores a cancelled or pending transition and reads only applied ones`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for is unresolved for a tenant with no subscription`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for is unresolved for an instant before an assignment with no history`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for is unresolved while the row still has no plan_version`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for resolves a backdated instant through an applied transition's to side`
+- `AuroraMeter.PlanAttributionTest` / `test I17 effective_for resolves an instant before the first applied transition from its from side`
+- `AuroraMeter.PlanAttributionTest` / `test I17 record for a tenant with no subscription stores attribution unresolved`
+- `AuroraMeter.PlanAttributionTest` / `test I17 record of a backdated event resolves the version through applied transition history`
+- `AuroraMeter.PlanAttributionTest` / `test I17 record of an event predating recorded history stores attribution unresolved and quarantines its outbox item`
+- `AuroraMeter.PlanAttributionTest` / `test I17 record stamps plan_id and plan_version from the plan effective at occurred_at`
+- `AuroraMeter.PlanAttributionTest` / `test I17 usage recorded before a transition keeps the old version after the transition applies`
 
 **Evidence.** `docs/evidence/v1/phase-07/i17.md`
 
@@ -1238,11 +1269,22 @@ may carry out of itself.
 granted through the legacy projection, because the allowance, the cap and the
 catch-up are all defined over lots. A tenant is never back-paid for periods
 before its first recurrence row, and a host adopting an allowance mid-period
-gets the whole of that period rather than a pro-rated part. Until build unit 07a
-lands plan versions, every key carries the literal version `"1"`. A plan
+gets the whole of that period rather than a pro-rated part. A plan
 transition landing inside a period is build unit 07b's to order; this engine
 re-reads the subscription under the lock and refuses a tenant whose plan changed,
 rather than granting the old plan's allowance.
+
+Each period's key and each period's policy carry the version **that period was
+sold under**, resolved through `AuroraMeter.Plans.effective_for/2`, so a
+catch-up across an upgrade grants each period at its own contract rather than
+all of them at today's. The version the sweep falls back to when nothing
+recorded covers a period is the subscription's own; it never invents one. Two
+narrower limits follow. The entitlement names a run considers are the ones the
+tenant's **current** version declares, so an allowance that existed only in a
+retired version is not back-paid; and a version that resolves to neither
+compiled code nor a stored snapshot keeps the current version's policy, because
+withdrawing an allowance a live contract declares would be a worse answer than
+paying it.
 
 **Tests.**
 
@@ -1297,6 +1339,12 @@ rather than granting the old plan's allowance.
 - `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 the ledger's reference index refuses a second grant even with the recurrence guard bypassed`
 - `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 a per-run reference double-grants under the same rendezvous`
 - `AuroraMeter.CreditsRecurrencesConcurrencyTest` / `test I18 a debit racing the recurrence leaves the carry computed from the committed availability`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I18 a catch-up period before an upgrade is granted at the version that period was sold under`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I18 a recurrence key written before this unit is not granted a second time`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I18 a recurring grant uses the plan version effective for the period`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I18 a tenant pinned to version 2 is granted version 2's allowance and key`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I18 a transition at a period boundary produces one grant for each period at its own version`
+- `AuroraMeter.CreditsRecurrencesVersionsTest` / `test I18 a version 2 that drops the allowance does not stop a version 1 tenant being paid`
 
 **Evidence.** `docs/evidence/v1/phase-06/i18-once-per-period.md`
 

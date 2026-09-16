@@ -38,10 +38,20 @@ defmodule AuroraMeter.Event do
   ## The `attribution` vocabulary
 
     * `:resolved`: the period source placed `occurred_at` in a window without
-      ambiguity. The period on this row is a fact.
+      ambiguity, **and** the plan in force at that instant was resolved. Both
+      the period and the plan on this row are facts.
+    * `:plan_unresolved`: the period is a fact and the plan is not there. The
+      tenant had no subscription at all, or none that covers `occurred_at`, so
+      there is no commercial contract to name. `plan_id` and `plan_version` are
+      NULL, and they are NULL rather than today's plan on purpose: substituting
+      the current plan for a historical fact is exactly the repricing decision
+      D05 forbids. Build unit 07c added this value; before it, every row whose
+      period resolved said `:resolved` and carried no plan at all.
     * `:unresolved`: the source could not place the instant, so the calendar
       month containing it was used instead. The period on this row is an
-      **approximation**, and this value is how you tell.
+      **approximation**, and this value is how you tell. The plan is not
+      resolved either, and deliberately not even attempted: a period this code
+      had to guess is not an instant worth resolving a contract against.
     * `:legacy_track`: the row was written by `AuroraMeter.track/4` before the
       durable path existed, and given an identity afterwards by
       `mix aurora_meter.events.backfill`. Its `occurred_at` is the instant the
@@ -56,7 +66,7 @@ defmodule AuroraMeter.Event do
   alias AuroraMeter.Schema
 
   @typedoc "How much to trust the period and plan recorded on an event."
-  @type attribution :: :resolved | :unresolved | :legacy_track | String.t()
+  @type attribution :: :resolved | :plan_unresolved | :unresolved | :legacy_track | String.t()
 
   @typedoc "Whether the row is committed, or still inside a transaction the host owns."
   @type durability :: :durable | :conditional
@@ -145,6 +155,7 @@ defmodule AuroraMeter.Event do
 
   defp attribution(nil), do: nil
   defp attribution("resolved"), do: :resolved
+  defp attribution("plan_unresolved"), do: :plan_unresolved
   defp attribution("unresolved"), do: :unresolved
   defp attribution("legacy_track"), do: :legacy_track
   defp attribution(other), do: other

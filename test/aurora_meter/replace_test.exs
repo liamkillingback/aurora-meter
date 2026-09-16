@@ -85,6 +85,12 @@ defmodule AuroraMeter.ReplaceTest do
     end
 
     test "replace stages two intents, correction first", ctx do
+      # Build unit 07c: eligibility carries the plan stamp too, and an
+      # unattributed tenant is staged `{:ineligible, :plan_unresolved}` whatever
+      # its feature source says. This test is about the ORDER of the two rows,
+      # so the tenant gets the assignment a real host would have.
+      AuroraMeter.Test.subscribe_since!(ctx.tenant, :free, ~U[2020-01-01 00:00:00Z])
+
       TestConfig.with_config(
         [
           {:aurora_meter, :events_outbox, RecordingOutbox},

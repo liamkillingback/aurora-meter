@@ -82,13 +82,28 @@ defmodule AuroraMeter.PlanTransitionPrecedenceTest do
              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
   end
 
-  test "I17 a provider sync naming the plan id without the version cancels rather than applies" do
-    # The shape a provider integration that has not adopted plan versions
-    # produces. Strict pair equality means this is an override, not an early
-    # apply: a provider that named no version has said nothing about which
-    # contract it means, and inventing one on its behalf would move the tenant
-    # onto a version nobody asked for. Recorded as finding X296; 07c sends the
-    # pair, which is what makes the early-apply branch reachable from Pro.
+  test "X296 a provider naming the plan id without the version cancels, and Aurora Meter Pro no longer produces that shape" do
+    # **Rewritten by build unit 07c, and the core behaviour it asserts is
+    # unchanged.** What changed is the premise. When 07b wrote this test,
+    # `AuroraMeter.Pro.Subscriptions.sync/1` sent `plan_id` and no version, so
+    # this was the shape Pro produced and the early-apply branch above was
+    # unreachable from Pro: every Stripe-confirmed upgrade to exactly the
+    # scheduled target was classified `provider_override` and CANCELLED.
+    #
+    # 07c gave `AuroraMeter.Pro.Config.plan_for_price/1` a `{plan_id, version}`
+    # return and made `sync/1` write both, so the shape below is now a
+    # third-party `AuroraMeter.Billing.Provider` that has not adopted plan
+    # versions, and nothing this programme ships. The Pro half is
+    # `pro:test/aurora_meter/pro/plan_ref_test.exs` /
+    # `test I17 X296 sync writes the plan id AND the version, so a confirmed
+    # upgrade applies early instead of cancelling`.
+    #
+    # Strict pair equality stays the default and stays right: a provider that
+    # named no version has said nothing about which contract it means, and
+    # inventing one on its behalf would move the tenant onto a version nobody
+    # asked for. The cancel is safe (the tenant lands on what the provider
+    # said) and is still not what a confirmed upgrade should do, which is why
+    # the fix was to make Pro speak the full pair rather than to loosen this.
     {tenant, _} = scheduled(:versioned, version: "2")
 
     sync(tenant, %{plan_id: "versioned"})

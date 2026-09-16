@@ -29,6 +29,18 @@ defmodule AuroraMeter.RecordTest do
     %{tenant: tenant, at: DateTime.utc_now(), period: AuroraMeter.period(tenant).start}
   end
 
+  # Build unit 07c: a tenant with no subscription has no commercial contract to
+  # attribute usage to, so every event it records is stamped
+  # `attribution: :plan_unresolved` and staged ineligible. A test that is about
+  # something else (the feature source, the correction chain, the identity
+  # rules) needs a tenant that a real host would have, which is one with an
+  # assignment. It is subscribed here rather than in `setup` so the tests that
+  # are about the unattributed tenant keep having one.
+  defp subscribed!(tenant, plan \\ :free) do
+    AuroraMeter.Test.subscribe_since!(tenant, plan, ~U[2020-01-01 00:00:00Z])
+    tenant
+  end
+
   defp record(tenant, opts) do
     feature = Keyword.get(opts, :feature, :ai_generations)
     quantity = Keyword.get(opts, :quantity, 1)
@@ -275,9 +287,11 @@ defmodule AuroraMeter.RecordTest do
 
   describe "identity" do
     test "recording writes one row, one totals delta and one outbox item", ctx do
+      subscribed!(ctx.tenant)
+
       TestConfig.with_config([{:aurora_meter, :events_outbox, RecordingOutbox}], fn ->
         assert {:ok, event, :inserted} =
-                 record(ctx.tenant, id: "one", occurred_at: ctx.at, quantity: 7)
+                 record(ctx.tenant, id: "one", occurred_at: DateTime.utc_now(), quantity: 7)
 
         assert event.event_id == "one"
         assert event.tenant_key == ctx.tenant
@@ -368,6 +382,7 @@ defmodule AuroraMeter.RecordTest do
 
   describe "period attribution" do
     test "record accepts an occurred_at from a previous period and resolves its period", ctx do
+      subscribed!(ctx.tenant)
       last_month = ~U[2026-05-15 09:00:00.000000Z]
 
       AuroraMeter.Test.with_clock(~U[2026-06-10 12:00:00.000000Z], fn ->
@@ -375,6 +390,11 @@ defmodule AuroraMeter.RecordTest do
 
         assert event.period_start == ~U[2026-05-01 00:00:00Z]
         assert event.attribution == :resolved
+
+        # Build unit 07c: the plan half of the same stamp. The tenant's
+        # assignment started in 2020, so a May 2026 instant is inside it.
+        assert event.plan_id == "free"
+        assert event.plan_version == "1"
       end)
     end
 
@@ -408,6 +428,9 @@ defmodule AuroraMeter.RecordTest do
     end
 
     test "an events-source feature is eligible and a buffered one is not", ctx do
+      subscribed!(ctx.tenant)
+      at = DateTime.utc_now()
+
       TestConfig.with_config(
         [
           {:aurora_meter, :events_outbox, RecordingOutbox},
@@ -415,10 +438,10 @@ defmodule AuroraMeter.RecordTest do
         ],
         fn ->
           assert {:ok, _event, :inserted} =
-                   record(ctx.tenant, feature: :ai_generations, id: "e1", occurred_at: ctx.at)
+                   record(ctx.tenant, feature: :ai_generations, id: "e1", occurred_at: at)
 
           assert {:ok, _event, :inserted} =
-                   record(ctx.tenant, feature: :requests, id: "b1", occurred_at: ctx.at)
+                   record(ctx.tenant, feature: :requests, id: "b1", occurred_at: at)
 
           assert [%{eligibility: :eligible}, %{eligibility: {:ineligible, :feature_buffered}}] =
                    RecordingOutbox.items()

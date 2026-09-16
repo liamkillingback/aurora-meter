@@ -13,6 +13,19 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Added
 
+- **Occurrence-plan attribution on every recorded event.**
+  `AuroraMeter.Plans.effective_for/2` answers which `{plan_id, version}` a
+  tenant was on at an instant, from the subscription for an instant inside the
+  current assignment and from the applied transition history for one before it,
+  and `AuroraMeter.record/4` stamps the answer onto `plan_id` and `plan_version`
+  once, at record time. Nothing recomputes it afterwards, so neither a plan
+  redeploy nor a plan change can reprice a fact that is already recorded
+  (decision D05). A correction copies its original's stamp rather than resolving
+  it again, so a credit issued after an upgrade is priced as the fact it
+  reverses was (invariant I09). The common case costs **no query at all**: an
+  instant inside the current assignment is answered from the cached
+  subscription row, and only a backdated one reads the transition history, as at
+  most two indexed single-row reads.
 - **Scheduled plan transitions.** A tenant moves between plans because somebody
   scheduled it, at a boundary they chose, with a reference they can cancel or
   retry. `AuroraMeter.Subscriptions.schedule_transition/3` writes an audit row in
@@ -341,6 +354,29 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 - Configuration `:credits_low_balance_handler_timeout` (5,000 ms).
 
 ### Changed
+
+- **`attribution` gains the value `"plan_unresolved"`, and grades the plan as
+  well as the period.** An event whose period resolved but whose plan did not
+  (the tenant has no subscription, or none that covers `occurred_at`, or the row
+  still has no `plan_version`) is stored with both plan columns NULL and this
+  value, and its export intent is staged
+  `{:ineligible, :plan_unresolved}` rather than eligible. **This is a behaviour
+  change for a host that records events for tenants it has no subscription
+  row for**: those events were staged eligible before and are staged ineligible
+  now. Core ships no delivery, so nothing changes for a core-only installation;
+  in Aurora Meter Pro the same items were already quarantined as `no_customer`,
+  and they now carry the more accurate reason. An unattributable fact is a
+  visible state, never a guess at today's plan.
+- **A recurring allowance is granted under the contract its period was sold
+  under.** `AuroraMeter.Credits.Recurrences` resolved the plan with
+  `AuroraMeter.Plans.get/1`, which answers the version effective **now**, so a
+  tenant still on version 1 began receiving version 2's allowance the moment
+  version 2's `effective_at` passed. It now resolves the tenant's own version,
+  and each period's key and stored policy carry the version
+  `AuroraMeter.Plans.effective_for/2` resolves for that period, so a catch-up
+  across an upgrade grants each period at its own contract. Keys written before
+  this change are unaffected: a tenant on version 1 mints the identical string,
+  and "already granted" is decided by the period rather than by the key.
 
 - **`AuroraMeter.Storage.put_subscription/1` no longer nulls a column the
   caller omitted.** It upserted with `{:replace_all_except, [...]}`, which wrote

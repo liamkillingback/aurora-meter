@@ -640,6 +640,16 @@ defmodule AuroraMeter.FeatureSourceTest do
   end
 
   describe "export eligibility" do
+    # Build unit 07c. Core's verdict now covers the plan stamp as well as the
+    # feature source, and a tenant with no subscription is staged
+    # `{:ineligible, :plan_unresolved}` whatever its feature source says. These
+    # two tests are one configuration key apart and are about that key, so the
+    # tenant is given the assignment a real host would have.
+    setup ctx do
+      AuroraMeter.Test.subscribe_since!(ctx.tenant, :free, ~U[2020-01-01 00:00:00Z])
+      :ok
+    end
+
     test "record/4 on a buffered feature stores the fact and marks the export intent ineligible",
          ctx do
       # Recording a late or corrected fact for a buffered feature is allowed and

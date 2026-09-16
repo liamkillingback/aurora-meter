@@ -107,6 +107,7 @@ defmodule AuroraMeter.Credits.Recurrences do
   alias AuroraMeter.Credits.Ledger
   alias AuroraMeter.Operations
   alias AuroraMeter.Period
+  alias AuroraMeter.Plan
   alias AuroraMeter.Plans
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
@@ -119,10 +120,25 @@ defmodule AuroraMeter.Credits.Recurrences do
 
   @namespace "recurring:"
 
-  # Until build unit 07a lands plan versions, every key carries the documented
-  # default. A tenant that stays on version "1" keeps one key shape across that
-  # change, which is the point of writing the literal rather than omitting the
-  # segment.
+  # The documented default, and now the **fallback** rather than the only
+  # answer. Build unit 07c resolves each period's version from
+  # `AuroraMeter.Plans.effective_for/2`, so a period is granted under the
+  # contract that period was sold under rather than under whatever the tenant
+  # is on today (task 07.08). Two things keep that compatible with the keys
+  # build unit 06d already wrote:
+  #
+  #   * a tenant on version "1" resolves to "1", so the key shape is byte for
+  #     byte what 06d wrote and no period is granted a second time, and
+  #   * "already granted" is decided by the period, not by the key.
+  #     `last_recurrence/2` finds the newest row for the entitlement by
+  #     `period_start` and `periods/4` then returns nothing for a period already
+  #     recorded, whatever version segment its key carries. The `UNIQUE
+  #     (tenant_key, key)` index is the racing-schedulers guard underneath that,
+  #     not the primary one.
+  #
+  # An unresolvable period falls back to the subscription's own version, and
+  # only then to this literal. Neither invents a version: they name the one the
+  # row already claims.
   @default_version "1"
 
   @schema NimbleOptions.new!(
@@ -440,11 +456,31 @@ defmodule AuroraMeter.Credits.Recurrences do
       else: {:skip, :not_entitled}
   end
 
+  # **The tenant's own version, not the one effective today** (build unit 07c,
+  # G07 bullet 1). `Plans.get/1` answers the version in force **now**, so with
+  # it a tenant still on version 1 received version 2's allowance the moment
+  # version 2's `effective_at` passed, which is the repricing decision D05 and
+  # invariant I17 forbid, in the one place the gate names explicitly ("their
+  # recurring grant amount unchanged"). `Plans.get/2` resolves compiled code
+  # first and the stored snapshot second, so a tenant on a version whose block
+  # has been deleted keeps its allowance rather than losing it.
+  #
+  # A row with no `plan_version` is the window between core schema version 10
+  # and the first `register!/0`; it falls back to `get/1` so an installation in
+  # that window keeps granting rather than stopping.
   defp plan_of(subscription) do
-    case Plans.get(plan_atom(subscription.plan_id)) do
+    case assigned_plan(subscription) do
       nil -> {:skip, :unknown_plan}
       %{recurring_credits: []} -> {:skip, :no_recurring_credits}
       plan -> lots_gate(plan, subscription)
+    end
+  end
+
+  defp assigned_plan(%Subscription{plan_id: plan_id, plan_version: version}) do
+    case plan_atom(plan_id) do
+      nil -> nil
+      id when is_binary(version) -> Plans.get(id, version) || Plans.get(id)
+      id -> Plans.get(id)
     end
   end
 
@@ -471,6 +507,10 @@ defmodule AuroraMeter.Credits.Recurrences do
 
   defp entitlement_counts(subscription, plan, credit, context) do
     tenant_key = subscription.tenant_key
+    # The version the telemetry event reports is the tenant's **current**
+    # assignment, which is what an operator watching a run wants to see. Each
+    # period's own version is resolved separately, in `request/6`.
+    context = %{context | version: subscription.plan_version || @default_version}
     last = last_recurrence(tenant_key, credit.name)
     last_start = last && last.period_start
 
@@ -598,7 +638,8 @@ defmodule AuroraMeter.Credits.Recurrences do
   # -- the request ------------------------------------------------------------
 
   defp request(subscription, plan, credit, period, previous, context) do
-    key = key(credit.name, plan.id, context.version, period.start)
+    {version, credit} = policy_for(subscription, plan, credit, period.start, context)
+    key = key(credit.name, plan.id, version, period.start)
     name = Atom.to_string(credit.name)
 
     %{
@@ -613,7 +654,7 @@ defmodule AuroraMeter.Credits.Recurrences do
         "recurrence_key" => key,
         "recurrence" => name,
         "plan_id" => Atom.to_string(plan.id),
-        "plan_version" => context.version
+        "plan_version" => version
       },
       metadata: %{
         "recurrence" => name,
@@ -622,6 +663,57 @@ defmodule AuroraMeter.Credits.Recurrences do
       },
       gate: gate(subscription)
     }
+  end
+
+  # The version a period was sold under, and that version's own policy (build
+  # unit 07c, task 07.08).
+  #
+  # The catch-up case is the one this exists for: three missed periods either
+  # side of an upgrade are three different contracts, and granting all three at
+  # today's amount would pay a customer for months they were not on today's
+  # plan. A version whose declaration no longer carries this entitlement, or
+  # which resolves to neither code nor a snapshot, keeps the caller's policy:
+  # the tenant is owed the allowance their current contract declares, and
+  # withdrawing it because an old definition is unreadable would be a worse
+  # answer than paying it.
+  @spec policy_for(Subscription.t(), Plan.t(), Plan.recurring_credit(), DateTime.t(), map()) ::
+          {String.t(), Plan.recurring_credit()}
+  defp policy_for(subscription, plan, credit, at, context) do
+    version = version_for(subscription, plan, at, context)
+    {version, policy_of(plan, version, credit)}
+  end
+
+  defp policy_of(%Plan{version: version}, version, credit), do: credit
+
+  defp policy_of(%Plan{id: id}, version, credit) do
+    with %Plan{recurring_credits: credits} <- Plans.get(id, version),
+         %{} = declared <- Enum.find(credits, &(&1.name == credit.name)) do
+      declared
+    else
+      _unreadable_or_undeclared -> credit
+    end
+  end
+
+  # The version this period was sold under (build unit 07c, task 07.08).
+  #
+  # The plan id is **pinned**, not just read. `effective_for/2` answers with a
+  # pair, and a historical period may belong to a different plan entirely; using
+  # that plan's version number for this plan's key would mint a key naming a
+  # contract that never existed. A pair for another plan therefore falls back
+  # exactly as an unresolved one does.
+  #
+  # Two nodes sweeping the same period agree, which is what keeps the `UNIQUE
+  # (tenant_key, key)` guard meaningful: before a transition applies both read
+  # the current assignment, and after it applies both take the historic branch,
+  # whose `from` side is the same pair the current assignment used to be.
+  @spec version_for(Subscription.t(), Plan.t(), DateTime.t(), map()) :: String.t()
+  defp version_for(%Subscription{} = subscription, plan, at, _context) do
+    plan_id = plan.id
+
+    case Plans.effective_for(subscription.tenant_key, at) do
+      {:ok, {^plan_id, version}} -> version
+      _other_plan_or_unresolved -> subscription.plan_version || @default_version
+    end
   end
 
   # Re-read and re-checked inside the balance row lock, because the scan's

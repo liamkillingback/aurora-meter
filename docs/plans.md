@@ -471,3 +471,57 @@ moving a tenant whose current contract is unnamed. Registration runs at boot, so
 this clears itself; the wider rule is the one the upgrade guide states, that
 0.4.x nodes should be gone before any transition is scheduled, because a 0.4.x
 node's `put_subscription/1` predates the explicit replace list.
+
+## What a recorded fact was sold under
+
+`AuroraMeter.Plans.get/1` answers "what may this tenant do now".
+`AuroraMeter.Plans.effective_for/2` answers a different question: **which
+commercial contract was this usage sold under**. The two differ for every
+backdated fact, and only the second is the one a bill rests on.
+
+```elixir
+AuroraMeter.Plans.effective_for("org_1", ~U[2026-02-14 09:00:00Z])
+#=> {:ok, {:pro, "1"}}
+```
+
+`AuroraMeter.record/4` calls it once, when the event is recorded, and stamps the
+answer onto the row's `plan_id` and `plan_version`. **Nothing recomputes it.**
+That is what stops a plan redeploy or a plan change from repricing a fact that
+is already recorded, and it is why a correction copies its original's stamp
+rather than resolving it again: a credit issued after an upgrade is priced as
+the fact it reverses was.
+
+How it resolves, in order:
+
+1. no subscription row: `{:error, :unresolved}`. There is no assignment to
+   attribute to, and the default plan is a fallback for **entitlement**, not a
+   commercial fact.
+2. a row whose `plan_version` is still NULL, which is the window between core
+   schema version 10 and the first `AuroraMeter.Plans.register!/0`:
+   `{:error, :unresolved}`, for the same reason `schedule_transition/3` refuses
+   one.
+3. an instant at or after the row's `plan_effective_at`: the row's own pair.
+   This is the overwhelming majority of calls and costs **no query at all**.
+4. an earlier instant: the applied history in `aurora_meter_plan_transitions`.
+   The latest applied change at or before the instant gives its `to` pair, and
+   failing that the earliest applied change after it gives its `from` pair,
+   because before the first recorded change the tenant was on what that change
+   moved them off. At most two indexed single-row reads.
+5. nothing covers the instant: `{:error, :unresolved}`.
+
+### When it cannot answer
+
+An unresolvable fact is a **state**, never a guess at today's plan. The row is
+stored with `plan_id` and `plan_version` NULL and
+`attribution: "plan_unresolved"`, and its export intent is staged
+`{:ineligible, :plan_unresolved}` so a delivery implementation quarantines it
+rather than sending it under a contract nobody sold.
+
+The two ways to get there are a tenant with no subscription at all, and a fact
+dated before the tenant's assignment started with no applied transition covering
+it. Both are visible, and neither is repaired automatically: an operator
+attributes the fact explicitly or accepts that it is not billable.
+
+See `AuroraMeter.Event`'s `attribution` vocabulary for the third value,
+`"unresolved"`, which is about the **period** rather than the plan.
+

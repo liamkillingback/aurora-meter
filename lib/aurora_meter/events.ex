@@ -41,6 +41,7 @@ defmodule AuroraMeter.Events do
   alias AuroraMeter.Events.Canonical
   alias AuroraMeter.Events.Gate
   alias AuroraMeter.Period
+  alias AuroraMeter.Plans
   alias AuroraMeter.Storage
   alias AuroraMeter.Tenant
 
@@ -595,15 +596,16 @@ defmodule AuroraMeter.Events do
   # rescues it and records an unresolved attribution rather than guessing a
   # period. 03a's backfill does exactly this; so does this.
   defp attribute(tenant, canonical) do
-    {period_start, period_source, attribution} = period(tenant, canonical.occurred_at)
+    {period_start, period_source, period_attribution} = period(tenant, canonical.occurred_at)
+    {plan_id, plan_version, attribution} = plan(tenant, canonical.occurred_at, period_attribution)
 
     canonical
     |> Map.put(:period_start, DateTime.truncate(period_start, :second))
     |> Map.put(:period_source, period_source)
     |> Map.put(:attribution, attribution)
     |> Map.put(:kind, "usage")
-    |> Map.put(:plan_id, nil)
-    |> Map.put(:plan_version, nil)
+    |> Map.put(:plan_id, plan_id)
+    |> Map.put(:plan_version, plan_version)
   end
 
   defp period(tenant, occurred_at) do
@@ -613,6 +615,28 @@ defmodule AuroraMeter.Events do
     _error ->
       fallback = Period.Calendar.current(tenant, occurred_at)
       {fallback.start, inspect(Period.Calendar), "unresolved"}
+  end
+
+  # The plan stamp (build unit 07c, task 07.08, L17.12): resolved **once**, here,
+  # from the assignment in force when the usage occurred. No later process
+  # recomputes it, so a plan redeploy or a plan change cannot reprice a fact that
+  # is already recorded (D05).
+  #
+  # `attribution` grades the whole row rather than one column of it, and the
+  # three values are ordered by how much of the row is an approximation:
+  # `"resolved"` is period and plan both placed, `"plan_unresolved"` is a real
+  # period with no commercial contract to name, and `"unresolved"` is a period
+  # the source could not place at all, which leaves the plan untrustworthy too
+  # even when `effective_for/2` would have answered. A period this code had to
+  # guess is not an instant worth resolving a contract against, so the plan is
+  # not even asked for: that is the one ordering here that matters.
+  defp plan(_tenant, _occurred_at, "unresolved"), do: {nil, nil, "unresolved"}
+
+  defp plan(tenant, occurred_at, "resolved") do
+    case Plans.effective_for(tenant, occurred_at) do
+      {:ok, {plan_id, version}} -> {Atom.to_string(plan_id), version, "resolved"}
+      {:error, :unresolved} -> {nil, nil, "plan_unresolved"}
+    end
   end
 
   # -- post-commit effects ---------------------------------------------------

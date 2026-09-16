@@ -340,6 +340,17 @@ defmodule AuroraMeter.CorrectTest do
   # -- the outbox seam ------------------------------------------------------
 
   describe "eligibility" do
+    # Build unit 07c. Eligibility now carries the plan stamp as well as the
+    # feature source, and a tenant with no subscription has no contract to
+    # attribute usage to, so every event it records is staged
+    # `{:ineligible, :plan_unresolved}` whatever its feature source says. These
+    # tests are about the feature source, so the tenant is given the assignment
+    # a real host would have, starting before the instant the facts are dated.
+    setup ctx do
+      AuroraMeter.Test.subscribe_since!(ctx.tenant, :free, ~U[2020-01-01 00:00:00Z])
+      :ok
+    end
+
     test "a correction of an events-source feature's event is staged as eligible", ctx do
       TestConfig.with_config(
         [

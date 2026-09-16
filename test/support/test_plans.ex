@@ -107,6 +107,41 @@ defmodule AuroraMeter.Test.VersionTwoLivePlans do
   end
 end
 
+# `AuroraMeter.TestPlans` with `:versioned` version 2 effective **and
+# declaring no recurring allowance at all**. Build unit 07c's negative control
+# C7 needs it: `AuroraMeter.Credits.Recurrences` resolves the plan to decide
+# which entitlements a tenant is owed, and resolving it with
+# `AuroraMeter.Plans.get/1` (the version effective NOW) skips a version 1 tenant
+# entirely with `reason: :no_recurring_credits` the moment a version 2 that
+# dropped the allowance ships. Two versions that both declare `:monthly` cannot
+# show that, because the per-period policy lookup corrects the amount anyway.
+defmodule AuroraMeter.Test.AllowanceDroppedPlans do
+  @moduledoc false
+  use AuroraMeter.Plans
+
+  plan :free do
+    price 0
+    limit :ai_generations, 50, :hard
+    feature :api_access, false
+    feature :seats, 1
+  end
+
+  plan :versioned do
+    price 2_000
+    limit :ai_generations, 1_000, :hard
+    feature :api_access, true
+    feature :seats, 5
+    recurring_credits :monthly, amount: 5_000_000, rollover: 1_000_000, expires: :period_end
+  end
+
+  plan :versioned, version: "2", effective_at: ~U[2020-01-01 00:00:00Z] do
+    price 3_000
+    limit :ai_generations, 2_000, :hard
+    feature :api_access, true
+    feature :seats, 25
+  end
+end
+
 # The same module with version 1's block **deleted**, which is the shape
 # acceptance criterion 9 is about: a tenant pinned to `:versioned` version 1
 # must keep version 1's limits, resolved from the stored snapshot, when the
