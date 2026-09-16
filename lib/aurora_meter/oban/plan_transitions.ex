@@ -4,57 +4,107 @@ if Code.ensure_loaded?(Oban) do
     Applies scheduled plan changes whose effective date has arrived, by calling
     `AuroraMeter.Subscriptions.apply_due_transitions/1`.
 
-    **That operation is not in this release.** `AuroraMeter.Subscriptions`
-    itself is, which is why the availability check asks whether the *function*
-    is exported and not only whether the module is loaded: a module that exists
-    without the function it is wanted for is exactly this case, and
-    `Code.ensure_loaded?/1` alone would answer yes.
+    Recommended schedule `"*/5 * * * *"`, which is what
+    `AuroraMeter.Oban.cron_entries/1` returns. **That interval is the delay a
+    host is choosing between a plan change's effective time and its
+    application**, and between the two the tenant is entitled under the old
+    plan: conservative for a downgrade, visible to the customer for an upgrade.
+    A host that wants a tighter bound registers a more frequent entry or calls
+    the operation directly. See [Plans](plans.md) for the measured lag.
 
-    Until the operation lands:
+    Job arguments, all optional, all mapping onto the operation's options:
 
-      * `AuroraMeter.Oban.cron_entries/1` does not return it, so nothing
-        schedules it;
-      * running it by hand cancels the job with `{:cancel, :not_implemented}`.
+      * `"limit"`: tenants per batch (default 500);
+      * `"batches"`: batches per job (default 10, after which the remainder is
+        left for the next tick);
+      * `"tenant"`: force one tenant.
 
-    Recommended schedule once it lands: `"*/5 * * * *"`. A plan change that has
-    come due is a change to what a customer is allowed to do, so the delay
-    between its effective time and its application is what a host is choosing
-    here.
-
-    Nothing about this module needs editing when the operation appears.
+    Running two of these at once, from two nodes, applies each transition once:
+    every effect in the operation is an update conditional on the transition
+    still being `pending` (invariant I16). The `unique` option below reduces
+    duplicate work and is never the guarantee.
     """
 
     @incomplete Oban.Job.states() -- [:completed, :discarded, :cancelled]
 
     use Oban.Worker,
       queue: :aurora_meter,
-      max_attempts: 3,
+      max_attempts: 5,
       unique: [period: :infinity, states: @incomplete]
 
     @operation {AuroraMeter.Subscriptions, :apply_due_transitions, 1}
 
+    @default_batches 10
+
     @doc """
-    Applies one batch of due transitions, or cancels with `:not_implemented`
-    while the operation is absent.
+    Applies due transitions in at most `"batches"` pages, newest cursor first.
+
+    Returns `{:ok, summary}`; a run that stops at the batch bound reports
+    `stopped: :partial`, which is what an alert on a backlog that never drains
+    watches.
 
     ## Examples
 
-        {:cancel, :not_implemented} =
-          AuroraMeter.Oban.PlanTransitions.perform(%Oban.Job{args: %{}})
+        AuroraMeter.Oban.PlanTransitions.perform(%Oban.Job{args: %{"limit" => 100}})
 
     """
     @impl Oban.Worker
     @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:cancel, term()}
     def perform(%Oban.Job{args: args}) do
       if AuroraMeter.Oban.available?(@operation) do
-        {module, function, _arity} = @operation
-        AuroraMeter.Oban.result(apply(module, function, [options(args)]))
+        AuroraMeter.Oban.result(run(args))
       else
         {:cancel, :not_implemented}
       end
     end
 
-    # Build unit 07b owns the argument mapping along with the operation.
-    defp options(_args), do: []
+    # The loop is here rather than in the operation because it is a scheduling
+    # policy, not a correctness property: `apply_due_transitions/1` is one
+    # bounded page and says whether there is more, and a caller decides how much
+    # of a backlog one tick should drain.
+    defp run(args) do
+      {module, function, _arity} = @operation
+      options = options(args)
+      batches = max(Map.get(args, "batches", @default_batches), 1)
+
+      Enum.reduce_while(1..batches, {:ok, blank()}, fn batch, {:ok, acc} ->
+        case apply(module, function, [Keyword.put(options, :after, acc.cursor)]) do
+          {:ok, page} -> continue(acc, page, batch, batches)
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    end
+
+    defp continue(acc, page, batch, batches) do
+      merged = merge(acc, page)
+
+      cond do
+        page.cursor == :done -> {:halt, {:ok, %{merged | stopped: :complete}}}
+        batch == batches -> {:halt, {:ok, %{merged | stopped: :partial}}}
+        true -> {:cont, {:ok, merged}}
+      end
+    end
+
+    defp blank, do: %{applied: 0, skipped: 0, failed: 0, batches: 0, cursor: nil, stopped: nil}
+
+    defp merge(acc, page) do
+      %{
+        acc
+        | applied: acc.applied + page.applied,
+          skipped: acc.skipped + page.skipped,
+          failed: acc.failed + page.failed,
+          batches: acc.batches + 1,
+          cursor: page.cursor
+      }
+    end
+
+    defp options(args) do
+      Enum.reduce([{"limit", :limit}, {"tenant", :tenant}], [], fn {key, option}, acc ->
+        case Map.fetch(args, key) do
+          {:ok, value} -> Keyword.put(acc, option, value)
+          :error -> acc
+        end
+      end)
+    end
   end
 end

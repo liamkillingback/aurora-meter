@@ -1,0 +1,30 @@
+restored
+applied j-node-stamped-effective-at
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.........................
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+[07b] twelve appliers of one due transition: applied=1 skipped=11 row_lock_waiters=12
+....
+10:51:32.936 [error] Postgrex.Protocol (#PID<0.469.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.851.0> exited
+.
+[07b] cache staleness after a kill: ttl=5000ms window_from_warm=5000ms window_from_kill=4995ms
+..
+
+  1) test X288 subscribe stamps plan_effective_at from the database, not from this node (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:44
+     plan_effective_at is ~U[2022-01-01 00:00:00Z], which is not the database's clock (~U[2026-09-16 00:51:38.055152Z]). A node stamp compared against a database clock is the two-clock defect finding X288 is about.
+     code: assert DateTime.diff(now, stored, :second) < 60,
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:63: (test)
+
+.................................................
+Finished in 6.5 seconds (0.00s async, 6.5s sync)
+
+Result: 82/83 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-16T00:51:30Z finished=2026-09-16T00:51:38Z

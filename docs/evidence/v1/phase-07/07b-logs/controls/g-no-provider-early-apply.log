@@ -1,0 +1,76 @@
+restored
+applied g-no-provider-early-apply
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+
+
+  1) test I17 a provider sync to a different plan cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:42
+     Assertion with == failed
+     code:  assert written.transition_state == "cancelled"
+     left:  "applied"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:48: (test)
+
+
+
+  2) test I17 a provider sync to exactly the scheduled target applies the transition early (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:62
+     Assertion with == failed
+     code:  assert written.transition_state == "applied"
+     left:  "cancelled"
+     right: "applied"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:68: (test)
+
+
+
+  3) test I17 a provider sync naming the plan id without the version cancels rather than applies (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:85
+     Assertion with == failed
+     code:  assert settled.state == "cancelled"
+     left:  "applied"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:97: (test)
+
+
+
+  4) test I17 a provider sync that does not change the plan leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:102
+     Assertion with == failed
+     code:  assert written.transition_state == "pending"
+     left:  "applied"
+     right: "pending"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:107: (test)
+
+
+
+  5) test I17 a provider sync touching only provider ids leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:114
+     Assertion with == failed
+     code:  assert transition(tenant).state == "pending"
+     left:  "applied"
+     right: "pending"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:120: (test)
+
+....................
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+[07b] twelve appliers of one due transition: applied=1 skipped=11 row_lock_waiters=12
+....
+10:51:14.172 [error] Postgrex.Protocol (#PID<0.457.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.851.0> exited
+.
+[07b] cache staleness after a kill: ttl=5000ms window_from_warm=5001ms window_from_kill=4996ms
+....................................................
+Finished in 6.5 seconds (0.00s async, 6.5s sync)
+
+Result: 78/83 passed
+Failed: 5 tests
+[mixlane] core exit=2 started=2026-09-16T00:51:11Z finished=2026-09-16T00:51:19Z

@@ -946,6 +946,17 @@ a batch is safe only because every operation using the loop re-reads the thing i
 is about to change under that row's own lock, and a later operation whose effects
 were not idempotent could not use this loop.
 
+**`AuroraMeter.Oban.PlanTransitions` keeps no checkpoint, and that is the
+statement rather than an omission.** Its operation resumes by **predicate**, not
+by position: a killed run leaves every un-applied tenant with
+`transition_state = 'pending'`, and the next run finds exactly those from the
+partial index. There is no cursor to rewind, no cursor to go stale, and nothing
+a checkpoint could add except a second thing to keep in step with the rows. The
+kill test asserts the complement rather than a cursor (`open-findings.md` X242:
+when a worker's resume rests on a predicate, its row should say that instead of
+borrowing a control that cannot discriminate for it). The `cursor` the operation
+returns is paging within one run, not durable state.
+
 The optional `AuroraMeter.Oban.*` workers add no guarantee of their own. Each
 `perform/1` runs bounded batches of an operation that is already idempotent; the
 worker opens no transaction, takes no lock and holds no state between runs, so
@@ -994,7 +1005,14 @@ nothing and the next run asks again.
 - `AuroraMeter.CreditsRecurrencesTest` / `test I16 the scan is bounded by limit and the next run continues from the cursor`
 - `AuroraMeter.CreditsRecurrencesTest` / `test I16 a run killed mid-tenant resumes and reaches the same state as an uninterrupted one`
 - `AuroraMeter.CreditsRecurrencesTest` / `test I16 a paused run writes nothing and says it is paused`
-- PLANNED (07b): `AuroraMeter.ObanJobControlsTest` / `test I16 PlanTransitions resumes at its checkpoint after a kill`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 a cancel racing an apply yields exactly one terminal state`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 a provider sync racing an apply yields one terminal state and one plan`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 the applier killed after commit and before cache invalidation converges`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 the applier killed before commit leaves the transition pending`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 the applier killed mid-batch leaves the applied tenants applied and the rest pending`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 twelve independent connections applying one due transition apply it once`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 twelve independent connections scheduling one ref produce one transition row`
+- `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 two Oban jobs from two nodes apply one transition`
 
 **Evidence.** `docs/evidence/v1/phase-05/i16.md`
 
@@ -1036,9 +1054,17 @@ is not a conflict. It decides which version a **new** subscription gets and
 cannot move a tenant already pinned to one.
 
 Two of the three adversarial proofs `v1-release.md` section 17 asks of I17 are
-**not** in this unit: the explicit scheduled migration is 07b's and the stale
-provider notification is 07c's. The bullets below prove the first one, the
-changed definition.
+proven here: the changed definition, and the explicit scheduled migration. The
+third, a stale provider notification that cannot move the version, is Aurora
+Meter Pro's and is proven in 07c.
+
+A scheduled transition is the **only** thing in the package that rewrites
+`plan_version` on a subscription that already has one, and it is explicit,
+referenced by the caller, audited in `aurora_meter_plan_transitions`, and
+conditional on the audit row still being pending. It never rewrites history: the
+previous `(plan_id, version)` is copied into the transition row before the
+subscription row changes, and the applied row carries the boundary the change
+took effect at rather than the instant a worker noticed.
 
 **Tests.**
 
@@ -1101,7 +1127,79 @@ changed definition.
 - `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint is independent of recurring credit declaration order`
 - `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint is the sha256 of the canonical form and is 32 bytes`
 - `AuroraMeter.PlansSnapshotTest` / `test I17 the separators cannot appear in a name the DSL accepts`
-- PLANNED (07b): `AuroraMeter.PlanTransitionsTest` / `test I17 an explicit scheduled migration is the only thing that moves a tenant's version`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition for a tenant with no subscription previews from the default plan`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition of a zero-price transition reports price 0 and no proration`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition of an unknown plan is refused`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition of an unknown version is refused`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition reports a limit change, an added feature and a removed feature`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition reports an added and a removed feature by name`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition reports an unchanged feature not at all`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition reports recurring credit changes`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition returns the effective time and the tenant's period`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition returns the old and new entitlements without writing anything`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition with Billing.Noop reports provider status :not_configured`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition with a provider implementing describe_plan_change shows it`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition with a provider that raises keeps the diff`
+- `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition with a provider that returns an error keeps the diff`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a cancellation wins over a sync that also names the scheduled target`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a cancelled transition is never applied by a later run`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync naming the plan id without the version cancels rather than applies`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync that does not change the plan leaves the transition pending`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync to a different plan cancels the pending transition`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync to exactly the scheduled target applies the transition early`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync touching only provider ids leaves the transition pending`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync writing a non-entitled status cancels the pending transition`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a stale sync for an ended subscription cannot revive a cancelled transition`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a transition effective before a later cancellation applies normally`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 put_subscription with no pending transition opens no transaction`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 a second ref with replace: false returns a conflict naming the pending ref`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 a second ref with replace: true cancels the first and schedules the second`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 a transition to a version in neither code nor snapshots is failed and not retried`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 a zero-price transition issues exactly the statements a priced one does`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 an applied transition changes plan_id, plan_version, fingerprint and effective time`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 an applied transition writes applied_at on the audit row`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 an explicit scheduled migration is the only thing that moves a tenant's version`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 an invalid custom period source raises InvalidPeriodError naming the module`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 apply_due_transitions applies a provider transition once provider_ref is set`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 apply_due_transitions applies a transition whose effective_at has passed`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 apply_due_transitions does not apply a transition before its effective_at`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 apply_due_transitions pages with a keyset cursor and returns :done`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the applier refuses a row whose mirror says applied and whose audit row says pending`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 apply_due_transitions skips a provider transition with no provider_ref`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 applying a transition deletes no counter, history, event, transaction or lot row`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 cancel_transition moves pending to cancelled and clears the pending state`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 cancel_transition on an already cancelled transition is idempotent`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 cancel_transition on an applied transition returns a conflict`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 cancel_transition with an unknown ref returns not_found`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 confirm_transition applies immediately when the provider boundary has passed`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 confirm_transition is idempotent under redelivery of the same provider_ref`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 confirm_transition with a different provider_ref on an applied transition conflicts`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 confirm_transition with an unknown ref returns not_found`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 confirm_transition without a provider_ref is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 no transition source names a price, so no branch can depend on one`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition copies the current plan and version into from_plan_id`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition defaults effective_at to the end of the tenant's current period`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition defaults version to the version effective at the effective time`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition for a row with a null plan_version is registration_incomplete`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition for a tenant with no subscription is not_found`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition merges the caller's detail into the audit row`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition to a future-dated version is accepted when it is effective then`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition to a version not yet effective at the effective time is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition to an unknown plan is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition to an unknown version of a known plan is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition to the tenant's current plan and version is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition with a non-UTC effective_at is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition with a past effective_at is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition with a ref over 128 bytes is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition without a ref is refused`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 schedule_transition writes the audit row and mirrors it on the subscription`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the due scan's keyset pages partition the pending set with no repeat and no gap`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the default effective_at under a subscription-aligned source is current_period_end`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the default effective_at under a weekly host source is the end of the current week`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the default effective_at under the calendar source is the first of next month`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the same ref with different parameters returns a conflict naming both`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 the same ref with identical parameters returns the existing transition`
+- `AuroraMeter.PlanTransitionsTest` / `test I17 usage recorded before the boundary stays in its period after the transition applies`
 - PLANNED (07c): `AuroraMeter.Pro.PlanAttributionTest` / `test I17 a stale provider notification cannot move the version`
 
 **Evidence.** `docs/evidence/v1/phase-07/i17.md`

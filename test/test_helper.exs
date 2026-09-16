@@ -62,7 +62,7 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 # assertion fail. A probe script that commits rows needs a prefix in this list.
 AuroraMeter.Test.Connections.sweep!(~w(
   concurrent corrconc flush_batch gate jobctl killt lotconc lotfault lotmig lotprop lots model
-  obansched planconc probe
+  obansched planconc plantrans probe
   projection recurconc reconcile recordconc replay replaybig storagecase stmt
 ))
 

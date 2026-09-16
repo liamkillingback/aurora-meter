@@ -1,0 +1,75 @@
+a-apply-unconditional            exit=2   failed  (discriminated) | Result: 82/83 passed
+      test I17 the applier refuses a row whose mirror says applied and whose audit row says pending (AuroraMeter.PlanTransitionsTest)
+b-mark-applied-unconditional     exit=0   PASSED  (did NOT discriminate) | Result: 83 passed
+c-ref-not-idempotent             exit=2   failed  (discriminated) | Result: 80/83 passed
+      test I16 twelve independent connections scheduling one ref produce one transition row (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I17 the same ref with identical parameters returns the existing transition (AuroraMeter.PlanTransitionsTest)
+      test I17 the same ref with different parameters returns a conflict naming both (AuroraMeter.PlanTransitionsTest)
+d-apply-before-boundary          exit=2   failed  (discriminated) | Result: 61/83 passed
+      test I17 a provider sync that does not change the plan leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a transition effective before a later cancellation applies normally (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I16 twelve independent connections applying one due transition apply it once (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 two Oban jobs from two nodes apply one transition (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 the applier killed before commit leaves the transition pending (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 the applier killed after commit and before cache invalidation converges (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 the applier killed mid-batch leaves the applied tenants applied and the rest pending (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I17 cancel_transition on an applied transition returns a conflict (AuroraMeter.PlanTransitionsTest)
+      test I17 apply_due_transitions applies a transition whose effective_at has passed (AuroraMeter.PlanTransitionsTest)
+      test I17 apply_due_transitions does not apply a transition before its effective_at (AuroraMeter.PlanTransitionsTest)
+      test I17 an applied transition changes plan_id, plan_version, fingerprint and effective time (AuroraMeter.PlanTransitionsTest)
+      test I17 an applied transition writes applied_at on the audit row (AuroraMeter.PlanTransitionsTest)
+      test I17 a transition to a version in neither code nor snapshots is failed and not retried (AuroraMeter.PlanTransitionsTest)
+      test I17 apply_due_transitions applies a provider transition once provider_ref is set (AuroraMeter.PlanTransitionsTest)
+      test I17 confirm_transition applies immediately when the provider boundary has passed (AuroraMeter.PlanTransitionsTest)
+      test I17 confirm_transition is idempotent under redelivery of the same provider_ref (AuroraMeter.PlanTransitionsTest)
+      test I17 confirm_transition with a different provider_ref on an applied transition conflicts (AuroraMeter.PlanTransitionsTest)
+      test I17 apply_due_transitions pages with a keyset cursor and returns :done (AuroraMeter.PlanTransitionsTest)
+      test I17 an explicit scheduled migration is the only thing that moves a tenant's version (AuroraMeter.PlanTransitionsTest)
+      test I17 applying a transition deletes no counter, history, event, transaction or lot row (AuroraMeter.PlanTransitionsTest)
+      test I17 usage recorded before the boundary stays in its period after the transition applies (AuroraMeter.PlanTransitionsTest)
+      test I17 a zero-price transition issues exactly the statements a priced one does (AuroraMeter.PlanTransitionsTest)
+e-effective-at-is-apply-time     exit=2   failed  (discriminated) | Result: 80/83 passed
+      test I17 a provider sync to exactly the scheduled target applies the transition early (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 an applied transition changes plan_id, plan_version, fingerprint and effective time (AuroraMeter.PlanTransitionsTest)
+      test I17 confirm_transition applies immediately when the provider boundary has passed (AuroraMeter.PlanTransitionsTest)
+f-no-provider-override           exit=2   failed  (discriminated) | Result: 79/83 passed
+      test I17 a provider sync to a different plan cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync naming the plan id without the version cancels rather than applies (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync that does not change the plan leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync touching only provider ids leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+g-no-provider-early-apply        exit=2   failed  (discriminated) | Result: 78/83 passed
+      test I17 a provider sync to a different plan cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync to exactly the scheduled target applies the transition early (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync naming the plan id without the version cancels rather than applies (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync that does not change the plan leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync touching only provider ids leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+h-no-cancellation-precedence     exit=2   failed  (discriminated) | Result: 80/83 passed
+      test I17 a provider sync writing a non-entitled status cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a cancellation wins over a sync that also names the scheduled target (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a stale sync for an ended subscription cannot revive a cancelled transition (AuroraMeter.PlanTransitionPrecedenceTest)
+i-invalidate-before-commit       exit=2   failed  (discriminated) | Result: 82/83 passed
+      test I16 the applier killed after commit and before cache invalidation converges (AuroraMeter.PlanTransitionsConcurrencyTest)
+j-node-stamped-effective-at      exit=2   failed  (discriminated) | Result: 82/83 passed
+      test X288 subscribe stamps plan_effective_at from the database, not from this node (AuroraMeter.PlanTransitionsTest)
+k-no-row-lock                    exit=0   PASSED  (did NOT discriminate) | Result: 83 passed
+l-replace-does-not-cancel        exit=2   failed  (discriminated) | Result: 82/83 passed
+      test I17 a second ref with replace: true cancels the first and schedules the second (AuroraMeter.PlanTransitionsTest)
+m-preview-writes                 exit=2   failed  (discriminated) | Result: 82/83 passed
+      test I17 preview_transition returns the old and new entitlements without writing anything (AuroraMeter.PlanPreviewTest)
+n-no-reaction-at-all             exit=2   failed  (discriminated) | Result: 76/83 passed
+      test I17 a provider sync to a different plan cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync to exactly the scheduled target applies the transition early (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync naming the plan id without the version cancels rather than applies (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a provider sync writing a non-entitled status cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a cancellation wins over a sync that also names the scheduled target (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 a stale sync for an ended subscription cannot revive a cancelled transition (AuroraMeter.PlanTransitionPrecedenceTest)
+      test I17 put_subscription with no pending transition opens no transaction (AuroraMeter.PlanTransitionPrecedenceTest)
+o-cursor-never-advances          exit=2   failed  (discriminated) | Result: 82/83 passed
+      test I17 the due scan's keyset pages partition the pending set with no repeat and no gap (AuroraMeter.PlanTransitionsTest)
+p-no-lock-and-no-predicate       exit=2   failed  (discriminated) | Result: 78/83 passed
+      test I16 twelve independent connections applying one due transition apply it once (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 a cancel racing an apply yields exactly one terminal state (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 a provider sync racing an apply yields one terminal state and one plan (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I16 two Oban jobs from two nodes apply one transition (AuroraMeter.PlanTransitionsConcurrencyTest)
+      test I17 the applier refuses a row whose mirror says applied and whose audit row says pending (AuroraMeter.PlanTransitionsTest)
+=== restored ===

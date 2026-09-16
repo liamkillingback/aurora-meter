@@ -28,29 +28,39 @@ if Code.ensure_loaded?(Oban) do
                  {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
                  {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
                  {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
+                 {"*/5 * * * *", AuroraMeter.Oban.PlanTransitions},
                  {"40 3 * * *", AuroraMeter.Oban.Retention}
                ]
       end
 
       test "a worker whose operation module arrived is scheduled by that fact alone" do
         # This was the "omits a worker whose operation module is absent" case
-        # until build unit 06d shipped `AuroraMeter.Credits.Recurrences`. The
-        # worker's own source did not change; the predicate did, which is what
-        # `AuroraMeter.Oban`'s availability rule promises. PlanTransitions below
-        # is still the absent half.
+        # until build unit 06d shipped `AuroraMeter.Credits.Recurrences`, and
+        # PlanTransitions was the last absent half until 07b shipped
+        # `apply_due_transitions/1`. Neither worker's source changed; the
+        # predicate did, which is what `AuroraMeter.Oban`'s availability rule
+        # promises.
         assert Code.ensure_loaded?(AuroraMeter.Credits.Recurrences)
         assert Scheduler.available?({AuroraMeter.Credits.Recurrences, :run, 1})
         assert AuroraMeter.Oban.RecurringGrants in scheduled_workers()
+
+        assert Scheduler.available?({AuroraMeter.Subscriptions, :apply_due_transitions, 1})
+        assert AuroraMeter.Oban.PlanTransitions in scheduled_workers()
       end
 
       test "omits a worker whose operation module exists without the function" do
-        # PlanTransitions is the other half of the predicate and the one that
-        # discriminates: the module IS loaded, so only `function_exported?/3`
-        # can answer. `Code.ensure_loaded?/1` alone would schedule it.
+        # The half of the predicate `Code.ensure_loaded?/1` alone cannot answer:
+        # the module IS loaded, so only `function_exported?/3` can tell a
+        # present operation from an absent one. Every registry entry names a
+        # function that exists today, so the absent case is written by hand
+        # rather than borrowed from whichever worker happens to be waiting.
         assert Code.ensure_loaded?(AuroraMeter.Subscriptions)
         assert Scheduler.available?({AuroraMeter.Subscriptions, :get, 1})
-        refute Scheduler.available?({AuroraMeter.Subscriptions, :apply_due_transitions, 1})
-        refute AuroraMeter.Oban.PlanTransitions in scheduled_workers()
+        refute Scheduler.available?({AuroraMeter.Subscriptions, :no_such_operation, 1})
+
+        refute Enum.any?(Scheduler.__registry__(), fn {_worker, operation, _cron, _description} ->
+                 not Scheduler.available?(operation)
+               end)
       end
 
       test "an available operation is what makes a worker appear" do
@@ -62,6 +72,7 @@ if Code.ensure_loaded?(Oban) do
                  AuroraMeter.Oban.CreditExpiry,
                  AuroraMeter.Oban.HoldReconciliation,
                  AuroraMeter.Oban.RecurringGrants,
+                 AuroraMeter.Oban.PlanTransitions,
                  AuroraMeter.Oban.Retention
                ]
       end
@@ -90,11 +101,12 @@ if Code.ensure_loaded?(Oban) do
                  [
                    {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
                    {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
+                   {"*/5 * * * *", AuroraMeter.Oban.PlanTransitions},
                    {"40 3 * * *", AuroraMeter.Oban.Retention}
                  ]
 
         assert Scheduler.cron_entries(
-                 exclude: [:hold_reconciliation, :retention, :recurring_grants]
+                 exclude: [:hold_reconciliation, :retention, :recurring_grants, :plan_transitions]
                ) == [{"*/30 * * * *", AuroraMeter.Oban.CreditExpiry}]
       end
 
@@ -103,6 +115,7 @@ if Code.ensure_loaded?(Oban) do
                  {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
                  {"0 * * * *", AuroraMeter.Oban.HoldReconciliation},
                  {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
+                 {"*/5 * * * *", AuroraMeter.Oban.PlanTransitions},
                  {"40 3 * * *", AuroraMeter.Oban.Retention}
                ]
 
@@ -298,10 +311,11 @@ if Code.ensure_loaded?(Oban) do
               not Regex.match?(@cron_expression, schedule),
               do: worker
 
-        assert unscheduled == [
-                 AuroraMeter.Oban.EventsReplay,
-                 AuroraMeter.Oban.PlanTransitions
-               ]
+        # Only one left. `AuroraMeter.Oban.PlanTransitions` carried no cron
+        # cell while its operation was absent and gained one in build unit 07b
+        # with no edit to the worker, which is what the availability predicate
+        # is for.
+        assert unscheduled == [AuroraMeter.Oban.EventsReplay]
 
         for worker <- unscheduled do
           assert Code.ensure_loaded?(worker)

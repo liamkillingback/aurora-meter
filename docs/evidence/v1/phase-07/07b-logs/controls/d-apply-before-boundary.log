@@ -1,0 +1,291 @@
+restored
+applied d-apply-before-boundary
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...
+
+  1) test I17 a provider sync that does not change the plan leaves the transition pending (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:102
+     match (=) failed
+     code:  assert {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:110: (test)
+
+...
+
+  2) test I17 a transition effective before a later cancellation applies normally (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:149
+     match (=) failed
+     code:  assert {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:152: (test)
+
+.................
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+
+  3) test I16 twelve independent connections applying one due transition apply it once (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:126
+     Assertion with == failed
+     code:  assert applied == 1
+     left:  0
+     right: 1
+     stacktrace:
+       test/aurora_meter/plan_transitions_concurrency_test.exs:140: (test)
+
+..
+
+  4) test I16 two Oban jobs from two nodes apply one transition (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:244
+     Assertion with == failed
+     code:  assert Enum.count(results, &match?({:ok, %{applied: 1}}, &1)) == 1
+     left:  0
+     right: 1
+     stacktrace:
+       test/aurora_meter/plan_transitions_concurrency_test.exs:260: (test)
+
+
+
+  5) test I16 the applier killed before commit leaves the transition pending (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:269
+     expected the worker to be killed at :before_commit, but it returned {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}. The fault was never reached, so nothing about process death was proven. Fired: []
+     code: TestConfig.with_config([{:aurora_meter, :repo, FaultRepo}], fn ->
+     stacktrace:
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/kill.ex:280: AuroraMeter.Test.Kill.completed!/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/kill.ex:254: AuroraMeter.Test.Kill.await/4
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/kill.ex:73: AuroraMeter.Test.Kill.run/2
+       test/aurora_meter/plan_transitions_concurrency_test.exs:275: anonymous fn/1 in AuroraMeter.PlanTransitionsConcurrencyTest."test I16 the applier killed before commit leaves the transition pending"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_transitions_concurrency_test.exs:273: (test)
+
+
+
+  6) test I16 the applier killed after commit and before cache invalidation converges (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:293
+     Assertion with == failed
+     code:  assert Storage.get_subscription(tenant).plan_id == "scale"
+     left:  "pro"
+     right: "scale"
+     stacktrace:
+       test/aurora_meter/plan_transitions_concurrency_test.exs:316: (test)
+
+
+
+  7) test I16 the applier killed mid-batch leaves the applied tenants applied and the rest pending (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:334
+     expected the first two tenants applied, got [{"pro", "pending"}, {"pro", "pending"}, {"pro", "pending"}, {"pro", "pending"}]
+     code: assert applied == 2, "expected the first two tenants applied, got #{inspect(states)}"
+     stacktrace:
+       test/aurora_meter/plan_transitions_concurrency_test.exs:378: (test)
+
+........................
+
+  8) test I17 cancel_transition on an applied transition returns a conflict (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:321
+     ** (MatchError) no match of right hand side value:
+
+         {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+
+     code: {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:324: (test)
+
+.
+
+  9) test I17 apply_due_transitions applies a transition whose effective_at has passed (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:337
+     match (=) failed
+     code:  assert {:ok, %{applied: 1, skipped: 0, failed: 0, cursor: :done}} =
+              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 1, skipped: 0, failed: 0, cursor: :done}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:341: (test)
+
+
+
+ 10) test I17 apply_due_transitions does not apply a transition before its effective_at (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:347
+     match (=) failed
+     code:  assert {:ok, %{applied: 0, skipped: 1}} = Subscriptions.apply_due_transitions(tenant: tenant)
+     left:  {:ok, %{applied: 0, skipped: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 1, skipped: 0}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:351: (test)
+
+
+
+ 11) test I17 an applied transition changes plan_id, plan_version, fingerprint and effective time (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:358
+     ** (MatchError) no match of right hand side value:
+
+         {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+
+     code: {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:364: (test)
+
+
+
+ 12) test I17 an applied transition writes applied_at on the audit row (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:379
+     ** (MatchError) no match of right hand side value:
+
+         {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+
+     code: {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:382: (test)
+
+
+
+ 13) test I17 a transition to a version in neither code nor snapshots is failed and not retried (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:389
+     match (=) failed
+     code:  assert {:ok, %{applied: 0, failed: 1}} =
+              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 0, failed: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:398: (test)
+
+..
+
+ 14) test I17 apply_due_transitions applies a provider transition once provider_ref is set (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:447
+     match (=) failed
+     code:  assert {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:463: (test)
+
+
+
+ 15) test I17 confirm_transition applies immediately when the provider boundary has passed (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:467
+     Assertion with == failed
+     code:  assert applied.state == "applied"
+     left:  "pending"
+     right: "applied"
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:486: (test)
+
+
+
+ 16) test I17 confirm_transition is idempotent under redelivery of the same provider_ref (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:492
+     Assertion with == failed
+     code:  assert first.state == "applied"
+     left:  "pending"
+     right: "applied"
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:502: (test)
+
+
+
+ 17) test I17 confirm_transition with a different provider_ref on an applied transition conflicts (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:508
+     match (=) failed
+     code:  assert {:error, {:conflict, %{provider_ref: "sub_1"}}} =
+              Subscriptions.confirm_transition(tenant, "r", provider_ref: "sub_2")
+     left:  {:error, {:conflict, %{provider_ref: "sub_1"}}}
+     right: {:ok,
+             %AuroraMeter.Schema.PlanTransition{
+               __meta__: #Ecto.Schema.Metadata<:loaded, "aurora_meter_plan_transitions">,
+               id: "ea3d41b7-9101-4f62-b0c8-4da685aba1c8",
+               tenant_key: "trans_2384",
+               ref: "r",
+               from_plan_id: "pro",
+               from_version: "1",
+               to_plan_id: "scale",
+               to_version: "1",
+               effective_at: ~U[2026-09-16 10:00:00Z],
+               state: "pending",
+               confirm: "provider",
+               provider_ref: "sub_2",
+               applied_at: nil,
+               detail: %{
+                 "provider_effective_at_changed" => "2026-10-01T00:00:00Z"
+               },
+               inserted_at: ~U[2026-09-16 00:50:55.920003Z],
+               updated_at: ~U[2026-09-16 00:50:55.925145Z]
+             }}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:519: (test)
+
+..
+
+ 18) test I17 apply_due_transitions pages with a keyset cursor and returns :done (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:538
+     Assertion with == failed
+     code:  assert first.applied == 2
+     left:  0
+     right: 2
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:556: (test)
+
+.
+
+ 19) test I17 an explicit scheduled migration is the only thing that moves a tenant's version (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:618
+     match (=) failed
+     code:  assert {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:641: anonymous fn/1 in AuroraMeter.PlanTransitionsTest."test I17 an explicit scheduled migration is the only thing that moves a tenant's version"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_transitions_test.exs:629: (test)
+
+
+
+ 20) test I17 applying a transition deletes no counter, history, event, transaction or lot row (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:660
+     ** (MatchError) no match of right hand side value:
+
+         {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+
+     code: {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:671: (test)
+
+
+
+ 21) test I17 usage recorded before the boundary stays in its period after the transition applies (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:692
+     ** (MatchError) no match of right hand side value:
+
+         {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+
+     code: {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:700: (test)
+
+.
+
+ 22) test I17 a zero-price transition issues exactly the statements a priced one does (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:733
+     ** (MatchError) no match of right hand side value:
+
+         {:ok, %{failed: 0, cursor: :done, applied: 0, skipped: 1}}
+
+     code: priced = statements(fn -> drive(:scale) end)
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:752: AuroraMeter.PlanTransitionsTest.drive/1
+       test/aurora_meter/plan_transitions_test.exs:770: AuroraMeter.PlanTransitionsTest.statements/1
+       test/aurora_meter/plan_transitions_test.exs:739: (test)
+
+....
+Finished in 1.5 seconds (0.00s async, 1.5s sync)
+
+Result: 61/83 passed
+Failed: 22 tests
+[mixlane] core exit=2 started=2026-09-16T00:50:53Z finished=2026-09-16T00:50:56Z

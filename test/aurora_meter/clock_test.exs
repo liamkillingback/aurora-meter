@@ -321,6 +321,16 @@ defmodule AuroraMeter.ClockTest do
       # replay itself reads no clock at all: it folds against a fixed instant
       # and orders by nothing temporal (06b). A data migration an operator runs
       # by hand is not a path, hot or otherwise.
+      #
+      # `subscriptions/transitions.ex` reads it once per scheduling call and
+      # once per applier run, and both comparisons it feeds have a persisted
+      # instant on the other side: "is this effective time still in the future"
+      # against a column this database is about to hold, and "has this boundary
+      # arrived" against `scheduled_effective_at`. A node clock on either would
+      # be the two-clock defect X288 records, and the duration involved is a
+      # billing period rather than seconds, so X100's backwards step cannot
+      # invert it. A plan change is one row per tenant per period; `track/4`
+      # never reaches this module (07b).
       allowed = [
         "lib/aurora_meter/clock.ex",
         "lib/aurora_meter/credits.ex",
@@ -328,6 +338,7 @@ defmodule AuroraMeter.ClockTest do
         "lib/aurora_meter/credits/lot_migration.ex",
         "lib/aurora_meter/events/replay.ex",
         "lib/aurora_meter/oban/credit_expiry.ex",
+        "lib/aurora_meter/subscriptions/transitions.ex",
         "lib/mix/tasks/aurora_meter.events.backfill.ex"
       ]
 

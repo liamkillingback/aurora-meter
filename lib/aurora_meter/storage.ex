@@ -25,6 +25,7 @@ defmodule AuroraMeter.Storage do
   alias AuroraMeter.Schema.PlanVersion
   alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Subscriptions
+  alias AuroraMeter.Subscriptions.Transitions
 
   @typedoc "A counter snapshot to persist. `feature` may be an atom or string."
   @type counter_row :: %{
@@ -188,14 +189,22 @@ defmodule AuroraMeter.Storage do
   @callback stream_counters(DateTime.t()) :: [Counter.t()]
 
   @doc """
-  One bounded page of subscriptions, in keyset order by `tenant_key`.
+  One bounded page of subscriptions, in keyset order.
 
-  `cursor` is the `tenant_key` the previous page ended on, or `nil` for the
+  `cursor` is the opaque value the previous page ended on, or `nil` for the
   first page; the page returned is strictly after it. The second element of the
   return is the cursor to pass next, or `nil` when that page was the last one.
 
-  Options: `:limit` (default 100) and `:status_in` (a list of status strings;
-  omitted means every status).
+  Options:
+
+    * `:limit` (default 100);
+    * `:status_in`: a list of status strings; omitted means every status;
+    * `:order`: `:tenant_key` (default) or `:scheduled_effective_at`, which
+      walks pending plan transitions in the order they come due;
+    * `:transition_state`, `:transition_confirm`: exact matches on the
+      transition mirror columns, which is how Aurora Meter Pro finds the
+      provider-confirmed work it owns without querying a core table directly;
+    * `:scheduled_before`: a `DateTime`, inclusive.
 
   Keyset, not offset, because the caller is a worker that walks every
   subscription while other processes insert and delete them. An offset page
@@ -460,16 +469,73 @@ defmodule AuroraMeter.Storage do
   @doc """
   Inserts or updates a tenant's subscription (upsert on `tenant_key`) and evicts
   it from the subscription cache on every node.
+
+  ## It reacts to a provider-driven plan change
+
+  A customer who changes plan in the billing provider's own portal reaches
+  Aurora Meter here, not through `AuroraMeter.Subscriptions`. So the reaction
+  to that lives here, where every provider path already passes, rather than in
+  a call the provider integration could forget to make. When the tenant has a
+  **pending plan transition** and this write changes the plan:
+
+    * writing a status that is not in
+      `AuroraMeter.Schema.Subscription.entitled_statuses/0` cancels it with
+      `detail.reason = "subscription_not_entitled"`;
+    * writing exactly the scheduled `{plan_id, plan_version}` applies it early
+      with `detail.reason = "provider_applied_early"`;
+    * writing any other pair cancels it with
+      `detail.reason = "provider_override"` and records what was observed.
+
+  A write that changes nothing about the plan leaves the transition pending.
+  See [Plans](plans.md) for the full precedence table and which rows belong to
+  Aurora Meter Pro.
+
+  **This is a new side effect on an existing public function** (1.0.0-rc.1). A
+  host calling `put_subscription/1` directly with a changed plan while a
+  transition is pending will now see that transition settled.
+
+  A tenant with no pending transition pays one uncached read and opens no
+  transaction, which is every call on an ordinary installation.
   """
   @spec put_subscription(map()) :: {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
   def put_subscription(attrs) do
-    result = impl().put_subscription(attrs)
+    previous = reaction_candidate(attrs)
+
+    result =
+      case previous do
+        %Subscription{transition_state: "pending"} ->
+          Transitions.provider_write(previous, fn -> impl().put_subscription(attrs) end)
+
+        _none ->
+          Transitions.catch_up(previous, impl().put_subscription(attrs))
+      end
 
     with {:ok, %Subscription{tenant_key: tenant_key}} <- result do
       Subscriptions.invalidate(tenant_key)
     end
 
     result
+  end
+
+  # The read is skipped entirely unless this write could provoke a reaction,
+  # which needs the caller to have an opinion about the plan or the status.
+  # `AuroraMeter.Pro.Subscriptions.sync/1` always has both; a caller that
+  # touches only the provider ids pays nothing.
+  defp reaction_candidate(attrs) do
+    attrs = Map.new(attrs)
+
+    with true <- opinionated?(attrs),
+         key when is_binary(key) <- attrs[:tenant_key] || attrs["tenant_key"] do
+      impl().get_subscription(key)
+    else
+      _no -> nil
+    end
+  end
+
+  defp opinionated?(attrs) do
+    Enum.any?(~w(plan_id plan_version status)a, fn field ->
+      Map.has_key?(attrs, field) or Map.has_key?(attrs, Atom.to_string(field))
+    end)
   end
 
   @doc "Stores one plan version snapshot. See `c:put_plan_version/1`."

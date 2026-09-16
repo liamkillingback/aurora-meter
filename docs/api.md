@@ -240,6 +240,11 @@ in section 2.
 |---|---|---|---|---|
 | `AuroraMeter.Subscriptions.get/1` | `(tenant) :: Subscription.t() \| nil` | stable | 0.2.0 | Cached for `:subscription_cache_ttl` milliseconds. |
 | `AuroraMeter.Subscriptions.invalidate/1` | `(tenant) :: :ok` | stable | 0.2.0 | Evicts locally and broadcasts the eviction. |
+| `AuroraMeter.Subscriptions.schedule_transition/3` | `(tenant, atom(), keyword()) :: {:ok, PlanTransition.t()} \| {:error, {tag, term()}}` | additive | 1.0.0 | One scheduled plan change. `:ref` required and idempotent per tenant; `:version`, `:effective_at` (default: the end of the tenant's period), `:replace` (default `true`), `:confirm` (`:local` or `:provider`), `:detail`. |
+| `AuroraMeter.Subscriptions.cancel_transition/3` | `(tenant, String.t(), keyword()) :: {:ok, PlanTransition.t()} \| {:error, {tag, term()}}` | additive | 1.0.0 | Idempotent. An applied transition is a conflict. Arity 2 exists through a default `[]`. |
+| `AuroraMeter.Subscriptions.preview_transition/3` | `(tenant, atom(), keyword()) :: {:ok, map()} \| {:error, {:invalid, term()}}` | additive | 1.0.0 | A pure read: no lock, no write. Returns `from`, `to`, `changes`, `effective_at`, `period` and `provider`. `price` is the plan's list price, never an invoice amount. |
+| `AuroraMeter.Subscriptions.confirm_transition/3` | `(tenant, String.t(), keyword()) :: {:ok, PlanTransition.t()} \| {:error, {tag, term()}}` | additive | 1.0.0 | For a billing provider integration. `:provider_ref` required; `:effective_at` wins over the scheduled boundary. Idempotent under redelivery. |
+| `AuroraMeter.Subscriptions.apply_due_transitions/1` | `(keyword()) :: {:ok, map()}` | additive | 1.0.0 | Applies every transition whose effective time has arrived, one transaction per tenant. Options `:limit`, `:after`, `:tenant`, `:now`. Safe from every node at once. |
 | `AuroraMeter.Flusher.flush/0` | `() :: {:ok, non_neg_integer()} \| {:error, term()}` | stable | 0.1.0 | The operational "flush before you report" hook. An error retains the batch for an idempotent retry (0.4.0). |
 | `AuroraMeter.Broadcaster.topic/1` | `(String.t()) :: String.t()` | stable | 0.1.0 | `"aurora_meter:tenant:" <> tenant_key`. The only entry of `AuroraMeter.Broadcaster` that is supported; the module itself is internal. Read the contract on `AuroraMeter.LiveView`. |
 | `AuroraMeter.LiveView.subscribe/1` | `(tenant) :: :ok \| {:error, term()}` | stable | 0.1.0 | Subscribes the calling process to the tenant's usage topic. |
@@ -368,7 +373,7 @@ is a public function any scheduler can call. See
 | `AuroraMeter.Oban.HoldReconciliation` | `AuroraMeter.Credits.reconcile_holds/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"*/15 * * * *"`. Job arguments `older_than_seconds`, `limit`, `reference_prefix`, `tenant`. |
 | `AuroraMeter.Oban.EventsReplay` | `AuroraMeter.Events.Replay.run/1` | optional-dep | 1.0.0 | Needs `oban`. No schedule: a projection rebuild is an operator action, and `cron_entries/1` never returns it. |
 | `AuroraMeter.Oban.RecurringGrants` | `AuroraMeter.Credits.Recurrences.run/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"7 * * * *"`. Job arguments `limit`, `batch`, `max_periods`, `tenant`. |
-| `AuroraMeter.Oban.PlanTransitions` | due plan changes | optional-dep | 1.0.0 | Needs `oban`. Its operation is not in this release; the worker cancels with `{:cancel, :not_implemented}` and `cron_entries/1` omits it. |
+| `AuroraMeter.Oban.PlanTransitions` | `AuroraMeter.Subscriptions.apply_due_transitions/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"*/5 * * * *"`. Job arguments `limit`, `batches`, `tenant`. |
 | `AuroraMeter.Oban.Retention` | `AuroraMeter.Retention.prune/1` | optional-dep | 1.0.0 | Needs `oban`. Recommended `"40 3 * * *"`. Job arguments `only`, `batch_size`, `max_items`. Do not schedule it until every node has written a flush heartbeat. |
 | `AuroraMeter.Oban.ConfigError` | raised by `AuroraMeter.Oban.validate!/1` | optional-dep | 1.0.0 | Needs `oban`. Carries `:message` and `:problems`. |
 
@@ -442,7 +447,7 @@ them is a breaking change for implementers and does not happen during 1.x.
 | `AuroraMeter.Storage` | `upsert_counters/1`, `add_counters/1`, `upsert_history/1`, `add_history/1`, `flush_batch/3`, `load_counter/3`, `load_history/3`, `load_history_range/4`, `get_subscription/1`, `put_subscription/1`, `insert_events/1`, `stream_counters/1`, `capabilities/0`, `record_events/2`, `load_event/2`, `load_event_total/3`, `stream_events/2`, `write_projection_totals/2`, `activate_projection/1` | stable | 0.1.0 | 19 callbacks, none optional. The seven durable ones arrived in 1.0.0; an adapter that cannot do them declares nothing from `capabilities/0` and the dispatcher refuses the call on its behalf. See [Storage adapters](storage-adapters.md). |
 | `AuroraMeter.Credits.HoldReconciler` | `decide/1` | stable | 0.6.0 | What the host says about a hold that is still open long after its work should have finished. It may be called more than once for one hold, and anything that is not a decision means `:keep`. |
 | `AuroraMeter.Events.Outbox` | `enqueue/2` | stable | 1.0.0 | Called inside the transaction that records an event, so an export intent commits with the fact. Core ships no delivery; Aurora Meter Pro implements it. |
-| `AuroraMeter.Billing.Provider` | `create_checkout_session/2`, `billing_portal_url/2`, `sync_subscription/1`, `report_usage/1` | stable | 0.1.0 | Aurora Meter Pro implements it for Stripe. |
+| `AuroraMeter.Billing.Provider` | `create_checkout_session/2`, `billing_portal_url/2`, `sync_subscription/1`, `report_usage/1`, and optionally `describe_plan_change/3` and `update_subscription_plan/3` | stable | 0.1.0 | Aurora Meter Pro implements it for Stripe. The two optional callbacks arrived in 1.0.0 for scheduled plan changes; `AuroraMeter.Config.validate!/0` checks only the required four, so a provider written before them still boots. |
 
 The implementations the core ships:
 
@@ -604,6 +609,7 @@ for, so a renamed event fails the build.
 | `[:aurora_meter, :credits, :conservation_error]` | `balance_delta`, `held_delta`, `promotional_delta`, `expired_delta` | `tenant_key`, `operation`, `reference` | stable | 0.6.0 | `[:aurora_meter, :credits, :conservation_error]` |
 | `[:aurora_meter, :credits, :lot_migration]` | `wallets`, `migrated`, `blocked`, `deferred`, `rows`, `duration_ms` | `shadow`, `state` | stable | 0.6.0 | `[:aurora_meter, :credits, :lot_migration]` |
 | `[:aurora_meter, :credits, :recurrence]` | `amount`, `rollover_amount` | `tenant_key`, `name`, `plan_id`, `plan_version`, `period_start`, `result`, `reason` | stable | 0.6.0 | `[:aurora_meter, :credits, :recurrence]` |
+| `[:aurora_meter, :plans, :transition]` | `count` | `tenant_key`, `ref`, `from_plan_id`, `from_version`, `to_plan_id`, `to_version`, `result` | stable | 1.0.0 | `[:aurora_meter, :plans, :transition]` |
 | `[:aurora_meter, :events, :backfill, :batch]` | `scanned`, `updated`, `batches` | `cursor` | stable | 1.0.0 | `[:aurora_meter, :events, :backfill, :batch]` |
 | `[:aurora_meter, :record, :start \| :stop \| :exception]` | `duration`, `count` | `result`, `kind`, `feature`, `batch_size`, `tenant_key`, `durability`, `projection` | stable | 1.0.0 | `[:aurora_meter, :record]` |
 | `[:aurora_meter, :replay, :batch]` | `scanned`, `keys`, `duration` | `generation`, `cursor`, `phase` | stable | 1.0.0 | `[:aurora_meter, :replay, :batch]` |
@@ -660,6 +666,7 @@ on the keys you need rather than on the whole map.
 | `{:aurora_meter, :subscription_changed, tenant_key}` | `"aurora_meter:subscriptions"` | internal | 0.2.0 | `{:aurora_meter, :subscription_changed, key}` |
 | `{:aurora_meter, :credits, %{tenant_key, balance, held, available, spendable, debt, expired}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :credits,` |
 | `{:aurora_meter, :event, %{tenant_key, feature, event_id, quantity, period_start, kind}}` | `AuroraMeter.Broadcaster.topic/1` | stable | 1.0.0 | `{:aurora_meter, :event,` |
+| `{:aurora_meter, :plan_transition, %{tenant_key, ref, state}}` | `AuroraMeter.Broadcaster.topic/1` | stable | 1.0.0 | `{:aurora_meter, :plan_transition,` |
 | `{:aurora_meter, :low_balance, %{tenant_key, available, spendable, threshold, crossing_id}}` | `AuroraMeter.Credits.topic/1` | stable | 0.4.0 | `{:aurora_meter, :low_balance, event}` |
 
 The two cluster messages and the subscription invalidation are `internal`: they
@@ -802,6 +809,8 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Schema.FlushReceipt` | The idempotent flush receipt row. Bookkeeping for the flusher. |
 | `AuroraMeter.Storage.Ecto` | The bundled adapter. Configure it by name; the callbacks are section 2. |
 | `AuroraMeter.Store` | Owns the ETS tables and the pending flush batch. |
+| `AuroraMeter.Subscriptions.Preview` | The entitlement diff and the provider resolution behind `AuroraMeter.Subscriptions.preview_transition/3`. |
+| `AuroraMeter.Subscriptions.Transitions` | The plan transition state machine: the locked reads, the conditional updates and the due scan. Call `AuroraMeter.Subscriptions`. |
 | `AuroraMeter.Supervisor` | The runtime supervision tree. Add `AuroraMeter` to your own tree. |
 
 A function carrying `@doc false` inside any module is internal for the same

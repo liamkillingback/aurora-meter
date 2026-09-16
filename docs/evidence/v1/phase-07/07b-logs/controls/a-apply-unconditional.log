@@ -1,0 +1,33 @@
+restored
+applied a-apply-unconditional
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.........................
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+[07b] twelve appliers of one due transition: applied=1 skipped=11 row_lock_waiters=12
+....
+10:50:32.051 [error] Postgrex.Protocol (#PID<0.475.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.846.0> exited
+.
+[07b] cache staleness after a kill: ttl=5000ms window_from_warm=4999ms window_from_kill=4994ms
+.................................
+
+  1) test I17 the applier refuses a row whose mirror says applied and whose audit row says pending (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:412
+     match (=) failed
+     code:  assert {:ok, %{applied: 0, skipped: 1}} =
+              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 0, skipped: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 1, skipped: 0}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:429: (test)
+
+..................
+Finished in 6.5 seconds (0.00s async, 6.5s sync)
+
+Result: 82/83 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-16T00:50:29Z finished=2026-09-16T00:50:37Z

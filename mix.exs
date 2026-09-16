@@ -239,8 +239,8 @@ defmodule AuroraMeter.MixProject do
         "docs/adr/0006-counter-feature-kind.md",
         "docs/adr/0007-idempotent-flush-batches.md",
         "docs/adr/0008-pending-quota-work.md",
-        # 0009 and 0011 to 0014 describe V1 design that has not shipped and are
-        # deliberately absent: hexdocs would present a plan as a feature
+        # 0009, 0011 to 0014 and 0016 describe V1 design that has not shipped
+        # and are deliberately absent: hexdocs would present a plan as a feature
         # (open-findings.md X85). Each is added by the release that ships it,
         # and test/aurora_meter/release_metadata_test.exs fails if one appears
         # here without being moved off its list.
@@ -267,15 +267,6 @@ defmodule AuroraMeter.MixProject do
       # out. Keep it equal to the `@moduledoc false` members of the Internal
       # group below.
       skip_code_autolink_to: [
-        # Not a `@moduledoc false` module: a function that does not exist yet.
-        # `AuroraMeter.Oban.PlanTransitions` documents the operation it will
-        # call, and the scheduler map names it in the worker table, because a
-        # host reading either needs to know what the worker is for. ExDoc can
-        # resolve the module and not the function, so it warns. Build unit 07b
-        # lands `apply_due_transitions/1` and removes this line.
-        # `AuroraMeter.Credits.Recurrences.run/1` needs no entry: ExDoc does not
-        # try to link a function on a module it has never heard of.
-        "AuroraMeter.Subscriptions.apply_due_transitions/1",
         "AuroraMeter.BootChecks",
         "AuroraMeter.Config.Schema",
         "AuroraMeter.Credits.Allocator",
@@ -302,6 +293,8 @@ defmodule AuroraMeter.MixProject do
         # check the claim. The module is internal and carries `@moduledoc
         # false`, so ExDoc can resolve it and not link to it.
         "AuroraMeter.Storage.Ecto.flush_batch/3",
+        "AuroraMeter.Subscriptions.Preview",
+        "AuroraMeter.Subscriptions.Transitions",
         "AuroraMeter.Supervisor"
       ],
       source_ref: "v#{@version}",
@@ -430,6 +423,8 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Schema.FlushReceipt,
         AuroraMeter.Storage.Ecto,
         AuroraMeter.Store,
+        AuroraMeter.Subscriptions.Preview,
+        AuroraMeter.Subscriptions.Transitions,
         AuroraMeter.Supervisor
       ]
     ]

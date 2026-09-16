@@ -232,6 +232,50 @@ defmodule AuroraMeter.Test.PeriodSources do
     end
   end
 
+  defmodule SubscriptionAligned do
+    @moduledoc """
+    `AuroraMeter.Pro.Period`'s shape, written in core so build unit 07b can test
+    a subscription-aligned boundary without depending on the Pro package.
+
+    The tenant's own `current_period_start`/`current_period_end` when the
+    subscription is entitled and the instant is inside the window, and the
+    calendar month otherwise. That is `pro/period.ex:20-36` line for line, and
+    the point of restating it here is that the default `effective_at` of a
+    scheduled transition is "the end of the tenant's current period" for
+    whatever source the host configured, not for the calendar.
+    """
+
+    @behaviour AuroraMeter.Period
+
+    alias AuroraMeter.Period.Calendar
+    alias AuroraMeter.Schema.Subscription
+    alias AuroraMeter.Subscriptions
+
+    @impl AuroraMeter.Period
+    def current(tenant, now) do
+      case Subscriptions.get(tenant) do
+        %Subscription{
+          current_period_start: %DateTime{} = from,
+          current_period_end: %DateTime{} = to
+        } =
+            subscription ->
+          window(tenant, now, subscription, from, to)
+
+        _none ->
+          Calendar.current(tenant, now)
+      end
+    end
+
+    defp window(tenant, now, subscription, from, to) do
+      if Subscription.entitled?(subscription) and DateTime.compare(now, to) == :lt and
+           DateTime.compare(now, from) != :lt do
+        %{start: from, end: to, source: :subscription}
+      else
+        Calendar.current(tenant, now)
+      end
+    end
+  end
+
   defmodule NoNow do
     @moduledoc "A clock missing `now/0`, for the boot check."
     def today, do: Date.utc_today()

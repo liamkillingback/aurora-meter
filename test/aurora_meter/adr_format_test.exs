@@ -7,7 +7,7 @@ defmodule AuroraMeter.ADRFormatTest do
 
   @adr_dir "docs/adr"
   @v1_first 9
-  @v1_last 15
+  @v1_last 16
   @template "docs/evidence/v1/TEMPLATE.md"
   @evidence_readme "docs/evidence/README.md"
   # Built from codepoints so this file stays free of the characters it forbids.
@@ -60,7 +60,7 @@ defmodule AuroraMeter.ADRFormatTest do
     end
   end
 
-  test "00c every V1 ADR (0009 to 0015) has Context, Decision, Consequences, Migration impact and Verification sections" do
+  test "00c every V1 ADR (0009 to 0016) has Context, Decision, Consequences, Migration impact and Verification sections" do
     files = v1_files()
 
     assert Enum.map(files, &number/1) == Enum.to_list(@v1_first..@v1_last)

@@ -1,0 +1,288 @@
+restored
+applied c-ref-not-idempotent
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.........................
+
+  1) test I16 twelve independent connections scheduling one ref produce one transition row (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:100
+     Expected truthy, got false
+     code: assert Enum.all?(results.values, &match?({:ok, %PlanTransition{}}, &1))
+     arguments:
+
+         # 1
+         [
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           error: {:conflict,
+            %{
+              ref: "r",
+              submitted: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              },
+              stored: %{
+                confirm: "local",
+                effective_at: ~U[2026-10-01 00:00:00Z],
+                to_plan_id: "scale",
+                to_version: "1"
+              }
+            }},
+           ok: %AuroraMeter.Schema.PlanTransition{
+             __meta__: #Ecto.Schema.Metadata<:loaded, "aurora_meter_plan_transitions">,
+             id: "e495d07d-4cc7-4c84-bb65-c347cafe25a0",
+             tenant_key: "plantrans_131",
+             ref: "r",
+             from_plan_id: "pro",
+             from_version: "1",
+             to_plan_id: "scale",
+             to_version: "1",
+             effective_at: ~U[2026-10-01 00:00:00Z],
+             state: "pending",
+             confirm: "local",
+             provider_ref: nil,
+             applied_at: nil,
+             detail: %{},
+             inserted_at: ~U[2026-09-16 00:50:47.205712Z],
+             updated_at: ~U[2026-09-16 00:50:47.205712Z]
+           }
+         ]
+
+         # 2
+         #Function<23.54783577/1 in AuroraMeter.PlanTransitionsConcurrencyTest."test I16 twelve independent connections scheduling one ref produce one transition row"/1>
+
+     stacktrace:
+       test/aurora_meter/plan_transitions_concurrency_test.exs:105: (test)
+
+
+[07b] twelve appliers of one due transition: applied=1 skipped=11 row_lock_waiters=12
+....
+10:50:47.730 [error] Postgrex.Protocol (#PID<0.445.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.846.0> exited
+.
+[07b] cache staleness after a kill: ttl=5000ms window_from_warm=4999ms window_from_kill=4995ms
+....................
+
+  2) test I17 the same ref with identical parameters returns the existing transition (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:257
+     ** (MatchError) no match of right hand side value:
+
+         {:error,
+          {:conflict,
+           %{
+             ref: "r",
+             submitted: %{
+               confirm: "local",
+               effective_at: ~U[2026-10-01 00:00:00Z],
+               to_plan_id: "scale",
+               to_version: "1"
+             },
+             stored: %{
+               confirm: "local",
+               effective_at: ~U[2026-10-01 00:00:00Z],
+               to_plan_id: "scale",
+               to_version: "1"
+             }
+           }}}
+
+     code: {:ok, second} = Subscriptions.schedule_transition(tenant, :scale, ref: "r")
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:260: (test)
+
+
+
+  3) test I17 the same ref with different parameters returns a conflict naming both (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:266
+     match (=) failed
+     code:  assert {:error, {:conflict, detail}} = Subscriptions.schedule_transition(tenant, :free, ref: "r")
+     left:  {:error, {:conflict, detail}}
+     right: {:ok,
+             %AuroraMeter.Schema.PlanTransition{
+               __meta__: #Ecto.Schema.Metadata<:loaded, "aurora_meter_plan_transitions">,
+               id: "8f7b7397-e6b4-4f7b-a16f-9c0b4075fcbe",
+               tenant_key: "trans_12738",
+               ref: "r",
+               from_plan_id: "pro",
+               from_version: "1",
+               to_plan_id: "scale",
+               to_version: "1",
+               effective_at: ~U[2026-10-01 00:00:00Z],
+               state: "pending",
+               confirm: "local",
+               provider_ref: nil,
+               applied_at: nil,
+               detail: %{},
+               inserted_at: ~U[2026-09-16 00:50:52.927406Z],
+               updated_at: ~U[2026-09-16 00:50:52.927406Z]
+             }}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:270: (test)
+
+..............................
+Finished in 6.5 seconds (0.00s async, 6.5s sync)
+
+Result: 80/83 passed
+Failed: 3 tests
+[mixlane] core exit=2 started=2026-09-16T00:50:45Z finished=2026-09-16T00:50:53Z

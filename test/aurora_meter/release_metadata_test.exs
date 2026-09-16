@@ -58,7 +58,8 @@ defmodule AuroraMeter.ReleaseMetadataTest do
     "docs/adr/0011-credit-lots-and-allocations.md",
     "docs/adr/0012-immutable-plan-versions.md",
     "docs/adr/0013-narrow-ai-shaped-sample.md",
-    "docs/adr/0014-optional-integrations-stay-free.md"
+    "docs/adr/0014-optional-integrations-stay-free.md",
+    "docs/adr/0016-scheduled-plan-transitions.md"
   ]
 
   describe "G02 one version, five places" do

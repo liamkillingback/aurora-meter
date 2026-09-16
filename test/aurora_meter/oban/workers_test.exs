@@ -218,10 +218,30 @@ if Code.ensure_loaded?(Oban) do
       end
     end
 
-    describe "the worker whose operation is not in this release" do
-      test "PlanTransitions cancels with :not_implemented" do
-        refute function_exported?(AuroraMeter.Subscriptions, :apply_due_transitions, 1)
-        assert PlanTransitions.perform(job()) == {:cancel, :not_implemented}
+    describe "PlanTransitions, whose operation arrived in build unit 07b" do
+      # It used to be the worker whose operation was not in this release, and
+      # the check that made it appear is the one that mattered: nothing about
+      # the worker was edited to schedule it, `AuroraMeter.Oban.available?/1`
+      # simply started answering true once the function existed.
+      test "runs the applier and maps its return, with no edit to the worker" do
+        assert function_exported?(AuroraMeter.Subscriptions, :apply_due_transitions, 1)
+
+        assert {:ok, %{applied: 0, skipped: 0, failed: 0, stopped: :complete}} =
+                 PlanTransitions.perform(job(%{"limit" => 1}))
+      end
+
+      test "passes only the options the operation declares, and only those the job carries" do
+        # Args carry ids and scalars, never a policy (`architecture-map.md`
+        # section 6). An unknown key is ignored rather than raising: a job that
+        # cannot be fixed by editing the crontab is a job that fails until
+        # somebody finds it.
+        tenant = AuroraMeter.Test.unique_tenant("obansched")
+        {:ok, _} = AuroraMeter.subscribe(tenant, :pro)
+
+        assert {:ok, %{applied: 0, skipped: 0}} =
+                 PlanTransitions.perform(
+                   job(%{"limit" => 1, "tenant" => tenant, "proration" => "always"})
+                 )
       end
     end
 

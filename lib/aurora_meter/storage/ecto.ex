@@ -379,18 +379,79 @@ defmodule AuroraMeter.Storage.Ecto do
   # public function: a host that relied on omission to clear a provider field
   # now passes `nil` explicitly.
   def put_subscription(attrs) do
-    attrs = Map.new(attrs)
+    {stamped, attrs} = extract_stamps(Map.new(attrs))
     supplied = MapSet.new(Map.keys(attrs), &field_name/1)
     replaceable = Enum.filter(Subscription.syncable(), &MapSet.member?(supplied, &1))
 
-    %Subscription{}
-    |> Subscription.changeset(attrs)
-    |> repo().insert(
-      on_conflict: {:replace, replaceable ++ [:updated_at]},
-      conflict_target: [:tenant_key],
-      returning: true
-    )
+    insert = fn ->
+      %Subscription{}
+      |> Subscription.changeset(attrs)
+      |> repo().insert(
+        on_conflict: {:replace, replaceable ++ [:updated_at]},
+        conflict_target: [:tenant_key],
+        returning: true
+      )
+    end
+
+    case stamped do
+      [] -> insert.()
+      fields -> unwrap_stamped(repo().transaction(fn -> stamp(insert.(), fields) end))
+    end
   end
+
+  defp unwrap_stamped({:ok, {:ok, subscription}}), do: {:ok, subscription}
+  defp unwrap_stamped(result), do: result
+
+  # **`:db_now` is how a caller asks the database to stamp a column, and it
+  # exists because `Ecto.Repo.insert/2` accepts no fragment in a value**
+  # (findings X220 and X288).
+  #
+  # `plan_effective_at` is the instant a tenant's contract started, and from
+  # build unit 07b it is compared against the database's clock: the applier
+  # writes the transition's boundary into it, and a scheduled change is refused
+  # when its effective time is not in the future. A column stamped by whichever
+  # node ran `AuroraMeter.subscribe/3` and compared against the database would
+  # be two clocks on one comparison, which `architecture-map.md` section 3
+  # names as the defect.
+  #
+  # So the value is never read into Elixir at all. The insert omits the column,
+  # and one `UPDATE` in the same transaction sets it from `clock_timestamp()`.
+  # It costs a second statement on a path that writes one row per tenant plan
+  # change; `AuroraMeter.track/4` is nowhere near it. The alternative,
+  # `db_now/0` read into Elixir and written back, is the read-then-write form
+  # the map explicitly refuses, and the one after that is a column default,
+  # which is DDL this unit does not own.
+  @stampable [:plan_effective_at]
+
+  defp extract_stamps(attrs) do
+    Enum.reduce(@stampable, {[], attrs}, fn field, {stamped, rest} ->
+      case Map.pop(rest, field) do
+        {:db_now, popped} -> {[field | stamped], popped}
+        _kept -> {stamped, rest}
+      end
+    end)
+  end
+
+  defp stamp({:ok, %Subscription{tenant_key: key}}, [:plan_effective_at]) do
+    {1, [subscription]} =
+      repo().update_all(
+        from(s in Subscription,
+          where: s.tenant_key == ^key,
+          update: [
+            set: [
+              plan_effective_at:
+                fragment("date_trunc('second', clock_timestamp() AT TIME ZONE 'UTC')")
+            ]
+          ],
+          select: s
+        ),
+        []
+      )
+
+    {:ok, subscription}
+  end
+
+  defp stamp({:error, changeset}, _stamped), do: repo().rollback(changeset)
 
   # Attribute maps arrive with atom keys from every in-tree caller and could
   # arrive with string keys from a host's. `to_existing_atom` and not
@@ -443,28 +504,83 @@ defmodule AuroraMeter.Storage.Ecto do
   # page came back shorter than `limit`, which is the only honest end signal: a
   # page that is exactly full may or may not be the last one, so the caller is
   # asked once more rather than guessing.
+  #
+  # `:order` chooses which index the page walks. `:scheduled_effective_at` is
+  # the due scan build unit 07b's applier and Aurora Meter Pro both use: its
+  # cursor is the compound key `(scheduled_effective_at, tenant_key)`, which is
+  # exactly the partial index core schema version 10 creates, so the filter and
+  # the cursor sit on one key and the page is served without a sort. It is a
+  # keyset over a column a writer can change, so the guarantee is bounded to one
+  # scan: a row whose `scheduled_effective_at` moves backwards past the cursor
+  # while a scan is walking is missed by that scan and picked up by the next,
+  # which starts from `nil`. Nothing is lost, and the bound on lateness is one
+  # scan interval rather than for ever.
   def list_subscriptions(cursor, opts) do
     limit = Keyword.get(opts, :limit, 100)
+    order = Keyword.get(opts, :order, :tenant_key)
 
     rows =
       Subscription
-      |> after_cursor(cursor)
+      |> after_cursor(order, cursor)
       |> with_statuses(Keyword.get(opts, :status_in))
-      |> then(&from(s in &1, order_by: [asc: s.tenant_key], limit: ^limit))
+      |> with_equals(:transition_state, Keyword.get(opts, :transition_state))
+      |> with_equals(:transition_confirm, Keyword.get(opts, :transition_confirm))
+      |> scheduled_before(Keyword.get(opts, :scheduled_before))
+      |> ordered(order, limit)
       |> repo().all()
 
     if length(rows) < limit do
       {rows, nil}
     else
-      {rows, List.last(rows).tenant_key}
+      {rows, encode_cursor(order, List.last(rows))}
     end
   end
 
-  defp after_cursor(query, nil), do: query
-  defp after_cursor(query, cursor), do: from(s in query, where: s.tenant_key > ^cursor)
+  defp ordered(query, :tenant_key, limit) do
+    from(s in query, order_by: [asc: s.tenant_key], limit: ^limit)
+  end
+
+  defp ordered(query, :scheduled_effective_at, limit) do
+    from(s in query, order_by: [asc: s.scheduled_effective_at, asc: s.tenant_key], limit: ^limit)
+  end
+
+  defp encode_cursor(:tenant_key, row), do: row.tenant_key
+
+  defp encode_cursor(:scheduled_effective_at, row) do
+    DateTime.to_iso8601(row.scheduled_effective_at) <> "|" <> row.tenant_key
+  end
+
+  defp after_cursor(query, _order, nil), do: query
+
+  defp after_cursor(query, :tenant_key, cursor) do
+    from(s in query, where: s.tenant_key > ^cursor)
+  end
+
+  defp after_cursor(query, :scheduled_effective_at, cursor) do
+    [at, key] = String.split(cursor, "|", parts: 2)
+    {:ok, at, 0} = DateTime.from_iso8601(at)
+
+    from(s in query,
+      where:
+        s.scheduled_effective_at > ^at or
+          (s.scheduled_effective_at == ^at and s.tenant_key > ^key)
+    )
+  end
 
   defp with_statuses(query, nil), do: query
   defp with_statuses(query, statuses), do: from(s in query, where: s.status in ^statuses)
+
+  defp with_equals(query, _field, nil), do: query
+
+  defp with_equals(query, field, value) do
+    from(s in query, where: field(s, ^field) == ^value)
+  end
+
+  defp scheduled_before(query, nil), do: query
+
+  defp scheduled_before(query, %DateTime{} = at) do
+    from(s in query, where: s.scheduled_effective_at <= ^at)
+  end
 
   @impl AuroraMeter.Storage
   # Core schema version 8 makes `event_id`, `payload_hash` and `occurred_at`

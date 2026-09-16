@@ -286,3 +286,188 @@ Resolving a stored snapshot writes a per-node cache with
 bounded: one put at registration, and one per genuinely unknown version per node
 thereafter, including for versions that do not exist, which are cached
 negatively so a bad lookup cannot loop.
+
+## Moving a tenant between plans
+
+A plan change is **explicit and scheduled**. Redeploying a plan definition never
+moves anybody (ADR 0012); a tenant moves because somebody scheduled it, at an
+instant they chose, with a reference they can cancel or retry.
+
+```elixir
+{:ok, transition} =
+  AuroraMeter.Subscriptions.schedule_transition("org_1", :scale, ref: "upgrade-8412")
+
+transition.effective_at
+#=> ~U[2026-10-01 00:00:00Z]
+```
+
+With no `:effective_at` that is the end of the tenant's current period, from the
+tenant's **own** period source: the first of next month under the calendar
+default, `current_period_end` under `AuroraMeter.Pro.Period`, the end of the week
+under a weekly host source. Until that instant nothing about the change is
+visible to `check/2`, `quota/2` or `reserve/3`: the tenant is entitled under the
+old plan and the new one is a row on the side.
+
+Applying it is a separate call, so a host owns when it happens:
+
+```elixir
+AuroraMeter.Subscriptions.apply_due_transitions(limit: 500)
+#=> {:ok, %{applied: 3, skipped: 0, failed: 0, cursor: :done}}
+```
+
+Run it from any scheduler. With Oban installed, `AuroraMeter.Oban.cron_entries/1`
+returns `{"*/5 * * * *", AuroraMeter.Oban.PlanTransitions}` and you need write
+nothing.
+
+### The lifecycle
+
+```
+                 schedule_transition/3
+    (none) ----------------------------> pending
+                                            |
+       cancel_transition/2  <---------------+
+             (cancelled)                    |
+                                            |
+    a provider write naming neither the     |
+    current nor the scheduled plan          |
+             (cancelled, reason             |
+              "provider_override")          |
+                                            |
+    apply_due_transitions/1, at or after    |
+    effective_at                            v
+                                         applied
+                                            ^
+    a provider write naming exactly the     |
+    scheduled plan and version -------------+
+             (applied, reason "provider_applied_early")
+
+    the target version resolves through neither code
+    nor a stored snapshot  ---------------> failed
+```
+
+Every move is a conditional update predicated on the transition still being
+`pending`, so running the applier twice, from two nodes, at any interleaving,
+applies the change once and reports a skip for every other caller. A transient
+database error never produces `failed`: the transaction rolls back and the row
+stays `pending` for the next run. Only a deterministic validation failure, a
+target version in neither code nor the registry, is terminal, and it is never
+retried automatically: an automatic retry of a target that does not exist loops
+for ever. Restore the definition (or its snapshot), cancel, and schedule a new
+one.
+
+`schedule_transition/3` is idempotent by `(tenant, ref)`. The same reference with
+the same parameters returns the existing transition; with different parameters it
+is `{:error, {:conflict, ...}}` naming both what is stored and what was
+submitted. A second reference cancels the first by default (`replace: true`), in
+one transaction, or is refused with `replace: false`.
+
+### Precedence
+
+A provider-driven change (a customer using the billing portal) reaches Aurora
+Meter through `AuroraMeter.Storage.put_subscription/1`, and core reacts there, so
+a provider integration cannot forget to tell it.
+
+| Situation | Rule | Owner |
+|---|---|---|
+| A scheduled change effective before the subscription stops being entitled | applies at its boundary; the cancellation happens later on its own | core |
+| A provider write whose status is not in `entitled_statuses/0` | the transition is cancelled, `detail.reason = "subscription_not_entitled"` | core |
+| A provider write naming exactly the scheduled `{plan_id, plan_version}` | the transition is applied early, `detail.reason = "provider_applied_early"` | core |
+| A provider write naming any other plan | the provider wins now; the transition is cancelled, `detail.reason = "provider_override"`, with the observed pair recorded | core |
+| A provider write that changes nothing about the plan | the transition stays pending | core |
+| Two local schedules for one tenant | the later one with `replace: true` cancels the earlier atomically; with `replace: false` it is refused | core |
+| The same schedule submitted twice | idempotent by `(tenant, ref)` | core |
+| A zero-price transition | identical to any other; core never looks at a price | core |
+| A cancellation known in advance (`cancel_at_period_end`) with a transition effective at or after the period end | Aurora Meter Pro calls `cancel_transition/2` when it observes the flag, so a customer is not shown a change that will never happen | Pro |
+| A stale provider payload for an ended subscription | never reaches core: Pro retrieves the subscription fresh and refuses a payload that would resurrect an ended one | Pro |
+
+The status rule is tested **first**, so a provider write that both names the
+scheduled plan and ends the subscription cancels rather than applying: a tenant
+who is no longer entitled has no plan to move to.
+
+Core cannot see a future provider cancellation, because a
+`cancel_at_period_end` flag is a provider concept and
+`aurora_meter_subscriptions` carries none. That is why the last two rows belong
+to Aurora Meter Pro.
+
+**The comparison is on the pair, not on the plan id.** A provider that names a
+plan id without naming a version has said nothing about which contract it means,
+so such a write is an override and not an early apply. A provider integration
+that wants the early-apply path sends `plan_version` alongside `plan_id`.
+
+### The lag, and how to tighten it
+
+A transition effective at `00:00` is applied by the next run of the applier.
+Under the `*/5` default that is **up to five minutes plus the run's own time**,
+and between the boundary and the apply the tenant is entitled under the **old**
+plan: conservative for a downgrade (they keep briefly more than they paid for)
+and visible to the customer for an upgrade.
+
+Measured locally on one node, a run applying 500 due transitions takes on the
+order of a second, so the run time is not what the bound is made of; the
+schedule is. A host that needs a tighter bound registers a more frequent cron
+entry, or calls `apply_due_transitions/1` from its own scheduler, or calls it
+with `tenant:` from the request that made the change. Aurora Meter runs no timer
+of its own: optional Oban integration is an optional module, not a mandatory
+process.
+
+There is a second, smaller lag on the read side. `apply_due_transitions/1`
+invalidates the subscription cache **after** the transaction commits, and that
+invalidation is a PubSub broadcast, which is best effort. A node that misses it
+serves the old plan for at most `:subscription_cache_ttl` milliseconds (default
+5,000), after which its entry expires and it reloads. Measured after a `kill -9`
+between the commit and the invalidation: 5,000 ms at the default TTL. The
+database is already correct throughout; this is a visibility bound, not a
+correctness one.
+
+### Previewing a change
+
+```elixir
+{:ok, preview} = AuroraMeter.Subscriptions.preview_transition("org_1", :scale)
+
+preview.changes
+#=> [%{kind: :feature, name: :ai_generations, from: {:limit, 1_000, :hard},
+#      to: {:metered, 1_000, 2}, direction: :changed}, ...]
+```
+
+A pure read: no lock, no transaction, no row, safe from a LiveView render. Each
+change carries a `direction` of `:increase`, `:decrease`, `:added`, `:removed` or
+`:changed`.
+
+**Core never prorates.** `preview.from.price` and `preview.to.price` are the
+plans' declared list prices in cents and are not invoice amounts. The billing
+provider is authoritative for what a customer is charged, and the only place a
+price id or a proration mode appears is `preview.provider`, which comes from the
+optional `c:AuroraMeter.Billing.Provider.describe_plan_change/3` callback. On a
+core-only installation that is `%{status: :not_configured, detail: %{}}`; a
+provider that errors or raises gives `%{status: :error, detail: %{reason: ...}}`
+and the entitlement diff is returned either way, because that half is core's and
+is right whatever the provider says.
+
+### Nothing is reset
+
+Applying a transition writes `aurora_meter_subscriptions` and
+`aurora_meter_plan_transitions`, and nothing else. It deletes no counter, no
+history bucket, no event, no credit transaction and no credit lot, and it zeroes
+nothing. A new period's counters are new rows keyed by `period_start`, which is
+how periods already work, so there is nothing to clear and no reset job to run.
+Usage recorded before the boundary stays in the period it was recorded in.
+
+### Two rules, and one rollout note
+
+**Do not schedule a transition from inside a credit callback.** A transition
+takes the subscription row's lock and a credit operation takes the wallet's; the
+two are never taken in the same transaction, and taking them in both orders is
+how a deadlock is built.
+
+**`put_subscription/1` has a side effect from 1.0.0-rc.1.** A host calling it
+directly with a changed plan while a transition is pending will now see that
+transition settled, per the table above.
+
+**Finish the rolling upgrade before scheduling.** A subscription row written
+before core schema version 10 has no `plan_version` until
+`AuroraMeter.Plans.register!/0` names it, and `schedule_transition/3` refuses
+such a row with `{:error, {:unavailable, :registration_incomplete}}` rather than
+moving a tenant whose current contract is unnamed. Registration runs at boot, so
+this clears itself; the wider rule is the one the upgrade guide states, that
+0.4.x nodes should be gone before any transition is scheduled, because a 0.4.x
+node's `put_subscription/1` predates the explicit replace list.

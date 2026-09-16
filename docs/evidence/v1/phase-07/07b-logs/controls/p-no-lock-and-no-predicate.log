@@ -1,0 +1,346 @@
+restored
+applied p-no-lock-and-no-predicate
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.........................
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+10:52:19.921 [error] Task #PID<0.710.0> started from #PID<0.707.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+10:52:19.927 [error] Task #PID<0.718.0> started from #PID<0.707.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+10:52:19.919 [error] Task #PID<0.723.0> started from #PID<0.707.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+10:52:19.922 [error] Task #PID<0.711.0> started from #PID<0.707.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+10:52:19.920 [error] Task #PID<0.715.0> started from #PID<0.707.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+10:52:19.923 [error] Task #PID<0.713.0> started from #PID<0.707.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+10:52:19.930 [error] Task #PID<0.707.0> started from #PID<0.703.0> terminating
+** (stop) exited in: Task.await_many([%Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.709.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94599>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.710.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94603>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.711.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94607>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.712.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94611>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.713.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94614>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.715.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94620>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.716.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94707>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.717.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94711>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.718.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94715>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.720.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94721>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.722.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94727>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.723.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94729>}], 30000)
+    ** (EXIT) an exception was raised:
+        ** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+            (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+            (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+            (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+            (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+            (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+            (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+            (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+            (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+            (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+            (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+            (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+    (elixir 1.20.1) lib/task.ex:1021: Task.await_many/5
+    (elixir 1.20.1) lib/task.ex:1001: Task.await_many/2
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:126: AuroraMeter.Test.Connections.run/3
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<20.54783577/0 in AuroraMeter.PlanTransitionsConcurrencyTest."test I16 twelve independent connections applying one due transition apply it once"/1>
+    Args: []
+
+
+  1) test I16 twelve independent connections applying one due transition apply it once (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:126
+     ** (EXIT from #PID<0.703.0>) exited in: Task.await_many([%Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.709.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94599>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.710.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94603>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.711.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94607>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.712.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94611>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.713.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94614>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.715.0>, ref: #Reference<0.0.90499.1046030766.1214578693.94620>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.716.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94707>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.717.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94711>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.718.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94715>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.720.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94721>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.722.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94727>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.707.0>, pid: #PID<0.723.0>, ref: #Reference<0.0.90499.1046030766.1214578699.94729>}], 30000)
+         ** (EXIT) an exception was raised:
+             ** (MatchError) no match of right hand side value:
+
+         {0, []}
+
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+                 (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+                 (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+                 (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+                 (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+                 (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+                 (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+                 (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+
+
+10:52:19.967 [error] Task #PID<0.738.0> started from #PID<0.735.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+
+  2) test I16 a cancel racing an apply yields exactly one terminal state (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:164
+     ** (exit) exited in: Task.await_many([%Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.735.0>, pid: #PID<0.738.0>, ref: #Reference<0.0.94083.1046030766.1214578689.105851>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.735.0>, pid: #PID<0.739.0>, ref: #Reference<0.0.94083.1046030766.1214578689.105855>}], 30000)
+         ** (EXIT) an exception was raised:
+             ** (MatchError) no match of right hand side value:
+
+         {0, []}
+
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+                 (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+                 (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+                 (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+                 (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+                 (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+                 (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+                 (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+     code: for _round <- 1..@rounds do
+     stacktrace:
+       (elixir 1.20.1) lib/task.ex:1021: Task.await_many/5
+       (elixir 1.20.1) lib/task.ex:1001: Task.await_many/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:126: AuroraMeter.Test.Connections.run/3
+       test/aurora_meter/plan_transitions_concurrency_test.exs:171: anonymous fn/1 in AuroraMeter.PlanTransitionsConcurrencyTest."test I16 a cancel racing an apply yields exactly one terminal state"/1
+       (elixir 1.20.1) lib/enum.ex:4636: Enum.map/2
+       test/aurora_meter/plan_transitions_concurrency_test.exs:166: (test)
+
+
+10:52:19.999 [error] Task #PID<0.747.0> started from #PID<0.744.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+
+  3) test I16 a provider sync racing an apply yields one terminal state and one plan (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:209
+     ** (exit) exited in: Task.await_many([%Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.744.0>, pid: #PID<0.747.0>, ref: #Reference<0.0.95235.1046030766.1214578701.95141>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.744.0>, pid: #PID<0.748.0>, ref: #Reference<0.0.95235.1046030766.1214578701.95145>}], 30000)
+         ** (EXIT) an exception was raised:
+             ** (MatchError) no match of right hand side value:
+
+         {0, []}
+
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+                 (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+                 (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+                 (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+                 (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+                 (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+                 (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+                 (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+     code: for _round <- 1..@rounds do
+     stacktrace:
+       (elixir 1.20.1) lib/task.ex:1021: Task.await_many/5
+       (elixir 1.20.1) lib/task.ex:1001: Task.await_many/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:126: AuroraMeter.Test.Connections.run/3
+       test/aurora_meter/plan_transitions_concurrency_test.exs:214: anonymous fn/2 in AuroraMeter.PlanTransitionsConcurrencyTest."test I16 a provider sync racing an apply yields one terminal state and one plan"/1
+       (elixir 1.20.1) lib/enum.ex:4659: Enum.reduce/3
+       test/aurora_meter/plan_transitions_concurrency_test.exs:210: (test)
+
+
+10:52:20.035 [error] Task #PID<0.757.0> started from #PID<0.753.0> terminating
+** (MatchError) no match of right hand side value:
+
+    {0, []}
+
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+    (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+    (aurora_meter 0.5.0) lib/aurora_meter/oban/plan_transitions.ex:71: anonymous fn/4 in AuroraMeter.Oban.PlanTransitions.run/1
+    (elixir 1.20.1) lib/enum.ex:5191: Enumerable.Range.reduce/5
+    (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+    (aurora_meter 0.5.0) lib/aurora_meter/oban/plan_transitions.ex:55: AuroraMeter.Oban.PlanTransitions.perform/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<6.11395459/0 in AuroraMeter.Test.Connections.spawn_all/4>
+    Args: []
+
+
+  4) test I16 two Oban jobs from two nodes apply one transition (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:244
+     ** (exit) exited in: Task.await_many([%Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.753.0>, pid: #PID<0.756.0>, ref: #Reference<0.0.96387.1046030766.1214578691.99004>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.753.0>, pid: #PID<0.757.0>, ref: #Reference<0.0.96387.1046030766.1214578691.99008>}], 30000)
+         ** (EXIT) an exception was raised:
+             ** (MatchError) no match of right hand side value:
+
+         {0, []}
+
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:557: AuroraMeter.Subscriptions.Transitions.mark_applied/1
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:552: AuroraMeter.Subscriptions.Transitions.commit_apply/2
+                 (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+                 (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+                 (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+                 (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:487: AuroraMeter.Subscriptions.Transitions.apply_tenant/2
+                 (aurora_meter 0.5.0) lib/aurora_meter/subscriptions/transitions.ex:462: AuroraMeter.Subscriptions.Transitions.apply_due/1
+                 (aurora_meter 0.5.0) lib/aurora_meter/oban/plan_transitions.ex:71: anonymous fn/4 in AuroraMeter.Oban.PlanTransitions.run/1
+                 (elixir 1.20.1) lib/enum.ex:5191: Enumerable.Range.reduce/5
+                 (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+                 (aurora_meter 0.5.0) lib/aurora_meter/oban/plan_transitions.ex:55: AuroraMeter.Oban.PlanTransitions.perform/1
+                 (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:367: anonymous fn/3 in AuroraMeter.Test.Connections.spawn_all/4
+                 (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+                 (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+     code: Connections.run(2, fn _i ->
+     stacktrace:
+       (elixir 1.20.1) lib/task.ex:1021: Task.await_many/5
+       (elixir 1.20.1) lib/task.ex:1001: Task.await_many/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:126: AuroraMeter.Test.Connections.run/3
+       test/aurora_meter/plan_transitions_concurrency_test.exs:254: (test)
+
+
+10:52:20.062 [error] Postgrex.Protocol (#PID<0.459.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.765.0> exited
+.
+[07b] cache staleness after a kill: ttl=5000ms window_from_warm=5000ms window_from_kill=4995ms
+.................................
+
+  5) test I17 the applier refuses a row whose mirror says applied and whose audit row says pending (AuroraMeter.PlanTransitionsTest)
+     test/aurora_meter/plan_transitions_test.exs:412
+     match (=) failed
+     code:  assert {:ok, %{applied: 0, skipped: 1}} =
+              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
+     left:  {:ok, %{applied: 0, skipped: 1}}
+     right: {:ok, %{failed: 0, cursor: :done, applied: 1, skipped: 0}}
+     stacktrace:
+       test/aurora_meter/plan_transitions_test.exs:429: (test)
+
+..................
+Finished in 6.2 seconds (0.00s async, 6.2s sync)
+
+Result: 78/83 passed
+Failed: 5 tests
+[mixlane] core exit=2 started=2026-09-16T00:52:17Z finished=2026-09-16T00:52:25Z

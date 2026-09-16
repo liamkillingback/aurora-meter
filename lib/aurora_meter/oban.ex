@@ -145,6 +145,7 @@ if Code.ensure_loaded?(Oban) do
           {"*/30 * * * *", AuroraMeter.Oban.CreditExpiry},
           {"*/15 * * * *", AuroraMeter.Oban.HoldReconciliation},
           {"7 * * * *", AuroraMeter.Oban.RecurringGrants},
+          {"*/5 * * * *", AuroraMeter.Oban.PlanTransitions},
           {"40 3 * * *", AuroraMeter.Oban.Retention}
         ]
 
@@ -155,6 +156,7 @@ if Code.ensure_loaded?(Oban) do
         ...>   exclude: [
         ...>     AuroraMeter.Oban.HoldReconciliation,
         ...>     AuroraMeter.Oban.RecurringGrants,
+        ...>     AuroraMeter.Oban.PlanTransitions,
         ...>     AuroraMeter.Oban.Retention
         ...>   ],
         ...>   schedules: %{credit_expiry: "0 4 * * *"}

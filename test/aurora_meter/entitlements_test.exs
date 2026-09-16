@@ -437,14 +437,29 @@ defmodule AuroraMeter.EntitlementsTest do
     assert Billing.sync_subscription(%{"id" => "sub_example"}) == {:error, :not_configured}
     assert Noop.report_usage([]) == {:error, :not_configured}
 
-    # Every callback the behaviour declares is answered above. A new one would
-    # otherwise default to nothing at all on a core-only install.
-    assert Enum.sort(Provider.behaviour_info(:callbacks)) == [
+    # Every *required* callback the behaviour declares is answered above. A new
+    # one would otherwise default to nothing at all on a core-only install.
+    assert Enum.sort(Schema.required_callbacks(Provider)) == [
              billing_portal_url: 2,
              create_checkout_session: 2,
              report_usage: 1,
              sync_subscription: 1
            ]
+
+    # And the optional ones are answered by **not being defined**, which is what
+    # `AuroraMeter.Subscriptions.preview_transition/3` resolves with
+    # `function_exported?/3` to report `provider: %{status: :not_configured}`
+    # rather than a fabricated mapping (build unit 07b). A provider written
+    # before these existed still boots, because `Config.validate!/0` checks only
+    # the required set.
+    assert Enum.sort(Provider.behaviour_info(:optional_callbacks)) == [
+             describe_plan_change: 3,
+             update_subscription_plan: 3
+           ]
+
+    for {fun, arity} <- Provider.behaviour_info(:optional_callbacks) do
+      refute function_exported?(Noop, fun, arity)
+    end
   end
 
   defp plan_id_errors(changeset) do

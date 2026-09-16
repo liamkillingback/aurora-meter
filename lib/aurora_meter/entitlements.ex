@@ -154,10 +154,16 @@ defmodule AuroraMeter.Entitlements do
           Map.merge(attrs, %{
             plan_version: plan.version,
             plan_fingerprint: plan.fingerprint,
-            # A node clock, and nothing in this release compares it. 07b owns
-            # the first comparison and must move this into the insert as a
-            # `clock_timestamp()` fragment before it does (finding X288).
-            plan_effective_at: DateTime.truncate(Clock.now(), :second)
+            # **Stamped by the database, not by this node** (finding X288,
+            # closed by build unit 07b). `:db_now` tells
+            # `AuroraMeter.Storage.put_subscription/1` to set the column from
+            # `clock_timestamp()` rather than from a value computed here: from
+            # 07b this instant is compared against the database's clock, and
+            # comparing a node's stamp against the database's is the defect
+            # `architecture-map.md` section 3 names. The value is never read
+            # into Elixir at all, so no future caller has to remember to use
+            # the right clock.
+            plan_effective_at: :db_now
           })
         )
 

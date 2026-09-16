@@ -13,6 +13,54 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Added
 
+- **Scheduled plan transitions.** A tenant moves between plans because somebody
+  scheduled it, at a boundary they chose, with a reference they can cancel or
+  retry. `AuroraMeter.Subscriptions.schedule_transition/3` writes an audit row in
+  `aurora_meter_plan_transitions` and mirrors it onto the subscription;
+  `cancel_transition/3` withdraws it; `preview_transition/3` shows the
+  entitlement diff, the effective time and the provider's mapping without
+  writing anything; `apply_due_transitions/1` applies what has come due, one
+  transaction per tenant, from any scheduler. With no `:effective_at` the
+  boundary is the end of the tenant's **own** period, from whatever period
+  source the host configured. Every effect is an update conditional on the
+  transition still being pending, so two nodes, an Oban retry and a duplicated
+  cron tick apply it once and report a skip for everybody else. See
+  [Plans](plans.md) for the lifecycle, the precedence table and the measured
+  lag.
+- **Core reacts to a provider-driven plan change.** A customer who changes plan
+  in the billing provider's portal reaches Aurora Meter through
+  `AuroraMeter.Storage.put_subscription/1`, and that is now where a pending
+  transition is settled: a write naming exactly the scheduled
+  `{plan_id, plan_version}` applies it early, a write naming any other plan
+  cancels it as an override with the observed pair recorded, and a write whose
+  status is not entitled cancels it whatever the plan says. **This is a new side
+  effect on an existing public function.** A host calling `put_subscription/1`
+  directly with a changed plan while a transition is pending will see that
+  transition settled. A tenant with nothing pending pays one uncached read and
+  opens no transaction.
+- `AuroraMeter.Subscriptions.confirm_transition/3`, for a billing provider
+  integration: it records the provider's reference, takes the provider's own
+  boundary over the scheduled one, and applies the transition if that boundary
+  has passed. Idempotent under webhook redelivery.
+- `AuroraMeter.Billing.Provider` gains two **optional** callbacks,
+  `describe_plan_change/3` (what a preview shows in its `provider` section) and
+  `update_subscription_plan/3`. `AuroraMeter.Config.validate!/0` checks only the
+  required four, so a provider written before these existed still boots, and
+  `AuroraMeter.Billing.Noop` implements neither: a core-only installation
+  previews with `provider: %{status: :not_configured}` rather than a fabricated
+  mapping. Core computes no proration of any kind; a preview reports each plan's
+  declared list price and the billing provider is authoritative for the invoice.
+- `AuroraMeter.Oban.PlanTransitions` starts appearing in
+  `AuroraMeter.Oban.cron_entries/1` at `"*/5 * * * *"`, with no edit to the
+  worker: its operation is now compiled in. Job arguments `limit`, `batches` and
+  `tenant`.
+- `AuroraMeter.Storage.list_subscriptions/2` gains the filter keys
+  `:transition_state`, `:transition_confirm` and `:scheduled_before`, and an
+  `:order` of `:scheduled_effective_at` whose keyset walks the partial index
+  core schema version 10 creates.
+- Telemetry `[:aurora_meter, :plans, :transition]` and the PubSub message
+  `{:aurora_meter, :plan_transition, %{tenant_key, ref, state}}` on the tenant's
+  topic.
 - **Immutable plan versions.** A plan is identified by `{id, version}`, not by
   `id` alone: `plan :pro, version: "2", effective_at: ~U[2026-10-01 00:00:00Z] do
   ... end` publishes a new commercial contract without touching the one existing
@@ -406,6 +454,14 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
   adapters nobody has reviewed.
 
 ### Fixed
+
+- **`plan_effective_at` is stamped by the database, not by the node that wrote
+  the row.** A fresh `AuroraMeter.subscribe/3` used to take
+  `AuroraMeter.Clock.now/0`; from this release the column is set with
+  `clock_timestamp()` and the value is never read into Elixir. Nothing compared
+  it before, and scheduled transitions do, so a node whose clock is minutes out
+  would otherwise decide a plan change against a clock the rest of the fleet
+  does not share.
 
 - **`AuroraMeter.Credits.with_credits/4` no longer raises `MatchError` when its
   hold was closed by someone else, and no longer loses the cost of work that

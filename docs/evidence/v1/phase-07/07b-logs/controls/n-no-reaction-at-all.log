@@ -1,0 +1,99 @@
+restored
+applied n-no-reaction-at-all
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+
+
+  1) test I17 a provider sync to a different plan cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:42
+     Assertion with == failed
+     code:  assert written.transition_state == "cancelled"
+     left:  "pending"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:48: (test)
+
+
+
+  2) test I17 a provider sync to exactly the scheduled target applies the transition early (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:62
+     Assertion with == failed
+     code:  assert written.transition_state == "applied"
+     left:  "pending"
+     right: "applied"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:68: (test)
+
+
+
+  3) test I17 a provider sync naming the plan id without the version cancels rather than applies (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:85
+     Assertion with == failed
+     code:  assert settled.state == "cancelled"
+     left:  "pending"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:97: (test)
+
+..
+
+  4) test I17 a provider sync writing a non-entitled status cancels the pending transition (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:123
+     Assertion with == failed
+     code:  assert settled.state == "cancelled"
+     left:  "pending"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:130: (test)
+
+
+
+  5) test I17 a cancellation wins over a sync that also names the scheduled target (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:135
+     Assertion with == failed
+     code:  assert settled.state == "cancelled"
+     left:  "pending"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:145: (test)
+
+..
+
+  6) test I17 a stale sync for an ended subscription cannot revive a cancelled transition (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:173
+     Assertion with == failed
+     code:  assert transition(tenant).state == "cancelled"
+     left:  "pending"
+     right: "cancelled"
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:176: (test)
+
+
+
+  7) test I17 put_subscription with no pending transition opens no transaction (AuroraMeter.PlanTransitionPrecedenceTest)
+     test/aurora_meter/plan_transition_precedence_test.exs:188
+     Assertion with > failed, both sides are exactly equal
+     code: assert transactions(fn ->
+             {:ok, _} = Storage.put_subscription(%{tenant_key: tenant, plan_id: "free"})
+           end) > 0
+     left: 0
+     stacktrace:
+       test/aurora_meter/plan_transition_precedence_test.exs:205: (test)
+
+..............
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+[07b] twelve appliers of one due transition: applied=1 skipped=11 row_lock_waiters=12
+....
+10:52:04.387 [error] Postgrex.Protocol (#PID<0.496.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.861.0> exited
+.
+[07b] cache staleness after a kill: ttl=5000ms window_from_warm=5000ms window_from_kill=4995ms
+....................................................
+Finished in 6.5 seconds (0.00s async, 6.5s sync)
+
+Result: 76/83 passed
+Failed: 7 tests
+[mixlane] core exit=2 started=2026-09-16T00:52:02Z finished=2026-09-16T00:52:09Z

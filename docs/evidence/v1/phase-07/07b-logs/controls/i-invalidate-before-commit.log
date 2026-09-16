@@ -1,0 +1,30 @@
+restored
+applied i-invalidate-before-commit
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/plan_transitions_test.exs test/aurora_meter/plan_transition_precedence_test.exs test/aurora_meter/plan_preview_test.exs test/aurora_meter/plan_transitions_concurrency_test.exs --seed 0
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.........................
+[07b] twelve schedules of one ref: %{idempotent: 11, scheduled: 1} rows=1
+.
+[07b] twelve appliers of one due transition: applied=1 skipped=11 row_lock_waiters=12
+....
+10:51:30.039 [error] Postgrex.Protocol (#PID<0.485.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.846.0> exited
+.
+
+  1) test I16 the applier killed after commit and before cache invalidation converges (AuroraMeter.PlanTransitionsConcurrencyTest)
+     test/aurora_meter/plan_transitions_concurrency_test.exs:293
+     Assertion with == failed
+     code:  assert Subscriptions.get(tenant).plan_id == "pro"
+     left:  "scale"
+     right: "pro"
+     stacktrace:
+       test/aurora_meter/plan_transitions_concurrency_test.exs:320: (test)
+
+...................................................
+Finished in 1.6 seconds (0.00s async, 1.6s sync)
+
+Result: 82/83 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-16T00:51:27Z finished=2026-09-16T00:51:30Z

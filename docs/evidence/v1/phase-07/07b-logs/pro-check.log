@@ -1,0 +1,228 @@
+=== 07b pro mix check ===
+2026-09-16T01:26:30Z
+d8cf7e2d313fbb2897aed27335086ac15536a8f9
+1877f86ed5e13a21b26ec66ef077e0cca79510c4
+removed Pro PLTs and the core beams in both trees
+[mixlane] pro: DB_PORT=5490 mix deps.get
+Resolving Hex dependencies...
+Resolution completed in 0.143s
+Unchanged:
+  bunt 1.0.0
+  certifi 2.17.0
+  credo 1.7.19
+  db_connection 2.10.2
+  decimal 3.1.1
+  dialyxir 1.4.7
+  earmark_parser 1.4.45
+  ecto 3.14.2
+  ecto_sql 3.14.0
+  erlex 0.2.9
+  ex_ast 0.13.1
+  ex_doc 0.40.3
+  file_system 1.1.1
+  finch 0.23.0
+  floki 0.38.4
+  glob_ex 0.1.12
+  h2 0.10.4
+  hackney 4.5.2
+  hpax 1.0.4
+  idna 7.1.0
+  igniter 0.8.4
+  jason 1.4.5
+  makeup 1.2.2
+  makeup_elixir 1.0.1
+  makeup_erlang 1.1.0
+  mime 2.0.7
+  mimerl 1.5.0
+  mint 1.10.0
+  mix_audit 2.1.5
+  nimble_options 1.1.1
+  nimble_parsec 1.4.2
+  nimble_pool 1.1.0
+  oban 2.23.0
+  owl 0.13.1
+  parse_trans 3.4.2
+  phoenix 1.8.13
+  phoenix_html 4.3.0
+  phoenix_live_view 1.2.11
+  phoenix_pubsub 2.3.0
+  phoenix_template 1.0.4
+  plug 1.20.3
+  plug_crypto 2.2.0
+  postgrex 0.22.4
+  quic 1.7.0
+  req 0.7.4
+  rewrite 1.3.0
+  sourceror 1.12.2
+  spitfire 0.4.1
+  ssl_verify_fun 1.1.7
+  stripity_stripe 3.3.2
+  telemetry 1.4.2
+  text_diff 0.1.0
+  uri_query 0.2.0
+  websock 0.5.3
+  websock_adapter 0.6.0
+  webtransport 0.4.3
+  yamerl 0.10.0
+  yaml_elixir 2.12.2
+[mixlane] pro exit=0 started=2026-09-16T01:26:30Z finished=2026-09-16T01:26:33Z
+[mixlane] pro: DB_PORT=5490 mix check
+==> aurora_meter
+Compiling 92 files (.ex)
+Generated aurora_meter app
+==> aurora_meter_pro
+Compiling 76 files (.ex)
+Generated aurora_meter_pro app
+Checking 162 source files (this might take a while) ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 1 second (0.05s to load, 1.0s running 69 checks on 162 files)
+2314 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:asn1, :aurora_meter, :aurora_meter_pro, :certifi, :compiler, :crypto, :db_connection, :decimal, :ecto, :ecto_sql, :eex, :elixir, :ex_ast, :ex_unit, :finch, :floki, :glob_ex, :h2, :hackney, :hpax, :idna, :igniter, :inets, :jason, :kernel, :logger, :mime, :mimerl, :mint, :mix, :nimble_options, :nimble_pool, :oban, :owl, :phoenix, :phoenix_html, :phoenix_live_view, :phoenix_pubsub, :phoenix_template, :phx_new, :plug, :plug_crypto, :postgrex, :public_key, :quic, :req, :rewrite, :sourceror, :spitfire, :ssl, :ssl_verify_fun, :stdlib, :stripity_stripe, :telemetry, :text_diff, :uri_query, :websock, :websock_adapter, :webtransport]
+Looking up modules in dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+Looking up modules in dialyxir_erlang-29.0.1_elixir-1.20.1.plt
+Finding applications for dialyxir_erlang-29.0.1_elixir-1.20.1.plt
+Finding modules for dialyxir_erlang-29.0.1_elixir-1.20.1.plt
+Checking 494 modules in dialyxir_erlang-29.0.1_elixir-1.20.1.plt
+Finding applications for dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+Finding modules for dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+Copying dialyxir_erlang-29.0.1_elixir-1.20.1.plt to dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+Looking up modules in dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+Checking 494 modules in dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+Adding 1897 modules to dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt
+done in 1m12.6s
+ignore_warnings: .dialyzer_ignore.exs
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"priv/plts/dialyxir_erlang-29.0.1_elixir-1.20.1_deps-test.plt",
+  files: [~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Migration.V9.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Stripe.Fake.State.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Outbox.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.Mix.Tasks.AuroraMeterPro.Gen.Migration.beam",
+   ~c"/home/liamk/src/PhxTemplates/product-workspaces/aurora_meter_pro/_build/test/lib/aurora_meter_pro/ebin/Elixir.AuroraMeter.Pro.Migration.V1.beam",
+   ...],
+  ...
+]
+Total errors: 1, Skipped: 1, Unnecessary Skips: 0
+done in 0m4.92s
+done (passed successfully)
+Running ExUnit with seed: 230906, max_cases: 48
+
+.......................................
+11:27:58.558 [warning] AuroraMeter.Pro is not in your supervision tree, so its configuration was never validated and its boot checks never ran. Add `AuroraMeter.Pro` to your children, after your Repo. Validating lazily now.
+.............................................................................................................    warning: AuroraMeter.Pro.Credits.Expirer.run/0 is deprecated. Use AuroraMeter.Oban.CreditExpiry (aurora_meter 1.0)
+    │
+ 50 │     assert {:ok, count} = Expirer.run()
+    │                                   ~
+    │
+    └─ test/aurora_meter/pro/credits/expirer_test.exs:50:35: AuroraMeter.Pro.Credits.ExpirerTest."test run/0 still returns {:ok, count}"/1
+
+..................
+11:28:00.302 [error] AuroraMeter.Pro.Exporter.StripeMeterEvents: the meter event call raised for subject "stripemeter_129037": AuroraMeter.Pro.Test.StripeMeterDouble was told to
+...............................................................
+11:28:02.277 [warning] AuroraMeter.Pro configuration did not validate: config :aurora_meter_pro, stripe_account_id is required once usage is exported (one feature is mapped in stripe_meters). It is part of the outbox identity, so there is no safe default: an invented account id produces an identity that can never match a real one. Set `stripe_account_id: "acct_..."`. See the configuration table in docs/getting-started.md. Falling back to the unvalidated value. Add AuroraMeter.Pro to your supervision tree to have this fail at boot instead.
+..
+11:28:02.285 [warning] AuroraMeter.Pro configuration did not validate: config :aurora_meter_pro, stripe_mode is :live but the configured Stripe API key begins sk_test_, which is :test mode. One of the two is wrong, and shipping either way round moves money in the wrong environment. (Only the key's prefix is read, and only the prefix is printed here.) See the configuration table in docs/getting-started.md. Falling back to the unvalidated value. Add AuroraMeter.Pro to your supervision tree to have this fail at boot instead.
+.............................
+11:28:02.335 [warning] AuroraMeter.Pro is not in your supervision tree, so its configuration was never validated and its boot checks never ran. Add `AuroraMeter.Pro` to your children, after your Repo. Validating lazily now.
+...
+11:28:02.345 [warning] AuroraMeter.Pro is not in your supervision tree, so its configuration was never validated and its boot checks never ran. Add `AuroraMeter.Pro` to your children, after your Repo. Validating lazily now.
+.
+11:28:02.347 [warning] AuroraMeter.Pro is not in your supervision tree, so its configuration was never validated and its boot checks never ran. Add `AuroraMeter.Pro` to your children, after your Repo. Validating lazily now.
+....................
+11:28:02.370 [warning] AuroraMeter.Pro is not in your supervision tree, so its configuration was never validated and its boot checks never ran. Add `AuroraMeter.Pro` to your children, after your Repo. Validating lazily now.
+.............................
+11:28:02.815 [error] Postgrex.Protocol (#PID<0.162591.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (Postgrex.Error) FATAL 57P01 (admin_shutdown) terminating connection due to administrator command
+..................................................................................
+11:28:04.038 [error] AuroraMeter.Pro.UsageReporter: staging reportfail_b_184454 api_calls for ~U[2026-09-01 00:00:00Z] raised injected fault at :before_commit (label: :stage_second_subscription) context: %{kind: :write, schema: AuroraMeter.Pro.Schema.OutboxItem, statement: :other, repo_fun: :insert_all}. The run continues; the next run recomputes this window.
+...............................
+11:28:04.302 [warning] AuroraMeter.Pro.AuditLog.Pruner is deprecated and is removed in Aurora Meter Pro 2.0. It still prunes the audit log and only the audit log. Move the crontab entry to AuroraMeter.Pro.Retention.Pruner, which prunes the audit log and the four other operational tables that grow with traffic. See the Retention guide.
+.........................
+11:28:04.529 [warning] AuroraMeter.Pro.Outbox.Reconciler: feature "api_calls" has a Stripe meter event name but no meter id, so its usage cannot be read back and nothing was confirmed for it. Set config :aurora_meter_pro, stripe_meter_ids: %{api_calls: "mtr_..."}. Sending a meter event takes the meter's event name; reading a summary takes its id.
+.......
+11:28:04.616 [warning] AuroraMeter.Pro.Outbox.Reconciler: feature "api_calls" has a Stripe meter event name but no meter id, so its usage cannot be read back and nothing was confirmed for it. Set config :aurora_meter_pro, stripe_meter_ids: %{api_calls: "mtr_..."}. Sending a meter event takes the meter's event name; reading a summary takes its id.
+......
+11:28:04.678 [warning] AuroraMeter.Pro.Outbox.Reconciler: could not read a meter event summary for "mtr_TEST": {:error, %Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{}, message: "scripted: the provider did not answer", user_message: nil}}. Nothing was confirmed and no finding was opened.
+....
+11:28:04.709 [warning] AuroraMeter.Pro.Credits: refund for pi_syncrefund_136460 (tenant unknown) arrived before its grant; refusing so Stripe redelivers it
+..........
+11:28:05.023 [error] AuroraMeter.Pro.Credits: refund for pi_syncrefund_136973 has no grant, no tenant metadata and is older than the grant race; answered 200 and opened a reversal_without_grant reconciliation item (docs/recovery.md)
+......
+11:28:05.255 [warning] AuroraMeter.Pro.Credits: refund for pi_syncrefund_235716 (syncrefund_235716) arrived before its grant; refusing so Stripe redelivers it
+...........................
+11:28:05.378 [warning] AuroraMeter.Pro is not in your supervision tree, so its configuration was never validated and its boot checks never ran. Add `AuroraMeter.Pro` to your children, after your Repo. Validating lazily now.
+........
+11:28:05.398 [warning] AuroraMeter.Pro configuration did not validate: config :aurora_meter_pro, stripe_mode is :live but the configured Stripe API key begins sk_test_, which is :test mode. One of the two is wrong, and shipping either way round moves money in the wrong environment. (Only the key's prefix is read, and only the prefix is printed here.) See the configuration table in docs/getting-started.md. Falling back to the unvalidated value. Add AuroraMeter.Pro to your supervision tree to have this fail at boot instead.
+..............................................................
+11:28:06.178 [warning] AuroraMeter.Pro.AuditLog.Pruner is deprecated and is removed in Aurora Meter Pro 2.0. It still prunes the audit log and only the audit log. Move the crontab entry to AuroraMeter.Pro.Retention.Pruner, which prunes the audit log and the four other operational tables that grow with traffic. See the Retention guide.
+..............
+11:28:06.257 [warning] AuroraMeter.Pro configuration did not validate: config :aurora_meter_pro, stripe_account_id is required once usage is exported (one feature is mapped in stripe_meters). It is part of the outbox identity, so there is no safe default: an invented account id produces an identity that can never match a real one. Set `stripe_account_id: "acct_..."`. See the configuration table in docs/getting-started.md. Falling back to the unvalidated value. Add AuroraMeter.Pro to your supervision tree to have this fail at boot instead.
+.............
+11:28:06.861 [error] AuroraMeter.Pro.Credits: the credit for pi_prolots_188422 (prolots_188422) is committed and its card could not be saved after 3 attempts (:timeout); opened a card_not_saved reconciliation item (docs/recovery.md)
+
+11:28:07.276 [error] AuroraMeter.Pro.Credits: the credit for pi_prolots_188422 (prolots_188422) is committed and its card could not be saved after 3 attempts (:timeout); opened a card_not_saved reconciliation item (docs/recovery.md)
+...................................................................
+11:28:08.488 [error] AuroraMeter.Pro.Credits: refund for pi_orphan_240132 has no grant, no tenant metadata and is older than the grant race; answered 200 and opened a reversal_without_grant reconciliation item (docs/recovery.md)
+
+11:28:08.491 [error] AuroraMeter.Pro.Credits: refund for pi_orphan_240132 has no grant, no tenant metadata and is older than the grant race; answered 200 and opened a reversal_without_grant reconciliation item (docs/recovery.md)
+........
+11:28:08.911 [warning] AuroraMeter.Pro auto top-up for worker_190406 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+..
+11:28:08.987 [warning] AuroraMeter.Pro auto top-up for worker_240324 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+........
+11:28:09.181 [warning] AuroraMeter.Pro auto top-up for worker_240644 got no answer (%Stripe.Error{source: :stripe, code: :api_error, request_id: nil, extra: %{http_status: 500}, message: "server error", user_message: nil}); leaving the attempt open rather than counting it against the card
+...........................................
+11:28:09.609 [warning] AuroraMeter.Pro.AuditLog.Pruner is deprecated and is removed in Aurora Meter Pro 2.0. It still prunes the audit log and only the audit log. Move the crontab entry to AuroraMeter.Pro.Retention.Pruner, which prunes the audit log and the four other operational tables that grow with traffic. See the Retention guide.
+.............................
+11:28:09.833 [warning] AuroraMeter.Pro auto top-up for pendingpay_151751 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+......
+11:28:10.063 [warning] AuroraMeter.Pro auto top-up for pendingpay_242564 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+...
+11:28:10.160 [warning] AuroraMeter.Pro auto top-up for pendingpay_446338 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+11:28:10.164 [warning] AuroraMeter.Pro auto top-up for pendingpay_446338 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+11:28:10.168 [warning] AuroraMeter.Pro auto top-up for pendingpay_446338 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+11:28:10.173 [warning] AuroraMeter.Pro auto top-up for pendingpay_446338 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+
+11:28:10.177 [warning] AuroraMeter.Pro auto top-up for pendingpay_446338 got no answer (%Stripe.Error{source: :network, code: :network_error, request_id: nil, extra: %{hackney_reason: :timeout}, message: "An error occurred while making the network request. The HTTP client returned the following reason: :timeout", user_message: nil}); leaving the attempt open rather than counting it against the card
+.
+11:28:10.312 [warning] AuroraMeter.Pro auto top-up for pendingpay_446402 got no answer (%Stripe.Error{source: :stripe, code: :rate_limit_error, request_id: nil, extra: %{http_status: 429}, message: "too many requests", user_message: nil}); leaving the attempt open rather than counting it against the card
+.
+11:28:10.323 [error] AuroraMeter.Pro.Credits: paid checkout session "cs_p17_pendingpay_446466" for pendingpay_446466 carries no payment_intent; refusing so Stripe redelivers it rather than granting under the session id (P17)
+..
+11:28:10.371 [error] Postgrex.Protocol (#PID<0.162605.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.166456.0> exited
+..
+11:28:10.464 [error] Postgrex.Protocol (#PID<0.162595.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.166469.0> exited
+.
+11:28:10.514 [error] Postgrex.Protocol (#PID<0.162607.0> ({Postgrex.Protocol, "aurora_meter_pro_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.166477.0> exited
+............................................................................................................................................
+11:28:12.430 [error] AuroraMeter.Pro.Credits: refund for pi_not_ours has no grant, no tenant metadata and is older than the grant race; answered 200 and opened a reversal_without_grant reconciliation item (docs/recovery.md)
+..
+11:28:12.432 [warning] AuroraMeter.Pro.Credits: refund for pi_early_dispute_org_448130 (tenant unknown) arrived before its grant; refusing so Stripe redelivers it
+.....
+11:28:12.491 [error] AuroraMeter.Pro.Credits: refund for pi_unknown has no grant, no tenant metadata and is older than the grant race; answered 200 and opened a reversal_without_grant reconciliation item (docs/recovery.md)
+...................
+11:28:12.766 [warning] AuroraMeter.Pro.Credits: dispute reinstatement for pi_legacy_other_org_223555 (org_223555) arrived before its grant; refusing so Stripe redelivers it
+
+11:28:12.767 [warning] AuroraMeter.Pro.Credits: refund for pi_legacy_ungranted_org_223555 (org_223555) arrived before its grant; refusing so Stripe redelivers it
+.....
+11:28:12.837 [warning] AuroraMeter.Pro.Credits: refund for pi_refund_first_org_152647 (org_152647) arrived before its grant; refusing so Stripe redelivers it
+
+11:28:12.838 [warning] AuroraMeter.Pro.Webhook: charge.refunded evt_223683 not applied: :grant_not_found
+...................................
+Finished in 15.0 seconds (1.2s async, 13.7s sync)
+
+Result: 987 passed (66 doctests, 921 tests)
+Generating docs...
+View html docs at "/tmp/aurora_meter_pro-check-doc/index.html"
+[mixlane] pro exit=0 started=2026-09-16T01:26:33Z finished=2026-09-16T01:28:14Z
+check exit=0

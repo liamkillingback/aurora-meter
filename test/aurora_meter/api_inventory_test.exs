@@ -59,6 +59,8 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Schema.FlushReceipt,
     AuroraMeter.Storage.Ecto,
     AuroraMeter.Store,
+    AuroraMeter.Subscriptions.Preview,
+    AuroraMeter.Subscriptions.Transitions,
     AuroraMeter.Supervisor
   ]
 
