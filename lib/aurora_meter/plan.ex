@@ -19,6 +19,17 @@ defmodule AuroraMeter.Plan do
   is what makes recurring grants off by default. `AuroraMeter.Credits.Recurrences`
   is the engine that reads it; a new declaration kind was added here rather than
   a new feature kind so every `feature_config/0` consumer is untouched.
+
+  ## Identity
+
+  A plan is identified by `{id, version}`, not by `id` alone. `version` is a
+  short opaque string the host chooses (`"1"` when a block declares none),
+  `effective_at` is the UTC instant from which that version is the one a new
+  subscription gets (`nil` means "from the beginning"), and `fingerprint` is the
+  sha256 of the version's commercial content. Two deploys of the same
+  `{id, version}` with different content raise
+  `AuroraMeter.PlanVersionConflictError` rather than repricing every tenant:
+  see [Plans](plans.md).
   """
 
   @type feature_config ::
@@ -43,10 +54,29 @@ defmodule AuroraMeter.Plan do
 
   @type t :: %__MODULE__{
           id: atom(),
+          version: String.t(),
           price: non_neg_integer(),
           features: %{optional(atom()) => feature_config()},
-          recurring_credits: [recurring_credit()]
+          recurring_credits: [recurring_credit()],
+          effective_at: DateTime.t() | nil,
+          fingerprint: binary() | nil
         }
 
-  defstruct id: nil, price: 0, features: %{}, recurring_credits: []
+  @doc """
+  The version every plan block carries when it does not declare one.
+
+  It is the version `AuroraMeter.Plans.register!/0` backfills onto every
+  subscription written before plan versions existed, so a tenant's commercial
+  contract is named rather than implied (D05).
+  """
+  @spec base_version() :: String.t()
+  def base_version, do: "1"
+
+  defstruct id: nil,
+            version: "1",
+            price: 0,
+            features: %{},
+            recurring_credits: [],
+            effective_at: nil,
+            fingerprint: nil
 end

@@ -230,6 +230,15 @@ defmodule AuroraMeter.Test.FaultRepo do
   @spec query!(String.t(), list(), keyword()) :: term()
   def query!(sql, params, opts), do: target().query!(sql, params, opts)
 
+  # `AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1` takes the non-bang
+  # form: a database error there is reported to `AuroraMeter.Plans.register!/0`
+  # and stops the batch loop, and the next run resumes on `plan_version IS NULL`.
+  # Refusing to boot because one batch of a resumable assignment failed would be
+  # the wrong answer.
+  @doc false
+  @spec query(String.t(), list()) :: {:ok, term()} | {:error, term()}
+  def query(sql, params \\ []), do: target().query(sql, params)
+
   @doc false
   @spec in_transaction?() :: boolean()
   def in_transaction?, do: target().in_transaction?()

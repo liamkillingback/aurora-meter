@@ -1,0 +1,66 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.....................
+
+  1) test I17 a tenant subscribed before version 2 exists keeps version 1 after version 2 is effective (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:413
+     Assertion with == failed
+     code:  assert AuroraMeter.plan(tenant).version == "1"
+     left:  "2"
+     right: "1"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:443: anonymous fn/2 in AuroraMeter.PlanVersionsTest."test I17 a tenant subscribed before version 2 exists keeps version 1 after version 2 is effective"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:439: (test)
+
+
+
+  2) test I17 a tenant keeps version 1's limits when version 1's block is deleted from the module (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:454
+     Assertion with == failed
+     code:  assert plan.version == "1"
+     left:  "2"
+     right: "1"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:471: anonymous fn/1 in AuroraMeter.PlanVersionsTest."test I17 a tenant keeps version 1's limits when version 1's block is deleted from the module"/1
+       (ex_unit 1.20.1) lib/ex_unit/capture_log.ex:127: ExUnit.CaptureLog.with_log/2
+       (ex_unit 1.20.1) lib/ex_unit/capture_log.ex:89: ExUnit.CaptureLog.capture_log/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:464: (test)
+
+
+
+  3) test I17 a subscription pinned to a version in neither code nor storage falls back and says so (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:488
+     Assertion with == failed
+     code:  assert AuroraMeter.plan(tenant).id == :free
+     left:  :versioned
+     right: :free
+     stacktrace:
+       (ex_unit 1.20.1) lib/ex_unit/capture_log.ex:127: ExUnit.CaptureLog.with_log/2
+       (ex_unit 1.20.1) lib/ex_unit/capture_log.ex:89: ExUnit.CaptureLog.capture_log/2
+       test/aurora_meter/plan_versions_test.exs:496: (test)
+
+.
+
+  4) test I17 subscribe/3 with an explicit version pins it, including one not yet effective (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:522
+     Assertion with == failed
+     code:  assert AuroraMeter.plan(tenant).price == 2000
+     left:  3000
+     right: 2000
+     stacktrace:
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:210: anonymous fn/2 in AuroraMeter.Test.with_clock/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:525: (test)
+
+.....
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+
+Result: 27/31 passed
+Failed: 4 tests
+[mixlane] core exit=2 started=2026-09-15T23:08:13Z finished=2026-09-15T23:08:15Z
+

@@ -22,6 +22,7 @@ defmodule AuroraMeter.Storage do
 
   alias AuroraMeter.Event
   alias AuroraMeter.Schema.Counter
+  alias AuroraMeter.Schema.PlanVersion
   alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Subscriptions
 
@@ -105,7 +106,12 @@ defmodule AuroraMeter.Storage do
   `c:drain_projection_seed/2` and `c:activate_projection/1`;
   `:event_streaming` covers `c:stream_events/2`.
   """
-  @type capability :: :durable_events | :corrections | :projection_generations | :event_streaming
+  @type capability ::
+          :durable_events
+          | :corrections
+          | :projection_generations
+          | :event_streaming
+          | :plan_versions
 
   @typedoc """
   One event to record, already validated and canonicalised by
@@ -206,6 +212,51 @@ defmodule AuroraMeter.Storage do
   dispatchers refuse the call on its behalf.
   """
   @callback capabilities() :: [capability()]
+
+  @doc """
+  Inserts one plan version snapshot, or does nothing if `(plan_id, version)` is
+  already stored.
+
+  Never an update. A snapshot is the commercial content a customer was sold and
+  it is immutable; a differing compiled definition is
+  `AuroraMeter.PlanVersionConflictError`, not a write.
+  """
+  @callback put_plan_version(map()) ::
+              {:ok, PlanVersion.t()} | {:error, term()} | {:error, {:unsupported, capability()}}
+
+  @doc """
+  Every stored snapshot for `plan_id`, or for every plan when given `:all`.
+
+  Ordered by `(plan_id, version)` so two nodes comparing fingerprints compare
+  them in the same order and report the same list.
+  """
+  @callback list_plan_versions(String.t() | :all) ::
+              [PlanVersion.t()] | {:error, {:unsupported, capability()}}
+
+  @doc """
+  Names the contract of at most `limit` subscriptions that have no
+  `plan_version`, and reports what it did.
+
+  One bounded transaction. Rows are taken with `FOR UPDATE SKIP LOCKED`, so two
+  nodes running `AuroraMeter.Plans.register!/0` at the same time take disjoint
+  batches rather than queueing. `assigned` is how many rows this batch named and
+  `orphans` how many of those carry a `plan_id` with no registered version, which
+  get a version and a NULL fingerprint: retiring a plan id from code is ordinary
+  and refusing the upgrade for every customer who still holds one would make the
+  upgrade unrunnable for exactly the installs with the longest histories.
+
+  `assigned: 0` means there is nothing left to do and the caller stops.
+
+  **Not one of the two callbacks `api-change-map.md` 1.2 lists.** It is here
+  rather than as raw SQL inside `AuroraMeter.Plans` so that the whole of this
+  feature sits behind one capability, and an adapter that cannot store snapshots
+  is not asked to run a statement against a table it does not have (finding
+  X286).
+  """
+  @callback assign_legacy_plan_versions(pos_integer()) ::
+              {:ok, %{assigned: non_neg_integer(), orphans: non_neg_integer()}}
+              | {:error, term()}
+              | {:error, {:unsupported, capability()}}
 
   @doc """
   Records a batch of events in **one** transaction, with their projection
@@ -419,6 +470,29 @@ defmodule AuroraMeter.Storage do
     end
 
     result
+  end
+
+  @doc "Stores one plan version snapshot. See `c:put_plan_version/1`."
+  @spec put_plan_version(map()) ::
+          {:ok, PlanVersion.t()} | {:error, term()} | {:error, {:unsupported, capability()}}
+  def put_plan_version(attrs) do
+    with :ok <- require!(:plan_versions), do: impl().put_plan_version(attrs)
+  end
+
+  @doc "Reads stored plan version snapshots. See `c:list_plan_versions/1`."
+  @spec list_plan_versions(String.t() | :all) ::
+          [PlanVersion.t()] | {:error, {:unsupported, capability()}}
+  def list_plan_versions(scope) do
+    with :ok <- require!(:plan_versions), do: impl().list_plan_versions(scope)
+  end
+
+  @doc "Names one batch of legacy subscriptions. See `c:assign_legacy_plan_versions/1`."
+  @spec assign_legacy_plan_versions(pos_integer()) ::
+          {:ok, %{assigned: non_neg_integer(), orphans: non_neg_integer()}}
+          | {:error, term()}
+          | {:error, {:unsupported, capability()}}
+  def assign_legacy_plan_versions(limit) do
+    with :ok <- require!(:plan_versions), do: impl().assign_legacy_plan_versions(limit)
   end
 
   @doc "Appends raw usage events (durable mode / audit)."

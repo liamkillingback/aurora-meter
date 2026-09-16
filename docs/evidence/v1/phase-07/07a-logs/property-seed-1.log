@@ -1,0 +1,20 @@
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/credits_lot_migration_property_test.exs test/aurora_meter/plan_versions_property_test.exs --seed 1
+Running ExUnit with seed: 1, max_cases: 48
+Excluding tags: [:headless]
+
+     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+07a plan version property: round trip 100
+.07a plan version property: injectivity distinct=100 equal=0
+.07a plan version property: determinism 100
+...[06b replay property] compared: 19, refused: 2, skipped: 0, reordered by seq: 0, refusals: %{expire_reserved_grant: 1, promotional_divergence_debit: 1}
+
+Finished in 2.8 seconds (0.1s async, 2.6s sync)
+
+Result: 5 passed (4 properties, 1 test)
+[mixlane] core exit=0 started=2026-09-15T23:22:19Z finished=2026-09-15T23:22:23Z

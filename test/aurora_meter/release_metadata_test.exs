@@ -41,7 +41,7 @@ defmodule AuroraMeter.ReleaseMetadataTest do
   # section's statement that `latest_version()` is 6 was true of that release
   # and must not be rewritten. The release that ships schema 7 and 8 (10a / 11e)
   # owes the changelog the new number. Recorded as a finding in 03a's evidence.
-  @schema_version 9
+  @schema_version 10
 
   # X85. ADRs describing behaviour that has shipped, and therefore belong on
   # hexdocs with the release that shipped it.

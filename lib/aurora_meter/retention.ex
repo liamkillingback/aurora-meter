@@ -238,6 +238,13 @@ defmodule AuroraMeter.Retention do
     "aurora_meter_event_totals",
     "aurora_meter_events",
     "aurora_meter_history",
+    # A plan version snapshot is what makes a subscription or an event that
+    # names a retired version readable at all, and there is one row per plan
+    # version rather than one per tenant or per period: it does not grow, and
+    # pruning one would turn a customer's contract into an unreadable string.
+    # A transition row is the audit trail of a commercial change.
+    "aurora_meter_plan_transitions",
+    "aurora_meter_plan_versions",
     "aurora_meter_subscriptions"
   ]
 

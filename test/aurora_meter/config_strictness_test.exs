@@ -301,8 +301,14 @@ defmodule AuroraMeter.ConfigStrictnessTest do
       with_config([{:aurora_meter, :plans, AuroraMeter.Test.FloatPricePlans}], fn ->
         log = capture_log(fn -> assert is_list(Config.validate!(:strict)) end)
 
-        assert log =~ "plan :free declares :float_priced with a float unit_price (0.05)"
-        assert log =~ "plan :pro declares :float_priced with a float unit_price (0.05)"
+        # The version is named too, because a float unit price can belong to one
+        # version of a plan and not to another (build unit 07a).
+        assert log =~
+                 "plan :free version \"1\" declares :float_priced with a float unit_price (0.05)"
+
+        assert log =~
+                 "plan :pro version \"1\" declares :float_priced with a float unit_price (0.05)"
+
         assert log =~ "Integer minor units (cents) are the supported form"
       end)
     end

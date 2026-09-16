@@ -1,0 +1,41 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plans_snapshot_test.exs test/aurora_meter/plan_versions_property_test.exs
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+....
+
+  1) test I17 the canonical form lists features in name order, whatever order the map iterates in (AuroraMeter.PlansSnapshotTest)
+     test/aurora_meter/plans_snapshot_test.exs:104
+     Assertion with == failed
+     code:  assert rendered == Enum.sort(rendered)
+     left:  ["feature_10", "feature_1", "feature_7", "feature_9", "feature_29",
+             "feature_2", "feature_39", "feature_17", "feature_26",
+             "feature_11", "feature_16", "feature_21", "feature_20",
+             "feature_15", "feature_34", "feature_24", "feature_40",
+             "feature_22", "feature_36", "feature_28", "feature_8",
+             "feature_4", "feature_19", "feature_25", "feature_37",
+             "feature_38", "feature_23", "feature_32", "feature_14",
+             "feature_12", "feature_27", "feature_5", "feature_13",
+             "feature_35", "feature_30", "feature_18", "feature_3",
+             "feature_6", "feature_31", "feature_33"]
+     right: ["feature_1", "feature_10", "feature_11", "feature_12",
+             "feature_13", "feature_14", "feature_15", "feature_16",
+             "feature_17", "feature_18", "feature_19", "feature_2",
+             "feature_20", "feature_21", "feature_22", "feature_23",
+             "feature_24", "feature_25", "feature_26", "feature_27",
+             "feature_28", "feature_29", "feature_3", "feature_30",
+             "feature_31", "feature_32", "feature_33", "feature_34",
+             "feature_35", "feature_36", "feature_37", "feature_38",
+             "feature_39", "feature_4", "feature_40", "feature_5",
+             "feature_6", "feature_7", "feature_8", "feature_9"]
+     stacktrace:
+       test/aurora_meter/plans_snapshot_test.exs:125: (test)
+
+.............
+Finished in 0.1 seconds (0.1s async, 0.00s sync)
+
+Result: 17/18 passed (3/3 properties, 14/15 tests)
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-15T23:07:58Z finished=2026-09-15T23:07:59Z
+

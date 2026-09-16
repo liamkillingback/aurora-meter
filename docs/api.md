@@ -48,8 +48,9 @@ every helper name.
 | `AuroraMeter.usage_all/1` | `(tenant) :: %{atom() => integer()}` | stable | 0.1.0 | Warm counters only. |
 | `AuroraMeter.history/3` | `(tenant, atom(), keyword()) :: [AuroraMeter.Storage.history_point()]` | stable | 0.2.0 | Options `:days` (30), `:from`, `:to`. Zero-filled, oldest first. Needs `history: true` and schema version 2. |
 | `AuroraMeter.period/1` | `(tenant) :: AuroraMeter.Period.t()` | stable | 0.2.0 | Delegates to `AuroraMeter.Period.current!/2`, so an invalid period source raises here. |
-| `AuroraMeter.subscribe/2` | `(tenant, atom() \| String.t()) :: {:ok, Subscription.t()} \| {:error, Ecto.Changeset.t()}` | stable | 0.1.0 | An unknown plan id warns in 0.5.x and returns `{:error, changeset}` from 1.0. |
-| `AuroraMeter.plan/1` | `(tenant) :: AuroraMeter.Plan.t() \| nil` | stable | 0.1.0 | Falls back to `:default_plan` for a non-entitled subscription. |
+| `AuroraMeter.subscribe/2` | `(tenant, atom() \| String.t()) :: {:ok, Subscription.t()} \| {:error, Ecto.Changeset.t()}` | stable | 0.1.0 | An unknown plan id warns in 0.5.x and returns `{:error, changeset}` from 1.0. The tenant gets the plan's effective version. |
+| `AuroraMeter.subscribe/3` | `(tenant, atom() \| String.t(), keyword()) :: {:ok, Subscription.t()} \| {:error, Ecto.Changeset.t()}` | additive | 1.0.0 | Option `:version` pins one, including a version that is not yet effective: an explicit opt-in is not a future-dated version becoming active early. An unknown version is `{:error, changeset}` with `plan_version`. |
+| `AuroraMeter.plan/1` | `(tenant) :: AuroraMeter.Plan.t() \| nil` | stable | 0.1.0 | The **version the subscription is pinned to**, from 1.0. Falls back to `:default_plan` for a non-entitled subscription, and to the plan's base version for a row with no `plan_version`. |
 | `AuroraMeter.check/2` | `(tenant, atom()) :: :ok \| {:error, :limit_exceeded \| :not_entitled}` | stable | 0.1.0 | Advisory: a read then a compare. Use `reserve/3` for a hard limit. Honours `undeclared_feature_policy`. |
 | `AuroraMeter.allowed?/2` | `(tenant, atom()) :: boolean()` | stable | 0.1.0 | `check/2 == :ok`. |
 | `AuroraMeter.entitled?/2` | `(tenant, atom()) :: boolean()` | stable | 0.1.0 | Ignores quota. |
@@ -157,12 +158,18 @@ Micro-dollar integers throughout. See [Credits](credits.md).
 
 | Entry | Signature and return | Class | Since | Notes |
 |---|---|---|---|---|
-| `AuroraMeter.Plans.all/0` | `() :: %{optional(atom()) => AuroraMeter.Plan.t()}` | stable | 0.1.0 | |
-| `AuroraMeter.Plans.get/1` | `(atom()) :: AuroraMeter.Plan.t() \| nil` | stable | 0.1.0 | |
+| `AuroraMeter.Plans.all/0` | `() :: %{optional(atom()) => AuroraMeter.Plan.t()}` | stable | 0.1.0 | The shape is unchanged; from 1.0 the content is the **effective** version of each plan at `AuroraMeter.Clock.now/0`. |
+| `AuroraMeter.Plans.get/1` | `(atom()) :: AuroraMeter.Plan.t() \| nil` | stable | 0.1.0 | The plan id's effective version. |
+| `AuroraMeter.Plans.get/2` | `(atom(), String.t()) :: AuroraMeter.Plan.t() \| nil` | additive | 1.0.0 | One named version: compiled first, then the registered snapshot, else `nil`. |
+| `AuroraMeter.Plans.base/1` | `(atom()) :: AuroraMeter.Plan.t() \| nil` | additive | 1.0.0 | The version declaring no `effective_at`, which is what a subscription written before plan versions existed is on. |
+| `AuroraMeter.Plans.versions/1` | `(atom()) :: [AuroraMeter.Plan.t()]` | additive | 1.0.0 | Every version, compiled and stored, oldest first. Includes a version whose block has been deleted from the plans module. |
+| `AuroraMeter.Plans.plan_ids/0` | `() :: [atom()]` | additive | 1.0.0 | Every declared plan id, without resolving an effective version per id. |
+| `AuroraMeter.Plans.register!/0` | `() :: :ok` | additive | 1.0.0 | Called by `AuroraMeter.start_link/1`. Registers the compiled snapshots, refuses an edited version, and names the contract of subscriptions written before core schema version 10. Idempotent; not to be called inside a transaction. |
 | `AuroraMeter.Plans.feature_config/2` | `(atom(), atom()) :: AuroraMeter.Plan.feature_config() \| nil` | stable | 0.1.0 | |
 | `AuroraMeter.Plans.feature_value/3` | `(atom(), atom(), default) :: boolean() \| non_neg_integer() \| default` | stable | 0.4.0 | Arity 2 exists through a `nil` default. |
 | `AuroraMeter.Plans.declared_anywhere?/1` | `(atom()) :: boolean()` | stable | 0.5.0 | Whether any plan declares the feature. Behind the `declared:` telemetry metadata. |
 | `AuroraMeter.Plans.plan/2` | DSL macro | stable | 0.1.0 | Only inside a module that `use`s `AuroraMeter.Plans`. |
+| `AuroraMeter.Plans.plan/3` | DSL macro | additive | 1.0.0 | `plan :pro, version: "2", effective_at: ~U[...] do ... end`. Options `:version` (default `"1"`) and `:effective_at` (default `nil`, meaning from the beginning). Exactly one version of each plan id declares no `effective_at`. |
 | `AuroraMeter.Plans.price/1` | DSL macro | stable | 0.1.0 | Minor units (cents), integer. |
 | `AuroraMeter.Plans.limit/3` | DSL macro | stable | 0.1.0 | `limit :feature, count, :hard` or `:soft`. |
 | `AuroraMeter.Plans.metered/2` | DSL macro | stable | 0.1.0 | Options `:included`, `:unit_price`. Integer `unit_price` is the supported form; a float warns at boot from 0.5.0. |
@@ -221,6 +228,9 @@ in section 2.
 | `AuroraMeter.Storage.begin_projection_generation/0` | `() :: {:ok, map()} \| {:error, term()}` | stable | 1.0.0 | Announces a building generation under `FOR UPDATE` on the projection row, reads the watermark and seeds the new generation from the active one. |
 | `AuroraMeter.Storage.projection_state/0` | `() :: {:ok, map()} \| {:error, term()}` | stable | 1.0.0 | The active, building, previous and seed generations and the watermark. |
 | `AuroraMeter.Storage.drain_projection_seed/2` | `(integer(), pos_integer()) :: {:ok, non_neg_integer()} \| {:error, term()}` | stable | 1.0.0 | Subtracts a bounded slice of a seed generation from the generation it seeded and deletes it. |
+| `AuroraMeter.Storage.put_plan_version/1` | `(map()) :: {:ok, PlanVersion.t()} \| {:error, term()}` | additive | 1.0.0 | Insert or nothing. Never an update: a snapshot is immutable. Needs the `:plan_versions` capability. |
+| `AuroraMeter.Storage.list_plan_versions/1` | `(String.t() \| :all) :: [PlanVersion.t()]` | additive | 1.0.0 | Needs the `:plan_versions` capability. |
+| `AuroraMeter.Storage.assign_legacy_plan_versions/1` | `(pos_integer()) :: {:ok, %{assigned: non_neg_integer(), orphans: non_neg_integer()}} \| {:error, term()}` | additive | 1.0.0 | One bounded transaction of the legacy assignment, taken with `FOR UPDATE SKIP LOCKED`. `assigned: 0` means there is nothing left to do. Needs the `:plan_versions` capability. |
 
 ### 1.9 Subscriptions, flusher, live updates
 
@@ -251,6 +261,7 @@ in section 2.
 | `AuroraMeter.Config.period_source/0` | `() :: module()` | stable | 0.1.0 | |
 | `AuroraMeter.Config.clock/0` | `() :: module()` | stable | 0.5.0 | |
 | `AuroraMeter.Config.undeclared_feature_policy/0` | `() :: :allow \| :warn \| :deny \| :raise` | stable | 0.5.0 | |
+| `AuroraMeter.Config.plan_version_conflict/0` | `() :: :raise \| :warn` | additive | 1.0.0 | |
 | `AuroraMeter.Config.policy_for/1` | `(atom()) :: :allow \| :warn \| :deny \| :raise` | stable | 0.5.0 | The seam every entitlement entry point consults. |
 | `AuroraMeter.Config.durable_features/0` | `() :: [atom()]` | deprecated | 0.1.0 | Reads the deprecated `:durable_features` key. |
 | `AuroraMeter.Config.feature_sources/0` | `() :: %{atom() => :buffered \| :events}` | additive | 1.0.0 | The `:feature_sources` map as declared. |
@@ -457,7 +468,9 @@ copied.
 
 | Entry | Shape | Class | Since | Notes |
 |---|---|---|---|---|
-| `AuroraMeter.Plan` | `%Plan{id, price, features, recurring_credits}` | stable | 0.1.0 | Built by the DSL. `feature_config/0` is the per-feature union; `recurring_credit/0` is one allowance declaration, and the list is empty unless the plan declares `AuroraMeter.Plans.recurring_credits/2`. |
+| `AuroraMeter.Plan` | `%Plan{id, version, price, features, recurring_credits, effective_at, fingerprint}` | stable | 0.1.0 | Built by the DSL. `version`, `effective_at` and `fingerprint` are additive in 1.0.0. `feature_config/0` is the per-feature union; `recurring_credit/0` is one allowance declaration, and the list is empty unless the plan declares `AuroraMeter.Plans.recurring_credits/2`. |
+| `AuroraMeter.Schema.PlanVersion` | `aurora_meter_plan_versions` row | additive | 1.0.0 | One immutable snapshot of a plan version's commercial content. Written only by `AuroraMeter.Plans.register!/0`. |
+| `AuroraMeter.Schema.PlanTransition` | `aurora_meter_plan_transitions` row | additive | 1.0.0 | The audit row for a scheduled plan change. The table ships in core schema version 10; nothing writes it in this release. |
 | `AuroraMeter.Schema.Counter` | `aurora_meter_counters` row | stable | 0.1.0 | |
 | `AuroraMeter.Schema.History` | `aurora_meter_history` row | stable | 0.2.0 | |
 | `AuroraMeter.Schema.Event` | `aurora_meter_events` row | stable | 0.1.0 | The Ecto schema. Its `inserted_at` field is exposed as `recorded_at` on `AuroraMeter.Event`. |
@@ -466,6 +479,7 @@ copied.
 | `AuroraMeter.Schema.CreditBalance` | `aurora_meter_credit_balances` row | stable | 0.4.0 | |
 | `AuroraMeter.Schema.CreditTransaction` | `aurora_meter_credit_transactions` row | stable | 0.4.0 | |
 | `AuroraMeter.UndeclaredFeatureError` | exception | stable | 0.5.0 | Raised under `undeclared_feature_policy: :raise`. Fields `feature`, `tenant_key`, `plan_id`, `entry`, `reason`. |
+| `AuroraMeter.PlanVersionConflictError` | exception | additive | 1.0.0 | A compiled plan version's commercial content differs from the snapshot registered for it. Field `conflicts`, a list of maps with `plan_id`, `version`, `stored_fingerprint` and `compiled_fingerprint`. Rescue it in a release task; never retry it. |
 | `AuroraMeter.Period.InvalidPeriodError` | exception | stable | 0.5.0 | Fields `source`, `tenant_key`, `period`, `instant`, `reason`. |
 | `AuroraMeter.Credits.CurrencyMismatchError` | exception | stable | 0.5.0 | Fields `configured`, `stored`. |
 | `AuroraMeter.Migration.ConcurrentVersionError` | exception | stable | 1.0.0 | A version that must run outside a DDL transaction was given company. Fields `versions`, `concurrent`. |
@@ -545,6 +559,7 @@ never treated as Aurora Meter keys.
 | `:period_source` | atom, `AuroraMeter.Period.Calendar` | stable | 0.1.0 | Must implement `AuroraMeter.Period`. |
 | `:clock` | atom, `AuroraMeter.Clock.System` | stable | 0.5.0 | Must implement `AuroraMeter.Clock`. `AuroraMeter.Clock.System` is the only value supported in production. |
 | `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise`, `:warn` in 0.5.x and `:deny` from 1.0 | stable | 0.5.0 | `:allow` restores the 0.4.x behaviour exactly. `track/4` is outside the policy. |
+| `:plan_version_conflict` | `:raise \| :warn`, `:warn` in 0.5.x and `:raise` from 1.0 | additive | 1.0.0 | What `AuroraMeter.Plans.register!/0` does when a compiled plan version's content differs from its registered snapshot. Neither setting reprices anybody: the tenant stays on the stored definition either way. |
 | `:durable_features` | list of atoms, `[]` | deprecated | 0.1.0 | The legacy durable-track list. Kept and warned through 1.x, removed in 2.0. |
 | `:feature_sources` | map of atom to `:buffered \| :events`, `%{}` | additive | 1.0.0 | Where each feature's commercial quantity comes from. Anything not listed is `:buffered`. |
 | `:events_outbox` | atom or `nil`, `nil` | additive | 1.0.0 | Must implement `AuroraMeter.Events.Outbox`. Called inside the record transaction so an export intent commits with the fact. |
@@ -782,6 +797,8 @@ on it appears anywhere in the tables above, and when this list and the
 | `AuroraMeter.Migration.V7` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V8` | One schema version. Call `AuroraMeter.Migration.up/1`. |
 | `AuroraMeter.Migration.V9` | One schema version. Call `AuroraMeter.Migration.up/1`. |
+| `AuroraMeter.Migration.V10` | One schema version. Call `AuroraMeter.Migration.up/1`. |
+| `AuroraMeter.Plans.Snapshot` | The canonical form a plan fingerprint is taken over, and the jsonb encoding of a stored definition. Read a plan through `AuroraMeter.Plans`. |
 | `AuroraMeter.Schema.FlushReceipt` | The idempotent flush receipt row. Bookkeeping for the flusher. |
 | `AuroraMeter.Storage.Ecto` | The bundled adapter. Configure it by name; the callbacks are section 2. |
 | `AuroraMeter.Store` | Owns the ETS tables and the pending flush batch. |

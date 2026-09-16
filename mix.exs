@@ -293,6 +293,9 @@ defmodule AuroraMeter.MixProject do
         "AuroraMeter.Migration.V7",
         "AuroraMeter.Migration.V8",
         "AuroraMeter.Migration.V9",
+        "AuroraMeter.Migration.V10",
+        "AuroraMeter.Plans.Snapshot",
+        "AuroraMeter.Plans.Snapshot.canonical/1",
         "AuroraMeter.Schema.FlushReceipt",
         # `AuroraMeter.Retention` explains the receipt rule by naming the
         # function that writes the receipt, which is the only way a reader can
@@ -422,6 +425,8 @@ defmodule AuroraMeter.MixProject do
         AuroraMeter.Migration.V7,
         AuroraMeter.Migration.V8,
         AuroraMeter.Migration.V9,
+        AuroraMeter.Migration.V10,
+        AuroraMeter.Plans.Snapshot,
         AuroraMeter.Schema.FlushReceipt,
         AuroraMeter.Storage.Ecto,
         AuroraMeter.Store,

@@ -54,7 +54,13 @@ defmodule AuroraMeter.StorageCase do
   alias AuroraMeter.Events.Canonical
   alias AuroraMeter.Storage
 
-  @capabilities [:durable_events, :corrections, :projection_generations, :event_streaming]
+  @capabilities [
+    :durable_events,
+    :corrections,
+    :projection_generations,
+    :event_streaming,
+    :plan_versions
+  ]
 
   @doc false
   defmacro __using__(opts) do

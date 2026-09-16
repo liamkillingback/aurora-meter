@@ -1,0 +1,83 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plans_snapshot_test.exs test/aurora_meter/plan_versions_property_test.exs --seed 1337
+Compiling 5 files (.ex)
+Running ExUnit with seed: 1337, max_cases: 48
+Excluding tags: [:headless]
+
+........
+
+  1) test I17 the canonical form renders every commercial field with visible separators (AuroraMeter.PlansSnapshotTest)
+     test/aurora_meter/plans_snapshot_test.exs:33
+     Assertion with == failed
+     code:  assert canonical ==
+              Enum.join(
+                [
+                  "v1",
+                  "id#{@us}pro",
+                  "version#{@us}1",
+                  "price#{@us}i2000",
+                  "features",
+                  "f#{@us}ai_generations#{@us}limit#{@us}i1000#{@us}hard",
+                  "f#{@us}api_access#{@us}feature#{@us}bool#{@us}true",
+                  "recurring_credits",
+                  "c#{@us}monthly#{@us}amount#{@us}i5000000#{@us}category#{@us}promotional" <>
+                    "#{@us}rollover#{@us}i1000000#{@us}expires#{@us}period_end"
+                ],
+                @rs
+              )
+     left:  <<118, 49, 105, 100, 31, 112, 114, 111, 118, 101, 114, 115, 105,
+              111, 110, 31, 49, 112, 114, 105, 99, 101, 31, 105, 50,
+              48, 48, 48, 102, 101, 97, 116, 117, 114, 101, 115,
+              102, 31, 97, 105, 95, 103, 101, 110, 101, 114, 97,
+              116, 105, 111, 110, 115, 31, 108, 105, 109, 105, 116,
+              31, 105, 49, 48, 48, 48, 31, 104, 97, 114, 100, 102,
+              31, 97, 112, 105, 95, 97, 99, 99, 101, 115, 115, 31,
+              102, 101, 97, 116, 117, 114, 101, 31, 98, 111, 111,
+              108, 31, 116, 114, 117, 101, 114, 101, 99, 117, 114,
+              114, 105, 110, 103, 95, 99, 114, 101, 100, 105, 116,
+              115, 99, 31, 109, 111, 110, 116, 104, 108, 121, 31,
+              97, 109, 111, 117, 110, 116, 31, 105, 53, 48, 48, 48,
+              48, 48, 48, 31, 99, 97, 116, 101, 103, 111, 114, 121,
+              31, 112, 114, 111, 109, 111, 116, 105, 111, 110, 97,
+              108, 31, 114, 111, 108, 108, 111, 118, 101, 114, 31,
+              105, 49, 48, 48, 48, 48, 48, 48, 31, 101, 120, 112,
+              105, 114, 101, 115, 31, 112, 101, 114, 105, 111, 100,
+              95, 101, 110, 100>>
+     right: <<118, 49, 30, 105, 100, 31, 112, 114, 111, 30, 118, 101, 114, 115,
+              105, 111, 110, 31, 49, 30, 112, 114, 105, 99, 101, 31,
+              105, 50, 48, 48, 48, 30, 102, 101, 97, 116, 117, 114,
+              101, 115, 30, 102, 31, 97, 105, 95, 103, 101, 110,
+              101, 114, 97, 116, 105, 111, 110, 115, 31, 108, 105,
+              109, 105, 116, 31, 105, 49, 48, 48, 48, 31, 104, 97,
+              114, 100, 30, 102, 31, 97, 112, 105, 95, 97, 99, 99,
+              101, 115, 115, 31, 102, 101, 97, 116, 117, 114, 101,
+              31, 98, 111, 111, 108, 31, 116, 114, 117, 101, 30,
+              114, 101, 99, 117, 114, 114, 105, 110, 103, 95, 99,
+              114, 101, 100, 105, 116, 115, 30, 99, 31, 109, 111,
+              110, 116, 104, 108, 121, 31, 97, 109, 111, 117, 110,
+              116, 31, 105, 53, 48, 48, 48, 48, 48, 48, 31, 99, 97,
+              116, 101, 103, 111, 114, 121, 31, 112, 114, 111, 109,
+              111, 116, 105, 111, 110, 97, 108, 31, 114, 111, 108,
+              108, 111, 118, 101, 114, 31, 105, 49, 48, 48, 48, 48,
+              48, 48, 31, 101, 120, 112, 105, 114, 101, 115, 31,
+              112, 101, 114, ...>>
+     stacktrace:
+       test/aurora_meter/plans_snapshot_test.exs:50: (test)
+
+
+
+  2) test I17 the canonical form lists features in name order, whatever order the map iterates in (AuroraMeter.PlansSnapshotTest)
+     test/aurora_meter/plans_snapshot_test.exs:104
+     Assertion with == failed
+     code:  assert length(rendered) == 40
+     left:  0
+     right: 40
+     stacktrace:
+       test/aurora_meter/plans_snapshot_test.exs:124: (test)
+
+........
+Finished in 0.1 seconds (0.1s async, 0.00s sync)
+
+Result: 16/18 passed (3/3 properties, 13/15 tests)
+Failed: 2 tests
+[mixlane] core exit=2 started=2026-09-15T23:07:32Z finished=2026-09-15T23:07:34Z
+

@@ -71,9 +71,20 @@ defmodule AuroraMeter.Config.Schema do
   @spec version() :: String.t()
   def version, do: @version
 
-  @doc "The default `undeclared_feature_policy`, which is the one mode-dependent default."
+  @doc "The default `undeclared_feature_policy`, which is one of two mode-dependent defaults."
   @spec default_undeclared_feature_policy() :: :warn | :deny
   def default_undeclared_feature_policy, do: @policy
+
+  @doc """
+  The default `plan_version_conflict`.
+
+  The other mode-dependent default, and the same argument: refusing to boot
+  because a plan definition was edited is the right answer, and it is not the
+  right answer to spring on a host in a patch release. 0.5.x warns, 1.0 raises.
+  """
+  @spec default_plan_version_conflict() :: :warn | :raise
+  def default_plan_version_conflict,
+    do: if(Version.compare(@version, @strict_from) == :lt, do: :warn, else: :raise)
 
   @doc "How many distinct entries one warning scope records before it suppresses the rest."
   @spec warn_limit() :: pos_integer()

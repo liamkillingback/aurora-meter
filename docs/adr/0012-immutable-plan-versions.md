@@ -83,3 +83,51 @@ the first transition is scheduled.
 Unit 07a (I17: a changed definition raises, a tenant stays on version 1 after a
 version 2 deploy), 07b (transition races and precedence) and 07c (Pro price mapping
 and provider confirmed ordering). None of these tests exists yet.
+
+## Implementation notes (build unit 07a, 2026-09-16)
+
+Five things the implementation settled differently from, or more precisely than,
+the decision above. Each is recorded here rather than in a new ADR, because none
+of them repeals the decision and an ADR per implementation detail would make the
+series unreadable.
+
+**The fingerprint does not cover `effective_at`.** The decision says "a
+fingerprint of the compiled definition" without saying what is in it. The
+canonical form covers the plan id, the version, the price, every feature and
+every recurring credit, and deliberately not the effective instant. That instant
+says when a version starts applying to **new** subscriptions; a tenant already
+pinned to a version is not moved by it, so changing it cannot reprice anybody,
+which is what this ADR is about. Including it would also have made the third
+half of the decision unreachable: deleting a retired base version's block forces
+the version left behind to drop its own instant, or the plans module no longer
+compiles, so every retirement would have been a refused boot for a plan whose
+price nobody had touched.
+
+**The legacy assignment writes the plan's base version, not the literal `"1"`.**
+The decision and `schema-migration-map.md` S6 both say `"1"`, and for every
+plans module that never names a version those are the same string, because `"1"`
+is the DSL default. For a host whose first version is called `"2024-01"` the
+literal would name a version that has never existed and every one of their
+tenants would fall back to the default plan. The base version, the one declaring
+no `effective_at`, is by definition the contract in force before any other
+version of that id was written. `"1"` remains the fallback for a plan id that
+has no registered version at all.
+
+**The DSL's versioned form is `plan/3`, not `plan/2`.** Elixir parses
+`plan :pro, version: "2" do ... end` as three arguments: the id, the keyword
+list and the `do` block. The unversioned `plan :pro do ... end` is still
+`plan/2`, so no existing plans module changes, and `__using__/1` imports both.
+
+**`AuroraMeter.Storage` gained three callbacks, not two.**
+`api-change-map.md` 1.2 lists `put_plan_version/1` and `list_plan_versions/1`.
+The batched legacy assignment is `assign_legacy_plan_versions/1` beside them,
+under the same `:plan_versions` capability, rather than raw SQL issued from
+`AuroraMeter.Plans`: an adapter that cannot store snapshots must not be asked to
+run a statement against a table it does not have, and the degraded mode this ADR
+requires is expressed once, as a capability.
+
+**Version 10 also carries `open-findings.md` X220**, the `clock_timestamp()`
+default on `aurora_meter_flush_receipts.inserted_at`. It has nothing to do with
+plans; it is here because it is one line of DDL that needed a core schema
+version, and the orchestrator assigned it to S6 rather than to the version that
+was rewriting the credit ledger's ordering.

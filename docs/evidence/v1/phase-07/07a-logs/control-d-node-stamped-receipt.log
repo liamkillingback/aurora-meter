@@ -1,0 +1,21 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/storage_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+
+
+  1) test X220 a flush receipt's inserted_at comes from the database, not from the node clock (AuroraMeter.StorageTest)
+     test/aurora_meter/storage_test.exs:13
+     the receipt was stamped ~U[2020-01-01 00:00:00.000000Z], which is the frozen node clock rather than the database's. Version 10's column default is what makes the omission in flush_batch/3 safe.
+     code: assert DateTime.compare(receipt.inserted_at, ~U[2024-01-01 00:00:00Z]) == :gt,
+     stacktrace:
+       test/aurora_meter/storage_test.exs:28: (test)
+
+.........
+Finished in 0.1 seconds (0.00s async, 0.1s sync)
+
+Result: 9/10 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-15T23:00:40Z finished=2026-09-15T23:00:41Z
+

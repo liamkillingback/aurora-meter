@@ -4,19 +4,32 @@
 # library's configuration validation never sees it.
 Application.put_env(:aurora_meter_test, :repo, AuroraMeter.TestRepo)
 
-# Start the host-owned processes a real application would provide (repo + pubsub),
-# then the Aurora Meter runtime itself.
+# Start the host-owned processes a real application would provide (repo +
+# pubsub) first, on their own, because there is now a step between them and the
+# Aurora Meter runtime.
 {:ok, _} =
   Supervisor.start_link(
     [
       AuroraMeter.Test.Faults,
       AuroraMeter.Test.Config,
       AuroraMeter.TestRepo,
-      {Phoenix.PubSub, name: AuroraMeter.TestPubSub},
-      AuroraMeter
+      {Phoenix.PubSub, name: AuroraMeter.TestPubSub}
     ],
     strategy: :one_for_one,
     name: AuroraMeter.TestRootSupervisor
+  )
+
+# **Before** the runtime, because `AuroraMeter.start_link/1` registers the plan
+# versions (build unit 07a) and registration compares the compiled definitions
+# against whatever a previous run stored. `AuroraMeter.TestPlans` is a source
+# file developers edit, so without this a price change in the suite's own plans
+# module would make every later run log a conflict.
+AuroraMeter.Test.Connections.reset_plan_versions!()
+
+{:ok, _} =
+  Supervisor.start_link([AuroraMeter],
+    strategy: :one_for_one,
+    name: AuroraMeter.TestRuntimeSupervisor
   )
 
 Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
@@ -49,7 +62,7 @@ Ecto.Adapters.SQL.Sandbox.mode(AuroraMeter.TestRepo, :manual)
 # assertion fail. A probe script that commits rows needs a prefix in this list.
 AuroraMeter.Test.Connections.sweep!(~w(
   concurrent corrconc flush_batch gate jobctl killt lotconc lotfault lotmig lotprop lots model
-  obansched probe
+  obansched planconc probe
   projection recurconc reconcile recordconc replay replaybig storagecase stmt
 ))
 

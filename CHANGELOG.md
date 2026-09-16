@@ -9,10 +9,49 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Everything below landed after the 0.5.0 transition release and is not in any
 published version. The 0.5.0 section beneath is a historical record of that
 release and is deliberately not rewritten, including its statement that the
-schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
+schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Added
 
+- **Immutable plan versions.** A plan is identified by `{id, version}`, not by
+  `id` alone: `plan :pro, version: "2", effective_at: ~U[2026-10-01 00:00:00Z] do
+  ... end` publishes a new commercial contract without touching the one existing
+  tenants are on. `AuroraMeter.Plans.get/2` resolves a named version,
+  `versions/1` lists every version a plan has ever had, `get/1` and `all/0` keep
+  their shapes and answer with the version effective now, and
+  `AuroraMeter.subscribe/3` takes `version:` to pin one. A subscription records
+  `plan_version`, `plan_fingerprint` and `plan_effective_at`, and
+  `AuroraMeter.plan/1` resolves the version the row names rather than the plan
+  id's current definition. See [Plans](plans.md); the decision and its
+  implementation notes are in `docs/adr/0012-immutable-plan-versions.md`, which
+  is deliberately not in the published documentation until the release that
+  ships the whole of phase 07.
+- **Editing a plan version in place is refused, not applied.**
+  `AuroraMeter.Plans.register!/0` runs from `AuroraMeter.start_link/1`, stores a
+  snapshot of each compiled version in `aurora_meter_plan_versions`, and raises
+  `AuroraMeter.PlanVersionConflictError` when a compiled version's commercial
+  content differs from the one already registered. The message names the plan,
+  the version and both fingerprints, and the remedy is to publish a new version.
+  `config :aurora_meter, plan_version_conflict: :warn` logs it instead and is
+  the default in 0.5.x; `:raise` is the default from 1.0.
+- **Existing customers get an explicit version, not a new one.** The first boot
+  after core schema version 10 names the contract of every subscription written
+  before plan versions existed: the plan's base version, its fingerprint, and
+  `plan_effective_at` taken from the version's own instant or the subscription's
+  `inserted_at`, never from the clock at upgrade time. It runs in batches with
+  `FOR UPDATE SKIP LOCKED`, is idempotent, and resumes after an interruption
+  without a checkpoint. A subscription whose plan id is no longer in code is
+  named and counted rather than refused.
+- **A version deleted from the plans module stays readable.** `Plans.get/2`
+  falls back to the stored snapshot, so a tenant on a retired version keeps the
+  limits, feature values, price and recurring credits they were sold. A feature
+  name in a snapshot that no atom on the node matches is dropped from the
+  resolved plan and logged once per version per node, which is a documented
+  limit rather than a fixed problem: see [Plans](plans.md).
+- `AuroraMeter.Storage` gains `put_plan_version/1`, `list_plan_versions/1` and
+  `assign_legacy_plan_versions/1` behind a new `:plan_versions` capability. An
+  adapter that declares it cannot store snapshots logs one warning and leaves
+  compiled code as the only authority.
 - **`AuroraMeter.Credits.reverse_lot/4` and `AuroraMeter.Credits.restore_lot/4`**,
   the source-scoped refund pair. `reverse_lot/4` takes credit back off the lots
   one payment funded, in the order `available`, `consumed` (which raises `debt`),
@@ -255,6 +294,25 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 8.**
 
 ### Changed
 
+- **`AuroraMeter.Storage.put_subscription/1` no longer nulls a column the
+  caller omitted.** It upserted with `{:replace_all_except, [...]}`, which wrote
+  NULL into every column not cast, so a provider sync would have erased a
+  tenant's plan version and any scheduled transition. The replace list is now
+  computed from the attributes actually supplied and intersected with an allow
+  list that excludes the transition columns entirely. A host that relied on
+  omission to clear a provider field now passes `nil` explicitly.
+- `AuroraMeter.Plans.all/0` keeps its `%{id => Plan.t()}` shape and its content
+  becomes time dependent: it answers with the version of each plan effective at
+  `AuroraMeter.Clock.now/0`.
+- The generated `__aurora_plans__/0` is keyed by `{plan_id, version}` rather
+  than by `plan_id`. It is `@doc false` and generated, and a host that called it
+  directly has to change.
+- `aurora_meter_flush_receipts.inserted_at` is stamped by the database.
+  `AuroraMeter.Retention` compares it against a cutoff the database computes,
+  and it was written from the node's wall clock, which put two clocks on one
+  comparison and made an early prune (and so a double count) possible.
+  **This needs core schema version 10**: the column's default arrives with it,
+  and a 1.0.0-rc.1 node against a version 9 database cannot flush.
 - **References beginning `recurring:` are reserved.**
   `AuroraMeter.Credits.grant/3`, `grant_with_status/3`, `hold/4`, `debit/4` and
   `reverse/4` raise `ArgumentError` for a caller-supplied reference with that

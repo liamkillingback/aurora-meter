@@ -131,6 +131,39 @@ defmodule AuroraMeter.Test.FaultStorage do
   end
 
   @impl AuroraMeter.Storage
+  def put_plan_version(attrs) do
+    Faults.check(:before_commit, %{callback: :put_plan_version, attrs: attrs})
+    result = Backend.put_plan_version(attrs)
+    Faults.check(:after_commit_before_ack, %{callback: :put_plan_version, result: result})
+    result
+  end
+
+  @impl AuroraMeter.Storage
+  def list_plan_versions(scope) do
+    Faults.check(:before_commit, %{callback: :list_plan_versions, scope: scope})
+    result = Backend.list_plan_versions(scope)
+    Faults.check(:after_commit_before_ack, %{callback: :list_plan_versions, result: result})
+    result
+  end
+
+  # The fault point build unit 07a's kill tests use. `:before_commit` is before
+  # this batch's statement runs and `:after_commit_before_ack` is after it has
+  # committed and before `AuroraMeter.Plans.register!/0` counts it, which are
+  # the two sides of "a kill between batches" and "a kill mid-batch".
+  @impl AuroraMeter.Storage
+  def assign_legacy_plan_versions(limit) do
+    Faults.check(:before_commit, %{callback: :assign_legacy_plan_versions, limit: limit})
+    result = Backend.assign_legacy_plan_versions(limit)
+
+    Faults.check(:after_commit_before_ack, %{
+      callback: :assign_legacy_plan_versions,
+      result: result
+    })
+
+    result
+  end
+
+  @impl AuroraMeter.Storage
   def insert_events(rows) do
     Faults.check(:before_commit, %{callback: :insert_events, rows: length(rows)})
     result = Backend.insert_events(rows)

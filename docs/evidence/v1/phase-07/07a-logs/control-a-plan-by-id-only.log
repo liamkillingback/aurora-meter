@@ -1,0 +1,86 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.................
+
+  1) test I17 register! names the contract of a subscription that has none, and leaves a named one alone (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:311
+     Assertion with == failed
+     code:  assert row(named).plan_version == "2"
+     left:  "1"
+     right: "2"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:320: (test)
+
+.......
+
+  2) test I17 subscribe/3 with an explicit version pins it, including one not yet effective (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:522
+     Assertion with == failed
+     code:  assert row(tenant).plan_version == "1"
+     left:  "2"
+     right: "1"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:527: anonymous fn/1 in AuroraMeter.PlanVersionsTest."test I17 subscribe/3 with an explicit version pins it, including one not yet effective"/1
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:210: anonymous fn/2 in AuroraMeter.Test.with_clock/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:525: (test)
+
+
+
+  3) test I17 subscribe/3 with an unknown version is a changeset error naming plan_version (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:545
+     match (=) failed
+     code:  assert {:error, changeset} = AuroraMeter.subscribe(tenant, :versioned, version: "99")
+     left:  {:error, changeset}
+     right: {:ok,
+             %AuroraMeter.Schema.Subscription{
+               __meta__: #Ecto.Schema.Metadata<:loaded, "aurora_meter_subscriptions">,
+               id: "0828516f-3085-42a4-b2d7-713f884803ca",
+               tenant_key: "plansub_5636",
+               plan_id: "versioned",
+               status: "active",
+               provider: nil,
+               provider_customer_id: nil,
+               provider_subscription_id: nil,
+               current_period_start: nil,
+               current_period_end: nil,
+               plan_version: "1",
+               plan_fingerprint: <<27, 13, 54, 104, 195, 33, 147,
+                 65, 179, 215, 72, 249, 134, 103, 229, 19, 81, 136,
+                 7, 189, 125, 57, 142, 225, 59, 54, 203, 252, 53,
+                 158, 144, 47>>,
+               plan_effective_at: ~U[2026-09-15 23:00:36Z],
+               scheduled_plan_id: nil,
+               scheduled_plan_version: nil,
+               scheduled_effective_at: nil,
+               transition_ref: nil,
+               transition_state: nil,
+               transition_confirm: nil,
+               transition_applied_at: nil,
+               inserted_at: ~U[2026-09-15 23:00:36.492229Z],
+               updated_at: ~U[2026-09-15 23:00:36.492229Z]
+             }}
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:548: (test)
+
+
+
+  4) test I17 put_subscription with a partial attribute map leaves every column it did not send (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:555
+     Assertion with == failed
+     code:  assert before.plan_version == "2"
+     left:  "1"
+     right: "2"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:560: (test)
+
+...
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+
+Result: 27/31 passed
+Failed: 4 tests
+[mixlane] core exit=2 started=2026-09-15T23:00:34Z finished=2026-09-15T23:00:36Z
+

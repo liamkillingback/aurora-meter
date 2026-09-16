@@ -46,6 +46,19 @@ defmodule AuroraMeter.Config do
                   "0.5.x transition release and `:deny` from 1.0. `AuroraMeter.track/4` " <>
                   "counts an undeclared feature under every policy."
             ],
+            plan_version_conflict: [
+              type: {:in, [:raise, :warn]},
+              default: Schema.default_plan_version_conflict(),
+              doc:
+                "What `AuroraMeter.Plans.register!/0` does when a compiled plan version's " <>
+                  "commercial content differs from the snapshot already registered for it: " <>
+                  "`:raise` refuses the boot with " <>
+                  "`AuroraMeter.PlanVersionConflictError`, `:warn` logs the same message and " <>
+                  "continues. The default is `:warn` in the 0.5.x transition release and " <>
+                  "`:raise` from 1.0, so the first exposure to an edited plan version is a " <>
+                  "log line rather than a failed deploy. Neither setting reprices anybody: " <>
+                  "a tenant stays on the stored definition either way."
+            ],
             durable_features: [type: {:list, :atom}, default: []],
             feature_sources: [
               type: {:map, :atom, {:in, [:buffered, :events]}},
@@ -318,6 +331,18 @@ defmodule AuroraMeter.Config do
   @doc "What the entitlement functions do with a feature the tenant's plan does not declare."
   @spec undeclared_feature_policy() :: :allow | :warn | :deny | :raise
   def undeclared_feature_policy, do: get(:undeclared_feature_policy)
+
+  @doc """
+  Whether an edited plan version refuses the boot or logs.
+
+  ## Examples
+
+      iex> AuroraMeter.Config.plan_version_conflict() in [:raise, :warn]
+      true
+
+  """
+  @spec plan_version_conflict() :: :raise | :warn
+  def plan_version_conflict, do: get(:plan_version_conflict)
 
   @doc "Features that also write a durable event row on every `track`."
   @spec durable_features() :: [atom()]
@@ -693,20 +718,23 @@ defmodule AuroraMeter.Config do
   # but must not break an upgrade.
   @spec check_plans!(keyword(), Schema.mode()) :: keyword()
   defp check_plans!(opts, mode) do
+    # Keyed by `{plan_id, version}` since core schema version 10: a plan id has
+    # as many definitions as it has versions and each of them is checked.
     plans = opts[:plans].__aurora_plans__()
 
-    for {plan_id, plan} <- plans,
+    for {{plan_id, version}, plan} <- plans,
         {feature, {:metered, _included, unit_price}} <- plan.features,
         is_float(unit_price) do
       Logger.warning(
-        "config :aurora_meter, plans: plan #{inspect(plan_id)} declares " <>
-          "#{inspect(feature)} with a float unit_price (#{unit_price}). Integer minor " <>
+        "config :aurora_meter, plans: plan #{inspect(plan_id)} version #{inspect(version)} " <>
+          "declares #{inspect(feature)} with a float unit_price (#{unit_price}). Integer minor " <>
           "units (cents) are the supported form; a float is kept for compatibility and " <>
           "may lose precision."
       )
     end
 
-    check_default_plan!(opts[:plans], plans, opts[:default_plan], mode)
+    ids = plans |> Map.keys() |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    check_default_plan!(opts[:plans], ids, opts[:default_plan], mode)
 
     opts
   end
@@ -816,26 +844,26 @@ defmodule AuroraMeter.Config do
     :ok
   end
 
-  @spec check_default_plan!(module(), map(), atom(), Schema.mode()) :: :ok
-  defp check_default_plan!(module, plans, default_plan, mode) do
+  @spec check_default_plan!(module(), [atom()], atom(), Schema.mode()) :: :ok
+  defp check_default_plan!(module, ids, default_plan, mode) do
     cond do
-      Map.has_key?(plans, default_plan) ->
+      default_plan in ids ->
         :ok
 
       mode == :strict ->
-        raise ArgumentError, unknown_default_plan(module, plans, default_plan)
+        raise ArgumentError, unknown_default_plan(module, ids, default_plan)
 
       true ->
-        Logger.warning(unknown_default_plan(module, plans, default_plan))
+        Logger.warning(unknown_default_plan(module, ids, default_plan))
     end
 
     :ok
   end
 
-  @spec unknown_default_plan(module(), map(), atom()) :: String.t()
-  defp unknown_default_plan(module, plans, default_plan) do
+  @spec unknown_default_plan(module(), [atom()], atom()) :: String.t()
+  defp unknown_default_plan(module, ids, default_plan) do
     "config :aurora_meter, default_plan: #{inspect(default_plan)} is not declared by " <>
-      "#{inspect(module)}. Known plans: #{inspect(Enum.sort(Map.keys(plans)))}. Every " <>
+      "#{inspect(module)}. Known plans: #{inspect(Enum.sort(ids))}. Every " <>
       "tenant without an entitled subscription would resolve to no plan at all."
   end
 end

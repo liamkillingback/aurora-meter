@@ -213,7 +213,7 @@ defmodule AuroraMeter.ExamplesTest do
 
   describe "team-saas.md" do
     test "the plans module carries exactly what the guide prints" do
-      plans = Bramble.Plans.__aurora_plans__()
+      plans = by_id(Bramble.Plans)
 
       assert plans[:free].price == 0
       assert plans[:team].price == 4_900
@@ -300,7 +300,7 @@ defmodule AuroraMeter.ExamplesTest do
 
   describe "allowance-and-overage.md" do
     test "the plans module carries exactly what the guide prints" do
-      plans = Inkwell.Plans.__aurora_plans__()
+      plans = by_id(Inkwell.Plans)
 
       assert plans[:free].features[:generations] == {:limit, 25, :hard}
       assert plans[:writer].features[:generations] == {:metered, 1_000, 2}
@@ -343,7 +343,7 @@ defmodule AuroraMeter.ExamplesTest do
 
   describe "prepaid-credits.md" do
     test "the plans module carries exactly what the guide prints" do
-      plans = Parsely.Plans.__aurora_plans__()
+      plans = by_id(Parsely.Plans)
 
       assert plans[:payg].features[:pages_parsed] == {:counter}
       assert plans[:payg].features[:api_requests] == {:counter}
@@ -587,7 +587,7 @@ defmodule AuroraMeter.ExamplesTest do
 
   describe "events-source.md" do
     test "the plans module carries exactly what the guide prints" do
-      plans = Lumen.Plans.__aurora_plans__()
+      plans = by_id(Lumen.Plans)
 
       assert plans[:free].features[:tokens] == {:limit, 100_000, :hard}
       assert plans[:studio].features[:tokens] == {:metered, 2_000_000, 1}
@@ -775,5 +775,13 @@ defmodule AuroraMeter.ExamplesTest do
     TestConfig.with_config([{:aurora_meter, :period_source, source}], fn ->
       with_clock(instant, fun)
     end)
+  end
+
+  # The generated plans map is keyed by `{plan_id, version}` from core schema
+  # version 10. Every guide declares one version per plan, so these assertions
+  # are about the plan id and this drops the version rather than every
+  # assertion restating it.
+  defp by_id(module) do
+    Map.new(module.__aurora_plans__(), fn {{id, _version}, plan} -> {id, plan} end)
   end
 end

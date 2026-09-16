@@ -1,0 +1,23 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...................
+
+  1) test I17 the legacy assignment names the plan's base version, not the literal 1 (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:355
+     the tenant was pinned to "1", which is not a version :renamed has ever had
+     code: with_config([{:aurora_meter, :plans, AuroraMeter.Test.RenamedBaseVersionPlans}], fn ->
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:377: anonymous fn/1 in AuroraMeter.PlanVersionsTest."test I17 the legacy assignment names the plan's base version, not the literal 1"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:365: (test)
+
+...........
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+
+Result: 30/31 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-15T23:07:31Z finished=2026-09-15T23:07:32Z
+

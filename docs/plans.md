@@ -164,3 +164,125 @@ more than one allowance as long as the names differ. It is deliberately **not**
 a feature kind: `t:AuroraMeter.Plan.feature_config/0` and everything that reads it
 are untouched by this, so adding an allowance to a plan cannot change what
 `check/2`, `quota/2` or `remaining/2` say about anything.
+
+## Versions
+
+A plan is identified by an id **and a version**. A block that names no version
+is version `"1"`, so a plans module written before Aurora Meter 1.0 is unchanged
+and every tenant on it is on version `"1"`.
+
+```elixir
+plan :pro do                                   # version "1"
+  price 2_000
+  limit :ai_generations, 1_000, :hard
+end
+
+plan :pro, version: "2", effective_at: ~U[2026-10-01 00:00:00Z] do
+  price 3_000
+  limit :ai_generations, 2_000, :hard
+end
+```
+
+`:effective_at` is the UTC instant from which a **new** subscription gets that
+version. Exactly one version of each plan id must omit it: that one is the
+plan's base version, the contract in force before any other version was written,
+and it is what a subscription created before versions existed is assigned to.
+
+Two versions of one plan may not share an effective instant, and a version label
+is 1 to 32 characters of `A-Za-z0-9._-`. Both are compile-time errors.
+
+### What resolves to what
+
+```elixir
+AuroraMeter.Plans.get(:pro)          # the version effective right now
+AuroraMeter.Plans.get(:pro, "1")     # that version, whatever the clock says
+AuroraMeter.Plans.base(:pro)         # the version with no effective instant
+AuroraMeter.Plans.versions(:pro)     # every version, oldest first
+AuroraMeter.Plans.all()              # %{id => the effective version of that id}
+
+AuroraMeter.subscribe(org, :pro)                 # the effective version
+AuroraMeter.subscribe(org, :pro, version: "1")   # that version, pinned
+AuroraMeter.plan(org)                            # the version the tenant is on
+```
+
+`AuroraMeter.plan/1` resolves the version **the subscription names**, not the
+plan id's current definition. That is the whole point: deploying version 2 does
+not move a tenant who bought version 1, and it is why there is no way to reprice
+somebody by editing code.
+
+Pinning a version that is not yet effective is allowed. An explicit opt-in is
+not the same thing as a future-dated version becoming active early, because the
+caller asked for it by name.
+
+### Editing a version is refused
+
+`AuroraMeter.Plans.register!/0` runs from `AuroraMeter.start_link/1`. It stores a
+snapshot of each compiled version in `aurora_meter_plan_versions` and compares
+the fingerprint of every version it has seen before. Changing the price, a
+limit, a metered included count or unit price, a feature value or a recurring
+credit **inside an existing version** is
+`AuroraMeter.PlanVersionConflictError`, naming the plan, the version, both
+fingerprints and the remedy.
+
+```elixir
+config :aurora_meter, plan_version_conflict: :raise   # the 1.0 default
+config :aurora_meter, plan_version_conflict: :warn    # the 0.5.x default
+```
+
+`:warn` logs the same message and continues. Neither setting reprices anybody: a
+tenant stays on the stored definition either way.
+
+Changing a version's `:effective_at` is **not** a conflict. It says when the
+version starts applying to new subscriptions, and a tenant already pinned to one
+is not moved by it. It is also what makes retiring a version possible at all:
+deleting the base version's block forces the version left behind to drop its own
+instant, and a fingerprint that covered the instant would turn every such
+deletion into a refused boot for a plan whose price nobody had touched.
+
+### The registry is not a plan catalogue
+
+`aurora_meter_plan_versions` exists so that a subscription or an event naming a
+version whose block has been deleted from your code is still interpretable. Code
+is authoritative: there is no `Plans.put/1`, nothing reads the table to decide
+what a plan is, and a row is never updated after it is inserted.
+
+Registration also names the contract of every subscription written before core
+schema version 10, in batches, resumably, on the first boot after the upgrade.
+It never changes a `plan_id`, a `plan_version` or a fingerprint that is already
+set. A subscription whose plan id is in no compiled module gets the version and
+a null fingerprint, and is counted as `orphan_plans` in the log line: retiring a
+plan id from code is ordinary and refusing the upgrade over one would make the
+upgrade unrunnable for exactly the oldest installs.
+
+Run it yourself from a release task before a rolling deploy when the
+subscriptions table is large. Do not call it inside a transaction of your own:
+its batch loop opens its own.
+
+If `AuroraMeter` starts **above** your Repo in the supervision tree, registration
+is deferred with one warning and retried on the first lookup that needs a stored
+snapshot, rather than failing the boot. Starting it below the Repo registers at
+boot, which is what you want.
+
+### Two known limits
+
+**A deleted version's feature names have to stay loadable.** A snapshot stores
+feature names as strings and they are read back with
+`String.to_existing_atom/1`, never `String.to_atom/1`, because a row read out of
+a database must not be able to grow the atom table. A name whose atom does not
+exist on the node is dropped from the resolved plan and logged once per version
+per node. Every entitlement function takes an atom, so no caller can ask about a
+dropped name; code that **enumerates** `plan.features` will not see it. Keep the
+module that declares the name loadable, or restore the version's block.
+
+**A storage adapter that cannot store snapshots is reported, not ignored.** It
+logs one warning and compiled code becomes the only authority, which means a
+version whose block is deleted becomes unreadable and the tenants on it fall
+back to the default plan.
+
+### One operational note
+
+Resolving a stored snapshot writes a per-node cache with
+`:persistent_term.put/2`, which triggers a global garbage-collection scan. It is
+bounded: one put at registration, and one per genuinely unknown version per node
+thereafter, including for versions that do not exist, which are cached
+negatively so a bad lookup cannot loop.

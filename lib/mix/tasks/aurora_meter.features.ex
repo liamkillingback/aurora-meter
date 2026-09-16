@@ -70,7 +70,7 @@ defmodule Mix.Tasks.AuroraMeter.Features do
 
     %{
       plans_module: module,
-      plans: Enum.sort_by(Enum.map(plans, &plan_row/1), & &1.id),
+      plans: Enum.sort_by(Enum.map(plans, &plan_row/1), &{&1.id, &1.version}),
       references: references,
       undeclared: undeclared(references, declared),
       gaps: gaps(plans)
@@ -101,14 +101,14 @@ defmodule Mix.Tasks.AuroraMeter.Features do
   defp resolve_plans(nil), do: Config.plans()
   defp resolve_plans(name), do: Module.concat([name])
 
-  @spec plan_row({atom(), AuroraMeter.Plan.t()}) :: map()
-  defp plan_row({id, plan}) do
+  @spec plan_row({{atom(), String.t()}, AuroraMeter.Plan.t()}) :: map()
+  defp plan_row({{id, version}, plan}) do
     features =
       plan.features
       |> Enum.map(fn {feature, config} -> {feature, kind(config)} end)
       |> Enum.sort()
 
-    %{id: id, price: plan.price, features: features}
+    %{id: id, version: version, price: plan.price, features: features}
   end
 
   @spec references(keyword(), keyword()) :: [map()]
@@ -153,15 +153,28 @@ defmodule Mix.Tasks.AuroraMeter.Features do
         do: %{feature: feature, source: source}
   end
 
+  # Gaps are reported per plan **id**, not per version: a feature declared by
+  # any version of a plan is a name the plans module knows, which is what
+  # `:undeclared_feature_policy` resolves through. A feature that one version of
+  # a plan declares and another does not is a commercial difference between the
+  # versions rather than a configuration mistake, so it is not a gap; a version
+  # comparison belongs in `AuroraMeter.Plans.versions/1`, not in this lint.
   @spec gaps(map()) :: [map()]
   defp gaps(plans) do
-    ids = plans |> Map.keys() |> Enum.sort()
+    by_id =
+      Enum.reduce(plans, %{}, fn {{id, _version}, plan}, acc ->
+        Map.update(acc, id, MapSet.new(Map.keys(plan.features)), fn declared ->
+          MapSet.union(declared, MapSet.new(Map.keys(plan.features)))
+        end)
+      end)
+
+    ids = by_id |> Map.keys() |> Enum.sort()
 
     plans
     |> declared_anywhere()
     |> Enum.sort()
     |> Enum.map(fn feature ->
-      declared_in = Enum.filter(ids, &Map.has_key?(plans[&1].features, feature))
+      declared_in = Enum.filter(ids, &MapSet.member?(by_id[&1], feature))
       %{feature: feature, declared_in: declared_in, would_deny: ids -- declared_in}
     end)
     |> Enum.reject(&(&1.would_deny == []))
@@ -184,9 +197,16 @@ defmodule Mix.Tasks.AuroraMeter.Features do
 
   defp render_plans(plans) do
     Enum.flat_map(plans, fn plan ->
-      ["#{plan.id} (price #{plan.price})"] ++
+      ["#{plan.id}#{version_suffix(plan.version)} (price #{plan.price})"] ++
         Enum.map(plan.features, fn {feature, kind} -> "  #{feature}: #{kind}" end) ++ [""]
     end)
+  end
+
+  # The default version is not printed, so a plans module that declares no
+  # versions reads exactly as it did before core schema version 10.
+  @spec version_suffix(String.t()) :: String.t()
+  defp version_suffix(version) do
+    if version == AuroraMeter.Plan.base_version(), do: "", else: " version #{inspect(version)}"
   end
 
   @spec render_references([map()]) :: [String.t()]

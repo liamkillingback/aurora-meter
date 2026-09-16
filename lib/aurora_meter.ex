@@ -421,6 +421,17 @@ defmodule AuroraMeter do
           {:ok, AuroraMeter.Schema.Subscription.t()} | {:error, Ecto.Changeset.t()}
   defdelegate subscribe(tenant, plan_id), to: AuroraMeter.Entitlements
 
+  @doc """
+  Assigns a specific version of `plan_id` to `tenant`.
+
+      AuroraMeter.subscribe(org, :pro, version: "1")
+
+  See `AuroraMeter.Entitlements.subscribe/3`.
+  """
+  @spec subscribe(term(), atom() | String.t(), keyword()) ::
+          {:ok, AuroraMeter.Schema.Subscription.t()} | {:error, Ecto.Changeset.t()}
+  defdelegate subscribe(tenant, plan_id, opts), to: AuroraMeter.Entitlements
+
   @doc "Returns `tenant`'s current plan. See `AuroraMeter.Entitlements.plan/1`."
   @spec plan(term()) :: AuroraMeter.Plan.t() | nil
   defdelegate plan(tenant), to: AuroraMeter.Entitlements
@@ -631,14 +642,37 @@ defmodule AuroraMeter do
   end
 
   @doc """
-  Validates configuration and starts the Aurora Meter runtime supervisor.
+  Validates configuration, starts the Aurora Meter runtime supervisor, and
+  registers the plan versions.
 
   Raises `NimbleOptions.ValidationError` if the `:aurora_meter` configuration is
-  missing a required key or has a value of the wrong type.
+  missing a required key or has a value of the wrong type, and
+  `AuroraMeter.PlanVersionConflictError` when a compiled plan version's
+  commercial content differs from the snapshot already registered for it
+  (`plan_version_conflict: :warn` logs the same message instead).
+
+  `AuroraMeter.Plans.register!/0` runs only when the supervisor actually
+  started. `{:error, {:already_started, _}}` is a legitimate answer for a host
+  that starts Aurora Meter twice, and registering a second time there would do
+  the work twice for no reason.
+
+  Starting Aurora Meter **below** the host's Repo is what lets registration
+  happen at boot. Above it, registration is deferred with one warning and
+  retried on the first lookup that needs a stored snapshot, rather than failing:
+  in 0.4.0 `start_link/1` did no database work at all, and this release is not
+  entitled to turn a supervision order that used to work into a failed boot.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
     AuroraMeter.Config.validate!()
-    AuroraMeter.Supervisor.start_link(opts)
+
+    case AuroraMeter.Supervisor.start_link(opts) do
+      {:ok, pid} ->
+        AuroraMeter.Plans.register!()
+        {:ok, pid}
+
+      other ->
+        other
+    end
   end
 end

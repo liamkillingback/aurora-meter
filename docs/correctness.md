@@ -1000,33 +1000,109 @@ nothing and the next run asks again.
 
 ## I17 Historical plans remain stable
 
-**Guarantee.** Not guaranteed by the shipped code. Plans are declared in a
-compile-time DSL and resolved by id at read time, so redeploying a changed
-definition changes what an existing tenant is entitled to, immediately and
-silently. Phase 07 adds immutable plan versions and a `plan_version` on the
-subscription, after which deploying a changed definition of an already used
-version raises at registration, a tenant stays on the version it was subscribed
-on until an explicit scheduled migration moves it, and a stale provider
-notification cannot move a version.
+**Guarantee.** A plan is identified by `(plan_id, version)`. A subscription
+records the version it was sold, and `AuroraMeter.Entitlements.plan/1` resolves
+**that** version: from the compiled plans module when it is still there, and
+otherwise from the snapshot `AuroraMeter.Plans.register!/0` stored in
+`aurora_meter_plan_versions`. So deploying a new version of a plan does not move
+a tenant already on an older one, and deleting a retired version's block does
+not change what the tenants on it are entitled to.
 
-**Prerequisites.** The phase 07 plan registry and the subscription schema change
-that records the version.
+Editing a version **in place** is refused rather than applied:
+`register!/0` compares a fingerprint of each compiled version's commercial
+content (the plan id, the version, the price, every feature and every recurring
+credit) against the stored one and raises
+`AuroraMeter.PlanVersionConflictError`, or logs the same message under
+`plan_version_conflict: :warn`, which is the 0.5.x default.
 
-**Known limits.** Today the only protections are compile-time: a duplicate feature
-declaration and a negative limit both raise while the plans module compiles, and an
-integer feature must be a non-negative integer. Those keep a plans module
-internally consistent; they do nothing about a tenant's entitlement changing under
-it between deploys. Any customer-facing claim of plan stability must wait for
-phase 07.
+Subscriptions written before core schema version 10 are named at the first boot
+after the upgrade, with the plan's **base** version and that version's
+fingerprint, in resumable batches. Registration never changes a `plan_id`, a
+`plan_version` or a fingerprint that is already set.
+
+**Prerequisites.** Core schema version 10, and a storage adapter that declares
+the `:plan_versions` capability. An adapter that does not logs one warning and
+leaves compiled code as the only authority, in which case a version deleted from
+code becomes unreadable and the tenants on it fall back to the default plan.
+
+**Known limits.** A feature or recurring credit name in a stored snapshot is read
+back with `String.to_existing_atom/1`. A name whose atom does not exist on the
+node is dropped from the resolved plan and logged once per version per node:
+invisible to `check/2`, `entitled?/2`, `quota/2` and `feature_value/3`, which all
+take atoms, and **not** invisible to code that enumerates `plan.features`.
+
+A version's `:effective_at` is deliberately outside the fingerprint, so moving it
+is not a conflict. It decides which version a **new** subscription gets and
+cannot move a tenant already pinned to one.
+
+Two of the three adversarial proofs `v1-release.md` section 17 asks of I17 are
+**not** in this unit: the explicit scheduled migration is 07b's and the stale
+provider notification is 07c's. The bullets below prove the first one, the
+changed definition.
 
 **Tests.**
 
 - `AuroraMeter.PlansTest` / `test a duplicate feature raises at compile time`
 - `AuroraMeter.PlansTest` / `test a negative limit raises at compile time`
 - `AuroraMeter.SubscriptionsTest` / `test a subscription that is not in an entitled status falls back to the default plan`
-- PLANNED (07a): `AuroraMeter.PlanVersionsTest` / `test I17 deploying a changed definition of a used version raises`
-- PLANNED (07a): `AuroraMeter.PlanVersionsTest` / `test I17 a tenant stays on v1 after v2 is deployed`
-- PLANNED (07a): `AuroraMeter.PlanVersionsTest` / `test I17 a stale provider notification cannot move the version`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 register! killed between assignment batches resumes and completes on the next run`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 register! killed inside a batch commits nothing from that batch`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 twelve concurrent put_plan_version calls for one key leave exactly one row`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 twelve concurrent register! calls insert one row per plan id and version`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 twelve concurrent register! calls reach the same conflict decision`
+- `AuroraMeter.PlanRegistryConcurrencyTest` / `test I17 two concurrent assignments take disjoint batches and leave every row named`
+- `AuroraMeter.PlanVersionsPropertyTest` / `property I17 encode then decode preserves the fingerprint`
+- `AuroraMeter.PlanVersionsPropertyTest` / `property I17 the fingerprint is a pure function of the commercial content`
+- `AuroraMeter.PlanVersionsPropertyTest` / `property I17 two plans with different commercial content have different fingerprints`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a future-dated version is not effective before its instant and is after it`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a non-UTC effective instant raises at compile time and says why`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a plan block without a version compiles as version 1 with no effective instant`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a plan id whose only version is future dated raises at compile time`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a storage adapter without snapshot support warns once and leaves code authoritative`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a subscription pinned to a version in neither code nor storage falls back and says so`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a tenant keeps version 1's limits when version 1's block is deleted from the module`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a tenant subscribed before version 2 exists keeps version 1 after version 2 is effective`
+- `AuroraMeter.PlanVersionsTest` / `test I17 all/0 keeps its %{id => plan} shape`
+- `AuroraMeter.PlanVersionsTest` / `test I17 an invalid version string raises at compile time`
+- `AuroraMeter.PlanVersionsTest` / `test I17 an unknown option in the plan keyword list raises and lists the accepted keys`
+- `AuroraMeter.PlanVersionsTest` / `test I17 base/1 is the version with no effective instant, whatever the clock says`
+- `AuroraMeter.PlanVersionsTest` / `test I17 duplicate plan id and version in one module raises at compile time`
+- `AuroraMeter.PlanVersionsTest` / `test I17 get/2 returns a compiled version and nil for a version in neither code nor storage`
+- `AuroraMeter.PlanVersionsTest` / `test I17 plan_version_conflict warn logs the same message once and does not raise`
+- `AuroraMeter.PlanVersionsTest` / `test I17 put_subscription never writes a transition column, even when asked to`
+- `AuroraMeter.PlanVersionsTest` / `test I17 put_subscription still invalidates the subscription cache`
+- `AuroraMeter.PlanVersionsTest` / `test I17 put_subscription with a full provider attribute map updates every syncable column`
+- `AuroraMeter.PlanVersionsTest` / `test I17 put_subscription with a partial attribute map leaves every column it did not send`
+- `AuroraMeter.PlanVersionsTest` / `test I17 register! names a subscription whose plan id is in no compiled module, with no fingerprint`
+- `AuroraMeter.PlanVersionsTest` / `test I17 register! names the contract of a subscription that has none, and leaves a named one alone`
+- `AuroraMeter.PlanVersionsTest` / `test I17 register! raises PlanVersionConflictError naming the plan, version and both fingerprints`
+- `AuroraMeter.PlanVersionsTest` / `test I17 register! stamps first_seen_at from the database, not from the node clock`
+- `AuroraMeter.PlanVersionsTest` / `test I17 register! stores one snapshot per compiled version and the second run writes nothing`
+- `AuroraMeter.PlanVersionsTest` / `test I17 subscribe/2 selects the version effective now and stamps its fingerprint`
+- `AuroraMeter.PlanVersionsTest` / `test I17 subscribe/3 with an explicit version pins it, including one not yet effective`
+- `AuroraMeter.PlanVersionsTest` / `test I17 subscribe/3 with an unknown version is a changeset error naming plan_version`
+- `AuroraMeter.PlanVersionsTest` / `test I17 the legacy assignment names the plan's base version, not the literal 1`
+- `AuroraMeter.PlanVersionsTest` / `test I17 the legacy assignment takes plan_effective_at from the past, never from the upgrade clock`
+- `AuroraMeter.PlanVersionsTest` / `test I17 two versions of one plan id both compile and versions/1 lists them oldest first`
+- `AuroraMeter.PlanVersionsTest` / `test I17 two versions of one plan with the same effective instant raise at compile time`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 a boolean feature value and the integer 1 produce different fingerprints`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 an integer and a float unit price produce different fingerprints`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 decode drops a feature name with no existing atom and names it`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 decode refuses a plan id with no existing atom rather than creating one`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 encode then decode round-trips a plan`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 short/1 renders twelve hex characters, or says there is no fingerprint`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the canonical form lists features in name order, whatever order the map iterates in`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the canonical form renders every commercial field with visible separators`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the effective instant is not commercial content and does not change the fingerprint`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint changes when any commercial field changes`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint is independent of feature declaration order`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint is independent of map iteration order above the small-map boundary`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint is independent of recurring credit declaration order`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the fingerprint is the sha256 of the canonical form and is 32 bytes`
+- `AuroraMeter.PlansSnapshotTest` / `test I17 the separators cannot appear in a name the DSL accepts`
+- PLANNED (07b): `AuroraMeter.PlanTransitionsTest` / `test I17 an explicit scheduled migration is the only thing that moves a tenant's version`
+- PLANNED (07c): `AuroraMeter.Pro.PlanAttributionTest` / `test I17 a stale provider notification cannot move the version`
 
 **Evidence.** `docs/evidence/v1/phase-07/i17.md`
 
@@ -1171,6 +1247,14 @@ the storefront together.
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 it is idempotent: a second run updates nothing and changes no hash`
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 a run killed between batches resumes byte for byte`
 - `AuroraMeter.EventsBackfillTest` / `test filling every legacy row I19 rows an old writer inserts during the run are picked up by the same pass`
+- `AuroraMeter.MigrationV10Test` / `test I19 a fresh install and an incremental upgrade to 10 produce the same catalogue`
+- `AuroraMeter.MigrationV10Test` / `test I19 a populated version 9 database upgrades with no subscription changed`
+- `AuroraMeter.MigrationV10Test` / `test I19 down of version 10 removes both tables and every column it added`
+- `AuroraMeter.MigrationV10Test` / `test I19 version 10 creates both plan tables and every subscription column with its checks`
+- `AuroraMeter.MigrationV10Test` / `test I19 version 10 is on the data-loss list, so its down needs confirm_data_loss`
+- `AuroraMeter.MigrationV10Test` / `test I19 version 10 refuses a plan version fingerprint that is not 32 bytes`
+- `AuroraMeter.MigrationV10Test` / `test I19 version 10 refuses a transition state it does not know`
+- `AuroraMeter.MigrationV10Test` / `test I19 version 10 run twice is a no-op`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 a populated core1 database upgrades with every total preserved`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 an interrupted backfill resumes without double counting`
 

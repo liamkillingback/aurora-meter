@@ -1,0 +1,302 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs test/aurora_meter/plan_registry_concurrency_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...
+
+  1) test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding (AuroraMeter.PlanRegistryConcurrencyTest)
+     test/aurora_meter/plan_registry_concurrency_test.exs:160
+     match (=) failed
+     The following variables were pinned:
+       held = 12
+     code:  assert {:ok, %{assigned: ^held}} = Storage.assign_legacy_plan_versions(1000)
+     left:  {:ok, %{assigned: ^held}}
+     right: {:ok, %{assigned: 40, orphans: 0}}
+     stacktrace:
+       test/aurora_meter/plan_registry_concurrency_test.exs:206: (test)
+
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.472.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.679.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.468.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.681.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.447.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.694.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.500.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.693.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.456.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.680.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.486.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.686.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.470.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.697.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.485.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.688.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.453.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.698.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.455.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.684.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.483.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.690.0> exited
+
+09:01:30.784 [error] Postgrex.Protocol (#PID<0.458.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.683.0> exited
+
+
+  2) test I17 two concurrent assignments take disjoint batches and leave every row named (AuroraMeter.PlanRegistryConcurrencyTest)
+     test/aurora_meter/plan_registry_concurrency_test.exs:210
+     ** (exit) exited in: Task.await_many([%Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.679.0>, ref: #Reference<0.0.86403.2874924429.3613196289.132402>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.680.0>, ref: #Reference<0.0.86403.2874924429.3613196289.132406>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.681.0>, ref: #Reference<0.0.86403.2874924429.3613196302.125736>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.683.0>, ref: #Reference<0.0.86403.2874924429.3613196302.125739>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.684.0>, ref: #Reference<0.0.86403.2874924429.3613196302.125743>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.686.0>, ref: #Reference<0.0.86403.2874924429.3613196290.125754>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.688.0>, ref: #Reference<0.0.86403.2874924429.3613196290.125758>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.690.0>, ref: #Reference<0.0.86403.2874924429.3613196290.125760>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.693.0>, ref: #Reference<0.0.86403.2874924429.3613196290.125764>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.694.0>, ref: #Reference<0.0.86403.2874924429.3613196302.125791>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.697.0>, ref: #Reference<0.0.86403.2874924429.3613196302.125800>}, %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.675.0>, pid: #PID<0.698.0>, ref: #Reference<0.0.86403.2874924429.3613196302.125802>}], 30000)
+         ** (EXIT) time out
+     code: Connections.run(12, fn _index ->
+     stacktrace:
+       (elixir 1.20.1) lib/task.ex:1017: Task.await_many/5
+       (elixir 1.20.1) lib/task.ex:1001: Task.await_many/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/connections.ex:126: AuroraMeter.Test.Connections.run/3
+       test/aurora_meter/plan_registry_concurrency_test.exs:219: (test)
+
+
+09:02:30.791 [error] Postgrex.Protocol (#PID<0.482.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.705.0> exited
+
+
+  3) test I17 register! killed between assignment batches resumes and completes on the next run (AuroraMeter.PlanRegistryConcurrencyTest)
+     test/aurora_meter/plan_registry_concurrency_test.exs:236
+     ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+
+       1. per test by setting "@tag timeout: x" (accepts :infinity)
+       2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. by running "mix test --timeout x" which sets timeout
+       5. or by running "mix test --trace" which sets timeout to infinity
+          (useful when using IEx.pry/0)
+
+     where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+     code: assert :ok = Kill.assert_db!(fn -> Plans.register!() end)
+     stacktrace:
+       (erts 17.0.1) :prim_inet.recv0/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:3345: Postgrex.Protocol.rows_recv/5
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2312: Postgrex.Protocol.recv_execute/5
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2149: Postgrex.Protocol.bind_execute_close/4
+       (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+       (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+       (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+       (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+       (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:429: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:786: anonymous fn/2 in AuroraMeter.Plans.assign_legacy/0
+       (elixir 1.20.1) lib/stream.ex:1720: Stream.do_unfold/4
+       (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:685: AuroraMeter.Plans.register/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/kill.ex:92: AuroraMeter.Test.Kill.assert_db!/1
+       test/aurora_meter/plan_registry_concurrency_test.exs:271: (test)
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+       (stdlib 8.0) timer.erl:599: :timer.tc/2
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:455: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+
+09:03:30.828 [error] Postgrex.Protocol (#PID<0.448.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.711.0> exited
+
+
+  4) test I17 register! killed inside a batch commits nothing from that batch (AuroraMeter.PlanRegistryConcurrencyTest)
+     test/aurora_meter/plan_registry_concurrency_test.exs:279
+     ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+
+       1. per test by setting "@tag timeout: x" (accepts :infinity)
+       2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. by running "mix test --timeout x" which sets timeout
+       5. or by running "mix test --trace" which sets timeout to infinity
+          (useful when using IEx.pry/0)
+
+     where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+     code: assert :ok = Kill.assert_db!(fn -> Plans.register!() end)
+     stacktrace:
+       (erts 17.0.1) :prim_inet.recv0/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2293: Postgrex.Protocol.recv_bind/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2148: Postgrex.Protocol.bind_execute_close/4
+       (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+       (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+       (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+       (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+       (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:429: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:786: anonymous fn/2 in AuroraMeter.Plans.assign_legacy/0
+       (elixir 1.20.1) lib/stream.ex:1720: Stream.do_unfold/4
+       (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:685: AuroraMeter.Plans.register/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/kill.ex:92: AuroraMeter.Test.Kill.assert_db!/1
+       test/aurora_meter/plan_registry_concurrency_test.exs:303: (test)
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+       (stdlib 8.0) timer.erl:599: :timer.tc/2
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:455: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.................
+09:04:30.916 [error] Postgrex.Protocol (#PID<0.495.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.822.0> exited
+
+
+  5) test I17 register! names the contract of a subscription that has none, and leaves a named one alone (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:311
+     ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+
+       1. per test by setting "@tag timeout: x" (accepts :infinity)
+       2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. by running "mix test --timeout x" which sets timeout
+       5. or by running "mix test --trace" which sets timeout to infinity
+          (useful when using IEx.pry/0)
+
+     where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+     code: assert :ok = Plans.register!()
+     stacktrace:
+       (erts 17.0.1) :prim_inet.recv0/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2293: Postgrex.Protocol.recv_bind/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2218: Postgrex.Protocol.bind_execute/4
+       (ecto_sql 3.14.0) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+       (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+       (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+       (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+       (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+       (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:429: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:786: anonymous fn/2 in AuroraMeter.Plans.assign_legacy/0
+       (elixir 1.20.1) lib/stream.ex:1720: Stream.do_unfold/4
+       (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:685: AuroraMeter.Plans.register/2
+       test/aurora_meter/plan_versions_test.exs:322: (test)
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+       (stdlib 8.0) timer.erl:599: :timer.tc/2
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:455: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+
+09:05:30.917 [error] Postgrex.Protocol (#PID<0.473.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.828.0> exited
+
+
+  6) test I17 register! names a subscription whose plan id is in no compiled module, with no fingerprint (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:334
+     ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+
+       1. per test by setting "@tag timeout: x" (accepts :infinity)
+       2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. by running "mix test --timeout x" which sets timeout
+       5. or by running "mix test --trace" which sets timeout to infinity
+          (useful when using IEx.pry/0)
+
+     where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+     code: assert :ok = Plans.register!()
+     stacktrace:
+       (erts 17.0.1) :prim_inet.recv0/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2293: Postgrex.Protocol.recv_bind/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2218: Postgrex.Protocol.bind_execute/4
+       (ecto_sql 3.14.0) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+       (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+       (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+       (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+       (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+       (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:429: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:786: anonymous fn/2 in AuroraMeter.Plans.assign_legacy/0
+       (elixir 1.20.1) lib/stream.ex:1720: Stream.do_unfold/4
+       (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:685: AuroraMeter.Plans.register/2
+       test/aurora_meter/plan_versions_test.exs:347: (test)
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+       (stdlib 8.0) timer.erl:599: :timer.tc/2
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:455: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+
+09:06:30.920 [error] Postgrex.Protocol (#PID<0.490.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.833.0> exited
+
+
+  7) test I17 the legacy assignment names the plan's base version, not the literal 1 (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:355
+     ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+
+       1. per test by setting "@tag timeout: x" (accepts :infinity)
+       2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. by running "mix test --timeout x" which sets timeout
+       5. or by running "mix test --trace" which sets timeout to infinity
+          (useful when using IEx.pry/0)
+
+     where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+     code: with_config([{:aurora_meter, :plans, AuroraMeter.Test.RenamedBaseVersionPlans}], fn ->
+     stacktrace:
+       (erts 17.0.1) :prim_inet.recv0/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2293: Postgrex.Protocol.recv_bind/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2218: Postgrex.Protocol.bind_execute/4
+       (ecto_sql 3.14.0) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+       (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+       (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+       (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+       (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+       (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:429: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:786: anonymous fn/2 in AuroraMeter.Plans.assign_legacy/0
+       (elixir 1.20.1) lib/stream.ex:1720: Stream.do_unfold/4
+       (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:685: AuroraMeter.Plans.register/2
+       test/aurora_meter/plan_versions_test.exs:373: anonymous fn/1 in AuroraMeter.PlanVersionsTest."test I17 the legacy assignment names the plan's base version, not the literal 1"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:365: (test)
+       (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+
+
+09:07:30.922 [error] Postgrex.Protocol (#PID<0.496.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.837.0> exited
+
+
+  8) test I17 the legacy assignment takes plan_effective_at from the past, never from the upgrade clock (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:389
+     ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+
+       1. per test by setting "@tag timeout: x" (accepts :infinity)
+       2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+       3. globally via "ExUnit.start(timeout: x)" configuration
+       4. by running "mix test --timeout x" which sets timeout
+       5. or by running "mix test --trace" which sets timeout to infinity
+          (useful when using IEx.pry/0)
+
+     where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+     code: with_clock(~U[2035-06-01 00:00:00Z], fn -> assert :ok = Plans.register!() end)
+     stacktrace:
+       (erts 17.0.1) :prim_inet.recv0/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2293: Postgrex.Protocol.recv_bind/3
+       (postgrex 0.22.4) lib/postgrex/protocol.ex:2218: Postgrex.Protocol.bind_execute/4
+       (ecto_sql 3.14.0) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+       (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+       (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+       (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+       (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+       (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+       (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:429: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:786: anonymous fn/2 in AuroraMeter.Plans.assign_legacy/0
+       (elixir 1.20.1) lib/stream.ex:1720: Stream.do_unfold/4
+       (elixir 1.20.1) lib/enum.ex:2676: Enum.reduce_while/3
+       (aurora_meter 0.5.0) lib/aurora_meter/plans.ex:685: AuroraMeter.Plans.register/2
+       test/aurora_meter/plan_versions_test.exs:398: anonymous fn/0 in AuroraMeter.PlanVersionsTest."test I17 the legacy assignment takes plan_effective_at from the past, never from the upgrade clock"/1
+       (aurora_meter 0.5.0) lib/aurora_meter/test.ex:210: anonymous fn/2 in AuroraMeter.Test.with_clock/2
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:398: (test)
+
+..........
+Finished in 390.6 seconds (0.00s async, 390.6s sync)
+
+Result: 30/38 passed
+Failed: 8 tests
+[mixlane] core exit=2 started=2026-09-15T23:00:58Z finished=2026-09-15T23:07:31Z
+

@@ -1,0 +1,50 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plans_snapshot_test.exs test/aurora_meter/plan_versions_property_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+.....
+
+  1) test I17 the fingerprint is independent of recurring credit declaration order (AuroraMeter.PlansSnapshotTest)
+     test/aurora_meter/plans_snapshot_test.exs:137
+     Assertion with == failed
+     code:  assert fingerprint(recurring_credits: [first, second]) == fingerprint(recurring_credits: [second, first])
+     left:  <<246, 191, 137, 224, 38, 121, 77, 227, 49, 1, 65, 64, 245, 207, 17,
+              163, 27, 126, 233, 15, 191, 195, 180, 8, 126, 158, 44,
+              63, 66, 77, 74, 180>>
+     right: <<144, 23, 168, 24, 92, 25, 194, 30, 180, 192, 113, 150, 191, 42,
+              208, 10, 228, 133, 53, 232, 182, 223, 123, 65, 230,
+              77, 118, 164, 140, 118, 43, 194>>
+     stacktrace:
+       test/aurora_meter/plans_snapshot_test.exs:154: (test)
+
+.........
+
+  2) property I17 the fingerprint is a pure function of the commercial content (AuroraMeter.PlanVersionsPropertyTest)
+     test/aurora_meter/plan_versions_property_test.exs:102
+     Failed with generated values (after 9 successful runs):
+
+         * Clause:    plan <- plan_generator()
+           Generated: %AuroraMeter.Plan{id: :versioned, version: "gk", price: 453441, features: %{tokens: {:metered, 14891, 148}, ai_generations: {:metered, 40680, 93.75}}, recurring_credits: [%{name: :quarterly, category: :adjustment, amount: 2533689, rollover: 754049, expires: {:seconds, 217135}}, %{name: :annual, category: :paid, amount: 2769537, rollover: 577521, expires: :period_end}], effective_at: nil, fingerprint: nil}
+
+     Assertion with == failed
+     code:  assert Snapshot.fingerprint(reordered) == digest
+     left:  <<240, 125, 54, 83, 166, 220, 230, 91, 185, 179, 125, 203, 240, 235,
+              81, 113, 191, 44, 171, 204, 9, 65, 123, 23, 228, 32,
+              7, 12, 150, 29, 128, 119>>
+     right: <<86, 163, 82, 237, 130, 67, 205, 29, 128, 132, 1, 225, 137, 188, 8,
+              167, 203, 142, 201, 150, 115, 84, 75, 211, 230, 167,
+              231, 109, 19, 70, 208, 182>>
+     stacktrace:
+       test/aurora_meter/plan_versions_property_test.exs:118: anonymous fn/3 in AuroraMeter.PlanVersionsPropertyTest."property I17 the fingerprint is a pure function of the commercial content"/1
+       (stream_data 1.3.0) lib/stream_data.ex:2556: StreamData.shrink_failure/6
+       (stream_data 1.3.0) lib/stream_data.ex:2516: StreamData.check_all/7
+       test/aurora_meter/plan_versions_property_test.exs:105: (test)
+
+..
+Finished in 0.1 seconds (0.1s async, 0.00s sync)
+
+Result: 16/18 passed (2/3 properties, 14/15 tests)
+Failed: 1 property, 1 test
+[mixlane] core exit=2 started=2026-09-15T23:07:35Z finished=2026-09-15T23:07:37Z
+

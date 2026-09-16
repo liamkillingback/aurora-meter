@@ -1,0 +1,33 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+..............
+
+  1) test I17 register! raises PlanVersionConflictError naming the plan, version and both fingerprints (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:234
+     Expected exception AuroraMeter.PlanVersionConflictError but nothing was raised
+     code: with_config(
+     stacktrace:
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:246: (test)
+
+
+
+  2) test I17 plan_version_conflict warn logs the same message once and does not raise (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:273
+     Assertion with =~ failed
+     code:  assert log =~ "[error]"
+     left:  ""
+     right: "[error]"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:288: (test)
+
+...............
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+
+Result: 29/31 passed
+Failed: 2 tests
+[mixlane] core exit=2 started=2026-09-15T23:07:59Z finished=2026-09-15T23:08:01Z
+

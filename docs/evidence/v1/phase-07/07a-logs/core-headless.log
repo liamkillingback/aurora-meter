@@ -1,0 +1,432 @@
+=== 07a core headless (AURORA_HEADLESS=1) ===
+2026-09-15T23:27:02Z
+0b3c206d60fa86019b17392914c4d6621777ac3b
+removed _build/test/lib/{aurora_meter,oban}
+[mixlane] core: DB_PORT=5490 mix deps
+* bunt 1.0.0 (Hex package) (mix)
+  locked at 1.0.0 (bunt) dc5f86aa
+  ok
+* credo 1.7.19 (Hex package) (mix)
+  locked at 1.7.19 (credo) 2d8bc95d
+  ok
+* db_connection 2.10.2 (Hex package) (mix)
+  locked at 2.10.2 (db_connection) 510b1448
+  ok
+* decimal 3.1.1 (Hex package) (mix)
+  locked at 3.1.1 (decimal) c5f25f2c
+  ok
+* dialyxir 1.4.7 (Hex package) (mix)
+  locked at 1.4.7 (dialyxir) b3452720
+  ok
+* earmark_parser 1.4.45 (Hex package) (mix)
+  locked at 1.4.45 (earmark_parser) d3ec045b
+  ok
+* ecto 3.14.1 (Hex package) (mix)
+  locked at 3.14.1 (ecto) 24b99195
+  ok
+* ecto_sql 3.14.0 (Hex package) (mix)
+  locked at 3.14.0 (ecto_sql) f4d8d36f
+  ok
+* erlex 0.2.9 (Hex package) (mix)
+  locked at 0.2.9 (erlex) 8cfffc0e
+  ok
+* ex_doc 0.40.3 (Hex package) (mix)
+  locked at 0.40.3 (ex_doc) 2756e357
+  ok
+* file_system 1.1.1 (Hex package) (mix)
+  locked at 1.1.1 (file_system) 7a15ff97
+  ok
+* jason 1.4.5 (Hex package) (mix)
+  locked at 1.4.5 (jason) b0c82399
+  ok
+* makeup 1.2.2 (Hex package) (mix)
+  locked at 1.2.2 (makeup) 9a1a24e5
+  ok
+* makeup_elixir 1.0.1 (Hex package) (mix)
+  locked at 1.0.1 (makeup_elixir) 7284900d
+  ok
+* makeup_erlang 1.1.0 (Hex package) (mix)
+  locked at 1.1.0 (makeup_erlang) 1cd6780f
+  ok
+* mix_audit 2.1.5 (Hex package) (mix)
+  locked at 2.1.5 (mix_audit) 87f9298e
+  ok
+* nimble_options 1.1.1 (Hex package) (mix)
+  locked at 1.1.1 (nimble_options) 821b2470
+  ok
+* nimble_parsec 1.4.2 (Hex package) (mix)
+  locked at 1.4.2 (nimble_parsec) 4b213989
+  ok
+* phoenix_pubsub 2.3.0 (Hex package) (mix)
+  locked at 2.3.0 (phoenix_pubsub) eec7be6e
+  ok
+* postgrex 0.22.4 (Hex package) (mix)
+  locked at 0.22.4 (postgrex) 4aae45a2
+  ok
+* telemetry 1.4.2 (Hex package) (rebar3)
+  locked at 1.4.2 (telemetry) 928f6495
+  ok
+* yamerl 0.10.0 (Hex package) (rebar3)
+  locked at 0.10.0 (yamerl) 346adb29
+  ok
+* yaml_elixir 2.12.2 (Hex package) (mix)
+  locked at 2.12.2 (yaml_elixir) e7c1b101
+  ok
+[mixlane] core exit=0 started=2026-09-15T23:27:02Z finished=2026-09-15T23:27:03Z
+[mixlane] core: DB_PORT=5490 mix compile --warnings-as-errors --force
+Compiling 90 files (.ex)
+Generated aurora_meter app
+[mixlane] core exit=0 started=2026-09-15T23:27:03Z finished=2026-09-15T23:27:04Z
+compile exit=0
+[mixlane] core: DB_PORT=5490 mix run -e 
+  false = Code.ensure_loaded?(Oban)
+  false = Code.ensure_loaded?(Phoenix.LiveView)
+  false = Code.ensure_loaded?(Igniter)
+
+  # The whole 07a surface, present with nothing optional loaded.
+  true = function_exported?(AuroraMeter.Plans, :get, 2)
+  true = function_exported?(AuroraMeter.Plans, :versions, 1)
+  true = function_exported?(AuroraMeter.Plans, :base, 1)
+  true = function_exported?(AuroraMeter.Plans, :register!, 0)
+  true = function_exported?(AuroraMeter.Storage, :put_plan_version, 1)
+  true = function_exported?(AuroraMeter.Storage, :list_plan_versions, 1)
+  true = function_exported?(AuroraMeter.Storage, :assign_legacy_plan_versions, 1)
+  true = Code.ensure_loaded?(AuroraMeter.Plans.Snapshot)
+  true = Code.ensure_loaded?(AuroraMeter.Schema.PlanVersion)
+  true = Code.ensure_loaded?(AuroraMeter.Schema.PlanTransition)
+  true = Code.ensure_loaded?(AuroraMeter.PlanVersionConflictError)
+  10 = AuroraMeter.Migration.latest_version()
+
+  # The fingerprint is a pure function and answers before any process starts.
+  plan = %AuroraMeter.Plan{id: :pro, version: "1", price: 2_000, features: %{}}
+  32 = byte_size(AuroraMeter.Plans.Snapshot.fingerprint(plan))
+
+  # A real cycle on a real database, booted the way a host boots it.
+  {:ok, _} = AuroraMeter.TestRepo.start_link(pool_size: 2)
+  {:ok, _} = Phoenix.PubSub.Supervisor.start_link(name: AuroraMeter.TestPubSub)
+
+  AuroraMeter.TestRepo.query!("DELETE FROM aurora_meter_plan_versions", [])
+  :ok = AuroraMeter.Plans.reset_registry()
+
+  # The boot step itself, with nothing optional in the build.
+  {:ok, _} = AuroraMeter.start_link([])
+  :ok = AuroraMeter.Plans.registry_state()
+
+  tenant = "headless_07a_#{System.unique_integer([:positive])}"
+  {:ok, _} = AuroraMeter.subscribe(tenant, :versioned)
+  "1" = AuroraMeter.plan(tenant).version
+  2_000 = AuroraMeter.plan(tenant).price
+  1_000 = AuroraMeter.quota(tenant, :ai_generations).limit
+
+  # Deploy: version 2 effective in the past. The tenant stays on version 1.
+  Application.put_env(:aurora_meter, :plans, AuroraMeter.Test.VersionTwoLivePlans)
+  :ok = AuroraMeter.Subscriptions.invalidate(tenant)
+  "2" = AuroraMeter.Plans.get(:versioned).version
+  "1" = AuroraMeter.plan(tenant).version
+  2_000 = AuroraMeter.plan(tenant).price
+  1_000 = AuroraMeter.quota(tenant, :ai_generations).limit
+
+  # Delete version 1 from code entirely: the tenant still reads version 1, and
+  # it can only have come from the stored snapshot.
+  Application.put_env(:aurora_meter, :plans, AuroraMeter.Test.VersionOneDeletedPlans)
+  :ok = AuroraMeter.Subscriptions.invalidate(tenant)
+  false = Map.has_key?(AuroraMeter.Test.VersionOneDeletedPlans.__aurora_plans__(), {:versioned, "1"})
+  %AuroraMeter.Plan{version: "1", price: 2_000} = AuroraMeter.Plans.get(:versioned, "1")
+  "1" = AuroraMeter.plan(tenant).version
+  1_000 = AuroraMeter.quota(tenant, :ai_generations).limit
+
+  Application.put_env(:aurora_meter, :plans, AuroraMeter.TestPlans)
+  AuroraMeter.TestRepo.query!(
+    "DELETE FROM aurora_meter_subscriptions WHERE tenant_key = $1", [tenant])
+
+  IO.puts("headless ok")
+
+Compiling 107 files (.ex)
+Generated aurora_meter app
+headless ok
+[mixlane] core exit=0 started=2026-09-15T23:27:04Z finished=2026-09-15T23:27:06Z
+run exit=0
+[mixlane] core: DB_PORT=5490 mix test --include headless --seed 0
+Running ExUnit with seed: 0, max_cases: 48
+Including tags: [:headless]
+
+.....     warning: variable "blocking" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 394 │     blocking = for flag <- report.flags, flag.blocking, do: flag.flag
+     │     ~~~~~~~~
+     │
+     └─ test/aurora_meter/credits_lot_migration_property_test.exs:394:5: AuroraMeter.CreditsLotMigrationPropertyTest.refused!/3
+
+................................................................................................................................................................................................................................................     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.TimingOutStorage)
+     │
+ 227 │     defmodule TimingOutStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:227: AuroraMeter.ClusterTest.TimingOutStorage (module)
+
+     warning: function assign_legacy_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+     warning: function list_plan_versions/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+.     warning: function put_plan_version/1 required by behaviour AuroraMeter.Storage is not implemented (in module AuroraMeter.ClusterTest.FailingStorage)
+     │
+ 172 │     defmodule FailingStorage do
+     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     │
+     └─ test/aurora_meter/cluster_test.exs:172: AuroraMeter.ClusterTest.FailingStorage (module)
+
+.............................................................................................................................
+09:27:12.316 [error] Postgrex.Protocol (#PID<0.280.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.2096.0> exited
+.............................
+09:29:13.715 [error] Postgrex.Protocol (#PID<0.287.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.2241.0> ({:sql_sandbox_owner, %{started_by: #PID<0.2240.0>}}) timed out because it owned the connection for longer than 120000ms (set via the :ownership_timeout option)
+
+[clock control] 150s, 24 loaders, 111208600 samples: Clock.now/0 backwards=0 worst=0.0s; DateTime.utc_now/0 backwards=0 worst=0.0s
+...............
+09:29:45.756 [error] Postgrex.Protocol (#PID<0.273.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.2405.0> exited
+.
+09:29:45.786 [error] Postgrex.Protocol (#PID<0.240.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.2412.0> exited
+.
+09:29:45.818 [error] Postgrex.Protocol (#PID<0.258.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.2419.0> exited
+.
+09:29:45.851 [error] Postgrex.Protocol (#PID<0.243.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.2426.0> exited
+.....................
+09:29:49.481 [error] Task #PID<0.3200.0> started from #PID<0.3199.0> terminating
+** (RuntimeError) the host's handler is broken
+    test/aurora_meter/credits_low_balance_test.exs:168: anonymous fn/2 in AuroraMeter.CreditsLowBalanceTest."test I11 a raising low-balance handler does not fail the ledger write"/1
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.1) lib/task/supervised.ex:40: Task.Supervised.reply/4
+Function: #Function<31.8206123/0 in AuroraMeter.Credits.Ledger.supervised_handler/2>
+    Args: []
+
+09:29:49.484 [warning] AuroraMeter.Credits: the low-balance handler raised the host's handler is broken for tenant "lowbal_6032" (crossing "2dde17d4-e32a-434a-8ce9-bef5c7c71613"). The ledger write stands and no alert was delivered; the crossing is already recorded, so no later write will re-send it. See docs/credits.md, "One alert per crossing".
+.
+09:29:49.540 [warning] AuroraMeter.Credits: the low-balance handler did not answer within 50ms and was killed for tenant "lowbal_5779" (crossing "14e7e6ad-0a16-461d-bb90-139f5e2b8ba1"). The ledger write stands and no alert was delivered; the crossing is already recorded, so no later write will re-send it. See docs/credits.md, "One alert per crossing".
+.......[06b replay property] compared: 14, refused: 7, skipped: 0, reordered by seq: 0, refusals: %{reversal_took_reserved: 1, expire_reserved_grant: 3, promotional_divergence_settle: 2, promotional_divergence_debit: 1}
+...........................................
+09:29:53.856 [error] Postgrex.Protocol (#PID<0.264.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.3473.0> ({AuroraMeter.EventsGateTest, :"test record_timeout a database that never answers is {:unavailable, :timeout} within the timeout, never an exit"}) timed out because it queued and checked out the connection for longer than 400ms
+
+Client #PID<0.3473.0> ({AuroraMeter.EventsGateTest, :"test record_timeout a database that never answers is {:unavailable, :timeout} within the timeout, never an exit"}) is still using a connection from owner at location:
+
+    (erts 17.0.1) :prim_inet.recv0/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:3008: Postgrex.Protocol.recv_close/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:1525: Postgrex.Protocol.close_parse_describe_flush/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:401: Postgrex.Protocol.handle_prepare/3
+    (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+    (db_connection 2.10.2) lib/db_connection.ex:1543: DBConnection.prepare/4
+    (db_connection 2.10.2) lib/db_connection.ex:1536: DBConnection.run_prepare/4
+    (db_connection 2.10.2) lib/db_connection.ex:1548: DBConnection.run_prepare_execute/5
+    (db_connection 2.10.2) lib/db_connection.ex:1592: DBConnection.run/4
+    (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+    (postgrex 0.22.4) lib/postgrex.ex:323: Postgrex.binary_query/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:628: Ecto.Adapters.SQL.query!/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:992: Ecto.Adapters.SQL.insert_all/9
+    (ecto 3.14.1) lib/ecto/repo/schema.ex:86: Ecto.Repo.Schema.do_insert_all/7
+    (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:1055: AuroraMeter.Storage.Ecto.insert_events_returning/3
+    (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:1020: AuroraMeter.Storage.Ecto.in_transaction/4
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+
+The connection itself was checked out by #PID<0.3473.0> ({AuroraMeter.EventsGateTest, :"test record_timeout a database that never answers is {:unavailable, :timeout} within the timeout, never an exit"}) at location:
+
+    (erts 17.0.1) :erlang.port_command/3
+    (erts 17.0.1) :prim_inet.send/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:3383: Postgrex.Protocol.do_send/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:2976: Postgrex.Protocol.handle_transaction/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:618: Postgrex.Protocol.handle_begin/2
+    (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+    (db_connection 2.10.2) lib/db_connection.ex:1851: DBConnection.run_begin/3
+    (db_connection 2.10.2) lib/db_connection.ex:1644: DBConnection.checkout_with_retries/5
+    (db_connection 2.10.2) lib/db_connection.ex:1833: DBConnection.begin/3
+    (db_connection 2.10.2) lib/db_connection.ex:1114: DBConnection.transaction/3
+    (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:1697: AuroraMeter.Storage.Ecto.guarded/1
+    (aurora_meter 0.5.0) lib/aurora_meter/events.ex:367: AuroraMeter.Events.admit/1
+    (aurora_meter 0.5.0) lib/aurora_meter/events.ex:194: anonymous fn/4 in AuroraMeter.Events.record/4
+    (aurora_meter 0.5.0) lib/aurora_meter/events.ex:328: anonymous fn/2 in AuroraMeter.Events.span/2
+    (telemetry 1.4.2) /home/liamk/src/PhxTemplates/product-workspaces/aurora_meter/deps/telemetry/src/telemetry.erl:359: :telemetry.span/3
+    test/aurora_meter/events_gate_test.exs:225: anonymous fn/1 in AuroraMeter.EventsGateTest."test record_timeout a database that never answers is {:unavailable, :timeout} within the timeout, never an exit"/1
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+    test/aurora_meter/events_gate_test.exs:221: AuroraMeter.EventsGateTest."test record_timeout a database that never answers is {:unavailable, :timeout} within the timeout, never an exit"/1
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+
+
+..........................................................................................
+09:30:06.282 [error] Postgrex.Protocol (#PID<0.240.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.4754.0> exited
+..
+09:30:10.762 [error] Postgrex.Protocol (#PID<0.266.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.4794.0> exited
+............
+09:30:10.860 [warning] AuroraMeter: feature :nothing is not declared on the tenant's plan (first seen from feature_value). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....................
+09:30:10.965 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :lost_acknowledgement) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"flush_batch_7556\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-15], feature: \"ops\", tenant_key: \"flush_batch_7556\"}]}}, batch_id: \"50bbf81c-0625-4347-9a6d-4455c5d80c48\"}"
+...........
+09:30:11.051 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :after_commit_before_ack (label: :foreign_write_then_raise) context: %{callback: :flush_batch, result: {:ok, %{counters: [%{value: 5, feature: \"ops\", tenant_key: \"org_31426\", period_start: ~U[2026-09-01 00:00:00Z]}], history: [%{value: 5, date: ~D[2026-09-15], feature: \"ops\", tenant_key: \"org_31426\"}]}}, batch_id: \"914f6dd2-ba53-497a-824f-65142383fb76\"}"
+......
+09:30:11.076 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :heartbeat_pending_case) context: %{counters: 1, callback: :flush_batch, history: 1, batch_id: \"1b8f2e4f-0c24-437f-b50d-653ff5aa8344\"}"
+......................................................
+09:30:30.594 [warning] AuroraMeter.Credits.LotMigration: "lotmig_12739" raised ** (AuroraMeter.Test.Faults.Injected) injected fault at :before_commit (label: nil) context: %{kind: :write, statement: :balance_update, schema: AuroraMeter.Schema.CreditBalance, repo_fun: :update!}
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/faults.ex:368: AuroraMeter.Test.Faults.fire/6
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/fault_repo.ex:328: AuroraMeter.Test.FaultRepo.guard/4
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:643: AuroraMeter.Credits.LotMigration.write!/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:577: AuroraMeter.Credits.LotMigration.reconciled/6
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    (aurora_meter 0.5.0) test/support/aurora_meter/test/fault_repo.ex:70: AuroraMeter.Test.FaultRepo.transaction/1
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:531: AuroraMeter.Credits.LotMigration.lock_phase/5
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:489: AuroraMeter.Credits.LotMigration.guarded/5
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:437: AuroraMeter.Credits.LotMigration.wallet/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:377: AuroraMeter.Credits.LotMigration.step_wallet/4
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:366: anonymous fn/4 in AuroraMeter.Credits.LotMigration.execute/3
+    (elixir 1.20.1) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:364: AuroraMeter.Credits.LotMigration.execute/3
+    (aurora_meter 0.5.0) lib/aurora_meter/credits/lot_migration.ex:301: AuroraMeter.Credits.LotMigration.run/1
+    test/aurora_meter/credits_lot_migration_test.exs:652: AuroraMeter.CreditsLotMigrationTest."test LI-06b-4 a write that fails inside the cutover leaves the wallet entirely untouched"/1
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+    (stdlib 8.0) timer.erl:599: :timer.tc/2
+ The wallet is untouched and reported blocked; the run continues.
+....aurora_meter.credits.migrate_lots:
+  wallets        2
+  migrated       1
+  blocked        1
+  deferred       0
+  skipped        0
+  rows           4
+  lots           1
+  allocations    1
+  lock ms max    2
+  duration ms    5
+
+blocked wallets:
+  org_2  reversal_unattributed %{}
+
+1 wallets are now owned by the allocator. Every node must already be on a release that honours `lots_enabled_at`: an older image ignores the column and would write legacy arithmetic over the lots, which the next conservation check would refuse.
+aurora_meter.credits.migrate_lots:
+  wallets        2
+  migrated       1
+  blocked        0
+  deferred       0
+  skipped        0
+  rows           4
+  lots           1
+  allocations    1
+  lock ms max    2
+  duration ms    5
+
+blocked wallets:
+  org_2  reversal_unattributed %{}
+
+1 wallets are now owned by the allocator. Every node must already be on a release that honours `lots_enabled_at`: an older image ignores the column and would write legacy arithmetic over the lots, which the next conservation check would refuse.
+aurora_meter.credits.migrate_lots will not cut a wallet over yet.
+
+the lot-aware refund path
+
+Nothing was read and nothing was written. Run it without --no-shadow to
+take the whole replay and reconciliation now; the cutover is a separate
+decision and it needs the lot-aware refund path first (X250).
+
+...................................................................................................................................................................................................................................................................................................................
+09:30:36.979 [warning] AuroraMeter: feature :nowhere is not declared on the tenant's plan (first seen from check). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....................................
+09:30:37.027 [warning] AuroraMeter: feature :elsewhere is not declared on the tenant's plan (first seen from check). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+........................................................................................................................................................[06a cross-oracle] compared: 11, diverged: 1
+......................
+09:30:48.288 [error] AuroraMeter: the in-memory projection of event "base" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="correct_18115" instant=~U[2026-09-15 23:30:48.288570Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+
+09:30:48.292 [error] AuroraMeter: the in-memory projection of event "fix" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="correct_18115" instant=~U[2026-09-15 23:30:48.292217Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.............
+09:30:48.641 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :receipt_insert) context: %{kind: :write, statement: :receipt_insert, schema: AuroraMeter.Schema.FlushReceipt, repo_fun: :insert_all}"
+.
+09:30:48.695 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, statement: :counter_upsert, schema: AuroraMeter.Schema.Counter, repo_fun: :insert_all}"
+.
+09:30:48.746 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :history_upsert) context: %{kind: :write, statement: :history_upsert, schema: AuroraMeter.Schema.History, repo_fun: :insert_all}"
+.
+09:30:48.788 [error] AuroraMeter flush failed; the same batch will be retried: "injected fault at :before_commit (label: :counter_upsert) context: %{kind: :write, statement: :counter_upsert, schema: AuroraMeter.Schema.Counter, repo_fun: :insert_all}"
+.....
+09:30:48.841 [warning] AuroraMeter: feature :nothing is not declared on the tenant's plan (first seen from quota). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+..........................
+09:30:49.449 [warning] AuroraMeter.Credits.Recurrences: the period source could not place "recurboom_13060" for :monthly (:period_source_error). The tenant is skipped and the run continues; nothing is granted for it until the source is fixed. this period source cannot place recurboom_13060
+..........................
+09:30:50.154 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record_batch). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+
+09:30:50.154 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record_batch). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+.................
+09:30:53.107 [error] AuroraMeter: publishing event "pubsub-down" failed (unknown registry: :no_such_pubsub_server. Either the registry name is invalid or the registry is not running, possibly because its application isn't started). The event is committed; consumers recover from AuroraMeter.Events.total/3.
+.
+09:30:53.123 [error] AuroraMeter: the in-memory projection of event "projection-down" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="projection_100674" instant=~U[2026-09-15 23:30:53.123376Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+......................................................
+09:30:53.188 [warning] config :aurora_meter, durable_features: [:ai_generations] is deprecated. It still works, and will keep working until 2.0. Aurora Meter 1.0 replaces it with `feature_sources`, which says where each feature's commercial quantity comes from instead of bolting an event row onto a buffered count, and with `AuroraMeter.record/4` for usage that must not be lost. Nothing to do today: see docs/upgrading-to-1.0.md before you upgrade to 1.0.
+........................................
+09:30:55.870 [warning] AuroraMeter: feature :nothing_declared is not declared on the tenant's plan (first seen from feature_value). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....
+09:30:55.886 [warning] AuroraMeter: feature :some_new_thing is not declared on the tenant's plan (first seen from check). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+........................................................................................
+09:30:58.048 [error] Postgrex.Protocol (#PID<0.299.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.11199.0> exited
+....
+09:30:58.128 [error] AuroraMeter: the in-memory projection of event "base" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="replace_101954" instant=~U[2026-09-15 23:30:58.128175Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+
+09:30:58.132 [error] AuroraMeter: the in-memory projection of event "fix" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="replace_101954" instant=~U[2026-09-15 23:30:58.132215Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+
+09:30:58.132 [error] AuroraMeter: the in-memory projection of event "fix~r" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="replace_101954" instant=~U[2026-09-15 23:30:58.132310Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.......................................
+09:30:58.380 [warning] AuroraMeter.Retention.forget_node/1 removed the flush heartbeat for "node_b".
+
+It read: state="pending" updated_at=~U[2026-09-15 23:30:58.378311Z] cursor=%{"batch_id" => "5078d40e-16df-4eb9-8fc9-34dc9d953da1", "pending_since" => "2026-07-16T23:30:58.377969Z", "version" => "0.5.0"}
+
+That node no longer blocks a flush-receipt prune. If it is still alive and still holding a pending batch, and it later retries that batch after its receipt has been pruned, the batch's usage is counted twice (invariant I01).
+
+
+09:30:58.382 [warning] AuroraMeter.Retention.forget_node/1 removed the flush heartbeat for "node_c".
+
+It read: state="pending" updated_at=~U[2026-09-15 23:30:58.378808Z] cursor=%{"batch_id" => "6244833d-4c71-4245-8a01-8bf099ac57fa", "pending_since" => "2026-07-16T23:30:58.378446Z", "version" => "0.5.0"}
+
+That node no longer blocks a flush-receipt prune. If it is still alive and still holding a pending batch, and it later retries that batch after its receipt has been pruned, the batch's usage is counted twice (invariant I01).
+
+.
+09:30:58.388 [warning] AuroraMeter.Retention: a flush heartbeat is filed under "nonode@nohost", which is what every unnamed VM calls itself. If more than one node shares this database, they share this one row and it cannot tell one node from ten. Set :flush_node_id per node, or start the VMs with names.
+
+09:30:58.391 [warning] AuroraMeter.Retention.forget_node/1 removed the flush heartbeat for "app@10.0.1.7".
+
+It read: state="idle" updated_at=~U[2026-09-15 23:30:58.390875Z] cursor=%{"version" => "0.5.0"}
+
+That node no longer blocks a flush-receipt prune. If it is still alive and still holding a pending batch, and it later retries that batch after its receipt has been pruned, the batch's usage is counted twice (invariant I01).
+
+...................................................................................
+09:30:59.460 [warning] AuroraMeter.Tenant.Default.to_key/1 returned an empty tenant key. Every tenant it cannot resolve then shares one set of counters. Return a non-empty String.t(), or refuse the term. This version keeps the old behaviour and warns once per node; Aurora Meter 1.0 raises. See the AuroraMeter.Tenant documentation.
+.........
+09:30:59.486 [warning] AuroraMeter: feature :requests is not declared on the tenant's plan (first seen from record). :undeclared_feature_policy is :warn, so it is allowed; Aurora Meter 1.0 denies it. Declare it on the plan, run `mix aurora_meter.features` to find every other one, or set `config :aurora_meter, undeclared_feature_policy: :allow`.
+....
+09:30:59.507 [error] AuroraMeter: the in-memory projection of event "unresolved" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_9094" instant=~U[2026-09-15 23:30:59.507393Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+.
+09:30:59.510 [error] AuroraMeter: the in-memory projection of event "ineligible" failed (AuroraMeter.Test.PeriodSources.FutureWindow returned a period that does not contain the instant asked about. An AuroraMeter period is a half-open UTC interval [start, end): start belongs to the period, end does not, and the interval must contain the instant it is resolved for. reason=:not_containing tenant_key="record_9158" instant=~U[2026-09-15 23:30:59.510720Z] period=%{start: ~U[2026-10-02 00:00:00Z], end: ~U[2026-11-02 00:00:00Z], source: :calendar}). The event is committed and AuroraMeter.Events.total/3 is authoritative; the in-memory value corrects itself on the next cold read.
+...........
+Finished in 231.8 seconds (2.2s async, 229.5s sync)
+
+Result: 1635 passed (69 doctests, 20 properties, 1546 tests)
+[mixlane] core exit=0 started=2026-09-15T23:27:06Z finished=2026-09-15T23:30:59Z
+test exit=0

@@ -54,6 +54,19 @@ defmodule AuroraMeter.Test.IncapableStorage do
   def drain_projection_seed(_seed, _limit),
     do: {:error, {:unsupported, :projection_generations}}
 
+  # The D12 case for build unit 07a: an adapter that cannot store plan version
+  # snapshots says so, and `AuroraMeter.Plans.register!/0` reports it once and
+  # leaves compiled code as the only authority rather than pretending to have
+  # registered anything.
+  @impl AuroraMeter.Storage
+  def put_plan_version(_attrs), do: {:error, {:unsupported, :plan_versions}}
+
+  @impl AuroraMeter.Storage
+  def list_plan_versions(_scope), do: {:error, {:unsupported, :plan_versions}}
+
+  @impl AuroraMeter.Storage
+  def assign_legacy_plan_versions(_limit), do: {:error, {:unsupported, :plan_versions}}
+
   @impl AuroraMeter.Storage
   defdelegate upsert_counters(rows), to: Backend
 
@@ -176,6 +189,15 @@ defmodule AuroraMeter.Test.UnresolvedStorage do
   defdelegate put_subscription(attrs), to: Backend
 
   @impl AuroraMeter.Storage
+  defdelegate put_plan_version(attrs), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate list_plan_versions(scope), to: Backend
+
+  @impl AuroraMeter.Storage
+  defdelegate assign_legacy_plan_versions(limit), to: Backend
+
+  @impl AuroraMeter.Storage
   defdelegate insert_events(rows), to: Backend
 
   @impl AuroraMeter.Storage
@@ -243,6 +265,12 @@ defmodule AuroraMeter.Test.NoListingStorage do
   defdelegate get_subscription(tenant_key), to: Backend
   @doc false
   defdelegate put_subscription(attrs), to: Backend
+  @doc false
+  defdelegate put_plan_version(attrs), to: Backend
+  @doc false
+  defdelegate list_plan_versions(scope), to: Backend
+  @doc false
+  defdelegate assign_legacy_plan_versions(limit), to: Backend
   @doc false
   defdelegate insert_events(rows), to: Backend
   @doc false

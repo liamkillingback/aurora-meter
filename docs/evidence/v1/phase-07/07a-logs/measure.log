@@ -1,0 +1,95 @@
+[mixlane] core: DB_PORT=5490 mix run --no-start /home/liamk/src/PhxTemplates/tmp/v1/07a-measure.exs
+seeded rows: 100000
+seed wall ms: 525
+v10 DDL wall ms: 85
+locks observed on aurora_meter tables during v10:
+  aurora_meter_subscriptions relation AccessExclusiveLock granted=true
+  aurora_meter_subscriptions relation ShareLock granted=true
+  aurora_meter_subscriptions relation ShareUpdateExclusiveLock granted=true
+rows with no plan_version after the DDL: 100000
+assignment batches: 20
+assignment rows: 100000
+assignment orphan_plans: 14285
+assignment wall ms: 1046
+assignment slowest batch ms: 81
+assignment batch ms: [81, 62, 61, 59, 59, 59, 58, 53, 56, 54, 54, 47, 45, 43, 41, 40, 39, 39, 41, 37]
+rows with no plan_version after the assignment: 0
+rows whose plan_id changed: 0
+interrupted: unnamed before: 100000
+interrupted: unnamed after two batches: 90000
+resumed batches: 18
+resumed rows: 90000
+resumed: unnamed after: 0
+total rows: 100000
+
+=== aurora_meter_plan_versions ===
+  id uuid null=NO default=gen_random_uuid()
+  plan_id text null=NO default=
+  version text null=NO default=
+  fingerprint bytea null=NO default=
+  definition jsonb null=NO default='{}'::jsonb
+  effective_at timestamp without time zone null=YES default=
+  first_seen_at timestamp without time zone null=NO default=(clock_timestamp() AT TIME ZONE 'UTC'::text)
+  INDEX CREATE UNIQUE INDEX aurora_meter_plan_versions_pkey ON public.aurora_meter_plan_versions USING btree (id)
+  INDEX CREATE INDEX aurora_meter_plan_versions_plan_effective_index ON public.aurora_meter_plan_versions USING btree (plan_id, effective_at)
+  INDEX CREATE UNIQUE INDEX aurora_meter_plan_versions_plan_id_version_index ON public.aurora_meter_plan_versions USING btree (plan_id, version)
+  CONSTRAINT aurora_meter_plan_versions_fingerprint_check CHECK ((octet_length(fingerprint) = 32)) validated=true
+  CONSTRAINT aurora_meter_plan_versions_pkey PRIMARY KEY (id) validated=true
+  CONSTRAINT aurora_meter_plan_versions_plan_id_check CHECK (((octet_length(plan_id) >= 1) AND (octet_length(plan_id) <= 128))) validated=true
+  CONSTRAINT aurora_meter_plan_versions_version_check CHECK (((octet_length(version) >= 1) AND (octet_length(version) <= 32))) validated=true
+
+=== aurora_meter_plan_transitions ===
+  id uuid null=NO default=gen_random_uuid()
+  tenant_key text null=NO default=
+  ref text null=NO default=
+  from_plan_id text null=YES default=
+  from_version text null=YES default=
+  to_plan_id text null=NO default=
+  to_version text null=NO default=
+  effective_at timestamp without time zone null=NO default=
+  state text null=NO default='pending'::text
+  confirm text null=NO default='local'::text
+  provider_ref text null=YES default=
+  applied_at timestamp without time zone null=YES default=
+  detail jsonb null=NO default='{}'::jsonb
+  inserted_at timestamp without time zone null=NO default=
+  updated_at timestamp without time zone null=NO default=
+  INDEX CREATE INDEX aurora_meter_plan_transitions_due_index ON public.aurora_meter_plan_transitions USING btree (state, effective_at)
+  INDEX CREATE UNIQUE INDEX aurora_meter_plan_transitions_pkey ON public.aurora_meter_plan_transitions USING btree (id)
+  INDEX CREATE UNIQUE INDEX aurora_meter_plan_transitions_tenant_ref_index ON public.aurora_meter_plan_transitions USING btree (tenant_key, ref)
+  CONSTRAINT aurora_meter_plan_transitions_confirm_check CHECK ((confirm = ANY (ARRAY['local'::text, 'provider'::text]))) validated=true
+  CONSTRAINT aurora_meter_plan_transitions_pkey PRIMARY KEY (id) validated=true
+  CONSTRAINT aurora_meter_plan_transitions_ref_check CHECK (((octet_length(ref) >= 1) AND (octet_length(ref) <= 128))) validated=true
+  CONSTRAINT aurora_meter_plan_transitions_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'applied'::text, 'cancelled'::text, 'failed'::text]))) validated=true
+
+=== aurora_meter_subscriptions ===
+  id uuid null=NO default=gen_random_uuid()
+  tenant_key character varying null=NO default=
+  plan_id character varying null=NO default=
+  status character varying null=NO default='active'::character varying
+  provider character varying null=YES default=
+  provider_customer_id character varying null=YES default=
+  provider_subscription_id character varying null=YES default=
+  current_period_start timestamp without time zone null=YES default=
+  current_period_end timestamp without time zone null=YES default=
+  inserted_at timestamp without time zone null=NO default=
+  updated_at timestamp without time zone null=NO default=
+  plan_version text null=YES default=
+  plan_fingerprint bytea null=YES default=
+  plan_effective_at timestamp without time zone null=YES default=
+  scheduled_plan_id text null=YES default=
+  scheduled_plan_version text null=YES default=
+  scheduled_effective_at timestamp without time zone null=YES default=
+  transition_ref text null=YES default=
+  transition_state text null=YES default=
+  transition_confirm text null=YES default=
+  transition_applied_at timestamp without time zone null=YES default=
+  INDEX CREATE INDEX aurora_meter_subscriptions_pending_transition_index ON public.aurora_meter_subscriptions USING btree (scheduled_effective_at, tenant_key) WHERE (transition_state = 'pending'::text)
+  INDEX CREATE UNIQUE INDEX aurora_meter_subscriptions_pkey ON public.aurora_meter_subscriptions USING btree (id)
+  INDEX CREATE UNIQUE INDEX aurora_meter_subscriptions_tenant_key_index ON public.aurora_meter_subscriptions USING btree (tenant_key)
+  CONSTRAINT aurora_meter_subscriptions_pkey PRIMARY KEY (id) validated=true
+  CONSTRAINT aurora_meter_subscriptions_transition_confirm_check CHECK (((transition_confirm IS NULL) OR (transition_confirm = ANY (ARRAY['local'::text, 'provider'::text])))) validated=true
+  CONSTRAINT aurora_meter_subscriptions_transition_state_check CHECK (((transition_state IS NULL) OR (transition_state = ANY (ARRAY['pending'::text, 'applied'::text, 'cancelled'::text, 'failed'::text])))) validated=true
+
+measurement ok
+[mixlane] core exit=0 started=2026-09-15T23:32:08Z finished=2026-09-15T23:32:13Z

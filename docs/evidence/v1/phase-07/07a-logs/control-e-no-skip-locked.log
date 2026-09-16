@@ -1,0 +1,112 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_registry_concurrency_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...
+09:00:58.428 [error] Postgrex.Protocol (#PID<0.488.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.666.0> (Task.Supervised) timed out because it queued and checked out the connection for longer than 15000ms
+
+Client #PID<0.666.0> (Task.Supervised) is still using a connection from owner at location:
+
+    test/aurora_meter/plan_registry_concurrency_test.exs:362: anonymous fn/2 in AuroraMeter.PlanRegistryConcurrencyTest.hold_rows/2
+    (aurora_meter 0.5.0) test/support/test_repo.ex:3: anonymous fn/1 in AuroraMeter.TestRepo.transaction/2
+    (ecto 3.14.1) lib/ecto/repo/transaction.ex:11: anonymous fn/3 in Ecto.Repo.Transaction.transact/4
+    (ecto_sql 3.14.0) lib/ecto/adapters/sql.ex:1481: anonymous fn/3 in Ecto.Adapters.SQL.checkout_or_transaction/4
+    (db_connection 2.10.2) lib/db_connection.ex:1760: DBConnection.run_transaction/5
+    test/aurora_meter/plan_registry_concurrency_test.exs:360: AuroraMeter.PlanRegistryConcurrencyTest.hold_rows/2
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+The connection itself was checked out by #PID<0.666.0> (Task.Supervised) at location:
+
+    (erts 17.0.1) :erlang.port_command/3
+    (erts 17.0.1) :prim_inet.send/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:3383: Postgrex.Protocol.do_send/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:2976: Postgrex.Protocol.handle_transaction/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:618: Postgrex.Protocol.handle_begin/2
+    (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+    (db_connection 2.10.2) lib/db_connection.ex:1851: DBConnection.run_begin/3
+    (db_connection 2.10.2) lib/db_connection.ex:1644: DBConnection.checkout_with_retries/5
+    (db_connection 2.10.2) lib/db_connection.ex:1833: DBConnection.begin/3
+    (db_connection 2.10.2) lib/db_connection.ex:1114: DBConnection.transaction/3
+    test/aurora_meter/plan_registry_concurrency_test.exs:360: AuroraMeter.PlanRegistryConcurrencyTest.hold_rows/2
+    (elixir 1.20.1) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+
+
+09:00:58.428 [error] Postgrex.Protocol (#PID<0.491.0> ({Postgrex.Protocol, "aurora_meter_test"})) disconnected: ** (DBConnection.ConnectionError) client #PID<0.664.0> ({AuroraMeter.PlanRegistryConcurrencyTest, :"test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding"}) timed out because it queued and checked out the connection for longer than 15000ms
+
+Client #PID<0.664.0> ({AuroraMeter.PlanRegistryConcurrencyTest, :"test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding"}) is still using a connection from owner at location:
+
+    (erts 17.0.1) :prim_inet.recv0/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:3296: Postgrex.Protocol.msg_recv/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:2293: Postgrex.Protocol.recv_bind/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:2148: Postgrex.Protocol.bind_execute_close/4
+    (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+    (db_connection 2.10.2) lib/db_connection.ex:1558: DBConnection.run_execute/5
+    (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+    (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+    (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+    (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:430: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+    test/aurora_meter/plan_registry_concurrency_test.exs:179: AuroraMeter.PlanRegistryConcurrencyTest."test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding"/1
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+    (stdlib 8.0) timer.erl:599: :timer.tc/2
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:455: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+The connection itself was checked out by #PID<0.664.0> ({AuroraMeter.PlanRegistryConcurrencyTest, :"test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding"}) at location:
+
+    (erts 17.0.1) :erlang.port_command/3
+    (erts 17.0.1) :prim_inet.send/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:3383: Postgrex.Protocol.do_send/3
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:1407: Postgrex.Protocol.parse_describe_flush/4
+    (postgrex 0.22.4) lib/postgrex/protocol.ex:379: Postgrex.Protocol.handle_prepare/3
+    (db_connection 2.10.2) lib/db_connection/holder.ex:379: DBConnection.Holder.holder_apply/4
+    (db_connection 2.10.2) lib/db_connection.ex:1543: DBConnection.prepare/4
+    (db_connection 2.10.2) lib/db_connection.ex:1536: DBConnection.run_prepare/4
+    (db_connection 2.10.2) lib/db_connection.ex:1548: DBConnection.run_prepare_execute/5
+    (db_connection 2.10.2) lib/db_connection.ex:1606: DBConnection.run_with_retries/5
+    (db_connection 2.10.2) lib/db_connection.ex:810: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.10.2) lib/db_connection.ex:802: DBConnection.prepare_execute/4
+    (postgrex 0.22.4) lib/postgrex.ex:353: Postgrex.query_prepare_execute/4
+    (aurora_meter 0.5.0) lib/aurora_meter/storage/ecto.ex:430: AuroraMeter.Storage.Ecto.assign_legacy_plan_versions/1
+    test/aurora_meter/plan_registry_concurrency_test.exs:179: AuroraMeter.PlanRegistryConcurrencyTest."test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding"/1
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:533: ExUnit.Runner.exec_test/2
+    (stdlib 8.0) timer.erl:599: :timer.tc/2
+    (ex_unit 1.20.1) lib/ex_unit/runner.ex:455: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+
+
+
+  1) test I17 SKIP LOCKED makes a concurrent assignment take the rows another transaction is not holding (AuroraMeter.PlanRegistryConcurrencyTest)
+     test/aurora_meter/plan_registry_concurrency_test.exs:160
+     ** (MatchError) no match of right hand side value:
+
+         {:error,
+          %Postgrex.Error{
+            message: nil,
+            postgres: %{
+              code: :query_canceled,
+              line: "3424",
+              message: "canceling statement due to user request",
+              file: "postgres.c",
+              routine: "ProcessInterrupts",
+              unknown: "ERROR",
+              where: "while locking tuple (0,93) in relation \"aurora_meter_subscriptions\"",
+              severity: "ERROR",
+              pg_code: "57014"
+            },
+            connection_id: 132986,
+            query: nil
+          }}
+
+     code: {:ok, batch} = Storage.assign_legacy_plan_versions(1_000)
+     stacktrace:
+       test/aurora_meter/plan_registry_concurrency_test.exs:179: (test)
+
+...
+Finished in 15.7 seconds (0.00s async, 15.7s sync)
+
+Result: 6/7 passed
+Failed: 1 test
+[mixlane] core exit=2 started=2026-09-15T23:00:41Z finished=2026-09-15T23:00:58Z
+

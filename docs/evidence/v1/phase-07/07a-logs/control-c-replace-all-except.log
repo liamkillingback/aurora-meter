@@ -1,0 +1,34 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs
+Compiling 4 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+...........................
+
+  1) test I17 put_subscription with a partial attribute map leaves every column it did not send (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:555
+     Assertion with == failed
+     code:  assert after_sync.plan_version == before.plan_version
+     left:  nil
+     right: "2"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:579: (test)
+
+
+
+  2) test I17 put_subscription never writes a transition column, even when asked to (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:594
+     Assertion with == failed
+     code:  assert kept.transition_ref == "ref-1"
+     left:  "ref-hijacked"
+     right: "ref-1"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:609: (test)
+
+..
+Finished in 0.5 seconds (0.00s async, 0.5s sync)
+
+Result: 29/31 passed
+Failed: 2 tests
+[mixlane] core exit=2 started=2026-09-15T23:00:38Z finished=2026-09-15T23:00:40Z
+

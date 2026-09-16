@@ -89,15 +89,35 @@ defmodule AuroraMeter.Entitlements do
   """
   @spec subscribe(term(), atom() | String.t()) ::
           {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
-  def subscribe(tenant, plan_id), do: subscribe(tenant, plan_id, ConfigSchema.mode())
+  def subscribe(tenant, plan_id), do: subscribe(tenant, plan_id, [])
 
-  @doc false
-  # `mode` is a parameter, and this is public but undocumented, so the suite can
-  # exercise both halves of the transition without depending on the package's
-  # own version.
-  @spec subscribe(term(), atom() | String.t(), ConfigSchema.mode()) ::
+  @doc """
+  Assigns a specific version of `plan_id` to `tenant`.
+
+  Options:
+
+    * `:version`: the plan version to pin. Without it the tenant gets the
+      version effective at `AuroraMeter.Clock.now/0`, which is what "new
+      subscriptions select the intended effective version" means. With it, the
+      named version is pinned even when it is not yet effective: an explicit
+      opt-in is not the same thing as a future-dated version becoming active
+      early, because the caller asked for it.
+    * `:mode`: undocumented, for the suite, so both halves of the transition
+      can be exercised without depending on the package's own version.
+
+  A version the plan does not have, in code or in the registry, is
+  `{:error, changeset}` with `plan_version: ["is not a known version of this plan"]`.
+
+  The row records the version, its fingerprint and the instant the assignment
+  started, so a later deploy of a new version cannot change what this tenant was
+  sold (D05).
+  """
+  @spec subscribe(term(), atom() | String.t(), keyword() | :strict | :transition) ::
           {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
-  def subscribe(tenant, plan_id, mode) do
+  def subscribe(tenant, plan_id, opts) when is_list(opts) do
+    mode = Keyword.get(opts, :mode, ConfigSchema.mode())
+    version = Keyword.get(opts, :version)
+
     attrs = %{
       tenant_key: Tenant.to_key(tenant),
       plan_id: to_string(plan_id),
@@ -106,9 +126,12 @@ defmodule AuroraMeter.Entitlements do
 
     cond do
       known_plan?(plan_id) ->
-        Storage.put_subscription(attrs)
+        subscribe_known(attrs, plan_id, version)
 
-      mode == :strict ->
+      # An explicit version of a plan that does not exist is refused in both
+      # modes: the transition-era leniency is about a plan id an older install
+      # has been writing for years, and nobody has been writing a version.
+      version != nil or mode == :strict ->
         {:error, unknown_plan_changeset(attrs)}
 
       true ->
@@ -117,9 +140,63 @@ defmodule AuroraMeter.Entitlements do
     end
   end
 
+  # The 0.4.x arity-3 form took the mode positionally. Kept so a host that
+  # copied it, and the suite's own transition tests, keep working.
+  def subscribe(tenant, plan_id, mode) when mode in [:strict, :transition],
+    do: subscribe(tenant, plan_id, mode: mode)
+
+  defp subscribe_known(attrs, plan_id, version) do
+    id = plan_atom(to_string(plan_id))
+
+    case resolve_version(id, version) do
+      {:ok, plan} ->
+        Storage.put_subscription(
+          Map.merge(attrs, %{
+            plan_version: plan.version,
+            plan_fingerprint: plan.fingerprint,
+            # A node clock, and nothing in this release compares it. 07b owns
+            # the first comparison and must move this into the insert as a
+            # `clock_timestamp()` fragment before it does (finding X288).
+            plan_effective_at: DateTime.truncate(Clock.now(), :second)
+          })
+        )
+
+      :error ->
+        {:error, unknown_version_changeset(attrs, version)}
+    end
+  end
+
+  defp resolve_version(id, nil) do
+    case Plans.get(id) do
+      nil -> :error
+      plan -> {:ok, plan}
+    end
+  end
+
+  defp resolve_version(id, version) when is_binary(version) do
+    case Plans.get(id, version) do
+      nil -> :error
+      plan -> {:ok, plan}
+    end
+  end
+
+  defp resolve_version(_id, _version), do: :error
+
   @doc """
-  Returns the plan for `tenant`: its subscription's plan when the subscription is
-  in an entitled status, else the default plan.
+  Returns the plan for `tenant`: the **version its subscription is pinned to**
+  when the subscription is in an entitled status, else the default plan.
+
+  The pin is what makes a plan deploy safe. A tenant on `:pro` version `"1"`
+  keeps version 1's limits, feature values, price and recurring credits when
+  version 2 becomes effective, and keeps them when version 1's block is deleted
+  from the plans module, because the definition is resolved from the registered
+  snapshot (`v1-release.md` 07.03, invariant I17).
+
+  A row with no `plan_version` at all (written before core schema version 10 and
+  not yet named by `AuroraMeter.Plans.register!/0`) resolves to the plan's
+  **base** version, never to whatever is current: the migration and the
+  registration are not simultaneous, and a tenant must not be repriced in the
+  window between them.
   """
   @spec plan(term()) :: AuroraMeter.Plan.t() | nil
   def plan(tenant) do
@@ -129,11 +206,31 @@ defmodule AuroraMeter.Entitlements do
       %Subscription{} = subscription ->
         # One copy of the entitled-status rule, on the schema that owns it.
         if Subscription.entitled?(subscription),
-          do: Plans.get(plan_atom(subscription.plan_id)) || default,
+          do: pinned_plan(subscription) || default,
           else: default
 
       _none ->
         default
+    end
+  end
+
+  defp pinned_plan(%Subscription{plan_id: plan_id, plan_version: version}) do
+    case plan_atom(plan_id) do
+      nil -> nil
+      id -> pinned_plan(id, version)
+    end
+  end
+
+  defp pinned_plan(id, nil), do: Plans.base(id)
+
+  defp pinned_plan(id, version) do
+    case Plans.get(id, version) do
+      nil ->
+        warn_unknown_version(id, version)
+        nil
+
+      plan ->
+        plan
     end
   end
 
@@ -607,12 +704,12 @@ defmodule AuroraMeter.Entitlements do
   end
 
   @spec known_plan?(atom() | String.t()) :: boolean()
-  defp known_plan?(plan_id) when is_atom(plan_id), do: Map.has_key?(Plans.all(), plan_id)
+  defp known_plan?(plan_id) when is_atom(plan_id), do: plan_id in Plans.plan_ids()
 
   defp known_plan?(plan_id) when is_binary(plan_id) do
     case plan_atom(plan_id) do
       nil -> false
-      atom -> Map.has_key?(Plans.all(), atom)
+      atom -> atom in Plans.plan_ids()
     end
   end
 
@@ -624,11 +721,32 @@ defmodule AuroraMeter.Entitlements do
     |> Map.put(:action, :insert)
   end
 
+  @spec unknown_version_changeset(map(), String.t() | nil) :: Ecto.Changeset.t()
+  defp unknown_version_changeset(attrs, version) do
+    %Subscription{}
+    |> Subscription.changeset(Map.put(attrs, :plan_version, version))
+    |> Ecto.Changeset.add_error(:plan_version, "is not a known version of this plan")
+    |> Map.put(:action, :insert)
+  end
+
+  # One line per `(plan_id, version)` per node. The tenant keeps paying and
+  # resolves to the default plan, which is the old behaviour for an unreadable
+  # plan, and the message says what would restore their entitlements.
+  @spec warn_unknown_version(atom(), String.t()) :: :ok
+  defp warn_unknown_version(id, version) do
+    ConfigSchema.warn_once(:unknown_plan_version, "#{id}/#{version}", fn ->
+      "AuroraMeter.Entitlements.plan/1: a subscription is pinned to plan #{inspect(id)} " <>
+        "version #{inspect(version)}, which is in neither the compiled plans module nor " <>
+        "aurora_meter_plan_versions, so the tenant resolves to the default plan. Restore the " <>
+        "version's block, or register its snapshot, before the next billing run."
+    end)
+  end
+
   @spec warn_unknown_plan(atom() | String.t()) :: :ok
   defp warn_unknown_plan(plan_id) do
     ConfigSchema.warn_once(:unknown_plan, to_string(plan_id), fn ->
       "AuroraMeter.subscribe/2: #{inspect(plan_id)} is not declared by " <>
-        "#{inspect(Config.plans())} (known: #{inspect(Enum.sort(Map.keys(Plans.all())))}). " <>
+        "#{inspect(Config.plans())} (known: #{inspect(Enum.sort(Plans.plan_ids()))}). " <>
         "The subscription is written and the tenant resolves to the default plan; " <>
         "Aurora Meter 1.0 returns {:error, changeset} with plan_id: \"is not a known plan\"."
     end)

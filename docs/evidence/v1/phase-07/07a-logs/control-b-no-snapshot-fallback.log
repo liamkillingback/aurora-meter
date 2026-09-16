@@ -1,0 +1,45 @@
+[mixlane] core: DB_PORT=5490 mix test --seed 0 test/aurora_meter/plan_versions_test.exs
+Compiling 5 files (.ex)
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:headless]
+
+..............
+
+  1) test I17 register! raises PlanVersionConflictError naming the plan, version and both fingerprints (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:234
+     Expected exception AuroraMeter.PlanVersionConflictError but nothing was raised
+     code: with_config(
+     stacktrace:
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:246: (test)
+
+
+
+  2) test I17 plan_version_conflict warn logs the same message once and does not raise (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:273
+     Assertion with =~ failed
+     code:  assert log =~ "[error]"
+     left:  ""
+     right: "[error]"
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:288: (test)
+
+......
+
+  3) test I17 a tenant keeps version 1's limits when version 1's block is deleted from the module (AuroraMeter.PlanVersionsTest)
+     test/aurora_meter/plan_versions_test.exs:454
+     version 1 should have resolved from the stored snapshot
+     code: with_plans(AuroraMeter.Test.VersionOneDeletedPlans, fn ->
+     stacktrace:
+       test/aurora_meter/plan_versions_test.exs:736: AuroraMeter.PlanVersionsTest.nil_or_snapshot/0
+       test/aurora_meter/plan_versions_test.exs:466: anonymous fn/1 in AuroraMeter.PlanVersionsTest."test I17 a tenant keeps version 1's limits when version 1's block is deleted from the module"/1
+       (aurora_meter 0.5.0) test/support/aurora_meter/test/config.ex:48: AuroraMeter.Test.Config.with_config/2
+       test/aurora_meter/plan_versions_test.exs:464: (test)
+
+........
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+
+Result: 28/31 passed
+Failed: 3 tests
+[mixlane] core exit=2 started=2026-09-15T23:07:56Z finished=2026-09-15T23:07:58Z
+

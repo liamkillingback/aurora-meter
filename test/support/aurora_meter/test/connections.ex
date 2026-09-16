@@ -38,6 +38,8 @@ defmodule AuroraMeter.Test.Connections do
   alias AuroraMeter.Schema.Event
   alias AuroraMeter.Schema.EventTotal
   alias AuroraMeter.Schema.History
+  alias AuroraMeter.Schema.PlanTransition
+  alias AuroraMeter.Schema.PlanVersion
   alias AuroraMeter.Schema.Subscription
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -57,6 +59,7 @@ defmodule AuroraMeter.Test.Connections do
     Event,
     EventTotal,
     History,
+    PlanTransition,
     Subscription
   ]
 
@@ -67,7 +70,10 @@ defmodule AuroraMeter.Test.Connections do
   # link is cut first; it carries no value the cleanup needs.
   @unlink [{CreditRecurrence, :rollover_from_id}]
 
-  @tenantless [AuroraMeter.Schema.FlushReceipt]
+  # `aurora_meter_plan_versions` carries no `tenant_key`: a plan version is an
+  # installation-wide fact, not a tenant's. `reset_plan_versions!/0` below is
+  # its cleanup, and it runs once before the suite rather than per test.
+  @tenantless [AuroraMeter.Schema.FlushReceipt, PlanVersion]
 
   @tenant_pattern ~r/^[a-z][a-z0-9_]{2,}_\d+$/
 
@@ -202,6 +208,48 @@ defmodule AuroraMeter.Test.Connections do
     end
 
     :ok
+  end
+
+  @doc """
+  Empties `aurora_meter_plan_versions` and unnames every subscription's
+  contract, before the suite starts (build unit 07a).
+
+  The third case `sweep!/1` cannot express, and the reason is the same as
+  `reset_projection!/0`'s: a plan version snapshot is **installation-wide**.
+  It is also stale state of a kind the other two are not. The suite's own plans
+  module is a source file developers edit, and `AuroraMeter.Plans.register!/0` refuses
+  a compiled version whose content differs from the snapshot it registered on a
+  previous run. Without this, editing a price in the suite's own plans module
+  would make every later run of the whole suite log a conflict for a plan
+  nobody had changed since.
+
+  `plan_version` is cleared with it, so each run's registration does its
+  assignment against the same starting state rather than against whatever the
+  last run left. Call it from `test/test_helper.exs` **before** the supervisor
+  that starts `AuroraMeter`, since registration happens inside
+  `AuroraMeter.start_link/1`.
+  """
+  @spec reset_plan_versions!() :: :ok
+  def reset_plan_versions! do
+    own = checkout!()
+
+    try do
+      repo().query!("DELETE FROM aurora_meter_plan_transitions", [])
+      repo().query!("DELETE FROM aurora_meter_plan_versions", [])
+
+      repo().query!(
+        """
+        UPDATE aurora_meter_subscriptions
+           SET plan_version = NULL, plan_fingerprint = NULL, plan_effective_at = NULL
+         WHERE plan_version IS NOT NULL
+        """,
+        []
+      )
+
+      :ok
+    after
+      if own, do: Sandbox.checkin(repo())
+    end
   end
 
   @doc """

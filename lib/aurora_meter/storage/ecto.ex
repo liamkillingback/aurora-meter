@@ -23,9 +23,75 @@ defmodule AuroraMeter.Storage.Ecto do
   alias AuroraMeter.Schema.EventTotal
   alias AuroraMeter.Schema.FlushReceipt
   alias AuroraMeter.Schema.History
+  alias AuroraMeter.Schema.PlanVersion
   alias AuroraMeter.Schema.Subscription
 
-  @capabilities [:durable_events, :corrections, :projection_generations, :event_streaming]
+  @capabilities [
+    :durable_events,
+    :corrections,
+    :projection_generations,
+    :event_streaming,
+    :plan_versions
+  ]
+
+  # One bounded batch of the legacy assignment (`schema-migration-map.md` S6).
+  #
+  # Three things about it are load bearing.
+  #
+  # `FOR UPDATE SKIP LOCKED` on the keyset subquery is what lets two nodes run
+  # `AuroraMeter.Plans.register!/0` at the same time and take disjoint batches
+  # instead of the second waiting on every row the first took.
+  #
+  # The join finds the plan's **base** version, the one whose `effective_at` is
+  # NULL, rather than the literal `'1'`. For a host that never wrote a
+  # `version:` they are the same string, because `"1"` is the DSL default. For a
+  # host that named its first version `"2024-01"`, `'1'` would name a version
+  # that has never existed, and the tenant would resolve to the default plan:
+  # the base version is by definition the contract that was in force before any
+  # other version of that id was written, which is what the row is being told
+  # (finding X287). `LATERAL ... LIMIT 1` rather than a plain join, so a table
+  # that somehow holds two base versions for one plan id cannot multiply rows.
+  #
+  # `plan_effective_at` takes the version's own instant, else the subscription's
+  # `inserted_at`. Never `now()`: "when did this assignment start" is a fact
+  # about the past and inventing it as the upgrade's timestamp would be a worse
+  # answer than the one already in the row.
+  #
+  # `updated_at` is deliberately **not** touched. Naming a contract that was
+  # already in force is not a change to the subscription, and a host watching
+  # `updated_at` for commercial changes should not see one here.
+  @assign_legacy_sql """
+  WITH batch AS (
+    SELECT id, plan_id, inserted_at
+    FROM aurora_meter_subscriptions
+    WHERE plan_version IS NULL
+    ORDER BY id
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+  ),
+  resolved AS (
+    SELECT b.id AS id,
+           COALESCE(v.version, '1') AS version,
+           v.fingerprint AS fingerprint,
+           COALESCE(v.effective_at, b.inserted_at) AS effective_at,
+           (v.version IS NULL) AS orphan
+    FROM batch b
+    LEFT JOIN LATERAL (
+      SELECT version, fingerprint, effective_at
+      FROM aurora_meter_plan_versions
+      WHERE plan_id = b.plan_id AND effective_at IS NULL
+      ORDER BY first_seen_at, version
+      LIMIT 1
+    ) v ON TRUE
+  )
+  UPDATE aurora_meter_subscriptions s
+  SET plan_version = r.version,
+      plan_fingerprint = r.fingerprint,
+      plan_effective_at = r.effective_at
+  FROM resolved r
+  WHERE s.id = r.id
+  RETURNING r.orphan
+  """
 
   @projection_checkpoint "events_projection"
 
@@ -59,30 +125,33 @@ defmodule AuroraMeter.Storage.Ecto do
   @impl AuroraMeter.Storage
   def flush_batch(id, counters, history) do
     repo().transaction(fn ->
-      # `inserted_at` is stamped by **this node's wall clock**, and from build
-      # unit 05d something compares it: `AuroraMeter.Retention` deletes a
-      # receipt older than a cutoff taken from `clock_timestamp()`. That is two
-      # clocks on one comparison, which is `open-findings.md` X181's shape, and
-      # `architecture-map.md` section 3 says a timestamp a money decision reads
-      # should be stamped by the database.
+      # **`inserted_at` is stamped by the database** (`open-findings.md` X220,
+      # fixed in core schema version 10).
       #
-      # It is **not** changed here, and the reason is not inertia. Ecto's
-      # `insert_all/3` takes no fragment in a value, so the database stamp needs
-      # either raw SQL, which would remove the `:receipt_insert` fault point the
-      # I02 harness injects at (`AuroraMeter.Test.FaultRepo`), or a column
-      # default, which is DDL and therefore a new core schema version that
-      # `schema-migration-map.md` fixes the contents of. Neither is 05d's to do.
+      # It used to be `Clock.now()`, this node's wall clock, and from build unit
+      # 05d something compares it: `AuroraMeter.Retention` deletes a receipt
+      # older than a cutoff taken from `clock_timestamp()`. That was two clocks
+      # on one comparison, which `architecture-map.md` section 3 forbids, and
+      # the cost of getting it wrong is a receipt pruned early, which reopens
+      # exactly the double-count window I01 exists to close.
       #
-      # What makes the comparison sound in the meantime is the size of the
-      # window, and `AuroraMeter.Retention`'s moduledoc states the bound rather
-      # than assuming it: the smallest cutoff the configuration will accept is
-      # one day, and one day is 288 times the largest clock disagreement
-      # anything else in this system tolerates (`events_future_tolerance` and
-      # Stripe's webhook signature window are both 300 seconds). Recorded as a
-      # finding, with the structural fix named for the release that next opens a
-      # core schema version.
+      # 05d could not fix it: Ecto's `insert_all/3` takes no fragment in a
+      # value, so a database stamp needs either raw SQL, which would remove the
+      # `:receipt_insert` fault point the I02 harness injects at
+      # (`AuroraMeter.Test.FaultRepo` maps the schema module), or a column
+      # default, which is DDL and therefore a new core schema version. Version
+      # 10 sets the default and the column is simply omitted here, which leaves
+      # the schema module, the fault point and the `on_conflict` behaviour
+      # untouched: this is still one `INSERT ... ON CONFLICT DO NOTHING` whose
+      # `inserted` count is the idempotency decision.
+      #
+      # **This requires core schema version 10.** Against a version 9 database
+      # the column has no default and is `NOT NULL`, so the insert fails
+      # immediately and loudly. That is the quiescence requirement
+      # `schema-migration-map.md` section 4 already records for S6: the
+      # migration and this release ship together.
       {inserted, _} =
-        repo().insert_all(FlushReceipt, [%{id: id, inserted_at: Clock.now()}],
+        repo().insert_all(FlushReceipt, [%{id: id}],
           on_conflict: :nothing,
           conflict_target: [:id]
         )
@@ -292,14 +361,79 @@ defmodule AuroraMeter.Storage.Ecto do
   def get_subscription(tenant_key), do: repo().get_by(Subscription, tenant_key: tenant_key)
 
   @impl AuroraMeter.Storage
+  # **The replace list is computed from what the caller actually sent**
+  # (open finding S4, lower-level invariant L17.5).
+  #
+  # It used to be `{:replace_all_except, [:id, :tenant_key, :inserted_at]}`,
+  # which writes NULL into every column the caller did not cast. That was
+  # invisible while the row held only provider fields a provider sync always
+  # sends; it stopped being invisible the moment the row started carrying the
+  # tenant's plan version and a scheduled transition, because the next
+  # `AuroraMeter.Pro.Subscriptions.sync/1` would have erased both.
+  #
+  # Two bounds, and the second is what makes 07b's columns safe. The list is
+  # intersected with `AuroraMeter.Schema.Subscription.syncable/0`, which does
+  # not contain the transition columns at all, so no sync path can reach them
+  # however it is called. And a column the caller omitted keeps its stored value
+  # rather than becoming NULL, which is a documented behaviour change to a
+  # public function: a host that relied on omission to clear a provider field
+  # now passes `nil` explicitly.
   def put_subscription(attrs) do
+    attrs = Map.new(attrs)
+    supplied = MapSet.new(Map.keys(attrs), &field_name/1)
+    replaceable = Enum.filter(Subscription.syncable(), &MapSet.member?(supplied, &1))
+
     %Subscription{}
-    |> Subscription.changeset(Map.new(attrs))
+    |> Subscription.changeset(attrs)
     |> repo().insert(
-      on_conflict: {:replace_all_except, [:id, :tenant_key, :inserted_at]},
+      on_conflict: {:replace, replaceable ++ [:updated_at]},
       conflict_target: [:tenant_key],
       returning: true
     )
+  end
+
+  # Attribute maps arrive with atom keys from every in-tree caller and could
+  # arrive with string keys from a host's. `to_existing_atom` and not
+  # `to_atom`: a key naming no field is dropped by the changeset anyway, and
+  # this is a public entry point.
+  defp field_name(key) when is_atom(key), do: key
+
+  defp field_name(key) when is_binary(key) do
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> :__unknown_field__
+  end
+
+  @impl AuroraMeter.Storage
+  def put_plan_version(attrs) do
+    # `first_seen_at` is deliberately absent from the insert unless the caller
+    # supplies it: the column carries a `clock_timestamp()` default from core
+    # schema version 10, so the row is stamped by the database rather than by
+    # whichever node happened to boot first. Same rule and same reason as the
+    # flush receipt above.
+    %PlanVersion{}
+    |> PlanVersion.changeset(Map.new(attrs))
+    |> repo().insert(on_conflict: :nothing, conflict_target: [:plan_id, :version])
+  end
+
+  @impl AuroraMeter.Storage
+  def list_plan_versions(:all) do
+    repo().all(from(v in PlanVersion, order_by: [asc: v.plan_id, asc: v.version]))
+  end
+
+  def list_plan_versions(plan_id) when is_binary(plan_id) do
+    repo().all(from(v in PlanVersion, where: v.plan_id == ^plan_id, order_by: [asc: v.version]))
+  end
+
+  @impl AuroraMeter.Storage
+  def assign_legacy_plan_versions(limit) when is_integer(limit) and limit > 0 do
+    case repo().query(@assign_legacy_sql, [limit]) do
+      {:ok, %{rows: rows}} ->
+        {:ok, %{assigned: length(rows), orphans: Enum.count(rows, fn [orphan] -> orphan end)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @impl AuroraMeter.Storage

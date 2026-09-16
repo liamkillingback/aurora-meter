@@ -11,7 +11,7 @@ defmodule AuroraMeter.PlansTest do
     plans = Plans.all()
 
     assert plans |> Map.keys() |> Enum.sort() ==
-             [:allowance, :allowance_flat, :free, :payg, :pro, :scale]
+             [:allowance, :allowance_flat, :free, :payg, :pro, :scale, :versioned]
 
     assert %Plan{id: :free, price: 0} = plans[:free]
   end
@@ -101,7 +101,7 @@ defmodule AuroraMeter.PlansTest do
       end
       """)
 
-    plan = module.__aurora_plans__()[:x]
+    plan = module.__aurora_plans__()[{:x, "1"}]
 
     assert plan.features == %{
              requests: {:counter},
@@ -270,7 +270,7 @@ defmodule AuroraMeter.PlansTest do
       end
       """)
 
-    module.__aurora_plans__()[id]
+    module.__aurora_plans__()[{id, "1"}]
   end
 
   defp compile_error(body, id \\ :x) do

@@ -3,9 +3,51 @@ defmodule AuroraMeter.StorageTest do
   use AuroraMeter.DataCase, async: false
 
   alias AuroraMeter.Schema.Event
+  alias AuroraMeter.Schema.FlushReceipt
   alias AuroraMeter.Storage
 
   @period ~U[2026-07-01 00:00:00Z]
+
+  # -- X220: the receipt is stamped by the database ---------------------------
+
+  test "X220 a flush receipt's inserted_at comes from the database, not from the node clock" do
+    tenant = unique_tenant()
+    id = Ecto.UUID.generate()
+    counters = [%{tenant_key: tenant, feature: :ai, period_start: @period, delta: 5}]
+
+    # A node clock frozen decades in the past. `AuroraMeter.Retention` compares
+    # this column against a cutoff the **database** computes, so a node-stamped
+    # value is two clocks on one comparison and a receipt pruned early reopens
+    # the double-count window I01 exists to close.
+    AuroraMeter.Test.with_clock(~U[2020-01-01 00:00:00Z], fn ->
+      assert {:ok, _} = Storage.flush_batch(id, counters, [])
+    end)
+
+    receipt = TestRepo.get!(FlushReceipt, id)
+
+    assert DateTime.compare(receipt.inserted_at, ~U[2024-01-01 00:00:00Z]) == :gt,
+           "the receipt was stamped #{inspect(receipt.inserted_at)}, which is the frozen node " <>
+             "clock rather than the database's. Version 10's column default is what makes the " <>
+             "omission in flush_batch/3 safe."
+  end
+
+  test "X220 the receipt still deduplicates a retried batch and does not move its timestamp" do
+    tenant = unique_tenant()
+    id = Ecto.UUID.generate()
+    counters = [%{tenant_key: tenant, feature: :ai, period_start: @period, delta: 5}]
+
+    assert {:ok, %{counters: [%{value: 5}]}} = Storage.flush_batch(id, counters, [])
+    first = TestRepo.get!(FlushReceipt, id).inserted_at
+
+    # The `on_conflict: :nothing` decision is unchanged by omitting the column:
+    # the second call still adds nothing, and the receipt keeps the instant it
+    # was first written at.
+    assert {:ok, %{counters: [%{value: 5}]}} = Storage.flush_batch(id, counters, [])
+
+    assert Storage.load_counter(tenant, :ai, @period) == 5
+    assert TestRepo.get!(FlushReceipt, id).inserted_at == first
+    assert TestRepo.aggregate(FlushReceipt, :count) >= 1
+  end
 
   test "a batch receipt deduplicates counters and history after unrelated writes" do
     tenant = unique_tenant()

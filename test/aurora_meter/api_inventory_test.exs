@@ -54,6 +54,8 @@ defmodule AuroraMeter.ApiInventoryTest do
     AuroraMeter.Migration.V7,
     AuroraMeter.Migration.V8,
     AuroraMeter.Migration.V9,
+    AuroraMeter.Migration.V10,
+    AuroraMeter.Plans.Snapshot,
     AuroraMeter.Schema.FlushReceipt,
     AuroraMeter.Storage.Ecto,
     AuroraMeter.Store,
@@ -92,6 +94,9 @@ defmodule AuroraMeter.ApiInventoryTest do
     {AuroraMeter.Plans, :plan, 2,
      "plans DSL macro: it is usable only inside a module that `use`s `AuroraMeter.Plans`, " <>
        "and a spec would describe the AST it receives rather than the DSL it accepts"},
+    {AuroraMeter.Plans, :plan, 3,
+     "plans DSL macro: `plan :pro, version: \"2\" do ... end` parses as three arguments, " <>
+       "the id, the options and the do block, so the versioned form is arity 3"},
     {AuroraMeter.Plans, :price, 1, "plans DSL macro, as `plan/2`"},
     {AuroraMeter.Plans, :limit, 3, "plans DSL macro, as `plan/2`"},
     {AuroraMeter.Plans, :metered, 2, "plans DSL macro, as `plan/2`"},
