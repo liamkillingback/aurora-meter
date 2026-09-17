@@ -293,8 +293,31 @@ defmodule AuroraMeter.ExamplesTest do
       assert AuroraMeter.usage(tenant, :ai_generations) == 0
     end
 
-    test "an undeclared feature is permissive" do
-      assert AuroraMeter.check(unique_tenant(), :some_new_thing) == :ok
+    # Build unit 11c. This asserted `:ok`, and the guide said "an undeclared
+    # feature is permissive", because that is what every release up to 0.5.x
+    # did. `AuroraMeter.Config.Schema` flips `undeclared_feature_policy` from
+    # `:warn` to `:deny` at 1.0.0-rc.0, so cutting the candidate reversed the
+    # answer and the guide became wrong. Both halves are asserted here, from the
+    # policy rather than from the version, so neither can drift again.
+    test "an undeclared feature is denied from 1.0, and permissive under the documented opt out" do
+      tenant = unique_tenant()
+
+      assert AuroraMeter.check(tenant, :some_new_thing) == {:error, :not_entitled}
+      refute AuroraMeter.entitled?(tenant, :some_new_thing)
+
+      TestConfig.with_config(
+        [{:aurora_meter, :undeclared_feature_policy, :allow}],
+        fn -> assert AuroraMeter.check(tenant, :some_new_thing) == :ok end
+      )
+
+      guide = File.read!("docs/examples/team-saas.md")
+
+      assert guide =~ "{:error, :not_entitled}",
+             "docs/examples/team-saas.md still shows the pre-1.0 answer for an undeclared " <>
+               "feature. It is a published hexdocs page and a reader would copy it"
+
+      assert guide =~ "undeclared_feature_policy: :allow",
+             "the guide denies the feature and does not name the opt out"
     end
   end
 

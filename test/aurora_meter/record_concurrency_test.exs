@@ -191,35 +191,42 @@ defmodule AuroraMeter.RecordConcurrencyTest do
       # touching the same two totals rows acquire them in opposite orders and
       # deadlock inside insert_all. Each pass uses fresh event ids so that every
       # pass really inserts and therefore really upserts both totals rows.
-      for pass <- 1..10 do
-        results =
-          Connections.run(2, fn i ->
-            elements =
-              if i == 1 do
-                [
-                  batch_element(ctx, "p#{pass}-a#{i}", :ai_generations),
-                  batch_element(ctx, "p#{pass}-b#{i}", :requests)
-                ]
-              else
-                [
-                  batch_element(ctx, "p#{pass}-b#{i}", :requests),
-                  batch_element(ctx, "p#{pass}-a#{i}", :ai_generations)
-                ]
-              end
+      #
+      # 11c: `:requests` is not declared on this tenant's plan, and 1.0 denies
+      # an undeclared feature, so the batches stopped inserting at all when the
+      # candidate version was cut. This test is about lock ordering, not about
+      # entitlement, so it says which policy it means.
+      TestConfig.with_config([{:aurora_meter, :undeclared_feature_policy, :allow}], fn ->
+        for pass <- 1..10 do
+          results =
+            Connections.run(2, fn i ->
+              elements =
+                if i == 1 do
+                  [
+                    batch_element(ctx, "p#{pass}-a#{i}", :ai_generations),
+                    batch_element(ctx, "p#{pass}-b#{i}", :requests)
+                  ]
+                else
+                  [
+                    batch_element(ctx, "p#{pass}-b#{i}", :requests),
+                    batch_element(ctx, "p#{pass}-a#{i}", :ai_generations)
+                  ]
+                end
 
-            AuroraMeter.record_batch(elements)
-          end)
+              AuroraMeter.record_batch(elements)
+            end)
 
-        for result <- results do
-          assert {:ok, [_one, _two]} = result
+          for result <- results do
+            assert {:ok, [_one, _two]} = result
+          end
         end
-      end
 
-      assert length(events(ctx.tenant)) == 40
+        assert length(events(ctx.tenant)) == 40
 
-      totals = Map.new(totals(ctx.tenant), &{&1.feature, &1.quantity})
-      assert totals["ai_generations"] == 20
-      assert totals["requests"] == 20
+        totals = Map.new(totals(ctx.tenant), &{&1.feature, &1.quantity})
+        assert totals["ai_generations"] == 20
+        assert totals["requests"] == 20
+      end)
     end
   end
 

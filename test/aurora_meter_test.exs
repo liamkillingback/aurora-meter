@@ -44,20 +44,34 @@ defmodule AuroraMeterTest do
       assert message =~ "second in-memory counter for the same database row"
     end
 
+    # Build unit 11c. The third assertion used to go through
+    # `AuroraMeter.track/3`, which takes the mode this build was COMPILED at.
+    # Cutting 1.0.0-rc.1 moved that from `:transition` to `:strict`
+    # (`AuroraMeter.Config.Schema` flips at `1.0.0-rc.0`) and the call started
+    # raising, so a test named "in transition mode" was testing whichever mode
+    # the version happened to be at. It now drives the transition behaviour
+    # through the mode-parameterised seam, which is what that parameter is for,
+    # and asserts the strict half separately.
     test "a binary feature name warns once and behaves as today in transition mode" do
       reset_warnings()
-      tenant = unique_tenant()
 
       log =
         capture_log(fn ->
           assert AuroraMeter.feature!("api_calls", :transition) == "api_calls"
           assert AuroraMeter.feature!("api_calls", :transition) == "api_calls"
-          assert AuroraMeter.track(tenant, "api_calls", 2) == :ok
         end)
 
       assert occurrences(log, "feature names are atoms") == 1
       assert log =~ "Aurora Meter 1.0 raises"
-      assert AuroraMeter.usage(tenant, "api_calls") == 2
+    end
+
+    test "a binary feature name raises in strict mode, which is what this build is" do
+      assert Schema.mode() == :strict,
+             "this build is not at 1.0, so the release strictness switch has moved"
+
+      assert_raise ArgumentError, ~r/feature names are atoms/, fn ->
+        AuroraMeter.track(unique_tenant(), "api_calls", 2)
+      end
     end
 
     test "a feature name that is neither an atom nor a binary raises in both modes" do
@@ -106,15 +120,21 @@ defmodule AuroraMeterTest do
 
       reset_warnings()
 
+      # 11c: `Tenant.to_key/1` takes the mode this build was compiled at, and
+      # this build is 1.0, so it raises rather than warns. The transition half
+      # is driven through the seam that takes the mode as a parameter, which is
+      # what the parameter exists for.
       log =
         capture_log(fn ->
-          with_config([{:aurora_meter, :tenant, EmptyKeyTenant}], fn ->
-            assert Tenant.to_key(:anything) == ""
-            assert Tenant.to_key(:anything_else) == ""
-          end)
+          assert Tenant.validate_key!(EmptyKeyTenant, "", :transition) == ""
+          assert Tenant.validate_key!(EmptyKeyTenant, "", :transition) == ""
         end)
 
       assert occurrences(log, "empty tenant key") == 1
+
+      with_config([{:aurora_meter, :tenant, EmptyKeyTenant}], fn ->
+        assert_raise ArgumentError, ~r/empty tenant key/, fn -> Tenant.to_key(:anything) end
+      end)
     end
 
     test "a tenant module returning a non-binary raises naming the module" do

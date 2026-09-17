@@ -1,0 +1,87 @@
+{
+  "note": "THIS IS 11c CANDIDATES.JSON. It is what 09e's --manifest flag is for and what its acceptance criterion 6 was waiting on. It supersedes tmp/v1/09e/artifacts/09e-artifacts.json, whose own first sentence says it is not this file.",
+  "build_unit": "11c",
+  "built_at": "2026-09-17T07:38:20Z",
+  "toolchain": {
+    "elixir": "Elixir 1.20.1 (compiled with Erlang/OTP 29)",
+    "otp": "29",
+    "os": "Linux 6.6.87.2-microsoft-standard-WSL2 x86_64"
+  },
+  "reproducibility": "Hex archives are NOT byte reproducible across toolchains (00b blocker B19): a rebuild elsewhere produces an identical inner file list and an identical metadata.config inside a different gzip stream, therefore a different sha256. Compare uncompressed_contents_sha256 and hex_inner_checksum between builds. Never sha256.",
+  "published_when_these_were_chosen": {
+    "aurora_meter": [
+      "0.1.0",
+      "0.2.0",
+      "0.3.0",
+      "0.3.1",
+      "0.3.2",
+      "0.4.0"
+    ],
+    "aurora_meter_pro": [
+      "0.1.0",
+      "0.1.1",
+      "0.2.0",
+      "0.2.1",
+      "0.2.2",
+      "0.3.0"
+    ],
+    "checked_against": "the hex.pm API on 2026-09-17, read directly, rather than against either repository's belief about itself",
+    "note": "1.0.0-rc.1 and 1.0.0 are absent for both packages. Core 0.5.0 is in the core tree and has never been published. Pro's tree carried 0.3.0, which IS published, so every mix hex.build in it named an artifact that already existed and differed from it."
+  },
+  "artifacts": [
+    {
+      "package": "aurora_meter",
+      "version": "1.0.0-rc.1",
+      "path": "/home/liamk/src/PhxTemplates/tmp/v1/11c/candidates/aurora_meter-1.0.0-rc.1.tar",
+      "sha256": "593904c403f2bb0b6fcf2e4c414d703ccdc586179b7f20b0ef3e64e25b75fd64",
+      "provenance": "candidate",
+      "bytes": 538624,
+      "hex_inner_checksum": "D4713EDEF641C03E7F6A382D14BAFCFF1C91A958648BF6BDFB1E59A3FD49B5DE",
+      "uncompressed_contents_sha256": "d60f0c87561a4afde0bae69d7009473582db924ce7a20d8a2a90704e3498dd5a",
+      "file_count": 126,
+      "source": {
+        "repository": "product-workspaces/aurora_meter",
+        "head": "ab9f48ff930d7e2fb216dd7e1958c9936b2f1fa2",
+        "worktree": "dirty",
+        "uncommitted_files": 14,
+        "uncommitted_diff_sha256": "7793cbefdd502045f42cbb714eb39be2c9fdd55e472d243065ec2ff54038471f",
+        "note": "Build unit 11c may not commit (programme rule 4), so the candidate is built from an uncommitted tree. `git -C <repository> diff HEAD | sha256sum` reproduces the exact tree this archive came from. The owner commits, tags and rebuilds in phase 12, and 11e's invalidation rule covers the difference."
+      },
+      "tag": {
+        "name": "v1.0.0-rc.1",
+        "exists": false,
+        "created_by": "owner",
+        "owner_step": "12.02",
+        "why_it_matters": "docs() sets source_ref to v<version>, so publishing before the tag exists ships a documentation set whose source links 404. That is finding S8, and it is what happened to core 0.3.0."
+      },
+      "build_command": "mix hex.build -o <path>"
+    },
+    {
+      "package": "aurora_meter_pro",
+      "version": "1.0.0-rc.1",
+      "path": "/home/liamk/src/PhxTemplates/tmp/v1/11c/candidates/aurora_meter_pro-1.0.0-rc.1.tar",
+      "sha256": "3c14ae700043f5902ed41006980c594650e065f7985a89f50be687854c39ab72",
+      "provenance": "candidate",
+      "bytes": 306176,
+      "hex_inner_checksum": "02A7BEC28F7D1BC241C63FFD55CC0BB899A6DDA45F9E27F1F40D5EE79DDE8298",
+      "uncompressed_contents_sha256": "3983137c658f2ec7a5f4172c85b5edf6a6b74d9fb5fb5fb48fb09443a30d25e2",
+      "file_count": 74,
+      "source": {
+        "repository": "product-workspaces/aurora_meter_pro",
+        "head": "c19dbd7f95f8e770afc4c51d4e8f22d069d1af1c",
+        "worktree": "dirty",
+        "uncommitted_files": 9,
+        "uncommitted_diff_sha256": "3ddd2160b14bde75e9ef2414c04d95625f009c4c17bb77d071715e2550d550c9",
+        "note": "Build unit 11c may not commit (programme rule 4), so the candidate is built from an uncommitted tree. `git -C <repository> diff HEAD | sha256sum` reproduces the exact tree this archive came from. The owner commits, tags and rebuilds in phase 12, and 11e's invalidation rule covers the difference."
+      },
+      "tag": {
+        "name": "v1.0.0-rc.1",
+        "exists": false,
+        "created_by": "owner",
+        "owner_step": "12.02",
+        "why_it_matters": "docs() sets source_ref to v<version>, so publishing before the tag exists ships a documentation set whose source links 404. That is finding S8, and it is what happened to core 0.3.0."
+      },
+      "build_command": "AURORA_METER_FROM_HEX=1 mix hex.build -o <path>. The switch is not optional: without it Mix drops the path dependency from the metadata and the tarball declares no aurora_meter requirement at all (open-findings.md X421). mix.exs now refuses the build outright in that state."
+    }
+  ]
+}

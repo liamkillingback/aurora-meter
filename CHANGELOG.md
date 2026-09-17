@@ -4,12 +4,67 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-rc.1] - 2026-09-17
+
+**Release candidate. Not published.** It exists so that the archive audited for
+release, the clean room installation, the sample's build and the soak all run
+against the exact tree that becomes 1.0.0. The final release is this tree with
+the version and this heading's date changed.
+
+### Upgrading: read this first
+
+`AuroraMeter.Migration.latest_version()` is **10**. 0.4.0 and the 0.5.0
+transition release both carried 6, so an existing install has four schema
+versions to apply and two data tasks to run between them. The full route, with
+what each step locks and what it does to your data, is
+[docs/upgrading-to-1.0.md](docs/upgrading-to-1.0.md). The short form:
+
+1. Generate the bounded upgrade migrations, which write one file per version
+   rather than one file that loops:
+
+   ```bash
+   mix aurora_meter.gen.migration --upgrade -r MyApp.Repo
+   ```
+
+2. Apply version 7, then run the event backfill before version 8:
+
+   ```bash
+   mix aurora_meter.events.backfill
+   ```
+
+   Version 8 adds a unique index on `event_id` and validates six check
+   constraints. A legacy durable event has no `event_id`, so the index cannot be
+   built until the backfill has given every row one. The backfill is idempotent:
+   a second run scans and updates nothing.
+
+3. Apply versions 8 and 9, then move the credit wallets onto lots:
+
+   ```bash
+   mix aurora_meter.credits.migrate_lots
+   ```
+
+   A wallet the task declines stays on the legacy writer and keeps working; the
+   reason is recorded on its checkpoint row. Re-run the task after fixing it.
+
+4. Apply version 10 and call `MyApp.Plans.register!/0` once, which is what the
+   installed supervisor child does at boot.
+
+**Two quiescence points.** Stop every writer that calls
+`AuroraMeter.record/4` or `track(..., durable: true)` before version 8, because
+the backfill and the unique index cannot agree while rows are still arriving
+without an identity. Have every node on this release before the wallet cutover
+in step 3, because a 0.4.x node writing through the legacy balance while the
+lots are being built is the one interleaving the cutover cannot repair.
+
+**Rolling back over step 3 is not supported.** Everything before it is
+reversible. The rehearsal that established this route ran it against all four
+published pairings a customer can be in; the numbers are in
+`docs/evidence/v1/phase-11/` and in the storefront's `migration-matrix.md`.
 
 Everything below landed after the 0.5.0 transition release and is not in any
 published version. The 0.5.0 section beneath is a historical record of that
 release and is deliberately not rewritten, including its statement that the
-schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
+schema version is 6: that was true of 0.5.0.
 
 ### Added
 

@@ -53,6 +53,18 @@ defmodule AuroraMeter.RecordTest do
     )
   end
 
+  # Build unit 11c. Several tests below need a **second, different** feature to
+  # show that identity is per feature, and the second one they use, `:requests`,
+  # is declared by `:payg` and not by `:free`. Up to 0.5.x that did not matter:
+  # `undeclared_feature_policy` defaulted to `:warn` and the record went in.
+  # 1.0 defaults it to `:deny`, so those recordings became
+  # `{:error, {:invalid, [feature: :undeclared]}}` the moment the version was
+  # cut. The tests are about identity, not entitlement, so they say which policy
+  # they mean rather than inheriting one that changes with the version.
+  defp permissively(fun) do
+    TestConfig.with_config([{:aurora_meter, :undeclared_feature_policy, :allow}], fun)
+  end
+
   defp event_count(tenant) do
     TestRepo.aggregate(
       from(e in AuroraMeter.Schema.Event, where: e.tenant_key == ^tenant),
@@ -196,13 +208,35 @@ defmodule AuroraMeter.RecordTest do
                )
     end
 
-    test "record rejects an empty tenant key", _ctx do
-      assert {:error, {:invalid, errors}} =
-               AuroraMeter.record("", :ai_generations, 1,
-                 id: "empty-tenant",
-                 occurred_at: DateTime.utc_now()
-               )
+    # Build unit 11c, and `open-findings.md` X453. Up to 0.5.x this returned
+    # `{:error, {:invalid, [tenant: :empty]}}`. From 1.0 it RAISES, because
+    # `AuroraMeter.Tenant.Default.to_key/1` hands back `""`, strict mode refuses
+    # an empty tenant key, and that refusal happens inside entitlement
+    # resolution, which `AuroraMeter.Events.build/4` reaches before
+    # `AuroraMeter.Events.Canonical`'s own `check_tenant/2` runs.
+    #
+    # The behaviour is deliberate (an empty key is one shared counter row for
+    # every tenant that produces it) and the ORDER is not a decision anybody
+    # took: `Canonical.check_tenant/2` still exists, still produces
+    # `{:tenant, :empty}`, and is now unreachable through `record/4`. Recorded
+    # as a finding against 03b rather than repaired here; this test asserts what
+    # the release actually does.
+    test "record raises on an empty tenant key from 1.0, and the invalid-tuple path is unreachable",
+         _ctx do
+      message =
+        assert_raise(ArgumentError, fn ->
+          AuroraMeter.record("", :ai_generations, 1,
+            id: "empty-tenant",
+            occurred_at: DateTime.utc_now()
+          )
+        end).message
 
+      assert message =~ "empty tenant key"
+
+      # The refusal `Canonical` would have produced, proved to be the same fact
+      # by asking `Canonical` directly. If this ever starts returning `[]`, the
+      # rule has been deleted rather than moved.
+      assert {:error, errors} = Canonical.validate(%{tenant_key: ""})
       assert {:tenant, :empty} in errors
     end
 
@@ -344,15 +378,17 @@ defmodule AuroraMeter.RecordTest do
         {:metadata, Keyword.put(base, :metadata, %{"trace" => "t2"})}
       ]
 
-      for {field, opts} <- changes do
-        assert {:error, {:conflict, existing}} = record(ctx.tenant, opts),
-               "changing #{field} did not conflict"
+      permissively(fn ->
+        for {field, opts} <- changes do
+          assert {:error, {:conflict, existing}} = record(ctx.tenant, opts),
+                 "changing #{field} did not conflict"
 
-        assert existing.event_id == "conflict"
-        assert existing.quantity == original.quantity
-        assert existing.occurred_at == original.occurred_at
-        assert existing.metadata == %{"trace" => "t1"}
-      end
+          assert existing.event_id == "conflict"
+          assert existing.quantity == original.quantity
+          assert existing.occurred_at == original.occurred_at
+          assert existing.metadata == %{"trace" => "t1"}
+        end
+      end)
 
       assert event_count(ctx.tenant) == 1
       assert totals(ctx.tenant) == [%{quantity: 2, events: 1}]
@@ -373,7 +409,9 @@ defmodule AuroraMeter.RecordTest do
                record(ctx.tenant, feature: :ai_generations, id: "per-tenant", occurred_at: ctx.at)
 
       assert {:error, {:conflict, existing}} =
-               record(ctx.tenant, feature: :requests, id: "per-tenant", occurred_at: ctx.at)
+               permissively(fn ->
+                 record(ctx.tenant, feature: :requests, id: "per-tenant", occurred_at: ctx.at)
+               end)
 
       assert existing.feature == :ai_generations
       assert event_count(ctx.tenant) == 1
@@ -434,7 +472,11 @@ defmodule AuroraMeter.RecordTest do
       TestConfig.with_config(
         [
           {:aurora_meter, :events_outbox, RecordingOutbox},
-          {:aurora_meter, :feature_sources, %{ai_generations: :events}}
+          {:aurora_meter, :feature_sources, %{ai_generations: :events}},
+          # 11c: `:requests` is not on `:free`, and 1.0 denies an undeclared
+          # feature. This test is about where a quantity comes from, not about
+          # entitlement.
+          {:aurora_meter, :undeclared_feature_policy, :allow}
         ],
         fn ->
           assert {:ok, _event, :inserted} =

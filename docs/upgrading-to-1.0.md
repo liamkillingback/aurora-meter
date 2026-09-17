@@ -124,6 +124,55 @@ schema. Shipping the key inert would teach an operator to trust a check that is
 not running, which is worse than not shipping it. It arrives with the plan
 versioning work in 1.0.
 
+## The schema route, 0.4.x or 0.5.x to 1.0
+
+Everything above is about configuration and behaviour. This is the part that
+touches your data. `AuroraMeter.Migration.latest_version()` is **6** in both
+0.4.0 and 0.5.0 and **10** in 1.0, so there are four versions to apply and two
+data tasks to run between them.
+
+```bash
+mix aurora_meter.gen.migration --upgrade -r MyApp.Repo
+```
+
+`--upgrade` reads the installed version from
+`aurora_meter_checkpoints["schema:core"]` and writes **one file per version**
+with explicit bounds, rather than one file that loops from wherever it finds
+itself. Read the generated files before you run them.
+
+| Order | Step | What it does | Reversible |
+|---|---|---|---|
+| 1 | Version 7 | Adds the columns the event identity needs | Yes |
+| 2 | `mix aurora_meter.events.backfill` | Gives every legacy durable event an `event_id`. Idempotent: a second run scans and updates nothing | Yes |
+| 3 | Version 8 | Unique index on `event_id`, `bigint` widening, six check constraints validated. Runs outside a transaction | Yes |
+| 4 | Version 9 | Credit lots and allocations | Yes |
+| 5 | `mix aurora_meter.credits.migrate_lots` | Moves each wallet onto lots. A wallet it declines stays on the legacy writer and keeps working, with the reason on its checkpoint row | **No** |
+| 6 | Version 10 | Plan version snapshots and fingerprints | Yes |
+| 7 | `MyApp.Plans.register!/0` | Assigns `plan_version` to existing subscriptions. The installed supervisor child does this at boot | Yes |
+
+**Stop durable writers before step 3.** Anything calling `AuroraMeter.record/4`
+or `track(..., durable: true)` must be quiet from step 2 until step 3 finishes:
+the backfill and the unique index cannot agree while rows are still arriving
+without an identity.
+
+**Have every node on 1.0 before step 5.** A 0.4.x node writing through the
+legacy balance while the lots are being built is the one interleaving the
+cutover cannot repair.
+
+**Step 5 is the rollback boundary.** Everything before it can be rolled back.
+After it, roll forward.
+
+The route was rehearsed against all four published states a host can be in
+(core 1, core 2, core 2 with Pro 1, and core 6 with Pro 9), with money in the
+ledger written by the published releases themselves rather than by hand. The
+numbers are in the storefront's `docs/evidence/v1/phase-11/migration-matrix.md`.
+**What is not measured yet** is how long each step takes and what it locks on a
+production sized table; that is build unit 11b's, and this section will carry
+its figures when it has them. Until then, rehearse on a copy of your own data.
+
+If you run Aurora Meter Pro, its migrations come **after** all of this. See
+Pro's `docs/upgrading.md`.
+
 ## After the upgrade
 
 The contract you are upgrading into is [the guarantee page](guarantees.md): one

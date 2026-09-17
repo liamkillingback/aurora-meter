@@ -89,7 +89,11 @@ defmodule AuroraMeterExampleAi.MixProject do
     if File.dir?(path) and is_nil(System.get_env("AURORA_METER_PRO_FROM_HEX")) do
       {:aurora_meter_pro, path: path, override: true}
     else
-      {:aurora_meter_pro, "~> 0.3", organization: "phxtemplates"}
+      # `~> 1.0` and not `~> 0.3`: this sample is built against the 1.0 core and
+      # Pro 1.0 requires it. `~> 0.3` would have resolved the published 0.3.0,
+      # which declares core `~> 0.4` and does not compile against this tree
+      # (`open-findings.md` X420, build unit 11c).
+      {:aurora_meter_pro, "~> 1.0", organization: "phxtemplates"}
     end
   end
 

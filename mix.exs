@@ -1,7 +1,12 @@
 defmodule AuroraMeter.MixProject do
   use Mix.Project
 
-  @version "0.5.0"
+  # The V1 release candidate. `1.0.0-rc.1` and `1.0.0` were both absent from the
+  # public registry when this was chosen, checked against hex.pm rather than
+  # against this repository's belief about itself: the tree carried 0.5.0, which
+  # is not published either, and Pro carried a version that IS
+  # (`docs/evidence/v1/phase-11/package-audit.md`, build unit 11c).
+  @version "1.0.0-rc.1"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do

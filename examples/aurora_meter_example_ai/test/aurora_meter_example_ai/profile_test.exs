@@ -171,7 +171,38 @@ defmodule AuroraMeterExampleAi.ProfileTest do
 
   test "the sample declares the aurora_meter path dependency, and the commercial one only under the flag" do
     mix_exs = File.read!("mix.exs")
-    assert mix_exs =~ ~s|{:aurora_meter, path: "../.."}|
+
+    # `open-findings.md` X422. This asserted the literal `path: "../.."`, which
+    # made the sample unable to pass its own suite when it was built from a
+    # package archive, and building it from the archive is exactly what G09
+    # bullet 6 asks for. Two requirements, neither wrong: 09c's guard exists so
+    # the sample never quietly starts resolving a PUBLISHED package, and the
+    # release rehearsal exists so the suite tests what a release ships.
+    #
+    # What both need is the same fact, and it is not a substring: `aurora_meter`
+    # is resolved from a local source and never from the registry. So the
+    # declared dependency is read from the project and its `:path` is required,
+    # whether that path is the working tree or an unpacked candidate archive.
+    core_path = declared_path(:aurora_meter)
+
+    assert core_path,
+           "the sample resolves :aurora_meter without a :path, which means from the " <>
+             "registry. The sample exists to exercise the code in this repository"
+
+    if core_path == "../.." do
+      assert mix_exs =~ ~s|{:aurora_meter, path: "../.."}|
+    else
+      # A release rehearsal. The path must be an unpacked package archive and
+      # not another checkout: an archive carries `lib/` and the declared root
+      # files, and never `test/`.
+      assert File.exists?(Path.join(core_path, "mix.exs")),
+             "the sample points :aurora_meter at #{core_path}, which is not an Elixir project"
+
+      refute File.dir?(Path.join(core_path, "test")),
+             "the sample points :aurora_meter at #{core_path}, which has a test/ directory, " <>
+               "so it is a second working tree rather than an unpacked archive. Point it " <>
+               "at the archive's contents or at ../.."
+    end
 
     # 09d made `mix.exs` the one file that has to name the commercial package,
     # because that is where the opt-in lives. What matters is that naming it
@@ -223,6 +254,19 @@ defmodule AuroraMeterExampleAi.ProfileTest do
     for package <- ~w(oban stripity_stripe) do
       assert pro_lock =~ ~s|"#{package}"|, "mix.pro.lock does not lock #{package}"
       refute core_lock =~ ~s|"#{package}"|, "mix.lock locks #{package}, which is Pro's"
+    end
+  end
+
+  # The `:path` a dependency is declared with, from the real project rather than
+  # from a substring of `mix.exs`. `nil` when it is declared without one, which
+  # for these two packages means the registry.
+  defp declared_path(app) do
+    Mix.Project.config()[:deps]
+    |> Enum.find(&(elem(&1, 0) == app))
+    |> case do
+      {^app, opts} when is_list(opts) -> opts[:path]
+      {^app, _requirement, opts} when is_list(opts) -> opts[:path]
+      _ -> nil
     end
   end
 

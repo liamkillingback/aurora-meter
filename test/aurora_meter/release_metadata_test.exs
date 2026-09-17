@@ -131,8 +131,23 @@ defmodule AuroraMeter.ReleaseMetadataTest do
     end
 
     test "G02 the requirement admits this version and stops at the next major" do
-      assert Version.match?(version(), requirement()),
-             "#{requirement()} does not admit #{version()}"
+      if pre_release?() do
+        # A `~>` requirement NEVER admits a pre-release, so the snippet above
+        # cannot be the one that installs a release candidate, and asserting it
+        # does would be asserting something false. What it must do is admit the
+        # release the candidate becomes.
+        refute Version.match?(version(), requirement()),
+               "#{requirement()} admits the pre-release #{version()}. Elixir's version " <>
+                 "matching does not do that, so either this test or the toolchain has " <>
+                 "changed underneath the release candidate story in README.md"
+
+        assert Version.match?(final_version(), requirement()),
+               "#{requirement()} does not admit #{final_version()}, which is the version " <>
+                 "#{version()} becomes"
+      else
+        assert Version.match?(version(), requirement()),
+               "#{requirement()} does not admit #{version()}"
+      end
 
       # A two-segment `~>` on a 0.x version raises the *first* segment for its
       # upper bound, so `~> 0.5` admits 0.6.0 and refuses 1.0.0. That is the
@@ -143,6 +158,39 @@ defmodule AuroraMeter.ReleaseMetadataTest do
 
       refute Version.match?(next_major(), requirement()),
              "#{requirement()} would silently admit #{next_major()}"
+    end
+
+    # Build unit 11c. The `~>` snippet is right for the release and wrong for
+    # the candidate, and a reader who copies it during the candidate window gets
+    # "no matching version" with no explanation. The exact pin has to be on the
+    # page beside it, and it has to be a pin that actually resolves.
+    test "G02 a pre-release version carries an exact pin on every install page" do
+      if pre_release?() do
+        for path <- [@readme, @getting_started] do
+          assert File.read!(path) =~ pin_snippet(),
+                 "#{version()} is a pre-release and #{path} does not show " <>
+                   "#{inspect(pin_snippet())}. `#{requirement()}` resolves nothing while " <>
+                   "the only 1.0 artifact is a release candidate"
+        end
+
+        assert Version.match?(version(), exact_requirement()),
+               "#{exact_requirement()} does not admit #{version()}"
+      else
+        # The other half of the same rule: once the release is out, a pin to a
+        # candidate is an instruction to install something older than the
+        # release, so it must be gone.
+        for path <- [@readme, @getting_started] do
+          stale =
+            Regex.scan(~r/\{:aurora_meter, "(\d+\.\d+\.\d+-[^"]+)"\}/, File.read!(path),
+              capture: :all_but_first
+            )
+            |> List.flatten()
+
+          assert stale == [],
+                 "#{path} still pins the pre-release #{inspect(stale)} although #{version()} " <>
+                   "is a release. Remove the candidate block"
+        end
+      end
     end
 
     test "G02 docs/RELEASE.md names the tag for the current version" do
@@ -235,24 +283,43 @@ defmodule AuroraMeter.ReleaseMetadataTest do
 
   defp adr?(path), do: String.starts_with?(path, "docs/adr/")
 
+  # Parsed rather than split on ".". `String.split("1.0.0-rc.1", ".")` yields
+  # ["1", "0", "0-rc", "1"], and `String.to_integer("0-rc")` raises, which is
+  # how the storefront's own `Docs.requirement/1` came to answer "1.0" for a
+  # release candidate (build unit 11c, engineering note 1).
+  defp parsed, do: Version.parse!(version())
+
+  defp pre_release?, do: parsed().pre != []
+
+  # The version the candidate becomes: 1.0.0-rc.1 -> 1.0.0.
+  defp final_version do
+    %Version{major: major, minor: minor, patch: patch} = parsed()
+    "#{major}.#{minor}.#{patch}"
+  end
+
   # For a 0.x release the compatible requirement is `~> MAJOR.MINOR`, which is
   # also what it is for 1.x: `~> 0.5` admits 0.5.1 and refuses 0.6.0, and
   # `~> 1.2` admits 1.2.9 and refuses 1.3.0.
   defp requirement do
-    [major, minor | _] = String.split(version(), ".")
+    %Version{major: major, minor: minor} = parsed()
     "~> #{major}.#{minor}"
   end
 
+  # The only requirement form that resolves a pre-release: the version itself.
+  defp exact_requirement, do: version()
+
   defp requirement_snippet, do: ~s({:aurora_meter, "#{requirement()}"})
 
+  defp pin_snippet, do: ~s({:aurora_meter, "#{exact_requirement()}"})
+
   defp next_patch do
-    [major, minor, patch | _] = String.split(version(), ".")
-    "#{major}.#{minor}.#{String.to_integer(patch) + 1}"
+    %Version{major: major, minor: minor, patch: patch} = parsed()
+    "#{major}.#{minor}.#{patch + 1}"
   end
 
   defp next_major do
-    [major | _] = String.split(version(), ".")
-    "#{String.to_integer(major) + 1}.0.0"
+    %Version{major: major} = parsed()
+    "#{major + 1}.0.0"
   end
 
   defp top_release do

@@ -275,16 +275,35 @@ misbehave today, so match on it.
 ## 8. Features you have not declared
 
 ```elixir
-AuroraMeter.check(org, :some_new_thing)   # => :ok
+AuroraMeter.check(org, :some_new_thing)   # => {:error, :not_entitled}
 ```
 
-An undeclared feature is permissive. A half-finished feature does not lock your
-customers out of the product, and in `:dev` it logs a warning so you notice
-before it ships.
+**From 1.0, an undeclared feature is denied.** `check/2` returns
+`{:error, :not_entitled}`, `allowed?/2` and `entitled?/2` return `false`, and
+`quota/2` answers `kind: :undeclared, enabled: false`. `track/4` still counts
+it, because metering is not entitlement.
 
-If you would rather a typo be loud, declare every feature on every plan, with
-`feature :some_new_thing, false` on the tiers that should not have it, and the
-warning stops being your only defence.
+Up to and including 0.5.x it was the other way around: an undeclared feature was
+allowed and logged a warning. That default was changed because a feature nobody
+declared is more often a typo than a plan, and a typo that quietly grants access
+is the expensive direction to be wrong in.
+
+Declare every feature on every plan, with `feature :some_new_thing, false` on
+the tiers that should not have it. `mix aurora_meter.features` lists every
+feature your configuration references and every plan that does not declare it,
+and `--strict` makes it exit non-zero so CI catches the gap before a deploy
+does.
+
+If you want the old behaviour back while you catch up, it is one line and it is
+supported:
+
+```elixir
+config :aurora_meter, undeclared_feature_policy: :allow
+```
+
+`:warn` keeps it permissive and logs once per feature per node. `:deny` is the
+1.0 default. `:raise` is useful in `:test` and nowhere else. The full transition
+is in [upgrading to 1.0](../upgrading-to-1.0.md).
 
 ## The whole thing, end to end
 

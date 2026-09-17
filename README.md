@@ -96,7 +96,16 @@ It is not part of the published package.
 
 ```elixir
 def deps do
-  [{:aurora_meter, "~> 0.5"}]
+  [{:aurora_meter, "~> 1.0"}]
+end
+```
+
+While 1.0.0 is still a release candidate, that requirement resolves nothing: a
+`~>` requirement never admits a pre-release. Pin the candidate to try it:
+
+```elixir
+def deps do
+  [{:aurora_meter, "1.0.0-rc.1"}]
 end
 ```
 
