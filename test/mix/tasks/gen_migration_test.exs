@@ -13,6 +13,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
   """
   use ExUnit.Case, async: false
 
+  alias AuroraMeter.Install.Plan
   alias AuroraMeter.Migration
 
   setup do
@@ -139,6 +140,57 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
     end
   end
 
+  describe "validate_checks" do
+    test "I19 X428 --no-validate-checks emits the option on the version 8 file and nowhere else",
+         %{path: path} do
+      # `AuroraMeter.track/4` never rejected a non-positive quantity and never
+      # bounded metadata, so a 0.4.x database can hold rows core schema version
+      # 8's constraints refuse. `mix aurora_meter.events.backfill` counts them
+      # and prints the remedy: run version 8 with `validate_checks: false`.
+      # Until 11a the generated file had no way to carry it and the only route
+      # from that advice to a working upgrade was to hand-edit a generated
+      # migration. Measured in the phase 11 fixture: the upgrade stops at
+      # version 8 with a raw Postgres check_violation.
+      generate(path, from: 7, validate_checks: false)
+
+      concurrent = read_named(path, "v8_concurrent")
+
+      assert concurrent =~ "up(from: 8, version: 8, validate_checks: false)",
+             "the file covering version 8 must be able to carry the remedy the backfill prints"
+
+      for name <- ["v7", "v9_to_v10"] do
+        refute read_named(path, name) =~ "validate_checks",
+               "#{name} does not run version 8, so the option would name a version its body " <>
+                 "never reaches: an option in a host's committed file that nothing reads"
+      end
+    end
+
+    test "I19 X428 without the flag nothing is emitted, so the default stands", %{path: path} do
+      generate(path, from: 7)
+
+      for name <- ["v7", "v8_concurrent", "v9_to_v10"] do
+        refute read_named(path, name) =~ "validate_checks",
+               "a host that never needed the escape must not find it in its migration"
+      end
+    end
+
+    test "I19 X428 the emitted option is one AuroraMeter.Migration.up/1 actually accepts" do
+      # The option is only a remedy if the runtime reads it. Asserting the
+      # string alone would pass just as well for a misspelling.
+      [file] =
+        Plan.files(package: :core, from: 8, validate_checks: false)
+        |> Enum.filter(&(&1.range.from == 8))
+
+      assert file.up =~ "validate_checks: false"
+
+      {call, _bindings} = Code.eval_string("quote do: #{file.up}")
+      {{:., _, [_module, :up]}, _, [options]} = call
+      assert Keyword.fetch!(options, :validate_checks) == false
+      assert Keyword.fetch!(options, :from) == 8
+      assert Keyword.fetch!(options, :version) == 8
+    end
+  end
+
   describe "data loss" do
     test "a range holding a destructive version generates a down that confirms it",
          %{path: path} do
@@ -153,8 +205,49 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
                "AuroraMeter.Migration.down(version: 7, to: 7, confirm_data_loss: true)",
              "version 7's down removes caller identity, so a generated rollback must say so"
 
-      refute concurrent =~ "confirm_data_loss",
-             "version 8's down drops an index and loses no fact, so it needs no confirmation"
+      # This assertion used to be its inverse, on the reading that version 8's
+      # down "drops an index and loses no fact". `schema-migration-map.md`
+      # section 3 is binding, names version 8, and gives the reason: the index
+      # is the identity guarantee, so dropping it is losing the guarantee
+      # (`open-findings.md` X362). The generated concurrent file is the one
+      # place a host would ever see it.
+      assert 8 in Migration.data_loss_versions()
+
+      assert concurrent =~
+               "AuroraMeter.Migration.down(version: 8, to: 8, confirm_data_loss: true)",
+             "version 8's down drops the unique index on (tenant_key, event_id), after " <>
+               "which two rows may claim to be the same fact"
+    end
+
+    test "the flag tracks data_loss_versions/0 on every range the generator can emit" do
+      destructive = Migration.data_loss_versions()
+      refute Enum.empty?(destructive), "an empty list makes this test vacuous"
+
+      needed =
+        for from <- 1..Migration.latest_version(),
+            file <- Plan.files(package: :core, from: from) do
+          needed? = Enum.any?(file.range.from..file.range.to//1, &(&1 in destructive))
+
+          assert file.down =~ "confirm_data_loss: true" == needed?,
+                 "--from #{from} produced #{file.suffix} covering " <>
+                   "#{file.range.from}..#{file.range.to}, whose down is:\n  #{file.down}"
+
+          needed?
+        end
+
+      # **`needed?` is constant here, and saying so is the point.** With the
+      # corrected list (1, 3, 4, 7, 8, 9, 10) only versions 2, 5 and 6 are
+      # non-destructive, and no contiguous range the splitter can produce
+      # consists only of those: every `--from` reaches 7. So this test proves
+      # the flag is never *missing* and proves nothing about it being wrongly
+      # *present*; an implementation that emitted it unconditionally would pass.
+      # The false branch is exercised where it can be: `migration_test.exs`
+      # drives `down/1` over version 5 on its own and asserts no refusal.
+      # X360's lesson, applied to a check rather than a generator: ask which
+      # field is constant in every case, and write down the answer.
+      assert Enum.uniq(needed) == [true],
+             "a range with no destructive version is now reachable; give this test its " <>
+               "negative case rather than leaving the comment above standing"
     end
   end
 
@@ -191,10 +284,20 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
   defp listing, do: "priv/test_repo/migrations/*.exs" |> Path.wildcard() |> Enum.sort()
 
   defp switches(opts) do
-    case Keyword.fetch(opts, :from) do
-      {:ok, from} -> ["--from", to_string(from)]
-      :error -> []
-    end
+    from =
+      case Keyword.fetch(opts, :from) do
+        {:ok, from} -> ["--from", to_string(from)]
+        :error -> []
+      end
+
+    validate =
+      case Keyword.fetch(opts, :validate_checks) do
+        {:ok, false} -> ["--no-validate-checks"]
+        {:ok, true} -> ["--validate-checks"]
+        :error -> []
+      end
+
+    from ++ validate
   end
 
   defp files(path), do: path |> Path.join("*.exs") |> Path.wildcard() |> Enum.sort()

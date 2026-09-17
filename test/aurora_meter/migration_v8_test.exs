@@ -235,12 +235,17 @@ defmodule AuroraMeter.MigrationV8Test do
   end
 
   describe "down" do
-    test "it drops the unique index, restores the plain one and needs no confirmation" do
+    test "it drops the unique index and restores the plain one, once the loss is confirmed" do
+      # It used to run without `confirm_data_loss` and the test name said the
+      # version "needs no confirmation". `schema-migration-map.md` section 3
+      # names version 8 with its reason: the unique index on
+      # `(tenant_key, event_id)` is the identity guarantee, so dropping it is
+      # losing the guarantee, not losing an index (`open-findings.md` X362).
       Migrations.with_database(fn repo ->
         Migrations.up(repo, from: 1, version: 7)
         Migrations.up(repo, from: 8, version: 8, mode: :no_txn)
 
-        Migrations.down(repo, version: 8, to: 8, mode: :no_txn)
+        Migrations.down(repo, version: 8, to: 8, mode: :no_txn, confirm_data_loss: true)
 
         refute index?(repo, @unique_index)
         assert index?(repo, @plain_index)

@@ -18,7 +18,7 @@ defmodule AuroraMeter.Migration do
   built:
 
       def up, do: AuroraMeter.Migration.up(from: 3, version: 3)
-      def down, do: AuroraMeter.Migration.down(version: 3, to: 3)
+      def down, do: AuroraMeter.Migration.down(version: 3, to: 3, confirm_data_loss: true)
 
   ## Versions
 
@@ -122,17 +122,42 @@ defmodule AuroraMeter.Migration do
   @concurrent_versions [8]
 
   # A version whose `down` destroys a commercial fact rather than an index or a
-  # nullable column. 11b adds the pre-existing versions 1, 3 and 4.
-  #
-  # Version 9 is on it because its `down` drops the credit lots and their
-  # allocations, which are the provenance of every micro-dollar a cut-over
-  # wallet holds, and takes `debt` with them.
-  #
-  # Version 10 is on it because its `down` drops `aurora_meter_plan_versions`,
-  # which is the only record of what a plan version's commercial content was
-  # once its block has left the host's code, and `plan_version` itself, which is
-  # the only record of which contract a tenant is on.
-  @data_loss_versions [7, 9, 10]
+  # nullable column, with the reason `schema-migration-map.md` section 3 gives
+  # for each. That map is binding and names core 1, 3, 4, 7, 8, 9 and 10; this
+  # module used to name only 7, 9 and 10, so a generated `down` covering 1, 3, 4
+  # or 8 carried no confirmation at all (`open-findings.md` X362). A list in a
+  # binding map and a list in code are two lists, and nothing compared them:
+  # `test/aurora_meter/migration_map_test.exs` compares them now.
+  @data_loss_reasons %{
+    1 =>
+      "drops aurora_meter_subscriptions, aurora_meter_counters and aurora_meter_events, " <>
+        "which between them are every commercial fact this package holds",
+    3 =>
+      "drops aurora_meter_credit_balances and aurora_meter_credit_transactions, which " <>
+        "are the prepaid ledger: every micro-dollar a customer has paid for and every " <>
+        "movement that explains the balance",
+    4 =>
+      "drops promotional_after, the per-row figure the promotional balance is rebuilt " <>
+        "from, so what a customer was given free and what they paid for stop being " <>
+        "distinguishable",
+    7 =>
+      "removes event_id and payload_hash, which are the identity of every recorded " <>
+        "fact and what tells a retry from a different fact, and drops " <>
+        "aurora_meter_event_totals and aurora_meter_checkpoints with them",
+    8 =>
+      "drops the unique index on (tenant_key, event_id), which removes the identity " <>
+        "guarantee itself: after it, two rows may claim to be the same fact and " <>
+        "nothing in the database refuses them",
+    9 =>
+      "drops the credit lots and their allocations, which are the provenance of every " <>
+        "micro-dollar a cut-over wallet holds, and takes debt with them",
+    10 =>
+      "drops aurora_meter_plan_versions, the only record of what a plan version's " <>
+        "commercial content was once its block has left the host's code, and " <>
+        "plan_version itself, the only record of which contract a tenant is on"
+  }
+
+  @data_loss_versions @data_loss_reasons |> Map.keys() |> Enum.sort()
 
   # The first version that writes the marker, which is also the version that
   # creates the table it lives in.
@@ -185,6 +210,12 @@ defmodule AuroraMeter.Migration do
   """
   @spec data_loss_versions() :: [pos_integer()]
   def data_loss_versions, do: @data_loss_versions
+
+  @doc false
+  # The reason each version is on the list, so the refusal names the fact it is
+  # about rather than describing version 7 whatever version was asked for.
+  @spec data_loss_reasons() :: %{pos_integer() => String.t()}
+  def data_loss_reasons, do: @data_loss_reasons
 
   @doc """
   Splits a version range into the host migration files it has to become.
@@ -306,7 +337,11 @@ defmodule AuroraMeter.Migration do
     destructive = Enum.filter(versions, &(&1 in @data_loss_versions))
 
     if not confirmed and destructive != [] do
-      raise DataLossError, versions: versions, destructive: destructive
+      raise DataLossError,
+        versions: versions,
+        destructive: destructive,
+        package: "Aurora Meter",
+        reasons: @data_loss_reasons
     end
 
     :ok

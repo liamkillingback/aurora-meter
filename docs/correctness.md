@@ -1429,8 +1429,47 @@ the storefront together.
 - `AuroraMeter.MigrationV10Test` / `test I19 version 10 refuses a plan version fingerprint that is not 32 bytes`
 - `AuroraMeter.MigrationV10Test` / `test I19 version 10 refuses a transition state it does not know`
 - `AuroraMeter.MigrationV10Test` / `test I19 version 10 run twice is a no-op`
+- `AuroraMeter.MigrationMapTest` / `test I19 X362 every version the binding map calls destructive is in data_loss_versions/0`
+- `AuroraMeter.MigrationMapTest` / `test I19 X362 the quotation above is still what the binding map says`
+- `AuroraMeter.MigrationMapTest` / `test I19 X362 every listed version is given a reason, and no unlisted version is`
+- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 X428 --no-validate-checks emits the option on the version 8 file and nowhere else`
+- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 X428 without the flag nothing is emitted, so the default stands`
+- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 X428 the emitted option is one AuroraMeter.Migration.up/1 actually accepts`
+- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 X426 the cutover is permitted in a process that has never touched AuroraMeter.Credits`
+- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 X426 the probe still refuses when the refund path really is absent`
+- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 X426 the escape hatch is not what permits it`
+- `AuroraMeter.Credits.LotCursorTest` / `test the documented operator sequence I19 X427 shadow then real, with no extra flags, migrates the wallets`
+- `AuroraMeter.Credits.LotCursorTest` / `test the documented operator sequence I19 X427 the rehearsal leaves the real cursor untouched`
+- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 X427 says so when it skipped everything, and fails`
+- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 X427 says so when there was nothing to do, and does not fail`
+- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 X427 does not erase the cursor it did not advance`
+- `AuroraMeter.Credits.LotCursorTest` / `test retry-blocked I19 X434 reaches a wallet behind the cursor`
+- `AuroraMeter.Credits.LotCursorTest` / `test retry-blocked I19 X434 does not drag the forward cursor backwards`
+- `AuroraMeter.Credits.LotCursorTest` / `test the cursor rows themselves I19 X427 the shadow cursor cannot collide with a wallet's checkpoint`
+
+Two of those bullets are about upgrades that could not be run at all rather than
+upgrades that lost money, and build unit 11a found both by building the
+`core6_pro9` fixture and watching it stop. X426: `cutover_blocked/0` asked
+`function_exported?(AuroraMeter.Credits, :reverse_lot, 4)` without loading the
+module first, which is false in any host that has not referenced it, so
+`mix aurora_meter.credits.migrate_lots --no-shadow` refused every cutover in
+every install, quoting a finding that had been closed. All three existing
+cutover test files set the `:allow_lot_cutover` escape hatch, and `or`
+short-circuits, so the branch that decides it in production had never been
+evaluated. X428: the backfill tells an operator to run version 8 with
+`validate_checks: false` for a database holding rows the V1 contract refuses,
+and until 11a the generator could not emit that option, so the only route from
+that advice to a working upgrade was to hand-edit a generated migration.
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 a populated core1 database upgrades with every total preserved`
 - PLANNED (11a): `AuroraMeter.MigrationFixtureTest` / `test I19 an interrupted backfill resumes without double counting`
+
+`schema-migration-map.md` section 3 names the versions whose `down` destroys a
+commercial fact, and `AuroraMeter.Migration` names them too. For five phases
+those were two lists and nothing compared them: the map said core 1, 3, 4, 7, 8,
+9, 10 and the code said 7, 9, 10, so a host generating an upgrade over version 1,
+3, 4 or 8 got a `down` with no confirmation on it (`open-findings.md` X362). The
+`MigrationMapTest` bullets above compare them, in both directions, and refuse to
+go quiet when the map is missing unless the whole storefront is.
 
 The wallet migration onto credit lots is the one data step in this package that
 rewrites how a wallet's money is accounted for. It is checked against figures
@@ -1772,6 +1811,12 @@ watched, and both were watched failing before they were trusted passing
 - `AuroraMeter.ExportedIdiomTest` / `test I20 no guarded file asks function_exported?/3 without loading the module first`
 - `AuroraMeter.ExportedIdiomTest` / `test I20 every allow-list entry still matches a real call site`
 - `AuroraMeter.ExportedIdiomTest` / `test I20 the guard sees a bare call, and does not see a wrapped one`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 X426 no shipped lib file asks function_exported?/3 without loading the module first`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 the lib sweep finds a site the file list would have missed`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 X426 the guard reads the variable forms the package actually uses`
+- `AuroraMeter.ConfigSchemaColdTest` / `test I20 X426 ensure_exports!/4 accepts a module nothing has loaded`
+- `AuroraMeter.ConfigSchemaColdTest` / `test I20 X426 and still refuses a module that really lacks the function`
+- `AuroraMeter.ConfigSchemaColdTest` / `test I20 and still refuses a module that cannot be loaded at all`
 
 **Evidence.** `docs/evidence/v1/phase-08/i20.md`
 

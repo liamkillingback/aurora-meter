@@ -37,6 +37,23 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
   exactly the case where destroying the tables is what was asked for. An
   upgrade file's `down` carries it only when the range it covers holds a
   version whose `down` destroys a commercial fact.
+
+  ## `--no-validate-checks`, for a database with rows the V1 contract refuses
+
+      mix aurora_meter.gen.migration -r MyApp.Repo --from 7 --no-validate-checks
+
+  `AuroraMeter.track/4` never rejected a non-positive quantity and never bounded
+  metadata, so a database written by 0.4.x can hold rows that core schema
+  version 8's constraints refuse. `mix aurora_meter.events.backfill` counts them
+  and prints the remedy: run version 8 with `validate_checks: false`, which
+  leaves those two constraints `NOT VALID` (still enforced on every new row, and
+  recorded in the schema marker) instead of proving them against history.
+
+  Until build unit 11a the generated file had no way to carry that option, so
+  the only route from the backfill's advice to a working upgrade was to
+  hand-edit a generated migration (`open-findings.md` X428). The flag emits it
+  on the file covering version 8 and on no other file. Without the flag nothing
+  is emitted and the default, `true`, stands.
   """
 
   use Mix.Task
@@ -45,7 +62,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
 
   alias AuroraMeter.Install.Plan
 
-  @switches [from: :integer]
+  @switches [from: :integer, validate_checks: :boolean]
 
   @impl Mix.Task
   @spec run([String.t()]) :: :ok
@@ -59,16 +76,16 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
 
     Enum.each(repos, fn repo ->
       Mix.Ecto.ensure_repo(repo, args)
-      gen_for_repo(repo, opts[:from])
+      gen_for_repo(repo, opts[:from], opts[:validate_checks])
     end)
   end
 
-  defp gen_for_repo(repo, from) do
+  defp gen_for_repo(repo, from, validate_checks) do
     path = Ecto.Migrator.migrations_path(repo)
     create_directory(path)
 
     from
-    |> files()
+    |> files(validate_checks)
     |> Enum.with_index()
     |> Enum.each(fn {file, index} ->
       module = Module.concat([repo, Migrations, file.module_suffix])
@@ -89,10 +106,10 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
   # `AuroraMeter.Install.Plan`, which `mix aurora_meter.install` reads too, so
   # the two supported ways of installing this package cannot produce two
   # different migrations (`open-findings.md` S1).
-  defp files(from) do
+  defp files(from, validate_checks) do
     if from, do: Plan.validate_from!(:core, from)
 
-    Plan.files(package: :core, from: from)
+    Plan.files(package: :core, from: from, validate_checks: validate_checks)
   end
 
   # One second apart per file, so several generated files keep the order the

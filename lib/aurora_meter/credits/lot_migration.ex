@@ -25,7 +25,9 @@ defmodule AuroraMeter.Credits.LotMigration do
      `expired` and `lots_enabled_at`, and run the allocator's conservation
      check as the last statement before commit.
   5. **Report**: one `aurora_meter_checkpoints` row per wallet, plus the run's
-     own cursor row.
+     own cursor row. A shadow run and a real run keep **separate** cursor rows,
+     so a rehearsal can never tell the real migration that it has already
+     covered ground it has not touched (`open-findings.md` X427).
 
   Steps 2 to 5 are one transaction, so a wallet is either entirely migrated or
   entirely untouched. Step 1 holds no lock, so a wallet with a long history
@@ -47,7 +49,24 @@ defmodule AuroraMeter.Credits.LotMigration do
   `low_balance_threshold`; it never changes any historical column except
   `hold_transaction_id`, which was null; it deletes nothing; it contacts no
   provider and sends no mail. With `shadow: true`, which is the default, the
-  only rows it writes at all are checkpoint rows.
+  only rows it writes at all are checkpoint rows, and the only cursor it writes
+  is its own: a shadow run cannot change where the real migration starts.
+
+  ## Reading a run that migrated nothing
+
+  Two opposite situations used to print the same summary of zeros. The summary
+  now separates them, and `run/1` reports both figures:
+
+    * `resumed_from` is the cursor the scan started after, `nil` if it started
+      at the beginning of the table;
+    * `unexamined` counts wallets still on the legacy writer that this run did
+      not look at and that no run of this mode has recorded a verdict for. It is
+      `nil` when the caller named tenants explicitly.
+
+  A run with `wallets: 0` and `unexamined: 0` had nothing to do. A run with
+  `wallets: 0` and `unexamined` above zero **skipped wallets that still need
+  migrating**, reports `state: "skipped_by_cursor"`, and the Mix task exits
+  non-zero for it.
 
   ## Cutting a wallet over
 
@@ -99,8 +118,41 @@ defmodule AuroraMeter.Credits.LotMigration do
   alias AuroraMeter.Schema.CreditTransaction
   alias AuroraMeter.Tenant
 
+  # **Shadow and real keep separate cursors** (`open-findings.md` X427, repair
+  # unit R8). The aggregate row is the resume point, and it belongs to the mode
+  # that wrote it: a shadow run records how far it has rehearsed, a real run how
+  # far it has cut over, and neither can be mistaken for the other.
+  #
+  # Before R8 there was one row. The guide's step 1 is a shadow run and its step
+  # 4 is the real one, so the rehearsal walked every wallet, left the cursor on
+  # the last one, and the real run that followed scanned `tenant_key > <last>`,
+  # examined **zero** wallets and printed a clean summary. An operator following
+  # our own documentation migrated nothing and was told it had worked.
+  #
+  # `architecture-map.md` 7.4 is binding and says shadow mode "computes and
+  # reports without writing". The per-wallet rows are the report (the guide
+  # sends the operator to `status/1` to read them), so they stay. The cursor is
+  # not a report, it is **control state the next run obeys**, and a rehearsal
+  # that changes what the real run does is the writing 7.4 forbids.
+  #
+  # The name cannot collide with a wallet's. `checkpoint_name/1` always emits
+  # `"lot_migration:" <> something`, and `wallet_checkpoints/2` selects on that
+  # prefix, so a row named `lot_migration_shadow` is reachable by neither, even
+  # for a tenant whose key is literally "shadow".
   @aggregate "lot_migration"
+  @aggregate_shadow "lot_migration_shadow"
   @prefix "lot_migration:"
+
+  # The checkpoint states that mean "a run of this mode has been here and
+  # decided". They are what `unexamined/4` counts against.
+  #
+  # A shadow run's verdicts do not count for a real run, and that asymmetry is
+  # the whole point: `shadow_ok` means the replay reconciled, **not** that the
+  # wallet was cut over. Letting it count would tell a real run that sixteen
+  # legacy wallets had been dealt with when not one had, which is exactly the
+  # sentence X427 is about.
+  @settled_real ~w(migrated blocked deferred paused skipped)
+  @settled_shadow @settled_real ++ ~w(shadow_ok shadow_blocked)
 
   # The operation-name shape `AuroraMeter.Operations` enforces. A tenant key is
   # host supplied and can hold anything at all, so a name built from one is
@@ -165,7 +217,11 @@ defmodule AuroraMeter.Credits.LotMigration do
     shadow: [type: :boolean, default: true, doc: "Compute and report, write nothing financial."],
     tenant: [type: :any, default: nil, doc: "One tenant term, or a list of them."],
     batch: [type: :pos_integer, default: 50, doc: "Wallets per aggregate checkpoint write."],
-    resume: [type: :boolean, default: true, doc: "Continue from the aggregate cursor."],
+    resume: [
+      type: :boolean,
+      default: true,
+      doc: "Continue from this mode's own cursor. Shadow and real keep separate ones."
+    ],
     max_rows: [type: :pos_integer, default: 50_000, doc: "Defer a wallet larger than this."],
     max_tail: [type: :non_neg_integer, default: 500, doc: "Rows folded in under the lock."],
     max_wallets: [type: :pos_integer, default: 100_000, doc: "Wallets one run examines."],
@@ -220,6 +276,9 @@ defmodule AuroraMeter.Credits.LotMigration do
           duration_ms: non_neg_integer(),
           lock_ms_max: non_neg_integer(),
           cursor: String.t() | nil,
+          resumed_from: String.t() | nil,
+          selection: :scan | :tenants,
+          unexamined: non_neg_integer() | nil,
           state: String.t(),
           reports: [report()]
         }
@@ -317,12 +376,18 @@ defmodule AuroraMeter.Credits.LotMigration do
   end
 
   @doc """
-  What the last run left behind: the aggregate cursor and every wallet report.
+  What the last run left behind: the aggregate cursors and every wallet report.
+
+  `:cursor` is how far the **real** migration has got, which is the one an
+  operator means by "where has this got to". `:shadow_cursor` is how far the
+  rehearsal has got. They are separate rows and neither steers the other
+  (`open-findings.md` X427).
 
   Options: `:repo`, and `:limit` (default 200) on the wallet rows read back.
   """
   @spec status(keyword()) :: %{
           cursor: String.t() | nil,
+          shadow_cursor: String.t() | nil,
           counts: map(),
           state: String.t() | nil,
           wallets: [map()]
@@ -330,6 +395,7 @@ defmodule AuroraMeter.Credits.LotMigration do
   def status(opts \\ []) do
     repo = opts[:repo] || Config.repo()
     aggregate = Checkpoints.get(@aggregate, repo: repo)
+    shadow = Checkpoints.get(@aggregate_shadow, repo: repo)
 
     wallets =
       repo
@@ -346,6 +412,7 @@ defmodule AuroraMeter.Credits.LotMigration do
 
     %{
       cursor: aggregate && aggregate.cursor["tenant_key"],
+      shadow_cursor: shadow && shadow.cursor["tenant_key"],
       counts: (aggregate && aggregate.counts) || %{},
       state: aggregate && aggregate.state,
       wallets: wallets
@@ -370,21 +437,40 @@ defmodule AuroraMeter.Credits.LotMigration do
   # -- the run loop -----------------------------------------------------------
 
   defp execute(repo, opts, started) do
-    cursor = if opts[:resume], do: resume_cursor(repo), else: nil
+    selection = if is_nil(opts[:tenant]), do: :scan, else: :tenants
+    cursor = start_cursor(repo, opts)
 
     acc =
       repo
       |> tenants(opts, cursor)
-      |> Enum.reduce(blank_summary(opts), fn tenant_key, acc ->
+      |> Enum.reduce(blank_summary(opts, cursor, selection), fn tenant_key, acc ->
         acc
         |> step_wallet(repo, tenant_key, opts)
         |> maybe_checkpoint(repo, opts)
       end)
 
-    summary = finalise(acc, started)
-    write_aggregate(repo, summary)
+    summary =
+      acc
+      |> Map.put(:unexamined, unexamined(repo, acc, cursor, opts))
+      |> finalise(started)
+
+    write_aggregate(repo, summary, opts)
     emit(summary)
     summary
+  end
+
+  # Where the scan starts, and the one case that must not resume.
+  #
+  # `--retry-blocked` is a sweep for wallets a previous run left behind, and
+  # every one of them is **behind** the cursor by construction: the run that
+  # declined a wallet carried on past it and stamped a later key. Resuming from
+  # the cursor therefore scans the one stretch of the table that cannot contain
+  # the wallets the flag exists for, so the documented remedy for a blocked
+  # wallet ("settle the hold, then re-run with `--retry-blocked`") examined
+  # nothing and exited 0. That is X427's defect wearing a different flag, and it
+  # is `open-findings.md` X434.
+  defp start_cursor(repo, opts) do
+    if opts[:resume] and not opts[:retry_blocked], do: resume_cursor(repo, opts), else: nil
   end
 
   defp step_wallet(acc, repo, tenant_key, opts) do
@@ -411,14 +497,14 @@ defmodule AuroraMeter.Credits.LotMigration do
 
   defp maybe_checkpoint(acc, repo, opts) do
     if acc.since_checkpoint >= opts[:batch] do
-      write_aggregate(repo, finalise(acc, nil))
+      write_aggregate(repo, finalise(acc, nil), opts)
       %{acc | since_checkpoint: 0}
     else
       acc
     end
   end
 
-  defp blank_summary(opts) do
+  defp blank_summary(opts, cursor, selection) do
     %{
       shadow: opts[:shadow],
       wallets: 0,
@@ -431,6 +517,9 @@ defmodule AuroraMeter.Credits.LotMigration do
       allocations: 0,
       lock_ms_max: 0,
       cursor: nil,
+      resumed_from: cursor,
+      selection: selection,
+      unexamined: nil,
       since_checkpoint: 0,
       reports: []
     }
@@ -441,8 +530,24 @@ defmodule AuroraMeter.Credits.LotMigration do
     |> Map.drop([:since_checkpoint])
     |> Map.put(:reports, Enum.reverse(acc.reports))
     |> Map.put(:duration_ms, if(started, do: Clock.monotonic_ms() - started, else: 0))
-    |> Map.put(:state, if(acc.blocked > 0, do: "complete_with_blocked", else: "complete"))
+    |> then(&Map.put(&1, :state, run_state(&1)))
   end
+
+  # The three outcomes an operator has to be able to tell apart.
+  #
+  # `wallets 0` used to mean two opposite things and print the same summary:
+  # "there was nothing to do", and "the cursor was past everything, so I looked
+  # at nothing". The second is X427 and it exits 0 today. The state now says
+  # which, and it says it from a number measured against the tables rather than
+  # deduced from the cursor's promise, because the cursor's promise is the thing
+  # that broke.
+  defp run_state(%{blocked: blocked}) when blocked > 0, do: "complete_with_blocked"
+
+  defp run_state(%{wallets: 0, unexamined: unexamined})
+       when is_integer(unexamined) and unexamined > 0,
+       do: "skipped_by_cursor"
+
+  defp run_state(_summary), do: "complete"
 
   # -- one wallet -------------------------------------------------------------
 
@@ -886,10 +991,12 @@ defmodule AuroraMeter.Credits.LotMigration do
     %{"flag" => Atom.to_string(name), "blocking" => blocking, "detail" => inspect(detail)}
   end
 
-  defp write_aggregate(repo, summary) do
+  defp write_aggregate(repo, summary, opts) do
+    name = aggregate(summary.shadow)
+
     Checkpoints.put(
-      @aggregate,
-      %{"tenant_key" => summary.cursor},
+      name,
+      %{"tenant_key" => advance(repo, name, summary, opts)},
       %{
         "wallets" => summary.wallets,
         "migrated" => summary.migrated,
@@ -900,11 +1007,43 @@ defmodule AuroraMeter.Credits.LotMigration do
         "lots" => summary.lots,
         "allocations" => summary.allocations,
         "lock_ms_max" => summary.lock_ms_max,
-        "shadow" => summary.shadow
+        "shadow" => summary.shadow,
+        "resumed_from" => summary.resumed_from,
+        "unexamined" => summary.unexamined
       },
       summary.state,
       repo: repo
     )
+  end
+
+  # The mode's own aggregate row. See the comment on `@aggregate_shadow`.
+  defp aggregate(true), do: @aggregate_shadow
+  defp aggregate(false), do: @aggregate
+
+  # **Progress is never un-made by a run that made none.**
+  #
+  # This was the second half of X427 and the half that made the symptom
+  # alternate. `summary.cursor` is nil when the run stepped no wallet, and
+  # writing that nil over the row erased the resume point, so the run after a
+  # zero-wallet run started from the beginning again and the outcome depended on
+  # how many times the task had been invoked. It also means an interrupted real
+  # run's resume point could be destroyed by any later run that happened to
+  # examine nothing, which is the thing build unit 11b needs to survive.
+  #
+  # A `--retry-blocked` sweep does not move it either: that run starts from the
+  # beginning by design (`start_cursor/2`), so letting it stamp its own last
+  # wallet would drag the forward pass's cursor backwards.
+  defp advance(repo, name, summary, opts) do
+    if opts[:retry_blocked] or is_nil(summary.cursor),
+      do: existing_cursor(repo, name),
+      else: summary.cursor
+  end
+
+  defp existing_cursor(repo, name) do
+    case Checkpoints.get(name, repo: repo) do
+      %{cursor: %{"tenant_key" => key}} when is_binary(key) -> key
+      _absent_or_null -> nil
+    end
   end
 
   defp emit(summary) do
@@ -963,9 +1102,23 @@ defmodule AuroraMeter.Credits.LotMigration do
   # ships and nothing else can open it. The second clause is the maintainer
   # suite's door, under the harness's own OTP application, which this package's
   # configuration never reads and a host has no reason to set.
+  # `Code.ensure_loaded?/1` before `function_exported?/3`, and it is not a
+  # formality. `function_exported?/3` answers **false for a module that is
+  # simply not loaded yet**, so in a host running
+  # `mix aurora_meter.credits.migrate_lots --no-shadow` this probe said "the
+  # lot-aware refund path does not exist" about a path that does, and every
+  # cutover in every install was refused with a reason that had been repaired.
+  # Measured in a fixture host before the fix: module_loaded false,
+  # function_exported? false, cutover_blocked true; after `Code.ensure_loaded`,
+  # all three the other way round (build unit 11a, `open-findings.md` X426).
+  #
+  # Nothing in the suite could see it, because all three lot-cutover test files
+  # set `:allow_lot_cutover`, and `or` short-circuits: the branch below the
+  # escape hatch had never been evaluated by any test.
   defp cutover_wired? do
     Application.get_env(:aurora_meter_test, :allow_lot_cutover, false) or
-      function_exported?(AuroraMeter.Credits, :reverse_lot, 4)
+      (Code.ensure_loaded?(AuroraMeter.Credits) and
+         function_exported?(AuroraMeter.Credits, :reverse_lot, 4))
   end
 
   defp balance_row(repo, tenant_key),
@@ -1025,11 +1178,75 @@ defmodule AuroraMeter.Credits.LotMigration do
   defp scan_after(query, nil), do: query
   defp scan_after(query, cursor), do: where(query, [b], b.tenant_key > ^cursor)
 
-  defp resume_cursor(repo) do
-    case Checkpoints.get(@aggregate, repo: repo) do
-      %{cursor: %{"tenant_key" => key}} when is_binary(key) -> key
-      _absent -> nil
-    end
+  defp resume_cursor(repo, opts), do: existing_cursor(repo, aggregate(opts[:shadow]))
+
+  # How many wallets are still on the legacy writer that this run did not
+  # examine and that no run of this mode has recorded a verdict for.
+  #
+  # **Measured against the tables, not deduced from the cursor.** Once the
+  # cursors are separated this number should always be zero, because a mode's
+  # cursor only ever advances over wallets that mode examined. That is exactly
+  # why it is counted rather than asserted: a report that derives "nothing was
+  # skipped" from the same invariant that skipped everything cannot notice when
+  # that invariant breaks again, and this one broke in production
+  # (`open-findings.md` X427, and X153 on rules nothing enforces). Put the
+  # single shared cursor back and this number is sixteen.
+  defp unexamined(repo, summary, cursor, opts),
+    do: scan_unexamined(repo, summary, cursor, opts, opts[:tenant])
+
+  # An explicit `--tenant` list is the operator naming the wallets they want, so
+  # "what else is out there" is not a number this run is entitled to call
+  # skipped. `nil` reads as "not applicable" everywhere downstream.
+  defp scan_unexamined(_repo, _summary, _cursor, _opts, tenant) when not is_nil(tenant), do: nil
+
+  defp scan_unexamined(repo, summary, cursor, opts, nil),
+    do: behind(repo, cursor, opts) + ahead(repo, summary.cursor || cursor)
+
+  # Legacy wallets the resume jumped over that carry no verdict from this mode.
+  defp behind(_repo, nil, _opts), do: 0
+
+  defp behind(repo, cursor, opts) do
+    settled = settled_keys(repo, opts[:shadow])
+
+    legacy =
+      repo.all(
+        from(b in CreditBalance,
+          where: is_nil(b.lots_enabled_at) and b.tenant_key <= ^cursor,
+          select: b.tenant_key,
+          limit: ^opts[:max_wallets]
+        )
+      )
+
+    Enum.count(legacy, &(not MapSet.member?(settled, &1)))
+  end
+
+  # Legacy wallets past the far end of what this run examined, which is what
+  # `--max-wallets` leaves for the next run. After a run that reached the end of
+  # the table this is zero, including when wallets were declined: a declined
+  # wallet is behind the cursor, not ahead of it.
+  defp ahead(repo, nil),
+    do:
+      repo.aggregate(
+        from(b in CreditBalance, where: is_nil(b.lots_enabled_at)),
+        :count,
+        :tenant_key
+      )
+
+  defp ahead(repo, key),
+    do:
+      repo.aggregate(
+        from(b in CreditBalance, where: is_nil(b.lots_enabled_at) and b.tenant_key > ^key),
+        :count,
+        :tenant_key
+      )
+
+  defp settled_keys(repo, shadow?) do
+    states = if shadow?, do: @settled_shadow, else: @settled_real
+
+    repo
+    |> wallet_checkpoints(:all)
+    |> Enum.filter(&(&1.state in states))
+    |> MapSet.new(& &1.counts["tenant_key"])
   end
 
   defp blocked_before?(repo, name) do
@@ -1039,12 +1256,13 @@ defmodule AuroraMeter.Credits.LotMigration do
     end
   end
 
-  defp wallet_checkpoints(repo, limit) do
+  defp wallet_checkpoints(repo, :all) do
     [repo: repo]
     |> Checkpoints.all()
     |> Enum.filter(&String.starts_with?(&1.name, @prefix))
-    |> Enum.take(limit)
   end
+
+  defp wallet_checkpoints(repo, limit), do: repo |> wallet_checkpoints(:all) |> Enum.take(limit)
 
   # -- ordering ---------------------------------------------------------------
 

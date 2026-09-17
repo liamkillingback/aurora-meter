@@ -173,6 +173,20 @@ defmodule AuroraMeter.Config.Schema do
               "It must be #{requirement}."
     end
 
+    # **Safe without its own `Code.ensure_loaded?/1`, and here is why**, because
+    # the next person will ask (repair unit R8, and `open-findings.md` X426 for
+    # what happens when the answer is no).
+    #
+    # `function_exported?/3` answers false for a module that merely has not been
+    # loaded, and a host-configured module is the least likely one in the system
+    # to be loaded already: nothing has referenced it when `AuroraMeter.Config`
+    # validates it at boot. The load happens in the statement above, which
+    # **raises** when it fails, so by this line the module is loaded or this
+    # function has already stopped. The guard is the preceding statement rather
+    # than the same expression, which is the one shape the AST guard in
+    # `AuroraMeter.ExportedIdiomTest` cannot see, so it is listed there by name
+    # with this reason. `config_schema_cold_test.exs` proves it from a process
+    # that has never touched the module, in both directions.
     Enum.each(callbacks, fn {fun, arity} ->
       if not function_exported?(module, fun, arity) do
         raise ArgumentError,

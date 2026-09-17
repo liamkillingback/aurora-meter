@@ -151,17 +151,35 @@ defmodule AuroraMeter.MigrationTest do
              "confirm_data_loss: true must not be refused by the data-loss guard"
     end
 
+    test "down/1 refuses version 8, whose down removes the identity guarantee itself" do
+      # This test used to assert the opposite, on the reasoning that version 8's
+      # down "drops an index and promotes nothing". `schema-migration-map.md`
+      # section 3 is binding and names version 8 with its reason: dropping the
+      # unique index on `(tenant_key, event_id)` removes the guarantee, so after
+      # it two rows may claim to be the same fact and nothing refuses them. The
+      # code said 7, 9, 10 and the map said 1, 3, 4, 7, 8, 9, 10, and this test
+      # was the place the difference had been written down as if it were a
+      # decision (`open-findings.md` X362).
+      assert_raise Migration.DataLossError, ~r/confirm_data_loss/, fn ->
+        Migration.down(version: 8, to: 8)
+      end
+    end
+
     test "down/1 of a version that destroys nothing needs no confirmation" do
+      # Version 5 adds a partial index on open holds and nothing else, which is
+      # the map's own description of what stays off the list.
+      refute 5 in Migration.data_loss_versions()
+
       error =
         try do
-          Migration.down(version: 8, to: 8)
+          Migration.down(version: 5, to: 5)
           nil
         rescue
           error -> error
         end
 
       refute match?(%Migration.DataLossError{}, error),
-             "version 8's down drops an index and promotes nothing; it loses no fact"
+             "version 5's down drops a partial index; it loses no commercial fact"
     end
   end
 

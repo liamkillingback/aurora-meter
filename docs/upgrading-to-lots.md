@@ -114,6 +114,9 @@ Read the blocked list before doing anything else. A shadow run reaches the same
 verdict as the real run that follows it, so the list you get here is the list
 you will get for real.
 
+The rehearsal keeps a cursor of its own and never touches the real migration's.
+Running it, however many times, cannot change where step 4 starts.
+
 **Expect it to be long if your wallets combine promotional credit with holds.**
 In 280 generated legacy histories, 69 per cent reconciled exactly and the
 majority of the rest were refused for one of two reasons that come from the
@@ -152,7 +155,10 @@ AuroraMeter.Credits.LotMigration.status()
 | `projection_mismatch` | the replay reconciled internally but did not match the balance row | as above |
 
 `--retry-blocked` re-processes wallets a previous run blocked. It is what you
-run after fixing the underlying data; nothing retries automatically.
+run after fixing the underlying data; nothing retries automatically. It starts
+from the first wallet rather than from the cursor, because a wallet a previous
+run declined is always behind the cursor, and it leaves the cursor where it
+found it so a partial sweep does not undo the forward pass's progress.
 
 A later run does not repeat the replay for a wallet already reported blocked,
 and it does still **report** it, with the reason `blocked_before` and its
@@ -186,7 +192,18 @@ lock rather than a long stall. The run is resumable: killing it loses at most
 the wallet in flight, and re-running skips every wallet that already committed.
 
 The run exits non-zero if any wallet was blocked, so a runner cannot report
-success while wallets were left behind.
+success while wallets were left behind. It also exits non-zero if it examined no
+wallets while wallets still need migrating, and says which cursor it resumed
+from. A summary of zeros used to mean either "there was nothing to do" or "the
+cursor was past everything", and those are now told apart:
+
+```
+  wallets        0
+  resumed from   org_9971
+  unexamined     16
+```
+
+is the second, and fails. `unexamined 0` is the first, and does not.
 
 > **This step is permitted from this release, and it was refused before it.**
 > The refusal existed because `AuroraMeter.Credits.reverse/4` did not take the
@@ -228,6 +245,13 @@ up where it left off:
 
 Run it repeatedly until `status/1` reports a cursor at the end of the table. The
 run is safe to interrupt and safe to repeat at any point.
+
+`status/1` reports two cursors, because the rehearsal and the real migration
+keep separate ones: `:shadow_cursor` is how far step 1 has read and `:cursor` is
+how far step 4 has written. Page through the rehearsal and the real run
+independently; neither moves the other. A run that examines no wallets leaves
+both exactly as it found them, so the run after an interrupted one resumes from
+the point the interrupted one reached.
 
 ## What the migration will not do
 

@@ -55,13 +55,19 @@ end
 
 defmodule AuroraMeter.Migration.DataLossError do
   @moduledoc """
-  Raised by `AuroraMeter.Migration.down/1` when the range holds a version whose
-  `down` destroys a commercial fact.
+  Raised by `AuroraMeter.Migration.down/1` and `AuroraMeter.Pro.Migration.down/1`
+  when the range holds a version whose `down` destroys a commercial fact.
 
   `down` is not a rollback. Version 7's `down` removes `event_id` and
   `payload_hash`, which are the identity of every recorded fact, and drops
   `aurora_meter_event_totals` and `aurora_meter_checkpoints` with them. The
   supported recovery from a bad upgrade is the backup taken before it.
+
+  Both packages raise this one exception rather than two, so a host rescuing it
+  needs one clause. `:package` says which package refused, and `:reasons` gives
+  the reason each listed version is destructive, so the message is about the
+  versions actually asked for rather than about version 7 whatever was asked
+  for.
 
   Pass `confirm_data_loss: true` when the loss is what you intend.
   """
@@ -69,34 +75,52 @@ defmodule AuroraMeter.Migration.DataLossError do
   @type t :: %__MODULE__{
           versions: [pos_integer()],
           destructive: [pos_integer()],
+          package: String.t(),
+          reasons: %{pos_integer() => String.t()},
           message: String.t()
         }
 
-  defexception [:versions, :destructive, :message]
+  defexception [:versions, :destructive, :package, :reasons, :message]
 
   @impl true
   @spec exception(keyword()) :: t()
   def exception(opts) do
     versions = Keyword.fetch!(opts, :versions)
     destructive = Keyword.fetch!(opts, :destructive)
+    package = Keyword.get(opts, :package, "Aurora Meter")
+    reasons = Keyword.get(opts, :reasons, %{})
 
     %__MODULE__{
       versions: versions,
       destructive: destructive,
-      message: build_message(destructive)
+      package: package,
+      reasons: reasons,
+      message: build_message(package, destructive, reasons)
     }
   end
 
-  @spec build_message([pos_integer()]) :: String.t()
-  defp build_message(destructive) do
+  @spec build_message(String.t(), [pos_integer()], %{pos_integer() => String.t()}) :: String.t()
+  defp build_message(package, destructive, reasons) do
     list = Enum.map_join(destructive, ", ", &Integer.to_string/1)
 
-    "the down step of Aurora Meter schema #{plural(destructive)} #{list} destroys " <>
-      "commercial state that no later step can rebuild: caller event identity, the payload " <>
-      "hashes that tell a retry from a different fact, and the projection totals. A down " <>
-      "step is not a rollback; the supported recovery from a bad upgrade is the backup " <>
-      "taken before it. Pass `confirm_data_loss: true` if destroying it is what you mean " <>
-      "to do."
+    "the down step of #{package} schema #{plural(destructive)} #{list} destroys " <>
+      "commercial state that no later step can rebuild." <>
+      detail(destructive, reasons) <>
+      " A down step is not a rollback; the supported recovery from a bad upgrade is the " <>
+      "backup taken before it. Pass `confirm_data_loss: true` if destroying it is what " <>
+      "you mean to do."
+  end
+
+  @spec detail([pos_integer()], %{pos_integer() => String.t()}) :: String.t()
+  defp detail(destructive, reasons) do
+    destructive
+    |> Enum.flat_map(fn version ->
+      case Map.fetch(reasons, version) do
+        {:ok, reason} -> [" Version #{version} #{reason}."]
+        :error -> []
+      end
+    end)
+    |> Enum.join()
   end
 
   @spec plural([pos_integer()]) :: String.t()

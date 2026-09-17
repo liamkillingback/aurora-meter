@@ -733,6 +733,13 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
       lock_ms_max: 2,
       duration_ms: 5,
       cursor: "org_2",
+      # A run that examined wallets and left none behind, so the only thing that
+      # can fail this summary is the blocked wallet. `unexamined` above zero with
+      # `wallets: 0` is the other failure the task has (X427), and it has its own
+      # tests in `credits/lot_cursor_test.exs`.
+      resumed_from: nil,
+      selection: :scan,
+      unexamined: 0,
       state: "complete_with_blocked",
       reports: [
         %{
@@ -789,10 +796,14 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     # database, and a real run here would reach wallets belonging to another
     # test. Shadow writes nothing but checkpoint rows, which this sandbox rolls
     # back.
+    #
+    # The cursor seeded is the SHADOW one, because a shadow run resumes from its
+    # own row now. Seeding "lot_migration" here would steer nothing, which is
+    # what `lot_cursor_test.exs` asserts on purpose (X427).
     keys = for shape <- [:paid_only, :debits, :released_hold], do: wallet(shape)
     [first, second, third] = Enum.sort(keys)
 
-    Checkpoints.put("lot_migration", %{"tenant_key" => second}, %{}, "running")
+    Checkpoints.put("lot_migration_shadow", %{"tenant_key" => second}, %{}, "running")
 
     {:ok, summary} = LotMigration.run(shadow: true, resume: true)
     examined = Enum.map(summary.reports, & &1.tenant_key)
@@ -800,9 +811,11 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     refute first in examined
     refute second in examined
     assert third in examined
+    assert summary.resumed_from == second
 
     {:ok, fresh} = LotMigration.run(shadow: true, resume: false)
     assert first in Enum.map(fresh.reports, & &1.tenant_key)
+    assert fresh.resumed_from == nil
   end
 
   test "I19 a recurring grant cannot reach a wallet the migration has yet to replay" do

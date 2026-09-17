@@ -33,6 +33,16 @@ defmodule AuroraMeter.Install.Plan do
     * `:package` - `:core` (default) or `:pro`
     * `:from` - `nil` (default) for a fresh install, or the first version of an
       upgrade
+    * `:validate_checks` - when `false`, the file covering core version 8 is
+      emitted with `validate_checks: false`. That is the remedy
+      `mix aurora_meter.events.backfill` prints for a database holding rows the
+      V1 contract would refuse: a non-positive quantity or metadata above 16
+      KiB, neither of which `AuroraMeter.track/4` ever rejected. Without it the
+      operator is told to run version 8 with an option their generated
+      migration has no way to carry, and the only route is to hand-edit a
+      generated file (build unit 11a, `open-findings.md` X428). Omitted from the
+      generated body when not given, so the default stays `true` and a host that
+      never needed it has nothing extra in its committed migration.
 
   A fresh install is one file whatever the version list looks like: the database
   is empty, so the concurrent version can build its index inside the transaction
@@ -46,6 +56,7 @@ defmodule AuroraMeter.Install.Plan do
   @spec files(keyword()) :: [file()]
   def files(opts \\ []) do
     package = spec(Keyword.get(opts, :package, :core))
+    package = Map.put(package, :validate_checks, Keyword.get(opts, :validate_checks))
 
     case Keyword.get(opts, :from) do
       nil -> [fresh(package)]
@@ -89,10 +100,7 @@ defmodule AuroraMeter.Install.Plan do
       call: "AuroraMeter.Migration",
       label: "Aurora Meter",
       suffix: "aurora_meter",
-      module_suffix: "AuroraMeter",
-      # Core's `Migration.down/1` raises `DataLossError` unless the flag is
-      # passed for a version whose `down` destroys a commercial fact.
-      data_loss: true
+      module_suffix: "AuroraMeter"
     }
   end
 
@@ -106,14 +114,23 @@ defmodule AuroraMeter.Install.Plan do
       call: "AuroraMeter.Pro.Migration",
       label: "Aurora Meter Pro",
       suffix: "aurora_meter_pro",
-      module_suffix: "AuroraMeterPro",
-      # Pro's `Migration.down/1` does not guard data loss yet: that guard and
-      # the flag that satisfies it are build unit 11b's. Emitting
-      # `confirm_data_loss: true` here would put an option in a host's committed
-      # file that nothing reads, which reads as a guarantee and is not one.
-      data_loss: false
+      module_suffix: "AuroraMeterPro"
     }
   end
+
+  # **Both packages guard data loss, so neither spec carries a flag saying
+  # whether it does.** Until build unit 11a Pro had no `data_loss_versions/0`
+  # and no guard, so this module carried a `data_loss:` boolean and two clauses
+  # each for `fresh_down/2` and `down/3`: one that emitted `confirm_data_loss`
+  # and one that did not, because emitting the option for a runtime that never
+  # read it would have been a guarantee that was not one (`open-findings.md`
+  # X369). Pro has both now, the false branches became unreachable, and dialyzer
+  # said so. They are gone rather than left as a shape somebody might read as an
+  # option that still exists.
+  #
+  # Whether a particular file carries the flag is decided per range, by asking
+  # the package's own `data_loss_versions/0`, which is the only question that
+  # was ever really being asked.
 
   # -- a fresh install -------------------------------------------------------
 
@@ -138,11 +155,10 @@ defmodule AuroraMeter.Install.Plan do
     end
   end
 
-  defp fresh_down(%{call: call, data_loss: true}, latest),
+  # Undoing an install is exactly the case where destroying the tables is what
+  # was asked for, and version 1 is on both packages' lists anyway.
+  defp fresh_down(%{call: call}, latest),
     do: "#{call}.down(version: #{latest}, to: 1, confirm_data_loss: true)"
-
-  defp fresh_down(%{call: call, data_loss: false}, latest),
-    do: "#{call}.down(version: #{latest}, to: 1)"
 
   # -- an upgrade ------------------------------------------------------------
 
@@ -159,12 +175,24 @@ defmodule AuroraMeter.Install.Plan do
     %{
       suffix: suffix(package, first, last, concurrent?),
       module_suffix: module_suffix(package, first, last, concurrent?),
-      up: "#{package.call}.up(from: #{first}, version: #{last})",
+      up:
+        "#{package.call}.up(from: #{first}, version: #{last}#{up_options(package, first, last)})",
       down: down(package, first, last),
       attributes: attributes(concurrent?),
       range: range
     }
   end
+
+  # `validate_checks:` belongs to core version 8 and to nothing else, so it is
+  # emitted only on the file that covers it. Emitting it on every file would put
+  # an option in a host's committed migration that the version it names does not
+  # read, which is the false-guarantee shape Pro's `confirm_data_loss` used to
+  # have (`open-findings.md` X369).
+  defp up_options(%{validate_checks: false, module: AuroraMeter.Migration}, first, last)
+       when first <= 8 and last >= 8,
+       do: ", validate_checks: false"
+
+  defp up_options(_package, _first, _last), do: ""
 
   defp suffix(package, version, version, true),
     do: "upgrade_#{package.suffix}_v#{version}_concurrent"
@@ -182,16 +210,13 @@ defmodule AuroraMeter.Install.Plan do
   defp module_suffix(package, first, last, false),
     do: "Upgrade#{package.module_suffix}V#{first}ToV#{last}"
 
-  defp down(%{call: call, data_loss: true, module: module}, first, last) do
+  defp down(%{call: call, module: module}, first, last) do
     if Enum.any?(first..last//1, &(&1 in module.data_loss_versions())) do
       "#{call}.down(version: #{last}, to: #{first}, confirm_data_loss: true)"
     else
       "#{call}.down(version: #{last}, to: #{first})"
     end
   end
-
-  defp down(%{call: call, data_loss: false}, first, last),
-    do: "#{call}.down(version: #{last}, to: #{first})"
 
   defp attributes(false), do: ""
 
