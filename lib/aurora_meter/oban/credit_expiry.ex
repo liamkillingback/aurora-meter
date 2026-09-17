@@ -66,10 +66,20 @@ if Code.ensure_loaded?(Oban) do
 
     @incomplete Oban.Job.states() -- [:completed, :discarded, :cancelled]
 
+    # An hour: twice the documented `*/30 * * * *` schedule.
+    #
+    # It was `:infinity`, and `@incomplete` contains `:executing`, so a job left
+    # `executing` by a node that died deduplicated every future enqueue for ever
+    # (`open-findings.md` X486). One node death now costs at most 90 minutes:
+    # the hour of the period, plus up to half an hour waiting for the next
+    # `*/30` tick, because the uniqueness lapsing is not itself an enqueue. A
+    # second run inside the period is still refused; admitting one past it costs
+    # nothing at all, for the reason the paragraph above gives, which is the
+    # same reason removing the option entirely would be safe.
     use Oban.Worker,
       queue: :aurora_meter,
       max_attempts: 3,
-      unique: [period: :infinity, states: @incomplete]
+      unique: [period: 3_600, states: @incomplete]
 
     alias AuroraMeter.Clock
     alias AuroraMeter.Credits

@@ -69,9 +69,33 @@ database, with a node killed every five minutes.
 
 ## The findings this package owns
 
-None of the defects the soak found are core's. They are listed in
-`docs/v1/build-plans/open-findings.md` and in the storefront's
-`soak-failures.md`; the one that blocks a release belongs to `aurora_meter_pro`.
+**The one that blocks a release is not core's**, it belongs to
+`aurora_meter_pro` (X486). Two of the soak's findings are core's, and a first
+draft of this file said none were, which was wrong:
+
+- **X490: the whole credit ledger's `inserted_at` bypasses the configured
+  clock, and the sweep that reads it takes its cutoff from
+  `AuroraMeter.Clock.now/0`.** All **129,044 of 129,044**
+  `aurora_meter_credit_transactions` rows, across all seven kinds, are stamped
+  inside the two hours of **wall** clock the run occupied, while
+  `aurora_meter_credit_lots.granted_at` in the same subsystem spans the full
+  simulated year. `AuroraMeter.Oban.HoldReconciliation` documents that its
+  cutoff is measured with `Clock.now/0` and passes it as `:older_than` to
+  `Ledger.pending_holds/1`, whose predicate is `t.inserted_at < ^cutoff`. In
+  this run those two clocks were **148 days apart**, so an hours-scale staleness
+  filter would have matched every pending hold on its first sweep. The ledger's
+  own comments already name this column as wrong to order by (open finding L20,
+  and 06a moves the ordering onto `seq`); what the soak adds is the consequence
+  for the clock seam, measured. `HoldReconciliation` did not run in this soak,
+  so this is the precondition measured and the effect reasoned.
+- **X489: the outbox is the fastest growing table in this schema by bytes**, at
+  1,209 bytes per row and 3,009 bytes per tenant per simulated day, which is 44
+  percent of the whole core schema's per-tenant growth. The retention key that
+  governs it is Pro's and covers `confirmed` items only, of which this run
+  produced none.
+
+Everything else is listed in `docs/v1/build-plans/open-findings.md` and in the
+storefront's `soak-failures.md`.
 
 Three of core's own schema guarantees turned out to be stronger than the soak's
 readers, and that is recorded because it changes what a guarantee table should

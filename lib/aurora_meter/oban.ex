@@ -36,7 +36,16 @@ if Code.ensure_loaded?(Oban) do
         config :my_app, Oban,
           repo: MyApp.Repo,
           queues: [aurora_meter: 5],
-          plugins: [{Oban.Plugins.Cron, crontab: AuroraMeter.Oban.cron_entries()}]
+          plugins: [
+            {Oban.Plugins.Cron, crontab: AuroraMeter.Oban.cron_entries()},
+            {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}
+          ]
+
+    The second plugin is not decoration. A node killed while a worker is running
+    leaves its job `executing` and nothing ever moves it, because nothing
+    observed the death; Lifeline is what clears it. `validate!/1` warns when it
+    is absent, and [the scheduler map](scheduler.md) says how to pick
+    `rescue_after`.
 
     ## What a worker is, and what it is not
 
@@ -58,6 +67,13 @@ if Code.ensure_loaded?(Oban) do
     The `unique` option on each worker is therefore defence in depth and not the
     guarantee. Removing it wastes work; it does not move money.
 
+    Its **period** is finite on every worker here, and that is not decoration
+    either. `:executing` is among the uniqueness states, so a job a dead node
+    left `executing` deduplicates new enqueues; with `period: :infinity` it did
+    so for ever, and one node death stopped that worker permanently
+    (`open-findings.md` X486). The periods, and the rule that produced them, are
+    in [the scheduler map](scheduler.md).
+
     ## Availability
 
     `cron_entries/1` returns an entry only for a worker whose operation is
@@ -70,6 +86,8 @@ if Code.ensure_loaded?(Oban) do
     and it began appearing in `cron_entries/1` with no edit to the worker at
     all, which is what the check is for.
     """
+
+    require Logger
 
     alias AuroraMeter.Oban.ConfigError
 
@@ -216,6 +234,32 @@ if Code.ensure_loaded?(Oban) do
       * `:testing` set to `:inline` or `:manual` outside the test environment,
         which silently stops every scheduled job.
 
+    ## What it warns about: no way to rescue an orphaned job
+
+    A node killed while one of these workers is running leaves that job
+    `executing` for ever, because nothing observes the death. Oban's answer is
+    `Oban.Plugins.Lifeline`, and a configuration that schedules Aurora Meter
+    work without it (or without Oban Pro's `DynamicLifeline`) accumulates
+    orphans that no retry, no alert and no operator ever sees:
+
+        plugins: [
+          {Oban.Plugins.Cron, crontab: AuroraMeter.Oban.cron_entries()},
+          {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}
+        ]
+
+    This is a **warning**, logged once, and never a refusal unless you ask for
+    one with `rescue: :require`. Aurora Meter's own workers no longer depend on
+    it for liveness: every uniqueness period is finite, so a wedged job stops
+    that worker for at most its period rather than for ever
+    (`open-findings.md` X486). What the plugin adds is the cleanup, and
+    `rescue_after` is a trade an operator makes rather than one this library can
+    make for them: shorter than the harm, and **longer than your slowest
+    legitimate run**, because Lifeline rescues on elapsed time alone and will
+    happily rescue a job that is still running.
+
+    Pass `rescue: :ignore` if you rescue orphans some other way and do not want
+    to be told.
+
     It cannot see a second `Oban.Plugins.Cron` running under a different Oban
     instance name. That case is documented in the scheduler map.
 
@@ -236,11 +280,19 @@ if Code.ensure_loaded?(Oban) do
       queue = Keyword.get(opts, :queue, @queue)
 
       env = Keyword.get(opts, :env, mix_env())
+      rescue_mode = rescue_mode!(Keyword.get(opts, :rescue, :warn))
+
+      rescue_problems = check_rescue(config)
 
       problems =
         check_repo(config) ++
           check_queue(config, queue) ++
-          check_crontab(config) ++ check_timezone(config) ++ check_testing(config, env)
+          check_crontab(config) ++
+          check_timezone(config) ++
+          check_testing(config, env) ++
+          if(rescue_mode == :require, do: rescue_problems, else: [])
+
+      if rescue_mode == :warn, do: Enum.each(rescue_problems, &Logger.warning/1)
 
       if problems == [] do
         :ok
@@ -248,6 +300,32 @@ if Code.ensure_loaded?(Oban) do
         raise ConfigError, message: message(problems), problems: problems
       end
     end
+
+    @doc """
+    The rescue advice `validate!/1` would give for this configuration, as a list
+    of sentences, empty when there is nothing to say.
+
+    Exposed so a host can put it in a health check or a boot banner of its own
+    instead of reading the log.
+
+    ## Examples
+
+        iex> AuroraMeter.Oban.rescue_advice(
+        ...>   plugins: [{Oban.Plugins.Cron, crontab: [{"*/5 * * * *", AuroraMeter.Oban.PlanTransitions}]}]
+        ...> ) |> length()
+        1
+
+        iex> AuroraMeter.Oban.rescue_advice(
+        ...>   plugins: [
+        ...>     {Oban.Plugins.Cron, crontab: [{"*/5 * * * *", AuroraMeter.Oban.PlanTransitions}]},
+        ...>     Oban.Plugins.Lifeline
+        ...>   ]
+        ...> )
+        []
+
+    """
+    @spec rescue_advice(keyword()) :: [String.t()]
+    def rescue_advice(config) when is_list(config), do: check_rescue(config)
 
     # -- the registry ----------------------------------------------------------
 
@@ -466,6 +544,80 @@ if Code.ensure_loaded?(Oban) do
         []
       end
     end
+
+    # A node killed while one of these workers is running leaves that job
+    # `executing` and nothing ever moves it, because nothing observed the death.
+    # `Oban.Plugins.Lifeline` is Oban's own answer and neither package mentioned
+    # it anywhere until repair unit R9 (`open-findings.md` X486).
+    #
+    # Compared as a **string suffix**, for two reasons. Core must not reference
+    # an `Oban.Pro.*` module, and Oban Pro's `DynamicLifeline` is the better
+    # answer for a host that has it, so a check that named one module would
+    # scold the host with the better one.
+    #
+    # It says nothing at all unless the crontab actually schedules Aurora Meter
+    # work. A host that drives the operations from its own scheduler has no
+    # Oban job to orphan, and telling it to install a plugin it does not need is
+    # how advice gets ignored.
+    # Refused rather than ignored. A typo in this option would silently turn the
+    # X486 advice off, and an option that silently does nothing is worse than no
+    # option: `rescue: :warm` would read, to whoever wrote it, exactly like
+    # `rescue: :ignore` worked.
+    defp rescue_mode!(mode) when mode in [:warn, :require, :ignore], do: mode
+
+    defp rescue_mode!(other) do
+      raise ArgumentError,
+            "AuroraMeter.Oban.validate!/1 `:rescue` must be :warn, :require or :ignore, " <>
+              "got: #{inspect(other)}"
+    end
+
+    defp check_rescue(config) do
+      scheduled =
+        config |> crontabs() |> Enum.flat_map(&entry_workers/1) |> Enum.filter(&aurora?/1)
+
+      if scheduled == [] or rescuer?(config) do
+        []
+      else
+        [
+          "the `:crontab` schedules #{length(scheduled)} Aurora Meter worker(s) and the " <>
+            "`:plugins` include no Lifeline. A node killed while one of them is running " <>
+            "leaves its job `executing` for ever, because nothing observes the death. Add " <>
+            "`{Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}`, with a " <>
+            "`rescue_after` longer than your slowest run: Lifeline rescues on elapsed " <>
+            "time alone and will rescue a job that is still running. Aurora Meter's own " <>
+            "workers stay live without it (every uniqueness period is finite), so this is " <>
+            "cleanup rather than liveness. Pass `rescue: :ignore` to silence it, or " <>
+            "`rescue: :require` to make it a refusal."
+        ]
+      end
+    end
+
+    # A name a host wrote in its own configuration, compared as a string, never
+    # as an alias: `check_conflict/1` above says why core cannot name a Pro
+    # module.
+    defp aurora?(worker) when is_atom(worker) do
+      name = Atom.to_string(worker)
+
+      String.starts_with?(name, "Elixir.AuroraMeter.Oban.") or
+        String.starts_with?(name, "Elixir.AuroraMeter.Pro.")
+    end
+
+    defp aurora?(_other), do: false
+
+    defp rescuer?(config) do
+      config
+      |> Keyword.get(:plugins, [])
+      |> List.wrap()
+      |> Enum.any?(fn
+        {module, _opts} -> lifeline?(module)
+        module -> lifeline?(module)
+      end)
+    end
+
+    defp lifeline?(module) when is_atom(module) and not is_nil(module) and not is_boolean(module),
+      do: String.ends_with?(Atom.to_string(module), "Lifeline")
+
+    defp lifeline?(_other), do: false
 
     defp mix_env do
       if Code.ensure_loaded?(Mix) and function_exported?(Mix, :env, 0), do: Mix.env()

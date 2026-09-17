@@ -86,10 +86,19 @@ if Code.ensure_loaded?(Oban) do
 
     @incomplete Oban.Job.states() -- [:completed, :discarded, :cancelled]
 
+    # Thirty minutes: twice the documented `*/15 * * * *` schedule.
+    #
+    # It was `:infinity`, and `@incomplete` contains `:executing`, so a job left
+    # `executing` by a node that died deduplicated every future enqueue for ever
+    # (`open-findings.md` X486). A sweep this worker is killed in the middle of
+    # keeps its holds open, and they stay open until the next run, so the bound
+    # is how long a hold a customer is waiting on can sit there: at most 45
+    # minutes, the thirty of the period plus up to fifteen waiting for the next
+    # `*/15` tick, because the uniqueness lapsing is not itself an enqueue.
     use Oban.Worker,
       queue: :aurora_meter,
       max_attempts: 3,
-      unique: [period: :infinity, states: @incomplete]
+      unique: [period: 1_800, states: @incomplete]
 
     alias AuroraMeter.Clock
     alias AuroraMeter.Credits

@@ -138,7 +138,15 @@ if Code.ensure_loaded?(Oban) do
       # layer's own answer. So this file does not test uniqueness, and the
       # evidence says so rather than recording a pass for it.
       refute UnguardedExpiry.__opts__()[:unique]
-      assert CreditExpiry.__opts__()[:unique][:period] == :infinity
+
+      # The guarded worker is still unique and the control still is not, which
+      # is the only difference between them and the whole point of this pair.
+      # The **period** is 3600 rather than `:infinity` since repair unit R9:
+      # `:executing` is among the uniqueness states, and an infinite period
+      # meant a job a dead node left `executing` deduplicated every later
+      # enqueue for ever (`open-findings.md` X486). It changes nothing here, and
+      # saying so is the point: this file's answer never came from uniqueness.
+      assert CreditExpiry.__opts__()[:unique][:period] == 3_600
 
       result = contended(tenant, UnguardedExpiry)
 

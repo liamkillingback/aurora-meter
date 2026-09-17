@@ -27,10 +27,23 @@ if Code.ensure_loaded?(Oban) do
 
     @incomplete Oban.Job.states() -- [:completed, :discarded, :cancelled]
 
+    # Fifteen minutes: twice the documented `*/5 * * * *` schedule, rounded up
+    # to the next quarter hour.
+    #
+    # It was `:infinity`, and `@incomplete` contains `:executing`, so a job left
+    # `executing` by a node that died deduplicated every future enqueue for ever
+    # (`open-findings.md` X486). This worker's bound is the one a customer
+    # notices: it is added to the lag between an effective date and the change
+    # landing, and only when a node dies mid-run. At most 20 minutes, the
+    # fifteen of the period plus up to five waiting for the next `*/5` tick,
+    # because the uniqueness lapsing is not itself an enqueue. Every effect is
+    # conditional on
+    # the transition still being `pending` (invariant I16), so an admitted
+    # duplicate applies each transition exactly once.
     use Oban.Worker,
       queue: :aurora_meter,
       max_attempts: 5,
-      unique: [period: :infinity, states: @incomplete]
+      unique: [period: 900, states: @incomplete]
 
     @operation {AuroraMeter.Subscriptions, :apply_due_transitions, 1}
 

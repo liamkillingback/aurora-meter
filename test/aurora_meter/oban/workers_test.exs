@@ -84,7 +84,15 @@ if Code.ensure_loaded?(Oban) do
 
         assert opts[:queue] == :aurora_meter
         assert opts[:max_attempts] == 3
-        assert opts[:unique][:period] == :infinity
+
+        # An hour, and it was `:infinity` until repair unit R9. `:executing` is
+        # in the states below, so an infinite period meant a job left
+        # `executing` by a node that died deduplicated every later enqueue for
+        # ever and the sweep stopped permanently (`open-findings.md` X486). The
+        # number is twice the documented `*/30 * * * *` schedule, and it is the
+        # worst time one node death can stop this worker.
+        assert opts[:unique][:period] == 3_600
+        assert :executing in opts[:unique][:states]
         refute :completed in opts[:unique][:states]
       end
 
@@ -184,7 +192,11 @@ if Code.ensure_loaded?(Oban) do
 
         assert opts[:queue] == :aurora_meter
         assert opts[:max_attempts] == 3
-        assert opts[:unique][:period] == :infinity
+
+        # Thirty minutes, twice the documented `*/15 * * * *` schedule, and it
+        # was `:infinity` until repair unit R9 (`open-findings.md` X486).
+        assert opts[:unique][:period] == 1_800
+        assert :executing in opts[:unique][:states]
       end
     end
 

@@ -16,11 +16,16 @@ if Code.ensure_loaded?(Oban) do
 
     alias AuroraMeter.Oban, as: Scheduler
     alias AuroraMeter.Oban.ConfigError
+    alias AuroraMeter.Oban.CreditExpiry
 
     doctest AuroraMeter.Oban
 
     @cron_expression ~r/^[\d*\/,\- ]+$/
     @scheduler_doc "docs/operations/scheduler.md"
+
+    # The longest uniqueness period either package permits itself, and therefore
+    # the worst time one node death can stop a worker (`open-findings.md` X486).
+    @ceiling 3_600
 
     describe "cron_entries/1" do
       test "returns one entry per available worker that has a schedule" do
@@ -223,7 +228,7 @@ if Code.ensure_loaded?(Oban) do
         # configuration as well as the unsupported one.
         for worker <- [AuroraMeter.Oban.CreditExpiry, AuroraMeter.Pro.Credits.Expirer] do
           config = base_config(plugins: cron_plugin(crontab: [{"*/30 * * * *", worker}]))
-          assert Scheduler.validate!(config: config) == :ok
+          assert Scheduler.validate!(config: config, rescue: :ignore) == :ok
         end
       end
 
@@ -269,6 +274,150 @@ if Code.ensure_loaded?(Oban) do
 
       test "accepts a queue name other than the default" do
         assert Scheduler.validate!(config: base_config(queues: [other: 3]), queue: :other) == :ok
+      end
+    end
+
+    # -- X486: the rescue plugin neither package had ever mentioned -------------
+
+    describe "X486 the missing Lifeline" do
+      test "warns, and does not raise, when Aurora Meter work is scheduled with no Lifeline" do
+        config = base_config(plugins: cron_plugin(crontab: Scheduler.cron_entries()))
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            assert Scheduler.validate!(config: config) == :ok
+          end)
+
+        assert log =~ "Lifeline"
+        assert log =~ "executing"
+      end
+
+      test "says nothing once a Lifeline is configured" do
+        assert Scheduler.rescue_advice(base_config()) == []
+      end
+
+      test "accepts any Lifeline, so a host on Oban Pro's DynamicLifeline is not scolded" do
+        # Compared as a name suffix. Core must not reference an `Oban.Pro.*`
+        # module, and the Pro plugin is the better answer for a host that has
+        # it, so a check that named one module would tell the host with the
+        # better one to install the worse one.
+        # Written as a literal atom rather than as an alias, because
+        # `Oban.Pro.Plugins.DynamicLifeline` is not a dependency of this package
+        # and never will be: a host writes it in its own configuration and this
+        # check only ever sees the name.
+        dynamic_lifeline = :"Elixir.Oban.Pro.Plugins.DynamicLifeline"
+
+        pro_style =
+          base_config(
+            plugins: cron_plugin(crontab: Scheduler.cron_entries()) ++ [{dynamic_lifeline, []}]
+          )
+
+        assert Scheduler.rescue_advice(pro_style) == []
+      end
+
+      test "says nothing when no Aurora Meter worker is scheduled at all" do
+        # A host driving the operations from its own scheduler has no Oban job
+        # to orphan. Advice it does not need is advice it learns to ignore.
+        assert Scheduler.rescue_advice(
+                 base_config(plugins: cron_plugin(crontab: [{"* * * * *", SomeHost.Worker}]))
+               ) == []
+      end
+
+      test "rescue: :require turns the warning into a refusal naming the plugin" do
+        config = base_config(plugins: cron_plugin(crontab: Scheduler.cron_entries()))
+
+        error =
+          assert_raise ConfigError, fn ->
+            Scheduler.validate!(config: config, rescue: :require)
+          end
+
+        assert error.message =~ "Oban.Plugins.Lifeline"
+        assert length(error.problems) == 1
+      end
+
+      test "an unrecognised :rescue mode is refused rather than ignored" do
+        # `rescue: :warm` would otherwise behave exactly like `:ignore`, which
+        # is the one outcome whoever typed it did not intend.
+        assert_raise ArgumentError, ~r/:warn, :require or :ignore/, fn ->
+          Scheduler.validate!(config: base_config(), rescue: :warm)
+        end
+      end
+
+      test "rescue: :ignore says nothing and logs nothing" do
+        config = base_config(plugins: cron_plugin(crontab: Scheduler.cron_entries()))
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            assert Scheduler.validate!(config: config, rescue: :ignore) == :ok
+          end)
+
+        refute log =~ "Lifeline"
+      end
+    end
+
+    # -- X486: the wedge itself ------------------------------------------------
+
+    describe "X486 a job wedged executing by a dead node" do
+      # The behavioural half of this lives in Aurora Meter Pro's
+      # `AuroraMeter.Pro.ObanWedgeTest`, which plants the row a killed node
+      # leaves and asserts that the next enqueue is a new job. It covers **these**
+      # workers too, by reading `__registry__/0`. It cannot live here: core's
+      # dependency on Oban is optional, so this suite starts no Oban instance and
+      # carries no `oban_jobs` table, and a test that cannot insert a job cannot
+      # watch one being refused.
+      #
+      # What is left here is the property that makes the bound a bound, and it is
+      # worth having in both places: Pro can be absent, and core's workers are
+      # then wedged with nobody watching.
+
+      test "no worker declares an infinite period beside :executing" do
+        for {worker, unique} <- unique_workers() do
+          assert is_integer(unique.period), """
+          #{inspect(worker)} declares `period: #{inspect(unique.period)}` with :executing
+          among its uniqueness states.
+
+          A node killed while this worker runs leaves its job `executing` for ever, because
+          nothing observes the death. An infinite period never lapses, so every later
+          enqueue is deduplicated against that corpse and the worker stops permanently.
+          That is `open-findings.md` X486, measured against Pro's outbox deliverer in soak
+          run 1: delivery stopped at 09:24:16 and never resumed.
+
+          Bound it. #{@scheduler_doc} states the rule.
+          """
+
+          assert unique.period <= @ceiling, """
+          #{inspect(worker)} declares `period: #{unique.period}`, longer than the
+          #{@ceiling} second ceiling #{@scheduler_doc} states. The period is the worst time
+          this worker is stopped by one node death.
+          """
+        end
+      end
+
+      test "the scan reads the resolved options, not the declaration" do
+        # `unique: [period: 60]` with no `:states` inherits Oban's defaults,
+        # which include `:executing`. A check that read `__opts__()` would not
+        # see it. Pro has a worker written exactly that way.
+        assert %{states: states} = unique(CreditExpiry.new(%{}))
+        assert :executing in states
+        assert length(unique_workers()) >= 5
+      end
+
+      test "the periods are the ones the scheduler map publishes" do
+        published =
+          for cells <- period_table(),
+              period = Enum.at(cells, 2),
+              period =~ ~r/^\d+$/,
+              into: %{},
+              do: {module_cell(Enum.at(cells, 0)), String.to_integer(period)}
+
+        declared = Map.new(unique_workers(), fn {worker, unique} -> {worker, unique.period} end)
+
+        assert published == declared, """
+        #{@scheduler_doc} and the workers disagree about the uniqueness periods.
+
+        document: #{inspect(published)}
+        workers : #{inspect(declared)}
+        """
       end
     end
 
@@ -337,25 +486,84 @@ if Code.ensure_loaded?(Oban) do
 
     defp cron_plugin(opts), do: [{Oban.Plugins.Cron, opts}]
 
+    # The configuration `docs/operations/scheduler.md` recommends, Lifeline
+    # included. It gained the plugin with X486: the documented configuration and
+    # the one the tests call "fine" have to be the same configuration, or the
+    # warning this unit added would be firing through half of this file and
+    # nobody would read it.
     defp base_config(overrides \\ []) do
       Keyword.merge(
         [
           repo: Application.get_env(:aurora_meter, :repo),
           queues: [aurora_meter: 5],
-          plugins: cron_plugin(crontab: Scheduler.cron_entries())
+          plugins:
+            cron_plugin(crontab: Scheduler.cron_entries()) ++
+              [{Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}]
         ],
         overrides
       )
     end
 
-    defp raised(opts), do: assert_raise(ConfigError, fn -> Scheduler.validate!(opts) end)
+    # The **resolved** uniqueness, as the engine computes it, rather than the
+    # literal keyword list a worker declared.
+    defp unique(changeset), do: Ecto.Changeset.get_change(changeset, :unique)
 
+    defp unique_workers do
+      for {worker, _mfa, _schedule, _description} <- Scheduler.__registry__(),
+          resolved = unique(worker.new(%{})),
+          is_map(resolved),
+          :executing in resolved.states,
+          do: {worker, resolved}
+    end
+
+    # Bounded to the first table after its own marker, the way `scheduler_table/0`
+    # is: an unanchored scan for `| \`AuroraMeter.Oban.` reads the worker table
+    # higher up the page, whose third cell is a cron expression rather than a
+    # number, and a reader that crashes on the wrong table is a reader nobody
+    # believes.
+    defp period_table do
+      @scheduler_doc
+      |> File.read!()
+      |> String.split("\n")
+      |> Enum.drop_while(&(not String.starts_with?(&1, "<!-- scheduler:periods -->")))
+      |> Enum.drop_while(&(not String.starts_with?(&1, "|")))
+      |> Enum.take_while(&String.starts_with?(&1, "|"))
+      |> Enum.drop(2)
+      |> Enum.map(fn line ->
+        line
+        |> String.trim()
+        |> String.trim("|")
+        |> String.split("|")
+        |> Enum.map(&String.trim/1)
+      end)
+    end
+
+    # `rescue: :ignore` by default. Every caller of this helper is about some
+    # other check, and a config built to fail one check is usually missing the
+    # Lifeline as well; without this the X486 warning is logged through half
+    # this file and stops meaning anything. The rescue tests pass the mode
+    # themselves.
+    defp raised(opts) do
+      assert_raise(ConfigError, fn ->
+        Scheduler.validate!(Keyword.put_new(opts, :rescue, :ignore))
+      end)
+    end
+
+    # Bounded to the **first** table after the marker.
+    #
+    # It used to take every `|` line to the end of the file, and when X486 added
+    # a second table lower down the page this reader swallowed it: fourteen rows
+    # where there are six workers, `Worker` parsed as a module from a header
+    # cell, and `binary_to_integer("Stopped for at most")`. Pro's equivalent
+    # reader was bounded when the same thing happened to it; core's was not, and
+    # the difference was invisible while there was only one table.
     defp scheduler_table do
       @scheduler_doc
       |> File.read!()
       |> String.split("\n")
       |> Enum.drop_while(&(not String.starts_with?(&1, "<!-- scheduler:core -->")))
-      |> Enum.filter(&String.starts_with?(&1, "|"))
+      |> Enum.drop_while(&(not String.starts_with?(&1, "|")))
+      |> Enum.take_while(&String.starts_with?(&1, "|"))
       |> Enum.drop(2)
       |> Enum.map(fn line ->
         line
@@ -405,7 +613,10 @@ if Code.ensure_loaded?(Oban) do
       config = [
         repo: Application.get_env(:aurora_meter, :repo),
         queues: [aurora_meter: 5],
-        plugins: [{Oban.Plugins.Cron, crontab: Scheduler.cron_entries()}]
+        plugins: [
+          {Oban.Plugins.Cron, crontab: Scheduler.cron_entries()},
+          {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}
+        ]
       ]
 
       Application.put_env(:aurora_meter_test, MyHost.Oban, config)

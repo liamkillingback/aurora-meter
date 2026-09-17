@@ -30,10 +30,22 @@ if Code.ensure_loaded?(Oban) do
 
     @incomplete Oban.Job.states() -- [:completed, :discarded, :cancelled]
 
+    # An hour, which is the documented `7 * * * *` schedule rather than twice
+    # it: the rule the other workers follow is capped at an hour, and this one
+    # reaches the cap.
+    #
+    # It was `:infinity`, and `@incomplete` contains `:executing`, so a job left
+    # `executing` by a node that died deduplicated every future enqueue for ever
+    # (`open-findings.md` X486). At the cap the period and the schedule coincide,
+    # which is the worst ratio of any worker in either package: the tick landing
+    # exactly at the lapse is still refused, so one node death costs **two**
+    # skipped hours rather than one. It is survivable because a grant is due
+    # from its period and never from the run that noticed it, so the third tick
+    # issues everything the first two would have.
     use Oban.Worker,
       queue: :aurora_meter,
       max_attempts: 3,
-      unique: [period: :infinity, states: @incomplete]
+      unique: [period: 3_600, states: @incomplete]
 
     @operation {AuroraMeter.Credits.Recurrences, :run, 1}
 

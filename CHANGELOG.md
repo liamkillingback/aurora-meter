@@ -759,6 +759,51 @@ schema version is 6: that was true of 0.5.0.
 
 ### Fixed
 
+- **One node death used to stop a scheduled worker for ever, and the fix is a
+  number.** Every worker here declared `unique: [period: :infinity, states: ...]`
+  with `:executing` in the states. A node killed while a worker is running
+  leaves its job `executing` and nothing ever moves it, because nothing observed
+  the death; an infinite period never lapses, so **every later enqueue was
+  deduplicated against that corpse**, from the crontab and from `iex` alike. The
+  worker stopped permanently, Oban stayed healthy, and nothing failed, retried
+  or alerted.
+
+  It was measured on Aurora Meter Pro's outbox deliverer in a V1 soak run: the
+  last provider call at 09:24:16 and none after it, 225 outbox items left leased
+  by a node that no longer existed, and pending climbing 350 to 2,762. Nothing
+  in the ledger was wrong. What had stopped was the path that turns correct
+  usage into revenue (`open-findings.md` X486).
+
+  Every period is now finite: `CreditExpiry` 3600, `HoldReconciliation` 1800,
+  `RecurringGrants` 3600, `PlanTransitions` 900, `Retention` unchanged at 3600.
+  The rule is twice the worker's documented schedule, rounded up to the next
+  quarter hour, and never more than an hour, so a wedged worker resumes at the
+  first tick more than that period after the wedge: 20 minutes for plan
+  transitions, 45 for hold reconciliation, 90 for credit expiry and 2 hours for
+  the hourly recurring grants sweep. Inside the period a second tick is refused,
+  which is what the option is for; past it, a duplicate run is admitted, and a
+  duplicate run of any of these workers has always been safe, because the
+  guarantee is the operation's row lock and never the queue. The periods are
+  published in [the scheduler map](docs/operations/scheduler.md) and a test
+  compares the page with the code in both directions.
+
+- **`AuroraMeter.Oban.validate!/1` now warns when nothing can rescue an orphaned
+  job.** A finite uniqueness period keeps the worker alive; it does not clear
+  the dead job, and nothing in this package can. `Oban.Plugins.Lifeline` is
+  Oban's own answer and **neither Aurora Meter package had ever mentioned it**,
+  so a host following the documented configuration had no rescue at all.
+  `validate!/1` logs one warning when the crontab schedules Aurora Meter workers
+  and the plugins include no Lifeline, matching any plugin whose name ends in
+  `Lifeline` so that Oban Pro's `DynamicLifeline` counts. It is a warning rather
+  than a refusal because the workers no longer depend on it for liveness:
+  `rescue: :require` makes it a refusal and `rescue: :ignore` silences it.
+  `AuroraMeter.Oban.rescue_advice/1` returns the same sentences for a health
+  check. The recommended configuration in the scheduler map now includes the
+  plugin, with the one thing an operator has to get right stated next to it:
+  `rescue_after` must be longer than the slowest legitimate run, because
+  Lifeline rescues on elapsed time alone and cannot tell a dead node from a slow
+  one.
+
 - **`AuroraMeter.Credits.pending_holds/1` and `reconcile_holds/1` use the word
   `amount` for two different things, and the documentation now says so.** These
   are the two halves of one job, and only one of the two `amount`s is the money.

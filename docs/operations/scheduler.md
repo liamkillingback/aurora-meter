@@ -38,8 +38,15 @@ Configure the queue and the crontab:
 config :my_app, Oban,
   repo: MyApp.Repo,
   queues: [aurora_meter: 5],
-  plugins: [{Oban.Plugins.Cron, crontab: AuroraMeter.Oban.cron_entries()}]
+  plugins: [
+    {Oban.Plugins.Cron, crontab: AuroraMeter.Oban.cron_entries()},
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}
+  ]
 ```
+
+The second plugin is not decoration. [A node that dies mid
+job](#a-node-that-dies-mid-job) is what it is for, and `validate!/1` warns when
+it is absent.
 
 `AuroraMeter.Oban.cron_entries/1` returns the recommended entries for the
 workers this build can actually run. Take it whole, or merge it into a crontab
@@ -127,6 +134,12 @@ found in one pass:
 * `:testing` left at `:inline` or `:manual` outside the test environment, which
   stops every queue and every plugin quietly.
 
+It also **warns**, without raising, when the crontab schedules Aurora Meter
+workers and the plugins include no Lifeline. See [a node that dies mid
+job](#a-node-that-dies-mid-job) for what that costs and how to choose
+`rescue_after`. `AuroraMeter.Oban.rescue_advice/1` returns the same sentences if
+you would rather put them in a health check than in the log.
+
 **One case it cannot see.** A second `Oban.Plugins.Cron`, under a second Oban
 instance with a different name, scheduling the same workers again. `validate!/1`
 is given one instance's configuration and has no way to learn about another. If
@@ -197,6 +210,75 @@ reads what the winner wrote. There is no clock in that decision at all.
 The `unique` option on each worker is defence in depth, and it is worth having:
 it saves a duplicate run's work. It is not what keeps the ledger right, and
 removing it would not make any of the above untrue.
+
+## A node that dies mid job
+
+A node killed while one of these workers is running leaves its job `executing`
+for ever. Nothing observed the death, so nothing fails it, retries it or
+discards it, and the row sits there with `attempted_by` naming a node that no
+longer exists.
+
+Two things follow from that, and they have different owners.
+
+**The one this package owns: a wedged job must not stop its worker for ever.**
+Every worker here that is unique at all has `:executing` among its uniqueness
+states, so a job in that state deduplicates a new enqueue. Until repair unit R9 the period beside it was
+`:infinity`, which never lapses, so **one node death stopped that worker
+permanently**: the crontab ticked, every insert collapsed into the corpse, and
+Oban looked healthy the whole time. Aurora Meter Pro's outbox deliverer was
+measured doing exactly that in a soak run, with usage accumulating and never
+being billed (`open-findings.md` X486). Every period is now finite:
+
+<!-- scheduler:periods -->
+
+| Worker | Schedule | `unique` period | Resumes within |
+|---|---|---|---|
+| `AuroraMeter.Oban.CreditExpiry` | `*/30 * * * *` | 3600 | 90 minutes |
+| `AuroraMeter.Oban.HoldReconciliation` | `*/15 * * * *` | 1800 | 45 minutes |
+| `AuroraMeter.Oban.RecurringGrants` | `7 * * * *` | 3600 | 2 hours |
+| `AuroraMeter.Oban.PlanTransitions` | `*/5 * * * *` | 900 | 20 minutes |
+| `AuroraMeter.Oban.Retention` | `40 3 * * *` | 3600 | the next nightly run |
+| `AuroraMeter.Oban.EventsReplay` | operator run | none | not applicable: it is not unique |
+
+The rule for the period is twice the worker's documented schedule, rounded up to
+the next quarter hour, and never more than an hour. Inside the period a second
+tick is still refused, which is what the option is for. Past it a run that has
+been going for two full schedule intervals is either wedged or so far behind that
+a second worker is help rather than harm, and a second worker is safe for the
+reason the section above gives: the guarantee is in the operation, not in the
+queue.
+
+**"Resumes within" is the period plus one schedule interval, and the second term
+is not a rounding error.** The uniqueness stops matching the corpse `period`
+seconds after it was enqueued, but nothing enqueues a replacement until the next
+**tick**, so the worker resumes at the first tick more than `period` after the
+wedge. For `RecurringGrants` those two are the same hour, which is why its
+figure is two hours rather than one. Anything faster than its own schedule is
+`Oban.Plugins.Lifeline`'s job, below.
+
+**The one you own: clearing the orphan.** A finite period keeps the worker
+alive; it does not move the dead job, and nothing in this package can. That is
+`Oban.Plugins.Lifeline`:
+
+```elixir
+config :my_app, Oban,
+  plugins: [
+    {Oban.Plugins.Cron, crontab: AuroraMeter.Oban.cron_entries()},
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(20)}
+  ]
+```
+
+Pick `rescue_after` yourself, and pick it **longer than your slowest legitimate
+run**. Lifeline rescues on elapsed time alone: it cannot tell a dead node from a
+slow one, so too short a value moves a job that is still running back to
+`available` and you get two copies. Oban Pro's `DynamicLifeline` uses node
+liveness instead and is the better answer if you have it.
+
+`AuroraMeter.Oban.validate!/1` warns when your crontab schedules Aurora Meter
+workers and no Lifeline is configured. It matches any plugin whose name ends in
+`Lifeline`, so `DynamicLifeline` counts. It is a warning rather than a
+refusal because these workers no longer depend on it to stay alive. Silence it
+with `rescue: :ignore`, or make it a refusal with `rescue: :require`.
 
 ## Telemetry
 
