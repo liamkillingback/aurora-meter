@@ -92,6 +92,132 @@ defmodule AuroraMeter.Install.Plan do
     :ok
   end
 
+  @doc """
+  The version an upgrade has to start from, read from the schema marker in the
+  database, and the file that already covers it if there is one.
+
+  Returns `{:ok, from}`, `:up_to_date`, or raises `Mix.Error` with what to do
+  instead. `repo` must already be started.
+
+  The marker is `aurora_meter_checkpoints["schema:core"]` and
+  `["schema:pro"]`, written by `Migration.up/1` at the end of each successful
+  version from core 7 and Pro 10 (`schema-migration-map.md` section 3). Its
+  absence is not "version 0": it means the database has not reached the version
+  that creates the table, and this refuses rather than guessing, because
+  guessing low re-runs migrations that have already run and guessing high skips
+  ones that have not.
+  """
+  @spec detect_from(:core | :pro, module()) :: {:ok, pos_integer()} | :up_to_date
+  def detect_from(package, repo) do
+    %{module: module, label: label, marker: marker, marker_from: marker_from} = spec(package)
+    latest = module.latest_version()
+
+    case installed_version(repo, marker) do
+      {:ok, installed} when installed >= latest ->
+        :up_to_date
+
+      {:ok, installed} ->
+        {:ok, installed + 1}
+
+      :no_marker ->
+        Mix.raise(
+          "--upgrade cannot tell which #{label} schema version this database is on: " <>
+            "aurora_meter_checkpoints has no \"#{marker}\" row. That row is written from " <>
+            "schema version #{marker_from} onwards, so its absence means the database has " <>
+            "not reached version #{marker_from} yet. Read your priv/repo/migrations to see " <>
+            "which version you are on and pass it: `--from <version + 1>`. " <>
+            "#{first_upgrade_hint(package)}"
+        )
+
+      :no_table ->
+        Mix.raise(
+          "--upgrade cannot tell which #{label} schema version this database is on: " <>
+            "the aurora_meter_checkpoints table does not exist, which means the database " <>
+            "is below core schema version 7. Read your priv/repo/migrations and pass " <>
+            "`--from <version + 1>`. #{first_upgrade_hint(package)}"
+        )
+
+      {:error, reason} ->
+        Mix.raise(
+          "--upgrade could not read the #{label} schema marker: #{inspect(reason)}. " <>
+            "Pass `--from <version>` instead."
+        )
+    end
+  end
+
+  @doc """
+  Raises when a migration in `path` already runs a version in `range`.
+
+  Generating a second file for a version that is already in the host's
+  migrations directory produces a history that applies it twice: harmless for
+  an idempotent version and a `duplicate_column` for one that is not, and in
+  both cases it is not what the operator asked for.
+  """
+  @spec refuse_existing!(:core | :pro, String.t(), Range.t()) :: :ok
+  def refuse_existing!(package, path, range) do
+    %{call: call, label: label} = spec(package)
+    pattern = ~r/#{Regex.escape(call)}\.up\(from: (\d+), version: (\d+)\)/
+
+    clashes =
+      path
+      |> Path.join("*.exs")
+      |> Path.wildcard()
+      |> Enum.flat_map(fn file ->
+        covered =
+          pattern
+          |> Regex.scan(File.read!(file))
+          |> Enum.flat_map(fn [_, from, to] ->
+            Enum.to_list(String.to_integer(from)..String.to_integer(to)//1)
+          end)
+
+        case Enum.filter(covered, &(&1 in range)) do
+          [] -> []
+          versions -> [{Path.basename(file), versions}]
+        end
+      end)
+
+    if clashes != [] do
+      detail =
+        Enum.map_join(clashes, "; ", fn {file, versions} ->
+          "#{file} already runs #{label} #{Enum.join(versions, ", ")}"
+        end)
+
+      Mix.raise(
+        "refusing to generate a migration for a version this repository already has: " <>
+          detail <>
+          ". Delete the generated file you do not want, or pass `--from` with " <>
+          "a version above the ones already covered."
+      )
+    end
+
+    :ok
+  end
+
+  defp first_upgrade_hint(:core),
+    do: "A database at core schema version 6 (the 0.4.0 release) upgrades with `--from 7`."
+
+  defp first_upgrade_hint(:pro),
+    do: "A database at Pro schema version 9 (the 0.3.0 release) upgrades with `--from 10`."
+
+  defp installed_version(repo, marker) do
+    %{rows: rows} =
+      repo.query!(
+        "SELECT (cursor->>'version')::integer FROM aurora_meter_checkpoints WHERE name = $1",
+        [marker]
+      )
+
+    case rows do
+      [[version]] when is_integer(version) -> {:ok, version}
+      _ -> :no_marker
+    end
+  rescue
+    error in Postgrex.Error ->
+      if error.postgres[:code] == :undefined_table, do: :no_table, else: {:error, error}
+
+    error ->
+      {:error, error}
+  end
+
   # -- the two packages ------------------------------------------------------
 
   defp spec(:core) do
@@ -100,7 +226,9 @@ defmodule AuroraMeter.Install.Plan do
       call: "AuroraMeter.Migration",
       label: "Aurora Meter",
       suffix: "aurora_meter",
-      module_suffix: "AuroraMeter"
+      module_suffix: "AuroraMeter",
+      marker: "schema:core",
+      marker_from: 7
     }
   end
 
@@ -114,7 +242,9 @@ defmodule AuroraMeter.Install.Plan do
       call: "AuroraMeter.Pro.Migration",
       label: "Aurora Meter Pro",
       suffix: "aurora_meter_pro",
-      module_suffix: "AuroraMeterPro"
+      module_suffix: "AuroraMeterPro",
+      marker: "schema:pro",
+      marker_from: 10
     }
   end
 

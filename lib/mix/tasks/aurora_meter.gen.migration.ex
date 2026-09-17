@@ -15,6 +15,22 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
   which generates migrations running versions `7..latest`. See
   `AuroraMeter.Migration` for the version list.
 
+  ## `--upgrade`, which reads the version rather than being told it
+
+      mix aurora_meter.gen.migration -r MyApp.Repo --upgrade
+
+  `--upgrade` starts the repo, reads the installed schema version from
+  `aurora_meter_checkpoints["schema:core"]` and generates from the next one.
+  It refuses, with what to do instead, when the marker is absent: that row
+  arrives with version 7, so its absence means the database has not reached
+  version 7 and the version has to come from the host's own migrations
+  directory. It does not guess, because guessing low re-runs migrations that
+  have already run and guessing high skips ones that have not.
+
+  It also refuses when a migration already in `priv/repo/migrations` covers a
+  version in the range, naming the file, so running the generator twice cannot
+  produce a history that applies the same version twice.
+
   ## Two things the generated files do on purpose
 
   **The version range is pinned at both ends.** A generated `up(from: 7)` would
@@ -62,7 +78,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
 
   alias AuroraMeter.Install.Plan
 
-  @switches [from: :integer, validate_checks: :boolean]
+  @switches [from: :integer, validate_checks: :boolean, upgrade: :boolean]
 
   @impl Mix.Task
   @spec run([String.t()]) :: :ok
@@ -74,13 +90,66 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
       Mix.raise("no ecto repo found: pass one with `-r MyApp.Repo` or set `:ecto_repos`.")
     end
 
+    if opts[:upgrade] && opts[:from] do
+      Mix.raise(
+        "--upgrade and --from say the same thing two different ways. --upgrade reads the " <>
+          "installed version from the database; --from states it. Pass one."
+      )
+    end
+
     Enum.each(repos, fn repo ->
       Mix.Ecto.ensure_repo(repo, args)
-      gen_for_repo(repo, opts[:from], opts[:validate_checks])
+      gen_for_repo(repo, opts)
     end)
   end
 
-  defp gen_for_repo(repo, from, validate_checks) do
+  defp gen_for_repo(repo, opts) do
+    case resolve_from(repo, opts) do
+      :up_to_date -> :ok
+      from -> write_files(repo, from, opts[:validate_checks])
+    end
+  end
+
+  # `--upgrade` needs the database, so the repo is started for the read and
+  # stopped again. Everything else about this task is offline.
+  defp resolve_from(repo, opts) do
+    if opts[:upgrade], do: detected_from(repo), else: opts[:from]
+  end
+
+  # `with_repo/3` starts the repo and the applications it needs, runs the read,
+  # and stops both. It is what `mix ecto.migrate` itself uses, so a host that
+  # can migrate can run this.
+  defp detected_from(repo) do
+    path = Ecto.Migrator.migrations_path(repo)
+
+    {:ok, result, _apps} =
+      Ecto.Migrator.with_repo(repo, &announce(Plan.detect_from(:core, &1), path))
+
+    result
+  end
+
+  defp announce(:up_to_date, _path) do
+    Mix.shell().info([
+      :yellow,
+      "this database is already on Aurora Meter schema version " <>
+        "#{Plan.latest_version(:core)}. Nothing to generate."
+    ])
+
+    :up_to_date
+  end
+
+  defp announce({:ok, from}, path) do
+    latest = Plan.latest_version(:core)
+
+    Mix.shell().info(
+      "detected Aurora Meter schema version #{from - 1}; generating #{from} to #{latest}"
+    )
+
+    Plan.refuse_existing!(:core, path, from..latest//1)
+    from
+  end
+
+  defp write_files(repo, from, validate_checks) do
     path = Ecto.Migrator.migrations_path(repo)
     create_directory(path)
 

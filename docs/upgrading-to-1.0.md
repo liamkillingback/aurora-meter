@@ -155,6 +155,25 @@ or `track(..., durable: true)` must be quiet from step 2 until step 3 finishes:
 the backfill and the unique index cannot agree while rows are still arriving
 without an identity.
 
+**If a step dies, the next run of it will refuse, and that is the interlock
+rather than a failure.** Both data tasks hold a Postgres advisory lock for the
+length of a run and leave `state = "running"` on their checkpoint row. A
+process that is killed releases the lock with its connection but cannot clear
+the row, so the next invocation sees `"running"` with the lock free and stops:
+
+```
+** (Mix) a previous run of this task was killed ... pass --force-resume to
+   continue from seq <n>.
+```
+
+Check that no other copy of the task is running, then re-run it with
+`--force-resume`. It continues from the last committed batch and re-processing
+a batch is a no-op, so nothing is counted twice. This was proved by killing the
+task with `kill -9` inside an open transaction at three different points and
+comparing the end state against an uninterrupted run: identical on all 25
+tables, every time
+(`docs/evidence/v1/phase-11/interrupt.md` in the storefront).
+
 **Have every node on 1.0 before step 5.** A 0.4.x node writing through the
 legacy balance while the lots are being built is the one interleaving the
 cutover cannot repair.
@@ -166,12 +185,148 @@ The route was rehearsed against all four published states a host can be in
 (core 1, core 2, core 2 with Pro 1, and core 6 with Pro 9), with money in the
 ledger written by the published releases themselves rather than by hand. The
 numbers are in the storefront's `docs/evidence/v1/phase-11/migration-matrix.md`.
-**What is not measured yet** is how long each step takes and what it locks on a
-production sized table; that is build unit 11b's, and this section will carry
-its figures when it has them. Until then, rehearse on a copy of your own data.
+
+## What it locks, and for how long
+
+Measured on **1,000,000 events**, on Postgres **16.13**, four times, on one
+machine that was busy. The full record, including the spread between runs, is
+`docs/evidence/v1/phase-11/locks.md` in the storefront.
+
+| Step | What it holds | A reader was blocked for | Per 1,000,000 rows |
+|---|---|---|---|
+| Version 7 | ACCESS EXCLUSIVE on `aurora_meter_events` for the whole rewrite | **3.3 to 8.7 seconds** | 4.2 to 9.6 seconds of wall time |
+| `events.backfill` | nothing: no ACCESS EXCLUSIVE lock was ever observed | **1.4 ms** | 37 to 55 seconds |
+| Version 8 | nothing for the index (it is built `CONCURRENTLY`); ACCESS EXCLUSIVE for 0.5 to 2.1 seconds for the three `NOT NULL` promotions | **0.15 to 1.83 seconds** | 4.6 to 12.5 seconds |
+| Versions 9 and 10 | nothing on `aurora_meter_events` | **1.1 ms** | 1 to 2 seconds |
+
+**Version 7 is the outage.** Between 115,000 and 300,000 rows a second across
+four runs, so plan with the low figure: **budget one second of full-table
+outage per 100,000 events**, round up, and add the time it takes to get the
+lock. Ten million events is somewhere between half a minute and a minute and a
+half of every query on that table waiting.
+
+Above roughly **fifty million events**, or wherever that budget stops being an
+acceptable maintenance window, the alternative is the ordinary one: add a new
+`bigint` column, dual-write to both, backfill in batches, and swap. Aurora
+Meter does not do this for you in V1, and the threshold is a number about your
+tolerance rather than about the database.
+
+**Version 7 fails fast rather than queueing.** It sets `SET LOCAL lock_timeout`
+(default `"5s"`, overridable with `AuroraMeter.Migration.up(lock_timeout:
+"30s")`), so a rewrite that cannot get the lock is cancelled rather than
+waiting, because everything arriving behind it in the lock queue waits too.
+Measured behind a held `SHARE` lock: it fails after the timeout with
+`ERROR 55P03 (lock_not_available) canceling statement due to lock timeout`, the
+table is **unchanged** (6 columns before, 6 after), and Ecto has not recorded
+the version, so the next `mix ecto.migrate` runs the same file again. A
+`lock_timeout` failure is a safe failure; find the transaction that is holding
+the table and retry in a quieter minute.
+
+Before version 8, check for long-running transactions. `CREATE INDEX
+CONCURRENTLY` takes no exclusive lock but it waits for every transaction that
+was open when it started:
+
+```sql
+SELECT pid, state, xact_start, left(query, 120)
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND state <> 'idle'
+  AND xact_start < now() - interval '1 minute'
+ORDER BY xact_start;
+```
+
+## How much disk it needs, which is more than you would guess
+
+**Three and a half times** the current total size of `aurora_meter_events`,
+free, before you start:
+
+| | Before version 7 | After version 10 |
+|---|---|---|
+| table | 126 MB | 426 MB |
+| indexes | 50 MB | 196 MB |
+| total relation | **176 MB** | **623 MB** |
+
+Most of that is data that is supposed to be there: `event_id`, `payload_hash`,
+`occurred_at`, `period_start`, `period_source`, `attribution`, `kind`,
+`dimensions` and `seq` on every row, plus two new indexes. Some of it is the
+dead tuples the backfill's `UPDATE` leaves behind, and **a plain `VACUUM` does
+not give that back**: measured at 426 MB before the vacuum and 426 MB after.
+Vacuum makes the space reusable, not free. `VACUUM FULL` would return it and
+would take exactly the exclusive lock the rest of this section is about keeping
+short, so do not run one as part of the upgrade.
+
+## What an 0.4.0 node can do while this is happening
+
+Measured with a real 0.4.0 node running against the database throughout, in its
+own OS process, doing `track`, `flush`, `usage` and `history` every 700 ms
+(`docs/evidence/v1/phase-11/rolling.md` in the storefront).
+
+| After | An 0.4.0 node's buffered `track`, `flush`, `usage` and `history` | An 0.4.0 node's `track(durable: true)` |
+|---|---|---|
+| version 7 | works, unchanged | works |
+| the backfill | works, unchanged | works; the rows it writes after the scan has passed them stay without an identity, and the next backfill pass takes them |
+| version 8 | **works, unchanged** | **raises** `ERROR 23502 not_null_violation` on `event_id` |
+| versions 9 and 10 | works, unchanged | (still raises) |
+
+So the quiescence point before version 8 is narrower than draining the fleet:
+**only the durable writers have to stop.** Most installs have none.
+
+One detail worth knowing if you have them: `track/4` bumps the in-memory
+counter **before** it inserts the durable row, so a call that fails this way
+still counted. Measured: `usage` went from 31 to 32 on a call whose insert
+raised. You lose the durable record of that call, not the count.
 
 If you run Aurora Meter Pro, its migrations come **after** all of this. See
 Pro's `docs/upgrading.md`.
+
+## Rolling back
+
+`down` is **never** a rollback. It destroys the facts a rollback exists to
+preserve: version 7's `down` removes `event_id` and `payload_hash`, which are
+the identity of every recorded fact, and drops `aurora_meter_event_totals` and
+`aurora_meter_checkpoints` with them. `AuroraMeter.Migration.down/1` refuses a
+range containing any such version unless you pass `confirm_data_loss: true`,
+and it names each one and what it destroys.
+
+Rollback means putting the previous image back and leaving the schema where it
+is. What that is safe after:
+
+| After | Previous image | Why |
+|---|---|---|
+| version 7 | **safe** | additive; every new column is nullable or defaulted, and old code neither reads nor writes them |
+| the backfill | **safe** | data only, in columns old code does not read |
+| version 8 | **safe if nothing calls `track(..., durable: true)` or `record/4`**; not safe if something does | the old durable insert violates `event_id NOT NULL`. Its buffered path is unaffected |
+| version 9 | **safe** | the lot tables exist but `lots_enabled_at` is null on every wallet, so the legacy writer is still the only writer |
+| `credits.migrate_lots` | **not safe. Forward fix only** | a rolled-back node ignores `lots_enabled_at` and writes legacy arithmetic over the lots. The next allocator write refuses with a conservation error, so it is caught, but the wallet is already wrong |
+| version 10 | **safe until a transition is scheduled** | an 0.4.0 node's subscription upsert leaves the new columns alone, because Ecto builds its replace list from that binary's own schema and the new columns are not in it. Measured, not assumed |
+
+**After version 10, roll forward.** After the wallet migration, the only options
+are a forward fix or a point-in-time restore, and a restore loses every write
+since the backup.
+
+Take the backup before version 7, and test it. A `pg_dump -Fc` taken before the
+upgrade, restored into a fresh database and upgraded again, produced an
+identical reconciliation document and identical per-table checksums on all 25
+tables, and a replay of the restored copy reproduced its projection exactly
+(`docs/evidence/v1/phase-11/backup-restore.md` in the storefront).
+
+## Schemas and prefixes
+
+Aurora Meter V1 stores its tables in the repository's default schema.
+Non-default Postgres schemas and schema-per-tenant prefixes are **not
+supported**, and V1 refuses them rather than half-honouring them:
+
+- `AuroraMeter.Migration.up(prefix: "tenant_a")` raises `ArgumentError`;
+- a repository that sets `migration_default_prefix`, or whose
+  `default_options/1` returns a `:prefix`, fails to boot with
+  `AuroraMeter.Config.PrefixError`, naming the key;
+- `mix ecto.migrate --prefix tenant_a` raises the same error before any version
+  runs, and creates nothing.
+
+The reason is one fact: every query this package issues omits the prefix. A
+prefix that reached the migrations and not the queries would put the tables in
+one schema and read from another, and the first symptom would be an empty
+ledger rather than an error.
 
 ## After the upgrade
 

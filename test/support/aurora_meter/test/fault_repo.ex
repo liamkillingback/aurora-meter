@@ -255,6 +255,17 @@ defmodule AuroraMeter.Test.FaultRepo do
   @spec config() :: keyword()
   def config, do: target().config()
 
+  @doc false
+  # Not a statement and not faultable: `default_options/1` is the repository
+  # callback Ecto merges into every operation's options, and
+  # `AuroraMeter.Config.validate!/0` reads it at boot to refuse a repository
+  # that would send this package's queries into another Postgres schema
+  # (build unit 11b). It is here because the surface guard's rule is that the
+  # shim exports every repo function `lib/` calls, and the rule is worth more
+  # than the exception would be.
+  @spec default_options(atom()) :: keyword()
+  def default_options(operation), do: target().default_options(operation)
+
   # -- the surface guard ------------------------------------------------------
 
   @doc """

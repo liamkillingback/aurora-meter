@@ -65,6 +65,31 @@ defmodule AuroraMeter.MigrationTest do
     assert covered == Enum.to_list(1..latest())
   end
 
+  # T11, closed by build unit 11b. The test repo used to apply version 6 before
+  # versions 4 and 5, because the files were added in the order the versions
+  # were built rather than in the order a customer runs them. The suite was
+  # green throughout, which is the point: a defect that only shows when 4 runs
+  # after 6 was invisible, and the fixture matrix cannot see it either, because
+  # it runs the published route and not this one.
+  test "I19 the test repo applies versions in ascending order" do
+    applied =
+      @sources
+      |> Path.wildcard()
+      |> Enum.sort()
+      |> Enum.flat_map(&(&1 |> File.read!() |> pinned_ranges()))
+
+    assert applied != []
+
+    assert applied == Enum.sort(applied),
+           "priv/test_repo/migrations applies core versions in the order " <>
+             "#{inspect(applied)}. Sorted by filename they must be ascending: the test " <>
+             "database is the only place this package's own suite runs a version history, " <>
+             "and a history in an order no customer can produce tests an order no customer " <>
+             "has."
+
+    assert applied == Enum.to_list(1..latest())
+  end
+
   test "a concurrent version is generated into a file of its own, with both attributes" do
     concurrent = Migration.concurrent_versions()
 

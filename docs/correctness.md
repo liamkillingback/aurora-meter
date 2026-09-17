@@ -1043,6 +1043,9 @@ nothing and the next run asks again.
 - `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 twelve independent connections applying one due transition apply it once`
 - `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 twelve independent connections scheduling one ref produce one transition row`
 - `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 two Oban jobs from two nodes apply one transition`
+- `AuroraMeter.MigrationGuardsTest` / `test I16 a re-run of the whole history is a no-op I16 up(from: 1, version: latest) twice raises nothing and changes no catalogue`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-4: version 8 converges on one valid index I16 it drops the index a real aborted concurrent create left behind`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-4: version 8 converges on one valid index I16 applying version 8 twice leaves exactly one valid index`
 
 **Evidence.** `docs/evidence/v1/phase-05/i16.md`
 
@@ -1555,6 +1558,26 @@ supported ways of installing one package came to produce two different files.
 - `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test the shared plan I19 Pro declares no concurrent version, so one range becomes one file` (pro)
 - `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test the shared plan I19 no generated Pro file claims a data-loss confirmation nothing reads` (pro)
 - `Mix.Tasks.AuroraMeterPro.InstallTest` / `test I19 the installer and the generator emit the same migration body` (pro)
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 up/1 raises ArgumentError naming the unknown option`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 up/1 names prefix and the default schema when prefix is given`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 down/1 raises ArgumentError naming the unknown option`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 down/1 names prefix when prefix is given`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 a misspelled known option is refused too`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 every option the version modules read is accepted`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 a non-keyword argument is refused by name`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when the repo sets migration_default_prefix`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when default_options carries a prefix for reads`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when default_options carries a prefix for insert_all`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! passes when the prefix is nil`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! passes when the prefix is public`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! says nothing about a module that is not a repository`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 the suite's own repository passes the check`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a migration running under a prefix refuses before it creates anything I19 mix ecto.migrate --prefix raises PrefixError and creates no table`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a migration running under a prefix refuses before it creates anything I19 the same migration with no prefix runs`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-3: down is refused unless the loss is confirmed I19 down(version: 10, to: 1) raises DataLossError and changes nothing`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-3: down is refused unless the loss is confirmed I19 down of a range with no destructive version needs no confirmation`
+- `AuroraMeter.MigrationGuardsTest` / `test L-11b-3: down is refused unless the loss is confirmed I19 down with confirm_data_loss: true drops the tables`
+- `AuroraMeter.MigrationTest` / `test I19 the test repo applies versions in ascending order`
 
 **Evidence.** `storefront:docs/evidence/v1/phase-11/i19.md`
 

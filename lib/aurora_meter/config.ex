@@ -305,6 +305,7 @@ defmodule AuroraMeter.Config do
     :aurora_meter
     |> Schema.validate!(env, @schema, mode)
     |> check_modules!()
+    |> check_repo_prefix!()
     |> check_outbox!()
     |> check_hold_reconciler!()
     |> check_plans!(mode)
@@ -736,6 +737,95 @@ defmodule AuroraMeter.Config do
     end)
 
     opts
+  end
+
+  # The one thing this package needs to know about the host's repository that
+  # the repository itself, not the `:aurora_meter` environment, decides: which
+  # Postgres schema it works in.
+  #
+  # V1 supports the default schema only, because every query in this package
+  # omits the prefix. A repository that sets `migration_default_prefix` would
+  # therefore create the tables in one schema and read them from another, and
+  # the first symptom is an empty ledger rather than an error. Boot is the
+  # earliest moment the mistake is visible, so it is refused here.
+  #
+  # The three operations named below are the ones this package actually issues
+  # (`Storage.Ecto` reads with `all`, writes counters and events with
+  # `insert_all`, and the ledger updates balances with `update_all`); a prefix
+  # on any of them is enough to split the package from its own tables.
+  #
+  # A repository module that does not export `config/0` or `default_options/1`
+  # is not inspected: it is not an Ecto repository yet, Ecto will say so with a
+  # better message than this one could, and guessing is how a check ends up
+  # answering about something it cannot see.
+  @prefix_operations [:all, :insert_all, :update_all]
+
+  @spec check_repo_prefix!(keyword()) :: keyword()
+  defp check_repo_prefix!(opts) do
+    repo = opts[:repo]
+
+    check_migration_prefix!(repo)
+    check_default_options_prefix!(repo)
+
+    opts
+  end
+
+  @spec check_migration_prefix!(module()) :: :ok
+  defp check_migration_prefix!(repo) do
+    # `Code.ensure_loaded?/1` and `function_exported?/3` in ONE expression,
+    # never in two statements: X426 was `function_exported?/3` answering false
+    # about a module that simply had not been loaded, and the guard in
+    # `exported_idiom_test.exs` deliberately refuses a `Code.ensure_loaded?/1`
+    # in a preceding line, because that cannot be proved from the expression
+    # and a later reordering would break it silently.
+    with true <- Code.ensure_loaded?(repo) and function_exported?(repo, :config, 0),
+         {:ok, config} <- repo_config(repo),
+         prefix when prefix not in [nil, "public"] <- config[:migration_default_prefix] do
+      raise AuroraMeter.Config.PrefixError,
+        source: {:repo_config, repo, :migration_default_prefix, prefix}
+    else
+      _ -> :ok
+    end
+  end
+
+  @spec check_default_options_prefix!(module()) :: :ok
+  defp check_default_options_prefix!(repo) do
+    if Code.ensure_loaded?(repo) and function_exported?(repo, :default_options, 1) do
+      Enum.each(@prefix_operations, &check_operation_prefix!(repo, &1))
+    end
+
+    :ok
+  end
+
+  @spec check_operation_prefix!(module(), atom()) :: :ok
+  defp check_operation_prefix!(repo, operation) do
+    prefix = default_options(repo, operation)[:prefix]
+
+    if prefix in [nil, "public"] do
+      :ok
+    else
+      raise AuroraMeter.Config.PrefixError, source: {:default_options, repo, operation, prefix}
+    end
+  end
+
+  # A repository whose own configuration raises is a problem Ecto reports in
+  # its own words a moment later; this check is about a prefix and has nothing
+  # to say about it.
+  @spec repo_config(module()) :: {:ok, keyword()} | :error
+  defp repo_config(repo) do
+    {:ok, repo.config()}
+  rescue
+    _ -> :error
+  end
+
+  @spec default_options(module(), atom()) :: keyword()
+  defp default_options(repo, operation) do
+    case repo.default_options(operation) do
+      options when is_list(options) -> options
+      _other -> []
+    end
+  rescue
+    _ -> []
   end
 
   # `events_outbox` is module-typed but optional, and `nil` is the supported

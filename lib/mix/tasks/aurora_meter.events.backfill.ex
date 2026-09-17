@@ -78,10 +78,30 @@ defmodule Mix.Tasks.AuroraMeter.Events.Backfill do
       |> Keyword.take([:batch_size, :max_batches, :dry_run, :force_resume, :timeout])
       |> Keyword.put(:repo, repo)
 
-    {:ok, result, _apps} =
-      Ecto.Migrator.with_repo(repo, fn _repo -> Backfill.run(run_opts) end)
+    stale_after = Keyword.get(opts, :stale_after, 900)
+    dry_run? = Keyword.get(opts, :dry_run, false)
 
-    report(result, repo, Keyword.get(opts, :stale_after, 900), Keyword.get(opts, :dry_run, false))
+    # The report runs INSIDE `with_repo`, not after it. Two of its clauses,
+    # `:already_running` and `:stale_running`, read the checkpoint's age from
+    # the database, and `with_repo` stops the repo on the way out. Called
+    # afterwards, both crashed with
+    #
+    #   ** (RuntimeError) could not lookup Ecto repo MyApp.Repo because it was
+    #      not started or it does not exist
+    #
+    # instead of printing their message. Those two clauses are the only ones an
+    # operator meets after a killed run or beside a concurrent one, which is
+    # exactly the moment the instruction they carry is the point
+    # (`open-findings.md` X480, found by build unit 11b while proving the
+    # resume interlock).
+    {:ok, :ok, _apps} =
+      Ecto.Migrator.with_repo(repo, fn _repo ->
+        run_opts
+        |> Backfill.run()
+        |> report(repo, stale_after, dry_run?)
+      end)
+
+    :ok
   end
 
   defp repo!(args) do

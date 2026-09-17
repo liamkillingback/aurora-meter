@@ -105,6 +105,21 @@ defmodule AuroraMeter.Migration do
       queueing every query on `aurora_meter_events` behind it.
     * `:confirm_data_loss` (`down/1`, default `false`): required to run the
       `down` of a version that destroys a commercial fact.
+
+  Any other option raises `ArgumentError`, naming it. Until V1 an unknown
+  option was dropped, so `up(prefix: "tenant_a")` migrated the public schema
+  and returned `:ok`.
+
+  ## Schemas and prefixes
+
+  V1 creates and reads its tables in the repository's default schema, and
+  nothing else is supported. Three things are refused rather than half done:
+  a `prefix:` option here, a repository configured with
+  `migration_default_prefix` or a `default_options` prefix (refused at boot by
+  `AuroraMeter.Config.validate!/0`), and a migration run under
+  `mix ecto.migrate --prefix`. The reason is one fact about this package:
+  every runtime query it issues omits the prefix, so a migration that honoured
+  one would build the tables somewhere no query would ever read them.
   """
 
   # `flush/0` is a macro whose expansion also calls `direction/0`, so both have
@@ -120,6 +135,15 @@ defmodule AuroraMeter.Migration do
   # index concurrently. It needs its own host migration file carrying
   # `@disable_ddl_transaction true` and `@disable_migration_lock true`.
   @concurrent_versions [8]
+
+  # Every option each entry point understands, which is every option any version
+  # module reads plus the two the dispatcher reads itself. An option that is not
+  # on the list is a request this package cannot honour, and until V1 it was
+  # dropped in silence: `up(prefix: "tenant_a")` migrated the public schema and
+  # returned `:ok`, so a host believing it had installed into `tenant_a` had a
+  # schema in one place and every query reading another.
+  @up_options [:from, :version, :concurrently, :validate_checks, :lock_timeout]
+  @down_options [:version, :to, :concurrently, :validate_checks, :confirm_data_loss]
 
   # A version whose `down` destroys a commercial fact rather than an index or a
   # nullable column, with the reason `schema-migration-map.md` section 3 gives
@@ -285,6 +309,9 @@ defmodule AuroraMeter.Migration do
   """
   @spec up(keyword()) :: :ok
   def up(opts \\ []) do
+    guard_options!(opts, @up_options, "up/1")
+    guard_runner_prefix!()
+
     from = Keyword.get(opts, :from, 1)
     to = Keyword.get(opts, :version, @latest)
     versions = Enum.to_list(from..to//1)
@@ -309,6 +336,9 @@ defmodule AuroraMeter.Migration do
   """
   @spec down(keyword()) :: :ok
   def down(opts \\ []) do
+    guard_options!(opts, @down_options, "down/1")
+    guard_runner_prefix!()
+
     from = Keyword.get(opts, :version, @latest)
     to = Keyword.get(opts, :to, 1)
     versions = Enum.to_list(from..to//-1)
@@ -321,6 +351,63 @@ defmodule AuroraMeter.Migration do
     end)
 
     :ok
+  end
+
+  # An unknown option is refused before anything is run, so a refused call
+  # leaves the schema exactly as it found it.
+  defp guard_options!(opts, known, function) do
+    if not Keyword.keyword?(opts) do
+      raise ArgumentError,
+            "AuroraMeter.Migration.#{function} takes a keyword list, got: #{inspect(opts)}"
+    end
+
+    case Keyword.keys(opts) -- known do
+      [] ->
+        :ok
+
+      unknown ->
+        raise ArgumentError, unknown_option_message(unknown, known, function)
+    end
+  end
+
+  defp unknown_option_message(unknown, known, function) do
+    prefix_note =
+      if :prefix in unknown do
+        " :prefix is refused rather than ignored: Aurora Meter V1 creates and reads its " <>
+          "tables in the repository's default schema only, and every query this package " <>
+          "issues omits the prefix, so a migration that honoured one would build the " <>
+          "tables in a schema no query would ever read. A non-default Postgres schema and " <>
+          "a schema-per-tenant layout are both unsupported in V1."
+      else
+        ""
+      end
+
+    "AuroraMeter.Migration.#{function} does not understand " <>
+      Enum.map_join(unknown, ", ", &inspect/1) <>
+      ". Supported: " <>
+      Enum.map_join(known, ", ", &inspect/1) <> "." <> prefix_note
+  end
+
+  # `mix ecto.migrate --prefix tenant_a` sets the prefix on the runner rather
+  # than in the call, and `create table` would honour it while every `execute`
+  # in these versions and every runtime query would not. That is a database half
+  # in one schema and half in another, so it is refused here, where nothing has
+  # run yet.
+  defp guard_runner_prefix! do
+    case runner_prefix() do
+      nil -> :ok
+      "public" -> :ok
+      prefix -> raise AuroraMeter.Config.PrefixError, source: {:migration_runner, prefix}
+    end
+  end
+
+  # Outside a migration runner there is no prefix to read, and `prefix/0` says
+  # so by raising. That is the case when `up/1` is called from a test or from a
+  # release task rather than from `mix ecto.migrate`.
+  defp runner_prefix do
+    Ecto.Migration.prefix()
+  rescue
+    RuntimeError -> nil
   end
 
   defp guard_concurrent!(versions, concurrently) do

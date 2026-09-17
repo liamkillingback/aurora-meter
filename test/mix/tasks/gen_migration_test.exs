@@ -15,6 +15,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
 
   alias AuroraMeter.Install.Plan
   alias AuroraMeter.Migration
+  alias AuroraMeter.Test.Migrations
 
   setup do
     path = Path.join(System.tmp_dir!(), "aurora_v1_gen_#{System.unique_integer([:positive])}")
@@ -254,6 +255,115 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
   test "it refuses a --from above the latest version", %{path: path} do
     assert_raise Mix.Error, ~r/above the latest/, fn ->
       generate(path, from: Migration.latest_version() + 1)
+    end
+  end
+
+  # X432, closed by build unit 11b. `docs/upgrading-to-1.0.md` has told the
+  # operator to run `--upgrade` since 03a wrote it, and until this unit the
+  # flag did not exist: the documented first step of the V1 upgrade was
+  # `** (Mix) Could not find migrations`. The marker it reads is core's
+  # `"schema:core"`, written since version 7, and Pro's `"schema:pro"`, which
+  # nothing wrote until this unit either.
+  describe "I19 X432 --upgrade reads the installed version" do
+    @describetag :migration
+
+    test "it detects the version from the marker and starts at the next one" do
+      Migrations.with_database(fn repo ->
+        Migrations.up(repo, from: 1, version: 7)
+
+        assert Plan.detect_from(:core, repo) == {:ok, 8}
+      end)
+    end
+
+    test "it reports up to date when the database is on the latest version" do
+      Migrations.with_database(fn repo ->
+        Migrations.up(repo,
+          from: 1,
+          version: Migration.latest_version(),
+          concurrently: false
+        )
+
+        assert Plan.detect_from(:core, repo) == :up_to_date
+      end)
+    end
+
+    test "it refuses rather than guessing when the checkpoints table is not there" do
+      Migrations.with_database(fn repo ->
+        Migrations.up(repo, from: 1, version: 6)
+
+        error = assert_raise(Mix.Error, fn -> Plan.detect_from(:core, repo) end)
+
+        assert error.message =~ "aurora_meter_checkpoints table does not exist"
+        assert error.message =~ "--from"
+        assert error.message =~ "`--from 7`"
+
+        # The half that matters: "no marker" is not "version 0". A generator
+        # that guessed low would re-run every version this database already has.
+        refute error.message =~ "version 0"
+      end)
+    end
+
+    test "it refuses rather than guessing when the table is there and the row is not" do
+      Migrations.with_database(fn repo ->
+        Migrations.up(repo, from: 1, version: 7)
+        repo.query!("DELETE FROM aurora_meter_checkpoints WHERE name = 'schema:core'", [])
+
+        error = assert_raise(Mix.Error, fn -> Plan.detect_from(:core, repo) end)
+
+        assert error.message =~ "no \"schema:core\" row"
+        assert error.message =~ "--from"
+      end)
+    end
+
+    test "it refuses when a migration in the repository already covers the range" do
+      error =
+        assert_raise(Mix.Error, fn ->
+          Plan.refuse_existing!(:core, "priv/test_repo/migrations", 7..10//1)
+        end)
+
+      assert error.message =~ "already runs Aurora Meter"
+      assert error.message =~ ".exs"
+    end
+
+    test "it allows a range no migration in the repository covers" do
+      # The negative control: a guard that refused every range would satisfy
+      # the test above and make the flag unusable.
+      assert Plan.refuse_existing!(:core, "priv/test_repo/migrations", 99..99//1) == :ok
+    end
+
+    test "--upgrade and --from together are refused", %{path: path} do
+      error =
+        assert_raise(Mix.Error, fn ->
+          ExUnit.CaptureIO.capture_io(fn ->
+            Mix.Tasks.AuroraMeter.Gen.Migration.run([
+              "-r",
+              "AuroraMeter.TestRepo",
+              "--upgrade",
+              "--from",
+              "7"
+            ])
+          end)
+        end)
+
+      assert error.message =~ "--upgrade and --from"
+      assert Path.wildcard(Path.join(path, "*.exs")) == []
+    end
+
+    test "the upgrade guide's own command is the one the task accepts" do
+      # The documentation defect X432 is about, checked from the other end: the
+      # guide tells the operator to run this exact line.
+      guide = File.read!("docs/upgrading-to-1.0.md")
+
+      assert guide =~ "mix aurora_meter.gen.migration --upgrade -r MyApp.Repo"
+
+      {parsed, _rest, invalid} =
+        OptionParser.parse(["--upgrade", "-r", "MyApp.Repo"],
+          switches: [from: :integer, validate_checks: :boolean, upgrade: :boolean],
+          aliases: [r: :repo]
+        )
+
+      assert invalid == []
+      assert parsed[:upgrade] == true
     end
   end
 
