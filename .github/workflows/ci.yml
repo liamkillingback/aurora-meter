@@ -513,154 +513,32 @@ jobs:
             exit 1
           fi
           echo "examples/ is clean"
-
   # ---------------------------------------------------------------------------
-  # The sample application's Pro profile.
+  # The sample application's Pro profile job was REMOVED by the orchestrator on
+  # 2026-09-18 and is an owner decision, not a build unit one (open-findings.md
+  # X409, decision D13).
   #
-  # `AURORA_SAMPLE_PRO=1` resolves `aurora_meter_pro` from the private Hex
-  # organisation `phxtemplates`, so this job needs a read key and cannot run
-  # without one. It runs the sample's suite with the package present: the
-  # `:pro`-tagged tests under `test/pro/` use Aurora Meter Pro's own provider
-  # fakes and make **no network call and no Stripe call**. The real-provider
-  # proof is `scripts/v1/profiles/sample.sh` in the storefront and is never
-  # reachable from CI.
+  # It resolved aurora_meter_pro from the private organisation, which needs
   #
-  # **When the key is absent this job does not quietly pass.** It prints a
-  # banner and raises a workflow warning naming what did not run, which is the
-  # difference between "15 tests were excluded" scrolling past in grey and a
-  # line in the run summary. A required suite that is silently skipped reports
-  # as a pass and is worth nothing (RUN01, applied to a CI leg).
+  #     mix hex.organization auth phxtemplates --key "$AURORA_HEX_READ_KEY"
   #
-  # It has its own build path (`_build/pro`, chosen by `mix.exs`) and its own
-  # lockfile (`mix.pro.lock`), so it never shares compiled artefacts with the
-  # `sample` job: a library compiled while Oban was resolvable is not the same
-  # artefact as one compiled without it, and sharing them fails the core
-  # profile on a dependency it does not depend on.
+  # and line 31 of this file forbids exactly that: NOTHING HERE MAY PUBLISH,
+  # DEPLOY OR TAG, naming `mix hex.organization auth` by name. The rule was
+  # written in this file, the step was added to this file, and
+  # AuroraMeter.CIContractTest caught it. It also set AURORA_SAMPLE_PRO, which
+  # is the SAMPLE's switch and which core's mix.exs never reads, so the leg
+  # would have resolved the ordinary dependency set and tested nothing it
+  # claimed to.
+  #
+  # What the owner has to decide: whether a read only organisation key in CI
+  # is inside D13 or outside it. It installs a credential on a runner, which is
+  # the class of action D13 reserves, and it publishes nothing, which is what
+  # D13 is about. Both readings are defensible and neither is mine.
+  #
+  # Until then the Pro profile is covered by 09d's local run against real
+  # Stripe, recorded in core docs/evidence/v1/phase-09, and NOT by CI.
   # ---------------------------------------------------------------------------
-  sample-pro:
-    name: sample application, Pro profile (fakes only, no Stripe call)
-    runs-on: ubuntu-latest
-    env:
-      MIX_ENV: test
-      DB_PORT: "5432"
-      AURORA_SAMPLE_PRO: "1"
-      # Force the Hex branch of `pro_dep/0` even if a sibling checkout ever
-      # appears on a runner: CI resolves the package the way a customer does.
-      AURORA_METER_PRO_FROM_HEX: "1"
-    services:
-      postgres:
-        image: postgres:16.13
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Is the organisation key available?
-        id: key
-        env:
-          AURORA_HEX_READ_KEY: ${{ secrets.AURORA_HEX_READ_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -n "${AURORA_HEX_READ_KEY:-}" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-            echo "the phxtemplates read key is available; the Pro profile will run"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Say loudly what did not run
-        if: steps.key.outputs.present != 'true'
-        run: |
-          set -euo pipefail
-          cat <<'BANNER'
-          ================================================================
-          THE SAMPLE'S PRO PROFILE DID NOT RUN
-          ================================================================
-
-          AURORA_HEX_READ_KEY is not set as a repository secret, so
-          aurora_meter_pro cannot be resolved from the private Hex
-          organisation and these did NOT run:
-
-            examples/aurora_meter_example_ai/test/pro/billing_test.exs
-            examples/aurora_meter_example_ai/test/pro/webhook_test.exs
-
-          They are not passing. They did not run. Every other test in the
-          sample runs in both profiles and asserts the right thing in each,
-          which is why there is no other gap.
-          ================================================================
-          BANNER
-          echo "::warning title=Pro profile skipped::examples/aurora_meter_example_ai test/pro/ did not run: AURORA_HEX_READ_KEY is not set. Those tests are not passing; they did not run."
-
-      - uses: erlef/setup-beam@v1
-        if: steps.key.outputs.present == 'true'
-        with:
-          elixir-version: "1.18.5"
-          otp-version: "27.3.4.17"
-          version-type: strict
-
-      - name: Restore the Pro profile's own deps and build cache
-        if: steps.key.outputs.present == 'true'
-        uses: actions/cache@v4
-        with:
-          path: |
-            examples/aurora_meter_example_ai/deps
-            examples/aurora_meter_example_ai/_build
-          key: ${{ runner.os }}-mix-sample-pro-1.18.5-otp-27.3.4.17-${{ hashFiles('examples/aurora_meter_example_ai/mix.pro.lock', 'mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-sample-pro-1.18.5-otp-27.3.4.17-
-
-      - name: Authorise the private organisation
-        if: steps.key.outputs.present == 'true'
-        env:
-          AURORA_HEX_READ_KEY: ${{ secrets.AURORA_HEX_READ_KEY }}
-        run: mix hex.organization auth phxtemplates --key "$AURORA_HEX_READ_KEY"
-
-      - name: Fetch dependencies
-        if: steps.key.outputs.present == 'true'
-        working-directory: examples/aurora_meter_example_ai
-        run: mix deps.get
-
-      - name: Compile (warnings as errors)
-        if: steps.key.outputs.present == 'true'
-        working-directory: examples/aurora_meter_example_ai
-        run: mix compile --warnings-as-errors --force
-
-      - name: Migrate both paths
-        if: steps.key.outputs.present == 'true'
-        working-directory: examples/aurora_meter_example_ai
-        run: |
-          set -euo pipefail
-          mix ecto.create --quiet
-          mix ecto.migrate --quiet
-          mix ecto.migrate --migrations-path priv/repo/pro_migrations --quiet
-
-      - name: Tests
-        if: steps.key.outputs.present == 'true'
-        working-directory: examples/aurora_meter_example_ai
-        run: mix test --seed 0
-
-      - name: The Pro tests actually ran
-        if: steps.key.outputs.present == 'true'
-        working-directory: examples/aurora_meter_example_ai
-        run: |
-          set -euo pipefail
-          # A job that resolved the package and then excluded the tests anyway
-          # would be green and worthless. This runs only the Pro files and
-          # fails if ExUnit reports none.
-          out=$(mix test --seed 0 test/pro)
-          echo "$out"
-          printf '%s' "$out" | grep -qE '[1-9][0-9]* tests?,' \
-            || { echo "no Pro tests ran"; exit 1; }
-
-  # ---------------------------------------------------------------------------
-  # Secret scanning.
-  # ---------------------------------------------------------------------------
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest

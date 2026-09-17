@@ -658,6 +658,139 @@ defmodule AuroraMeter.CreditsReconcileHoldsTest do
     end
   end
 
+  describe "the two halves of one job and the word amount" do
+    # `pending_holds/1` and `reconcile_holds/1` are documented as two halves of
+    # one job, and both use the word `amount`. Only one of them is the money.
+    # These two tests pin that, so a change to either column, to
+    # `Reconciliation.to_hold/2` or to the documentation that now explains it
+    # has to face what it is changing (`open-findings.md` X396).
+
+    test "I11 on a hold row the amount column is zero and the reservation is held_delta" do
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      {:ok, _} = Credits.hold(tenant, 460, "gen:#{tenant}")
+
+      assert [row] = Credits.pending_holds(older_than: cutoff(), tenant: tenant)
+
+      assert row.status == :pending
+
+      assert row.amount == 0,
+             "a hold moves the reserved figure and not the balance, so a listing that prints " <>
+               "txn.amount prints zero for every hold there is"
+
+      assert row.held_delta == 460
+    end
+
+    test "I11 the reconciler callback's amount is the row's held_delta, not its amount" do
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      {:ok, _} = Credits.hold(tenant, 460, "gen:#{tenant}")
+
+      [row] = Credits.pending_holds(older_than: cutoff(), tenant: tenant)
+      parent = self()
+
+      assert {:ok, %{kept: 1}} =
+               Credits.reconcile_holds(
+                 older_than: cutoff(),
+                 tenant: tenant,
+                 reconciler: fn hold -> send(parent, {:asked, hold}) && :keep end
+               )
+
+      assert_received {:asked, hold}
+
+      assert hold.amount == row.held_delta
+
+      refute hold.amount == row.amount,
+             "if these two ever agree, either a hold has started moving the balance or the " <>
+               "reconciler has started reading the wrong column"
+    end
+  end
+
+  describe "a death the release cannot clean up after" do
+    # `with_credits/4` releases from the calling process, so it needs that
+    # process to reach its own cleanup. This is the case where it does not, and
+    # it is the case that strands money: the kill lands inside the callback,
+    # after the work committed and before it returned, so the settle never ran
+    # and the reservation is still there (`open-findings.md` X397). Measured by
+    # build unit 09d against the sample as `held 0 -> 460 -> 0`, the last step
+    # only after a reconciler decided.
+    #
+    # Asserted here so the documentation that now describes it cannot be made
+    # false quietly, in either direction: a release on an untrappable exit is
+    # not something this package can do, and a change that appeared to do it
+    # would be guessing about work it cannot see.
+
+    test "I11 an untrappable kill inside with_credits/4 leaves the hold open" do
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      parent = self()
+      reference = "gen:#{tenant}"
+
+      before = Credits.summary(tenant)
+      assert before.held == 0
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          Credits.with_credits(tenant, 460, reference, fn ->
+            send(parent, :inside)
+            # Untrappable: no `after`, no `on_exit`, no rescue. Whatever
+            # survives, survives because it was committed.
+            Process.exit(self(), :kill)
+            {:ok, :never_reached, 160}
+          end)
+        end)
+
+      assert_receive :inside
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      assert [row] = Credits.pending_holds(older_than: cutoff(), tenant: tenant)
+      assert row.reference == reference
+      assert row.held_delta == 460
+      assert row.status == :pending
+
+      after_kill = Credits.summary(tenant)
+
+      assert after_kill.held == 460,
+             "the reservation is still against the customer and nothing releases it on its own"
+
+      assert after_kill.available == before.available - 460
+    end
+
+    test "I11 and reconcile_holds/1 is what closes it, for the cost the host names" do
+      # The other half, and the control for the test above: if the hold were
+      # already closed, this would report nothing to examine.
+      tenant = unique_tenant()
+      fund!(tenant, @dollar)
+      parent = self()
+      reference = "gen:#{tenant}"
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          Credits.with_credits(tenant, 460, reference, fn ->
+            send(parent, :inside)
+            Process.exit(self(), :kill)
+            {:ok, :never_reached, 160}
+          end)
+        end)
+
+      assert_receive :inside
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      assert {:ok, %{examined: 1, settled: 1, released: 0, kept: 0, failed: 0}} =
+               Credits.reconcile_holds(
+                 older_than: cutoff(),
+                 tenant: tenant,
+                 reconciler: fn %{reference: ^reference} -> {:settle, 160} end
+               )
+
+      assert Credits.pending_holds(older_than: cutoff(), tenant: tenant) == []
+
+      settled = Credits.summary(tenant)
+      assert settled.held == 0
+      assert settled.balance == @dollar - 160
+    end
+  end
+
   describe "pending_holds/1" do
     test "scopes to :tenant" do
       a = unique_tenant()

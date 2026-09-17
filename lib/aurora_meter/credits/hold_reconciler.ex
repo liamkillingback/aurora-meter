@@ -82,6 +82,16 @@ defmodule AuroraMeter.Credits.HoldReconciler do
   `age_seconds` the difference between the instant the run started and
   `held_at`, never negative, and `metadata` whatever the host passed to
   `AuroraMeter.Credits.hold/4`.
+
+  **`amount` here is the hold row's `held_delta`, not its `amount` column.** The
+  two are different numbers and the column is the wrong one: a hold moves the
+  reserved figure and not the balance, so `amount` on the row is `0` for every
+  hold there is, while this map's `amount` is the reservation. It is spelled
+  `amount` because micro-USD money is spelled `amount` throughout this package
+  (`api-change-map.md` section 5), and the trap is that
+  `AuroraMeter.Credits.pending_holds/1`, the other half of this job, hands back
+  the raw row rather than this map (`open-findings.md` X396). If you are reading
+  a figure off a row, read `held_delta`.
   """
   @type hold :: %{
           tenant_key: String.t(),

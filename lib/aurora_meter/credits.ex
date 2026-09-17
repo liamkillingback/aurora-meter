@@ -766,6 +766,29 @@ defmodule AuroraMeter.Credits do
   `reconcile_holds/1` is the other half: this lists them, that asks the host
   what to do about each one and applies the answer.
 
+  ## The reserved figure is `held_delta`, and `amount` is zero
+
+  These are raw `AuroraMeter.Schema.CreditTransaction` rows, and on a hold row
+  the two money columns say different things:
+
+    * `amount` is the **balance** delta, and a hold does not move the balance,
+      so it is **`0` on every hold there is**;
+    * `held_delta` is the **reserved** figure, which is what the hold took.
+
+  So `txn.amount` is not the money here, and a listing that prints it prints
+  zero for every open hold:
+
+      [hold] = AuroraMeter.Credits.pending_holds(older_than: cutoff)
+      hold.amount      #=> 0
+      hold.held_delta  #=> 460
+
+  The callback `reconcile_holds/1` invokes is handed a different shape, a
+  `t:AuroraMeter.Credits.HoldReconciler.hold/0`, whose `amount` **is** the
+  reservation: the reconciler maps this row's `held_delta` onto it. The word is
+  the same in the two halves of one job and only one of them is the money
+  (`open-findings.md` X396). To list holds in the shape the callback sees, run
+  the dry run below rather than reading a column.
+
   Options:
 
     * `:older_than`: required, a `DateTime`. Build it from
@@ -785,6 +808,15 @@ defmodule AuroraMeter.Credits do
       AuroraMeter.Credits.pending_holds(
         older_than: DateTime.add(AuroraMeter.Clock.now(), -3600, :second),
         reference_prefix: "doc:"
+      )
+
+  And the same holds in the reconciler's shape, written nowhere and moving
+  nothing, which is how to read the reserved figures without reading a column
+  that means something else:
+
+      AuroraMeter.Credits.reconcile_holds(
+        older_than: DateTime.add(AuroraMeter.Clock.now(), -3600, :second),
+        reconciler: fn hold -> IO.inspect(hold) && :keep end
       )
 
   """
@@ -866,6 +898,27 @@ defmodule AuroraMeter.Credits do
 
   Returns whatever `hold/4` refused with (`:insufficient_credits`,
   `:debt_outstanding` or `:duplicate_reference`) without running `fun`.
+
+  ## The death this cannot clean up after
+
+  The release above runs in the calling process, so it needs that process to
+  reach its own cleanup. A **`Process.exit(pid, :kill)`, a supervisor shutdown
+  past the timeout, a VM that goes away or a node that loses power** do not let
+  it: the hold stays open and nothing closes it on its own, ever.
+
+  It is worth being concrete, because the case that produces one is not the case
+  people picture. A kill landing **inside** `fun`, after it recorded a durable
+  fact with `AuroraMeter.record/4` and before it returned, leaves the event
+  committed, the host's own row for it missing, and the estimate still reserved.
+  Measured: `held 0 -> 460 -> 0`, the last step only after somebody decided.
+  Rebuilding the missing row from the export intent, which is the recovery the
+  metering documentation describes, fixes two of those three and not the hold.
+
+  `pending_holds/1` lists such holds and `reconcile_holds/1` closes them, from a
+  decision only the host can make. Core already ships the sweep that calls it
+  (`AuroraMeter.Oban.HoldReconciliation`, in `AuroraMeter.Oban.cron_entries/1`);
+  with no `:credits_hold_reconciler` configured it keeps every hold, so the
+  default is to do nothing rather than to guess (`open-findings.md` X397).
 
   ## Examples
 

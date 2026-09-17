@@ -704,6 +704,52 @@ schema version is 6: that was true of 0.5.0. **This branch carries schema 10.**
 
 ### Fixed
 
+- **`AuroraMeter.Credits.pending_holds/1` and `reconcile_holds/1` use the word
+  `amount` for two different things, and the documentation now says so.** These
+  are the two halves of one job, and only one of the two `amount`s is the money.
+  `pending_holds/1` hands back raw `CreditTransaction` rows, and on a hold row
+  the `amount` column is the **balance** delta: a hold does not move the
+  balance, so it is `0` on every hold there is, and the reservation is in
+  `held_delta`. The reconciler callback's `hold.amount` **is** that `held_delta`.
+  A dashboard that listed open holds and printed `txn.amount` therefore printed
+  zero for every one of them.
+
+  Nothing is renamed. Micro-USD money is spelled `amount` throughout this
+  package, so the callback's field is the consistent name and the trap is that
+  the other half hands back a row instead of the same map. `pending_holds/1`'s
+  documentation now states both columns with a worked example, the
+  `t:AuroraMeter.Credits.HoldReconciler.hold/0` typedoc names the trap from the
+  other side, and two tests pin the pair so a later change to either has to face
+  it (`open-findings.md` X396).
+
+- **`AuroraMeter.Credits.with_credits/4` does not release the hold when the
+  process is killed untrappably, and the documentation used to imply it did.**
+  "If `fun` raises, throws or exits, the hold is released" is true of an exit
+  the calling process can be told about. A `Process.exit(pid, :kill)`, a
+  supervisor shutting the process down past its timeout, a VM that goes away or
+  a node that loses power all skip the release, and the hold stays open for
+  ever, because nothing releases one on its own and the age of a hold is not
+  evidence of anything.
+
+  The case that produces one is not the case people picture: the kill lands
+  **inside** the callback, after it recorded a durable fact with
+  `AuroraMeter.record/4` and before it returned. The event is committed, the
+  host's own row for it is missing, and the estimate is still reserved.
+  Rebuilding the missing row from the export intent, which is the recovery
+  `docs/metering.md` describes, fixes two of those three. Measured against a
+  real ledger as `held 0 -> 460 -> 0`, the last step only after a reconciler
+  decided.
+
+  No new mechanism: `pending_holds/1`, `reconcile_holds/1`, the
+  `AuroraMeter.Credits.HoldReconciler` behaviour and the
+  `AuroraMeter.Oban.HoldReconciliation` sweep already in
+  `AuroraMeter.Oban.cron_entries/1` are the whole answer, and with no
+  `:credits_hold_reconciler` configured the sweep keeps every hold, so a host
+  that installs it and configures nothing is exactly as safe as one that does
+  not. What was missing was anything leading a reader from the crash to them.
+  `with_credits/4`, `docs/credits.md` and `docs/metering.md` now do, and the
+  behaviour is asserted rather than described (`open-findings.md` X397).
+
 - **`mix aurora_meter.install` produced an application that could not start.**
   The starter plans module it generates was written as a whole
   `defmodule MyApp.Plans do ... end`, and `Igniter` wraps whatever contents it

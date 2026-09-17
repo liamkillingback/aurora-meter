@@ -148,6 +148,26 @@ AuroraMeter.record(tenant, :tokens, 1_420,
 #=> {:ok, %AuroraMeter.Event{}, :inserted}
 ```
 
+### What a crash leaves behind, and the half that is easy to miss
+
+The transaction above is the whole of what Aurora Meter promises: the fact, its
+total and its export intent commit together or not at all. What it does not
+cover is the gap between that commit and **your** own row for the same work, and
+a process killed in that gap leaves a fact with nothing pointing at it. The
+export intent is your durable record of what was recorded, so that is what to
+rebuild the row from.
+
+If the `record/4` was inside `AuroraMeter.Credits.with_credits/4`, there is a
+third thing and it is money. The callback never returned, so the settle never
+ran, and the estimate is **still reserved** against the customer: the event is
+committed, your row is missing and `available` is short until somebody decides.
+Rebuilding the row fixes two of the three. The reservation is closed by
+`AuroraMeter.Credits.reconcile_holds/1`, from a decision only you can make,
+because only you know whether the work finished. See
+[Credits](credits.md#recovering-stale-holds); the sweep that calls it ships in
+`AuroraMeter.Oban.cron_entries/1` and keeps every hold until a reconciler is
+configured.
+
 ### Correcting a recorded fact
 
 A recorded fact is never edited and never deleted. Correcting one means

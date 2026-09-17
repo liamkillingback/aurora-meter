@@ -268,12 +268,43 @@ end)
 If the function raises, throws or exits the hold is released and the error
 propagates.
 
+**An untrappable death is the exception, and it is the one that strands money.**
+`with_credits/4` releases from a `try` in the calling process, so it needs that
+process to get as far as its own `after`. A `Process.exit(pid, :kill)`, a
+supervisor shutting the process down past its timeout, a VM that goes away and a
+node that loses power all skip it. The hold stays open, and if the work had
+already committed something before the kill, the fact is durable and the
+reservation is still there beside it:
+
+```
+                balance      held    available
+before          5 000 000       0    5 000 000
+after the kill  5 000 000     460    4 999 540
+```
+
+That 460 is a customer's available balance, lower than it should be, for ever,
+because nothing releases a hold on its own and the age of a hold is not evidence
+of anything. `reconcile_holds/1` below is how it is closed, and the decision is
+yours because only you know whether the work finished. There is nothing else to
+configure: core already ships the sweep
+(`AuroraMeter.Oban.HoldReconciliation`, in `AuroraMeter.Oban.cron_entries/1` on
+`*/15 * * * *`, and `mix aurora_meter.install --oban` adds it), and with no
+`:credits_hold_reconciler` configured it keeps every hold, which is safe and does
+nothing.
+
 ### Holds nothing will ever close
 
 A hold is taken before the row that remembers it exists, and those two cannot
 be one write: the ledger is a different schema and often a different
 database. A process killed in between leaves money reserved against a tenant
 with nothing anywhere pointing at it.
+
+There is a second shape and it is the one that is easy to miss, because the
+work **did** happen. A process killed inside the `with_credits/4` callback,
+after it recorded a durable fact and before it returned, leaves three things
+that do not agree: the event is committed, your own row for it is missing, and
+the estimate is still reserved. Rebuilding the missing row from the export
+intent fixes two of the three. The hold is the third, and it is money.
 
 Only the host can tell such a hold from one whose work is simply still
 running, so the ledger's part is to list them:
@@ -283,8 +314,19 @@ Credits.pending_holds(
   older_than: DateTime.add(DateTime.utc_now(), -3600, :second),
   reference_prefix: "job:"
 )
-#=> [%CreditTransaction{kind: :hold, status: :pending, reference: "job:42", ...}]
+#=> [%CreditTransaction{kind: :hold, status: :pending, reference: "job:42",
+#=>                      amount: 0, held_delta: 460, ...}]
 ```
+
+**Read those two columns again.** These are raw ledger rows, and on a hold row
+`amount` is the balance delta, which a hold does not move, so it is `0` for
+every hold there is. The reservation is `held_delta`. A dashboard that prints
+`txn.amount` for an open hold prints zero every time. `reconcile_holds/1` hands
+its callback a map whose `amount` **is** that `held_delta`, so the same word
+means the row's zero in one half of this job and the money in the other. If you
+are reading a figure off a row, read `held_delta`; if you want the reserved
+figures in the callback's shape without moving anything, run the dry run at the
+end of the next section.
 
 Oldest first, ordered by `(inserted_at, id)` so a `:limit`ed page can be
 resumed with `:after` without skipping a hold that shares a microsecond with

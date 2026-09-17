@@ -817,6 +817,17 @@ The fifty-connection proof runs in two waves of twenty-five, because
 attempted against one wallet and the admitted count is asserted cumulatively; the
 arithmetic is in `docs/evidence/v1/phase-05/i11.md`.
 
+Two things about a hold are documentation rather than mechanism, and repair unit
+R7 wrote both down where a host reads them. **`with_credits/4` releases from the
+calling process**, so an untrappable death (a `Process.exit(pid, :kill)`, a
+supervisor shutdown past the timeout, a VM or node that goes away) leaves the
+hold open; `reconcile_holds/1` is the only thing that closes one, and the
+decision is the host's because age is not evidence. **The word `amount` means
+two different things across the two halves of this job**: on a `pending_holds/1`
+row it is the balance delta, which a hold does not move, so it is zero, while the
+reconciler callback's `amount` is the row's `held_delta`, which is the
+reservation (`open-findings.md` X396, X397).
+
 A hold's terminal transition is protected by application code and a row lock, and
 by nothing in the schema. `Ledger.pending_hold/3` locks the hold row `FOR UPDATE`
 and re-reads `status = 'pending'` inside that lock, which is what makes a settle
@@ -841,6 +852,10 @@ being closed twice".
 - `AuroraMeter.CreditsReconcileConcurrencyTest` / `test I11 twenty-four concurrent reconciler runs over one hot wallet conserve the balance`
 - `AuroraMeter.CreditsTest` / `test with_credits/4 I11 returns its result when the hold was settled by someone else`
 - `AuroraMeter.CreditsTest` / `test with_credits/4 I11 records the executed cost when the hold was released by someone else`
+- `AuroraMeter.CreditsReconcileHoldsTest` / `test the two halves of one job and the word amount I11 on a hold row the amount column is zero and the reservation is held_delta`
+- `AuroraMeter.CreditsReconcileHoldsTest` / `test the two halves of one job and the word amount I11 the reconciler callback's amount is the row's held_delta, not its amount`
+- `AuroraMeter.CreditsReconcileHoldsTest` / `test a death the release cannot clean up after I11 an untrappable kill inside with_credits/4 leaves the hold open`
+- `AuroraMeter.CreditsReconcileHoldsTest` / `test a death the release cannot clean up after I11 and reconcile_holds/1 is what closes it, for the cost the host names`
 
 - `AuroraMeter.CreditsLotsConcurrencyTest` / `test I11 fifty independent holds against one wallet funded with ten admit exactly ten`
 - `AuroraMeter.CreditsLotsConcurrencyTest` / `test I11 twenty concurrent holds across twenty wallets do not interfere`
