@@ -124,6 +124,45 @@ defmodule AuroraMeterExampleAiWeb.OpsLiveTest do
       {:ok, _view, html} = live(conn, ~p"/ops")
       assert html =~ "a buffered feature never reaches the outbox"
     end
+
+    test "a correction is staged as a positive magnitude, and the net figure subtracts it",
+         %{conn: conn, scope: scope} do
+      # The defect the real Stripe proof run found. A correction's `quantity`
+      # is the magnitude of a REDUCTION, stored positive, and the gross sum
+      # over the outbox therefore counted it as an increase: the page showed
+      # "tokens staged" above "tokens counter" and called the difference
+      # nothing.
+      {:ok, generation, :created} =
+        Generations.create(
+          scope,
+          %{"kind" => "text", "prompt" => "a poem about a ledger", "model" => "nimbus-1-mini"},
+          Ecto.UUID.generate()
+        )
+
+      original = generation.prompt_tokens + generation.completion_tokens
+      reduce_by = max(div(original, 4), 1)
+
+      {:ok, _event, :inserted} =
+        AuroraMeter.correct(scope.org, generation.event_id, reduce_by,
+          id: "credit:" <> Ecto.UUID.generate(),
+          metadata: %{"ticket" => "ops-test"}
+        )
+
+      sources = Ops.sources(scope)
+
+      assert sources.tokens_outbox_rows == 2, "the correction stages its own row"
+      assert sources.tokens_outbox_gross == original + reduce_by
+      assert sources.tokens_outbox_corrections == reduce_by
+      assert sources.tokens_outbox_quantity == original - reduce_by
+
+      # And the figure that matters: the net staged quantity agrees with the
+      # counter, which is what "the two reporting sources agree" means.
+      assert sources.tokens_counter == sources.tokens_outbox_quantity
+
+      {:ok, _view, html} = live(conn, ~p"/ops")
+      assert html =~ "tokens staged, net of corrections"
+      assert html =~ "of which corrections"
+    end
   end
 
   describe "the orphan" do

@@ -1,7 +1,7 @@
 # Example: an allowance you may go over
 
 **The product.** Inkwell is an AI writing assistant. $29 a month includes 1,000
-generations. The 1,001st still works — it costs 2¢ and lands on the next
+generations. The 1,001st still works: it costs 2¢ and lands on the next
 invoice. Nobody is ever blocked mid-sentence.
 
 This is the `metered` feature kind. It is the right shape when *saying no*
@@ -45,7 +45,7 @@ This surprises people, so it is worth being blunt:
 So these two numbers let you draw "you are 240 over, about $4.80" without
 calling Stripe. They do not set the price. If you change `unit_price` here and
 not in Stripe, your dashboard lies and the invoice is still right. Keep them in
-step deliberately — the Pro package's **Usage reporting** guide covers the
+step deliberately; the Pro package's **Usage reporting** guide covers the
 Stripe side.
 
 ## 2. Counting
@@ -54,7 +54,7 @@ Stripe side.
 AuroraMeter.track(org, :generations)
 ```
 
-That is the whole hot path. It is an ETS counter increment — no database call —
+That is the whole hot path. It is an ETS counter increment with no database call,
 so you can put it anywhere, including in a loop.
 
 A background flusher writes totals to Postgres on the `:flush_interval` (five
@@ -109,12 +109,12 @@ AuroraMeter.track(org, :generations, -1)
 
 ```elixir
 AuroraMeter.check(org, :generations)
-# :ok — always, on :writer and :studio
+# :ok always, on :writer and :studio
 ```
 
 A metered feature never refuses. That is the point. If you find yourself
 wanting it to refuse at some ceiling, you want `limit … :hard`, or you want
-both — a metered feature for the money and your own sanity check for abuse:
+both: a metered feature for the money and your own sanity check for abuse:
 
 ```elixir
 defmodule Inkwell.Generation do
@@ -145,8 +145,8 @@ AuroraMeter.quota(org, :generations)
 
 **`percent` is clamped to 100 and will never tell you they went over.** At 1,240
 of 1,000 it reads `100`, and it reads `100` at 10,000 too. That is fine for
-drawing a bar and useless for describing the situation, so read `overage` —
-which is `240` here — and render the number next to the bar. A customer who is
+drawing a bar and useless for describing the situation, so read `overage`
+(which is `240` here) and render the number next to the bar. A customer who is
 1,240 into an allowance of 1,000 should not see the same screen as one who is
 exactly at their limit.
 
@@ -176,7 +176,7 @@ AuroraMeter.history(org, :generations, days: 30)
 ```
 
 History is on by default. If you do not want the extra table written, turn it
-off with `config :aurora_meter, history: false` — `history/3` then returns an
+off with `config :aurora_meter, history: false`. `history/3` then returns an
 empty list rather than raising.
 
 ## 6. Warning them before the invoice does
@@ -202,8 +202,8 @@ end
 
 Alerts are deduplicated per tenant, feature and period, so a customer sitting
 at 81% for a fortnight is emailed once, not every ten minutes. If your handler
-fails, the "already sent" record is rolled back and the next sweep tries again
-— an alert that could not be delivered is not silently marked delivered.
+fails, the "already sent" record is rolled back and the next sweep tries again:
+an alert that could not be delivered is not silently marked delivered.
 
 ## 7. Getting it onto the invoice
 
@@ -247,7 +247,7 @@ AuroraMeter.subscribe(org, :writer)
 ```
 
 The same feature name, `:generations`, is a hard cap on one plan and a metered
-allowance on the next. The counter carries across untouched — you are only
+allowance on the next. The counter carries across untouched; you are only
 changing the rules that are read against it.
 
 ## The whole thing, end to end

@@ -13,7 +13,7 @@ AuroraMeter.track(tenant, :ai_generations)        # +1
 AuroraMeter.track(tenant, :ai_generations, 5)     # +5
 ```
 
-`track/4` runs on the ETS hot path — no database round-trip. It increments an
+`track/4` runs on the ETS hot path, with no database round-trip. It increments an
 in-memory counter keyed by `{tenant, feature, period}` and marks it dirty for the
 flusher. Aggregate throughput is millions of increments/second because load
 spreads across many counter keys.

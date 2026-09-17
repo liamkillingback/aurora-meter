@@ -225,7 +225,7 @@ AuroraMeter.with_quota(org, :ai_generations, fn -> run_generation() end)
 AuroraMeter.quota(org, :ai_generations)
 # => %{kind: :hard, used: 6, limit: 1_000, remaining: 994, percent: 0, period: %{...}}
 
-# A counter is measured, never blocked, never billed — and has no denominator
+# A counter is measured, never blocked, never billed, and has no denominator
 AuroraMeter.quota(org, :requests)
 # => %{kind: :counter, used: 6, limit: nil, included: nil, percent: nil, overage: 0, ...}
 ```
@@ -237,8 +237,8 @@ the last unit of a hard limit.
 
 ### Prepaid credits
 
-For pay-as-you-go pricing — AI tokens, API calls, anything priced per unit
-rather than per plan — `AuroraMeter.Credits` keeps a prepaid balance per
+For pay-as-you-go pricing (AI tokens, API calls, anything priced per unit
+rather than per plan), `AuroraMeter.Credits` keeps a prepaid balance per
 tenant next to the plan counters. Amounts are integer micro-dollars
 (`AuroraMeter.Credits.Money` converts), every write is a row lock plus an
 append-only ledger entry, and `with_credits/4` holds an estimate, runs your
@@ -444,20 +444,38 @@ See the [changelog](CHANGELOG.md) for everything else that changed.
 
 ## Documentation
 
-**Worked examples** — a whole product each, from nothing:
+**Worked examples.** A whole product each, from nothing:
 
-- [Concepts](docs/examples/concepts.md) — every term defined, and the table of
+- [Concepts](docs/examples/concepts.md): every term defined, and the table of
   the five feature kinds. Start here.
-- [A team SaaS](docs/examples/team-saas.md) — switches, seats and hard caps
-- [Allowance and overage](docs/examples/allowance-and-overage.md) — a monthly
+- [A team SaaS](docs/examples/team-saas.md): switches, seats and hard caps
+- [Allowance and overage](docs/examples/allowance-and-overage.md): a monthly
   allowance customers may exceed, billed through Stripe
-- [Prepaid credits](docs/examples/prepaid-credits.md) — pay-as-you-go on a
+- [Prepaid credits](docs/examples/prepaid-credits.md): pay-as-you-go on a
   credit ledger, with holds for work of unknown cost
-- [Showing usage](docs/examples/showing-usage.md) — dashboards, live updates,
+- [Showing usage](docs/examples/showing-usage.md): dashboards, live updates,
   charts and the metrics worth alerting on
 
 Every code block in those is executed by `test/aurora_meter/examples_test.exs`,
 so a guide that stops being true stops the suite.
+
+**Before you depend on it.** Four pages, in the order they answer the
+questions a reader actually has:
+
+- [The mental model](docs/mental-model.md): the five things this library does,
+  what each costs, what happens when the machine dies, and five things a reader
+  would reasonably assume that are not true.
+- [Guarantees](docs/guarantees.md): the contract, one row per guarantee, each
+  with the conditions that make it hold, what voids it, and the named test that
+  proves it.
+- [Correctness](docs/correctness.md): the same ground per invariant, with the
+  prerequisites, the known limits and a link to the evidence.
+- [Architecture](docs/architecture.md): which process writes which table, where
+  the seams are, and which direction the core and Pro dependency runs.
+
+[Troubleshooting](docs/troubleshooting.md) is symptom first, for when something
+is already wrong. [SECURITY.md](SECURITY.md) says what is stored, what is sent
+(nothing) and how to report a vulnerability.
 
 **Reference.** What is supported, and for how long:
 
@@ -479,9 +497,10 @@ API reference on [HexDocs](https://hexdocs.pm/aurora_meter).
 
 ## Contributing
 
-Issues and pull requests are welcome. `mix check` runs the formatter, compiler
-warnings as errors, Credo, Dialyzer, the test suite and the docs build. Tests
-need a local Postgres; `mix test.setup` creates the database.
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+test-database setup, what `mix check` runs, the invariant-id naming convention,
+and the rule that a change touching money or quotas needs a test against
+independent database connections.
 
 ## License
 

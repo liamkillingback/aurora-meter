@@ -360,6 +360,194 @@ defmodule AuroraMeter.ApiInventoryTest do
     end
   end
 
+  describe "A06 the documented signature is the real one" do
+    # `open-findings.md` X370 and X229. A01 asks whether a documented function
+    # EXISTS, which is a different question from whether the type printed beside
+    # it is the type it has. `AuroraMeter.Pro.Reconcile.run/1` carried
+    # `(keyword()) :: [map()]` for a whole release after 04d changed it, and
+    # `Credits.hold/4`, `debit/4` and `with_credits/4` printed a two-atom error
+    # union for as long as it took somebody to notice `:debt_outstanding` was
+    # missing. Nothing failed either time, because nothing compared the two.
+    # Until something does, the inventory is a list of names rather than of
+    # contracts, and should be read as one.
+    #
+    # `Code.Typespec.fetch_specs/1` gives the real spec at run time, so the
+    # comparison is cheap. It is not exact, and deliberately so: the inventory
+    # abbreviates (`tenant` for `AuroraMeter.tenant()`, `map()` where the spec
+    # names a struct type), which is a readability decision rather than a
+    # defect. Two things are exact, and both are what a caller writes code
+    # against:
+    #
+    #   * the number of arguments, against the arity in the entry;
+    #   * the **match surface** of the return, in both directions: the atom
+    #     members of the top-level union, the leading atom of each top-level
+    #     tuple, and the tag one level inside it. An error tag the spec can
+    #     return and the table does not print is a `case` clause a reader will
+    #     not write, which is X370 exactly; an atom the table prints and the
+    #     spec cannot produce is a promise the code does not keep.
+    #
+    # Argument types are not compared beyond their count, because `keyword()`
+    # against `[{:rounding, :round | :floor | :ceil}]` is the abbreviation
+    # working as intended, and a check that failed it would be noise somebody
+    # switches off.
+    test "every documented argument count matches the entry's arity", %{regions: regions} do
+      wrong =
+        for row <- rows(regions, :functions),
+            {module, fun, arity} = function_entry!(row),
+            not skip_absent_optional?(row),
+            documented = documented_arity(row),
+            documented != nil,
+            documented != arity,
+            do:
+              {row.line,
+               "#{format_entry({module, fun, arity})}: the signature cell shows " <>
+                 "#{documented} arguments"}
+
+      assert wrong == [],
+             "docs/api.md prints a signature whose argument count is not the entry's " <>
+               "arity:\n" <> lines(wrong)
+    end
+
+    test "every documented return prints the atoms the @spec can return", %{regions: regions} do
+      wrong =
+        for row <- rows(regions, :functions),
+            {module, fun, arity} = entry = function_entry!(row),
+            not skip_absent_optional?(row),
+            returns = spec_returns(module, fun, arity),
+            returns != nil,
+            documented = signature_cell(row),
+            documented != nil,
+            {missing, extra} <- [atom_difference(documented, returns, module)],
+            missing != [] or extra != [],
+            do:
+              {row.line,
+               "#{format_entry(entry)}\n" <>
+                 "      documented: #{documented}\n" <>
+                 "      @spec     : #{Enum.join(returns, " and ")}\n" <>
+                 "      the spec can return and the table does not print: #{inspect(missing)}\n" <>
+                 "      the table prints and the spec cannot return: #{inspect(extra)}"}
+
+      assert wrong == [],
+             "docs/api.md prints a return type whose match surface is not the one the " <>
+               "@spec declares. The page ships to hexdocs, so the type a reader sees is " <>
+               "the one they write their `case` against:\n" <> lines(wrong)
+    end
+
+    test "the comparison examined the rows it was meant to examine", %{regions: regions} do
+      # A guard that compared nothing would pass for ever (X324, X325). Count
+      # the rows that actually reached the comparison, not the rows that exist,
+      # and count the ones it could not parse so an opt-out cannot grow quietly.
+      outcomes =
+        for row <- rows(regions, :functions),
+            {module, fun, arity} = function_entry!(row),
+            not skip_absent_optional?(row),
+            returns = spec_returns(module, fun, arity),
+            returns != nil,
+            documented = signature_cell(row),
+            documented != nil,
+            do: atom_difference(documented, returns, module)
+
+      compared = Enum.count(outcomes, &(&1 != :unparsable))
+      unparsable = Enum.count(outcomes, &(&1 == :unparsable))
+
+      assert compared >= 150,
+             "only #{compared} inventory rows reached the signature comparison. A shrunken " <>
+               "selection is a failure, not a pass."
+
+      assert unparsable <= 5,
+             "#{unparsable} rows could not be parsed as a type expression and were skipped. " <>
+               "Each one is a row this check is not looking at."
+    end
+
+    test "the comparison reports a return type that disagrees with its spec" do
+      # The permanent negative control. Without it, "no disagreements" is
+      # satisfied both by a correct page and by a comparison that answers the
+      # same thing about every input.
+      assert atom_difference("(tenant) :: :ok | {:error, :nope}", "f(term()) :: :ok") ==
+               {[], [:error, :nope]}
+
+      # X370's own shape: the spec gained an error tag and the table did not.
+      assert atom_difference(
+               "(tenant) :: {:ok, txn()} | {:error, :insufficient_credits}",
+               "hold(term()) :: {:ok, txn()} | {:error, :insufficient_credits | :debt_outstanding}"
+             ) == {[:debt_outstanding], []}
+
+      # A nested tag is part of the match surface.
+      assert atom_difference(
+               "(map()) :: {:ok, t()} | {:error, term()}",
+               "put(map()) :: {:ok, t()} | {:error, term()} | {:error, {:unsupported, cap()}}"
+             ) == {[:unsupported], []}
+
+      # And it must stay quiet where the table abbreviates on purpose, or it
+      # reports every row and gets switched off.
+      assert atom_difference("(tenant) :: {:ok, map()}", "f(term()) :: {:ok, report()}") ==
+               {[], []}
+
+      assert atom_difference(
+               "(tenant, keyword()) :: [{:usage | :credits, String.t()}]",
+               "topics(term(), keyword()) :: [{topic_name(), String.t()}]"
+             ) == {[], []}
+
+      # A named type met at a match position is resolved, so the side that
+      # writes `error()` and the side that writes the union out agree.
+      assert atom_difference(
+               "(tenant) :: {:ok, map()} | " <>
+                 "{:error, {:invalid | :conflict | :not_found | :unavailable, term()}}",
+               "f(term()) :: {:ok, map()} | {:error, error()}",
+               AuroraMeter.Subscriptions
+             ) == {[], []}
+
+      assert documented_arity(%{cells: ["`x`", "`(a, b) :: :ok`"]}) == 2
+      assert documented_arity(%{cells: ["`x`", "`() :: :ok`"]}) == 0
+      assert documented_arity(%{cells: ["`x`", "prose"]}) == nil
+    end
+  end
+
+  describe "A07 every worked example is run" do
+    # `open-findings.md` X237. `AuroraMeter.Pro.Export.daily_csv/3` carried an
+    # `iex>` example that no `doctest` declaration anywhere referenced, so it
+    # was prose shaped like a proof. Adding the one declaration fixes one
+    # module and leaves the next one exactly as invisible; this asks the general
+    # question, which is the one worth having.
+    test "every module with an iex> example is named by a doctest declaration" do
+      declared = doctested_modules()
+
+      undoctested =
+        for module <- lib_modules(),
+            has_iex_example?(module),
+            module not in declared,
+            do: {0, inspect(module)}
+
+      assert undoctested == [],
+             "these modules carry an `iex>` example that nothing runs, so it is prose " <>
+               "shaped like a proof. Add a `doctest` declaration for each to a test file, " <>
+               "or write the example as a fenced block rather than an `iex>` prompt:\n" <>
+               lines(undoctested)
+    end
+
+    test "the doctest scan found declarations and examples at all" do
+      assert MapSet.size(doctested_modules()) >= 3,
+             "no doctest declarations were found, so the check above cannot fail"
+
+      assert Enum.count(lib_modules(), &has_iex_example?/1) >= 3,
+             "no module was found carrying an `iex>` example, so the check above is asking " <>
+               "nothing of anything"
+    end
+
+    test "a doctested module really does carry the example it is declared for" do
+      # Both halves of the check have to be non-empty on today's tree or the
+      # assertion above passes vacuously.
+      subject = doctested_modules() |> Enum.find(&has_iex_example?/1)
+
+      assert subject != nil,
+             "no doctested module carries an `iex>` example, so this control proves nothing"
+
+      refute has_iex_example?(AuroraMeter.Supervisor) and
+               AuroraMeter.Supervisor not in doctested_modules(),
+             "the scan disagrees with itself"
+    end
+  end
+
   describe "A05 documented literals exist in lib/" do
     # Doc strings and comments are stripped first. Mentioning an event in a
     # moduledoc is not emitting it, and a check that accepted the mention would
@@ -702,4 +890,226 @@ defmodule AuroraMeter.ApiInventoryTest do
       if line > 0, do: "  #{@inventory}:#{line}  #{text}", else: "  #{text}"
     end)
   end
+
+  # -- A06: the documented signature against the real @spec ------------------
+
+  # The "Signature and return" cell, as text, with the escaped pipes a markdown
+  # table needs turned back into the union bars they stand for.
+  defp signature_cell(row) do
+    with cell when is_binary(cell) <- Enum.at(row.cells, 1),
+         [_, text] <- Regex.run(~r/^`(.+)`$/s, cell) do
+      String.replace(text, "\\|", "|")
+    else
+      _ -> nil
+    end
+  end
+
+  # "(a, b) :: c" -> 2. `nil` when the cell is not in that shape at all, which
+  # is how a prose cell opts out rather than failing with a confusing message.
+  defp documented_arity(row) do
+    with text when is_binary(text) <- signature_cell(row),
+         [_, args] <- Regex.run(~r/^\((.*?)\)\s*::/s, text) do
+      case String.trim(args) do
+        "" -> 0
+        args -> length(split_top_level(args))
+      end
+    else
+      _ -> nil
+    end
+  end
+
+  defp split_top_level(text) do
+    text
+    |> String.graphemes()
+    |> Enum.reduce({0, "", []}, fn char, {depth, current, done} ->
+      cond do
+        char in ["(", "[", "{"] -> {depth + 1, current <> char, done}
+        char in [")", "]", "}"] -> {depth - 1, current <> char, done}
+        char == "," and depth == 0 -> {depth, "", [current | done]}
+        true -> {depth, current <> char, done}
+      end
+    end)
+    |> then(fn {_depth, current, done} -> Enum.reverse([current | done]) end)
+  end
+
+  # One return-type string per `@spec` clause. A function with two clauses has
+  # two, and they are compared as a union, because a caller can receive either.
+  defp spec_returns(module, fun, arity) do
+    with true <- Code.ensure_loaded?(module),
+         {:ok, specs} <- Code.Typespec.fetch_specs(module),
+         {_key, forms} <- Enum.find(specs, fn {{f, a}, _} -> f == fun and a == arity end) do
+      Enum.map(forms, fn form ->
+        fun |> Code.Typespec.spec_to_quoted(form) |> Macro.to_string()
+      end)
+    else
+      _ -> nil
+    end
+  end
+
+  # The atoms a caller can pattern match on: the atom members of the top-level
+  # union, the leading atom of each top-level tuple, and (one level deeper) the
+  # tag inside a tuple such as `{:error, :not_configured}` or
+  # `{:error, {:unsupported, capability()}}`. A named type met at one of those
+  # positions is resolved, so `{:error, error()}` and the union `error()` stands
+  # for are the same surface, whichever side writes which.
+  #
+  # Deliberately NOT every atom in the type. The inventory abbreviates on
+  # purpose: it prints `map()` where the spec names a struct or a report type,
+  # and that is a readability decision rather than a defect. A comparison that
+  # failed those would be noise somebody eventually switches off. What it must
+  # not miss is the match surface, which is where X370 lived: an error tag the
+  # spec can return and the table does not print is a `case` clause a reader
+  # will not write.
+  #
+  # `:unparsable` when the text is not a type expression, which is how a prose
+  # cell opts out rather than being guessed at.
+  defp match_atoms(text, module) do
+    return =
+      text
+      |> String.split("::", parts: 2)
+      |> List.last()
+      |> String.split(~r/\bwhen\b/, parts: 2)
+      |> List.first()
+
+    case Code.string_to_quoted(return) do
+      {:ok, ast} ->
+        ast
+        |> union_members(module)
+        |> Enum.flat_map(&member_atoms(&1, 1, module))
+        |> MapSet.new()
+
+      _ ->
+        :unparsable
+    end
+  end
+
+  # Flattens `a | b` and resolves a named type into the union it stands for.
+  # Bounded, because a recursive type would not otherwise terminate.
+  defp union_members(node, module, depth \\ 2)
+
+  defp union_members({:|, _meta, [left, right]}, module, depth),
+    do: union_members(left, module, depth) ++ union_members(right, module, depth)
+
+  defp union_members(node, module, depth) when depth > 0 do
+    case resolve_type(node, module) do
+      nil -> [node]
+      resolved -> union_members(resolved, module, depth - 1)
+    end
+  end
+
+  defp union_members(node, _module, _depth), do: [node]
+
+  defp resolve_type({name, _meta, []}, module) when is_atom(name) and module != nil,
+    do: type_definition(module, name)
+
+  defp resolve_type({{:., _, [{:__aliases__, _, parts}, name]}, _meta, []}, _module),
+    do: type_definition(Module.concat(parts), name)
+
+  defp resolve_type(_node, _module), do: nil
+
+  defp type_definition(module, name) do
+    with true <- Code.ensure_loaded?(module),
+         {:ok, types} <- Code.Typespec.fetch_types(module),
+         {_kind, type} <-
+           Enum.find(types, fn {kind, {n, _definition, args}} ->
+             kind in [:type, :opaque] and n == name and args == []
+           end),
+         {:"::", _meta, [_head, definition]} <- Code.Typespec.type_to_quoted(type) do
+      definition
+    else
+      _ -> nil
+    end
+  end
+
+  defp member_atoms(node, depth, module) do
+    node
+    |> union_members(module)
+    |> Enum.flat_map(&single_member_atoms(&1, depth, module))
+  end
+
+  defp single_member_atoms(atom, _depth, _module) when is_atom(atom), do: [atom]
+
+  defp single_member_atoms({:{}, _meta, elements}, depth, module),
+    do: tuple_atoms(elements, depth, module)
+
+  defp single_member_atoms({left, right}, depth, module),
+    do: tuple_atoms([left, right], depth, module)
+
+  defp single_member_atoms(_other, _depth, _module), do: []
+
+  defp tuple_atoms([], _depth, _module), do: []
+
+  defp tuple_atoms([first | rest], depth, module) do
+    head = first |> union_members(module) |> Enum.filter(&is_atom/1)
+    tail = if depth > 0, do: Enum.flat_map(rest, &member_atoms(&1, depth - 1, module)), else: []
+    head ++ tail
+  end
+
+  # {atoms the spec can return and the table does not print,
+  #  atoms the table prints and the spec cannot return}, both sorted.
+  # `:unparsable` when either side is not a type expression.
+  defp atom_difference(documented, spec_returns, module \\ nil)
+
+  defp atom_difference(documented, spec_returns, module) when is_list(spec_returns) do
+    doc_atoms = match_atoms(documented, module)
+
+    spec_atoms =
+      Enum.reduce_while(spec_returns, MapSet.new(), fn clause, acc ->
+        case match_atoms(clause, module) do
+          :unparsable -> {:halt, :unparsable}
+          atoms -> {:cont, MapSet.union(acc, atoms)}
+        end
+      end)
+
+    if doc_atoms == :unparsable or spec_atoms == :unparsable do
+      :unparsable
+    else
+      {
+        spec_atoms |> MapSet.difference(doc_atoms) |> MapSet.to_list() |> Enum.sort(),
+        doc_atoms |> MapSet.difference(spec_atoms) |> MapSet.to_list() |> Enum.sort()
+      }
+    end
+  end
+
+  defp atom_difference(documented, spec, module) when is_binary(spec),
+    do: atom_difference(documented, [spec], module)
+
+  # -- A07: examples that nothing runs ---------------------------------------
+
+  # Read from the test sources as AST. A `doctest Foo` is a call; the same words
+  # in a moduledoc are a string, and a grep cannot tell them apart
+  # (open-findings.md X84, which DocsClaimsTest records for the same reason).
+  defp doctested_modules do
+    "test/**/*.exs"
+    |> Path.wildcard()
+    |> Enum.flat_map(fn path ->
+      path
+      |> File.read!()
+      |> Code.string_to_quoted!(file: path)
+      |> Macro.prewalk([], fn
+        {:doctest, _meta, [{:__aliases__, _, parts} | _]} = node, acc ->
+          {node, [Module.concat(parts) | acc]}
+
+        node, acc ->
+          {node, acc}
+      end)
+      |> elem(1)
+    end)
+    |> MapSet.new()
+  end
+
+  defp has_iex_example?(module) do
+    case Code.fetch_docs(module) do
+      {:docs_v1, _, _, _, moduledoc, _, docs} ->
+        contains_iex?(moduledoc) or
+          Enum.any?(docs, fn {_key, _anno, _sig, doc, _meta} -> contains_iex?(doc) end)
+
+      _ ->
+        false
+    end
+  end
+
+  defp contains_iex?(%{} = doc), do: doc |> Map.values() |> Enum.any?(&contains_iex?/1)
+  defp contains_iex?(text) when is_binary(text), do: String.contains?(text, "iex>")
+  defp contains_iex?(_), do: false
 end

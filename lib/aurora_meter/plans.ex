@@ -259,12 +259,12 @@ defmodule AuroraMeter.Plans do
   @doc """
   Declares a counter feature: `counter :requests`.
 
-  A counter is **measured but never billed and never blocked** — the thing to
+  A counter is **measured but never billed and never blocked**, the thing to
   reach for when the money lives somewhere else (a prepaid credit ledger, a
   usage-based invoice built outside Aurora Meter) and the plan only wants a
   number on the dashboard. `check/2` is always `:ok`, `remaining/2` is
   `:unlimited`, and `quota/2` reports `kind: :counter` with `limit`, `included`
-  and `percent` all `nil` — a counter has no denominator, so there is no bar to
+  and `percent` all `nil`: a counter has no denominator, so there is no bar to
   draw. See ADR 0006.
   """
   defmacro counter(feature) do
@@ -306,14 +306,14 @@ defmodule AuroraMeter.Plans do
 
   Options:
 
-    * `:amount` — required, a positive **integer** of micro-dollars. A float is
+    * `:amount`: required, a positive **integer** of micro-dollars. A float is
       an error rather than a warning: this is new API and money is an integer.
-    * `:category` — `:promotional` (default), `:paid` or `:adjustment`.
-    * `:rollover` — a non-negative integer cap in micro-dollars, `0` (default)
+    * `:category`: `:promotional` (default), `:paid` or `:adjustment`.
+    * `:rollover`: a non-negative integer cap in micro-dollars, `0` (default)
       for no rollover. At most this much of one period's **unused** allowance is
       carried into the next period, as a new lot with its own reference. It does
       not accumulate: two idle periods carry the cap, not twice the cap.
-    * `:expires` — `:period_end` (default), `:never` or `{:seconds, n}`.
+    * `:expires`: `:period_end` (default), `:never` or `{:seconds, n}`.
 
   Three combinations are refused at compile time, each because the ledger or the
   arithmetic cannot honour it:

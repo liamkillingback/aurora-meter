@@ -9,7 +9,11 @@ config :aurora_meter_example_ai, AuroraMeterExampleAi.Repo,
   # on, so the sample needs no second database server. Nothing else about the
   # sample depends on it: set DB_PORT for your own.
   port: String.to_integer(System.get_env("DB_PORT") || "5490"),
-  database: "aurora_meter_example_ai_dev",
+  # `DB_NAME` so a run can point the sample at a disposable database of its
+  # own. `scripts/pro-proof.sh` uses it: a proof that creates real Stripe
+  # objects must not also write into the database you have been reading all
+  # morning.
+  database: System.get_env("DB_NAME") || "aurora_meter_example_ai_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

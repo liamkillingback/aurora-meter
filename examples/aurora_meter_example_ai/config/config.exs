@@ -26,7 +26,15 @@ config :aurora_meter,
   events_outbox: AuroraMeterExampleAi.SampleOutbox,
   # Below this many micro-dollars available, the credits broadcast carries a
   # low-balance flag and the UI shows a banner. Fifty cents.
-  credits_low_balance_threshold: 500_000
+  credits_low_balance_threshold: 500_000,
+  # What this application says about a hold that is still open long after its
+  # work should have finished. It is consulted only by
+  # `AuroraMeter.Credits.reconcile_holds/1`, and **nothing in this sample runs
+  # a sweep on a schedule**: configuring the policy and scheduling the sweep are
+  # two decisions, and a sample that quietly released money on a timer would be
+  # teaching the wrong reflex. `docs/failures.md`'s untrappable_death recipe is
+  # where it earns its place.
+  credits_hold_reconciler: AuroraMeterExampleAi.HoldPolicy
 
 config :aurora_meter_example_ai, :scopes,
   user: [

@@ -2,7 +2,7 @@
 
 Aurora Meter is a Phoenix/Elixir usage-metering, entitlements, and billing library.
 
-**Read [`AGENTS.md`](AGENTS.md) before writing any code** — it is the authoritative
+**Read [`AGENTS.md`](AGENTS.md) before writing any code**: it is the authoritative
 build contract. **Execute [`plan.md`](plan.md) phase by phase; never skip a
 Verification Gate.**
 

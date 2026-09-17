@@ -1,6 +1,6 @@
 defmodule AuroraMeter do
   @moduledoc """
-  Aurora Meter — real-time usage metering, plan entitlements, and Stripe-ready
+  Aurora Meter: real-time usage metering, plan entitlements, and Stripe-ready
   billing primitives for Phoenix.
 
   Count, gate, and bill on the BEAM: increments hit an in-memory ETS counter
@@ -8,7 +8,7 @@ defmodule AuroraMeter do
   Postgres on an interval, and a broadcaster fans live values out over
   `Phoenix.PubSub`.
 
-  Add it to your host application's supervision tree — it validates configuration
+  Add it to your host application's supervision tree. It validates configuration
   at boot and starts the metering runtime:
 
       children = [

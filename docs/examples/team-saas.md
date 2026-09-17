@@ -5,7 +5,7 @@ tiers. Some things are switched off on the cheap tier, some things are capped,
 and every tier allows a certain number of people.
 
 This example covers switches (`feature`), plan values (`feature :seats, 5`) and
-hard caps (`limit … :hard`). No money changes hands inside Aurora Meter here —
+hard caps (`limit … :hard`). No money changes hands inside Aurora Meter here:
 Bramble charges a flat monthly price, and the only job is deciding who may do
 what.
 
@@ -54,7 +54,7 @@ by the credit ledger.)
 limit or a misspelled mode raises at compile time, not at 3am in production.
 
 **`:seats` is a `feature`, not a `limit`.** That is deliberate, and the next
-section explains why — it is the part people get wrong.
+section explains why: it is the part people get wrong.
 
 ## 2. Seats: a number, not a counter
 
@@ -145,7 +145,7 @@ AuroraMeter.check(org, :projects)
 Here is the trap. This code is wrong:
 
 ```elixir
-# WRONG — two requests can both pass
+# WRONG: two requests can both pass
 with :ok <- AuroraMeter.check(org, :projects) do
   {:ok, project} = Bramble.Projects.create(org, attrs)
   AuroraMeter.track(org, :projects)
@@ -175,12 +175,12 @@ Bramble.Projects.create(org, %{name: "Rebrand"})
 
 Under any amount of concurrency, a cap of 2 admits exactly 2.
 
-**The reservation is the usage.** `with_quota/4` increments the counter itself —
+**The reservation is the usage.** `with_quota/4` increments the counter itself, so
 do not also call `track/3`, or every project counts twice.
 
 If the function raises, the reservation is released before the error is
 re-raised, so a failed insert does not burn a slot. The same is true if it
-*exits* — a database checkout timeout, for instance — which is the common way
+*exits* (a database checkout timeout, for instance), which is the common way
 this kind of work fails.
 
 For more than one at a time, pass a quantity:
@@ -200,7 +200,7 @@ A project is deleted. Does the count go down?
 
 **No, and that is on purpose.** The counter measures *projects created this
 period*, not *projects that exist*. If deleting gave a slot back, a free team
-could create, delete, create, delete, and have unlimited projects — each one a
+could create, delete, create, delete, and have unlimited projects, each one a
 real row in your database for as long as they cared to keep it.
 
 If what you actually want to cap is *how many exist at once*, that is the seats
@@ -219,7 +219,7 @@ immediately: the caps are read from the plan on every check, so a team that was
 blocked at 2 projects can create the third the instant they upgrade.
 
 **Usage is not reset by a plan change.** A team that used 40 uploads on `:free`
-still has 40 used when they move to `:team` — they now have 10,000 to play
+still has 40 used when they move to `:team`. They now have 10,000 to play
 with, so it makes no practical difference, and resetting would let anyone
 refill by switching plan and switching back.
 
@@ -227,7 +227,7 @@ refill by switching plan and switching back.
 
 If you are using the Pro package, subscriptions are synced from Stripe and
 carry a status. A plan is granted only while that status is `active`,
-`trialing` or `past_due`. Anything else — `canceled`, `unpaid`, `incomplete` —
+`trialing` or `past_due`. Anything else (`canceled`, `unpaid`, `incomplete`)
 falls back to the configured `:default_plan`:
 
 ```elixir
@@ -270,7 +270,7 @@ AuroraMeter.remaining(org, :ai_summaries) # => :unlimited  (metered or counter)
 
 Note that `:unlimited` is an atom, not a big number. Code that does
 `remaining(org, f) > 0` will raise on it in a future Elixir and silently
-misbehave today — match on it.
+misbehave today, so match on it.
 
 ## 8. Features you have not declared
 
@@ -282,8 +282,8 @@ An undeclared feature is permissive. A half-finished feature does not lock your
 customers out of the product, and in `:dev` it logs a warning so you notice
 before it ships.
 
-If you would rather a typo be loud, declare every feature on every plan —
-`feature :some_new_thing, false` on the tiers that should not have it — and the
+If you would rather a typo be loud, declare every feature on every plan, with
+`feature :some_new_thing, false` on the tiers that should not have it, and the
 warning stops being your only defence.
 
 ## The whole thing, end to end

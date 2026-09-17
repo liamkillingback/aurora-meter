@@ -1,4 +1,4 @@
-# AGENTS.md — Aurora Meter build & contribution contract
+# AGENTS.md: Aurora Meter build & contribution contract
 
 Authoritative for anyone (human or agent) changing Aurora Meter. `CLAUDE.md`
 points here. Read fully before writing code.
@@ -6,7 +6,7 @@ points here. Read fully before writing code.
 ## What Aurora Meter is
 
 A Phoenix/Elixir library that meters usage, enforces plan entitlements, and (Pro)
-bills via Stripe — living inside the host app, which owns its data. The moat is
+bills via Stripe, living inside the host app, which owns its data. The moat is
 ETS-backed real-time metering. Follow `plan.md` phase by phase; never skip a
 Verification Gate.
 
@@ -32,11 +32,11 @@ Do not run `mix` inside a parallel task that shares `_build` with a sibling task
   `AuroraMeter.Pro.*` (pro).
 - Every public function has a `@spec` and a `@doc` with a purpose line and an
   `## Examples` block. `@type t` on every struct.
-- `snake_case` verbs/nouns. No stringly-typed options — validate with
+- `snake_case` verbs/nouns. No stringly-typed options; validate with
   `NimbleOptions`.
 - The hot path (`track`/`reserve`) never touches the database. ETS only; the DB
   is written by the `Flusher` on an interval.
-- Tenants are opaque terms resolved via `AuroraMeter.Tenant.to_key/1` — never
+- Tenants are opaque terms resolved via `AuroraMeter.Tenant.to_key/1`, never
   assume they are strings or integers.
 - `Storage` and `Billing.Provider` are behaviours; never call Ecto or Stripe
   directly outside their adapters.
@@ -53,7 +53,7 @@ Do not run `mix` inside a parallel task that shares `_build` with a sibling task
 
 ## Prohibited shortcuts
 
-- No calling the real Stripe API in tests — use `AuroraMeter.Pro.Stripe.Fake`.
+- No calling the real Stripe API in tests: use `AuroraMeter.Pro.Stripe.Fake`.
 - No GenServer-per-tenant counters (use `:ets.update_counter`). No DB writes on
   the hot path.
 - No secrets in the repo. No telemetry that phones home. No email gate on source.

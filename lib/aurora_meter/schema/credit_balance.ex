@@ -3,13 +3,13 @@ defmodule AuroraMeter.Schema.CreditBalance do
   A tenant's prepaid credit balance, one row per tenant, in micro-dollars
   (1e-6 USD; see `AuroraMeter.Credits.Money`).
 
-    * `balance` — everything granted minus everything settled, debited or
+    * `balance`: everything granted minus everything settled, debited or
       expired; signed, because a settlement may exceed its hold.
-    * `held` — the sum of pending holds; `balance - held` is what
+    * `held`: the sum of pending holds; `balance - held` is what
       `AuroraMeter.Credits.available/1` returns.
-    * `promotional` — the part of `balance` that came from promotional grants;
+    * `promotional`: the part of `balance` that came from promotional grants;
       consumed before paid credit and the only part that can expire.
-    * `low_balance_threshold` — per-tenant override of
+    * `low_balance_threshold`: per-tenant override of
       `:credits_low_balance_threshold`.
     * `debt`: executed cost the wallet could not fund, recorded rather than
       hidden. Every incoming grant repays it before creating availability, and

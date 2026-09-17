@@ -149,7 +149,9 @@ defmodule AuroraMeterExampleAi.Ops do
 
     %{
       tokens_counter: AuroraMeter.usage(org, :tokens),
-      tokens_outbox_quantity: outbox_quantity(scope, "tokens"),
+      tokens_outbox_quantity: net_quantity(scope, "tokens"),
+      tokens_outbox_gross: outbox_quantity(scope, "tokens"),
+      tokens_outbox_corrections: correction_quantity(scope, "tokens"),
       tokens_outbox_rows: outbox_rows(scope, "tokens"),
       images_counter: AuroraMeter.usage(org, :images),
       images_outbox_rows: outbox_rows(scope, "images"),
@@ -198,6 +200,67 @@ defmodule AuroraMeterExampleAi.Ops do
     scope
     |> outbox_scope()
     |> where([i], i.feature == ^feature)
+    |> select([i], type(coalesce(sum(i.quantity), 0), :integer))
+    |> Repo.one()
+  end
+
+  @doc """
+  What this organisation has staged for `feature`, **net of corrections**.
+
+  ## Why this is not `sum(quantity)`
+
+  A correction's `quantity` is the magnitude of a reduction, stored as a
+  positive integer exactly as a usage event's quantity is. Summing the column
+  therefore adds the credit to the charge: sixteen tokens corrected by four
+  sums to twenty, and the counter beside it on this page reads twelve.
+
+  The page showed both figures and called them the same thing until the real
+  Stripe proof run reconciled 587 staged against 579 delivered and was right
+  both times. The gross figure is still reported, next to this one, because
+  "how many units did I stage" and "how many units do I mean" are different
+  questions and an operations page should answer both rather than pick.
+
+  ## The arithmetic, and the thing that is easy to get wrong here
+
+  It is **not** `gross - corrections`. A correction contributes its magnitude
+  to the gross sum with the wrong sign, so removing it once only cancels that
+  contribution and leaves the original uncorrected: sixteen corrected by four
+  sums to twenty, and twenty minus four is sixteen, which is the figure before
+  the correction rather than after it.
+
+  So the net is the usage rows minus the correction rows, each summed on their
+  own, which is what the two queries below do. Written as `gross - 2 * c` it
+  would be arithmetically identical and would read like a trick.
+  """
+  @spec net_quantity(Scope.t(), String.t()) :: integer()
+  def net_quantity(%Scope{} = scope, feature) do
+    usage_quantity(scope, feature) - correction_quantity(scope, feature)
+  end
+
+  @doc """
+  The quantity staged for `feature` by usage rows alone.
+
+  A row staged before the payload carried a `kind` counts as usage, which is
+  what it was: `IS DISTINCT FROM` rather than `!=`, because `NULL != 'x'` is
+  `NULL` in SQL and a `WHERE` clause that evaluates to `NULL` excludes the row.
+  """
+  @spec usage_quantity(Scope.t(), String.t()) :: integer()
+  def usage_quantity(%Scope{} = scope, feature) do
+    scope
+    |> outbox_scope()
+    |> where([i], i.feature == ^feature)
+    |> where([i], fragment("?->>'kind' IS DISTINCT FROM ?", i.payload, "correction"))
+    |> select([i], type(coalesce(sum(i.quantity), 0), :integer))
+    |> Repo.one()
+  end
+
+  @doc "The magnitude staged for `feature` by corrections alone."
+  @spec correction_quantity(Scope.t(), String.t()) :: integer()
+  def correction_quantity(%Scope{} = scope, feature) do
+    scope
+    |> outbox_scope()
+    |> where([i], i.feature == ^feature)
+    |> where([i], fragment("?->>'kind' = ?", i.payload, "correction"))
     |> select([i], type(coalesce(sum(i.quantity), 0), :integer))
     |> Repo.one()
   end

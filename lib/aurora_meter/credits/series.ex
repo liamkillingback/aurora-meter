@@ -95,7 +95,7 @@ defmodule AuroraMeter.Credits.Series do
 
       bad ->
         raise ArgumentError,
-              ":kinds cannot include #{inspect(bad)} — holds and releases move `held`, not " <>
+              ":kinds cannot include #{inspect(bad)}: holds and releases move `held`, not " <>
                 "`balance`, so they are never spend"
     end
   end
@@ -108,7 +108,7 @@ defmodule AuroraMeter.Credits.Series do
   defp reject_grant(kinds) do
     if Enum.any?(kinds, &(&1 in @grant_kinds)) do
       raise ArgumentError,
-            ":kinds cannot include #{inspect(@grant_kinds)} — grants are reported separately, " <>
+            ":kinds cannot include #{inspect(@grant_kinds)}: grants are reported separately, " <>
               "and counting one as spend scores it twice with opposite signs"
     end
 

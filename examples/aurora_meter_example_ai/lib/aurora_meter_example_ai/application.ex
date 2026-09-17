@@ -26,11 +26,19 @@ defmodule AuroraMeterExampleAi.Application do
       # `AuroraMeterExampleAi.SampleOutbox.Drainer`.
       AuroraMeter.Exporter.Journal,
       {AuroraMeterExampleAi.SampleOutbox.Drainer,
-       interval: Application.get_env(:aurora_meter_example_ai, :outbox_interval, 1_000)},
-
-      # Start to serve requests, typically the last entry
-      AuroraMeterExampleAiWeb.Endpoint
+       interval: Application.get_env(:aurora_meter_example_ai, :outbox_interval, 1_000)}
     ]
+
+    # The Pro profile's children, or an empty list. One expression, so a
+    # child that is not in the list cannot be started by accident, and one
+    # call site, so the guard is in exactly one place.
+    children =
+      children ++
+        AuroraMeterExampleAi.Pro.Children.list() ++
+        [
+          # Start to serve requests, typically the last entry
+          AuroraMeterExampleAiWeb.Endpoint
+        ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options

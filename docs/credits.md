@@ -111,7 +111,7 @@ double-fund an account. `:category` is `:paid` (default), `:promotional` or
 `:adjustment`; `:metadata` is a map stored on the entry.
 
 `grant_with_status/3` returns `{:ok, txn, :new}` or `{:ok, txn, :duplicate}`
-when you need to tell the two apart — to announce the payment to the customer
+when you need to tell the two apart, to announce the payment to the customer
 exactly once, say. Ask it rather than probing for the reference beforehand:
 the status is decided inside the balance row's lock, and two concurrent
 deliveries of one payment that both look first both find nothing.
@@ -123,8 +123,8 @@ Credits.reverse(org, 2_000_000, "stripe:re_123", %{"source" => "refund"})
 ```
 
 `reverse/4` takes credit back for money that has already left the payment
-provider. Unlike `debit/3` it is **never refused for want of balance** —
-refusing would only make the ledger disagree with reality — so the balance may
+provider. Unlike `debit/3` it is **never refused for want of balance**, because
+refusing would only make the ledger disagree with reality, so the balance may
 go negative, which is the honest record of a debt. It is still idempotent on
 the reference.
 
@@ -271,7 +271,7 @@ propagates.
 ### Holds nothing will ever close
 
 A hold is taken before the row that remembers it exists, and those two cannot
-be one write — the ledger is a different schema and often a different
+be one write: the ledger is a different schema and often a different
 database. A process killed in between leaves money reserved against a tenant
 with nothing anywhere pointing at it.
 
@@ -405,9 +405,9 @@ Credits.grant(org, 5_000_000,
 ```
 
 Promotional credit is consumed before paid credit on every settlement, debit
-and expiry, so a customer's own money is the last to go. `expire_due/1` — run
-it from a cron (`Quantum`, an Oban cron job, a plain `Process.send_after`
-loop) — expires every promotional grant whose `expires_at` has passed: it
+and expiry, so a customer's own money is the last to go. `expire_due/1`, which
+you run from a cron (`Quantum`, an Oban cron job, a plain `Process.send_after`
+loop), expires every promotional grant whose `expires_at` has passed: it
 removes `min(promotional balance, grant amount)`, never taking the balance
 below zero, writes an `:expire` entry referenced `"expire:<grant id>"` and
 stamps the grant's `expired_at` so it is never processed twice.
@@ -920,7 +920,7 @@ to think about which way a number points.
 
 `spend_history/2` is **zero-filled across the whole range and sorted oldest
 first**. A day nothing happened on is `spent: 0, granted: 0, net: 0,
-balance_after: nil` — it is never missing. A chart can render the list straight
+balance_after: nil`, and is never missing. A chart can render the list straight
 through with no gap handling, and a quiet day draws a baseline rather than a
 hole. Buckets are UTC days (or UTC months); no local time zone is applied
 anywhere.
@@ -933,7 +933,7 @@ would double-count the money its settlement later charges, and a released hold
 would appear as spend that never happened. Passing either in `:kinds` raises
 rather than silently producing a wrong chart.
 
-An `:expire` *is* spend — promotional credit that left the balance is money the
+An `:expire` *is* spend: promotional credit that left the balance is money the
 customer no longer has, and hiding it makes the balance line in the chart stop
 matching the balance in the header.
 
@@ -954,16 +954,16 @@ are partial because the range does not start or end on a month boundary.
 
 `summary/1` derives two figures from the **trailing 30 days**:
 
-- `daily_burn` — mean spend per day, by integer division. `nil` when the tenant
+- `daily_burn`: mean spend per day, by integer division. `nil` when the tenant
   has spent nothing at all; `0` when the spend is real but too small to average
   a micro-dollar a day.
-- `runway_days` — `available / daily_burn`, floored, never negative. `nil`
+- `runway_days`: `available / daily_burn`, floored, never negative. `nil`
   whenever `daily_burn` is `nil` **or zero**: there is no honest number of days
   to show for a tenant who is not spending, and a dashboard must render the
   absence rather than a large number or a `∞`.
 
 `spent_this_period` and `granted_this_period` use the configured period source
-(`AuroraMeter.Period`), the same window `AuroraMeter.quota/2` reports — a
+(`AuroraMeter.Period`), the same window `AuroraMeter.quota/2` reports: a
 calendar month in the core, the Stripe subscription period under Pro.
 
 ### Rendering it

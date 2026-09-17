@@ -4,7 +4,7 @@ defmodule AuroraMeter.Schema.CreditRecurrence do
 
   A row is the record that a promise was kept: "for this tenant, this
   entitlement, this plan version and this period, the allowance was issued".
-  `UNIQUE (tenant_key, key)` is what makes that true exactly once however many
+  `UNIQUE (tenant_key, key)` is what keeps that to one row however many
   schedulers run, and it is evaluated inside the wallet's balance row lock, so
   the row and the grant it names commit together or not at all.
 

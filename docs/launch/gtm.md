@@ -1,5 +1,11 @@
 # Aurora Meter — go-to-market drafts (NOT published)
 
+> **Historical, superseded by the Aurora Meter V1 programme.** This page is a
+> draft from before V1 and is kept as a record of what was written at the time.
+> It is not rewritten to match how the software behaves today, it is not in the ExDoc extras
+> list, and no figure in it should be quoted. The published claims live in the
+> README, [Guarantees](../guarantees.md) and [Correctness](../correctness.md).
+
 Hand-off drafts for the owner to review, edit, and publish. Nothing here is live.
 
 ## One-liner

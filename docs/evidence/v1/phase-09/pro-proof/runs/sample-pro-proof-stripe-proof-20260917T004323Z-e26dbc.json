@@ -1,0 +1,454 @@
+{
+  "schema": "aurora-v1-stripe-proof/1",
+  "profile": "sample",
+  "run_id": "stripe-proof-20260917T004323Z-e26dbc",
+  "mode": "test",
+  "started_utc": "2026-09-17T00:43:23Z",
+  "finished_utc": "2026-09-17T00:45:20Z",
+  "result": "fail",
+  "branch": null,
+  "exit_code": 1,
+  "environment": {
+    "stripity_stripe": "3.3.2",
+    "sdk_default_api_version": "2025-11-17.clover",
+    "observed_response_stripe_version": [
+      "2024-06-20"
+    ],
+    "observed_event_api_versions": [
+      "2024-06-20"
+    ],
+    "stripe_cli": "stripe version 1.43.7",
+    "stripe_cli_reported_account_api_version": "2024-06-20",
+    "pro_sha": "dce6ffc",
+    "core_sha": "1a3a98e",
+    "elixir": "1.20.1",
+    "otp": "29",
+    "transport": "stripe listen --forward-to",
+    "registered_endpoint_modified": false,
+    "live_mode_used": false,
+    "credits_stripe_client": "AuroraMeter.Pro.Credits.StripeClient.Live",
+    "billing_provider": "AuroraMeter.Pro.Stripe"
+  },
+  "documentation": {
+    "read_before_objects_created": true,
+    "accessed_utc": "2026-09-15",
+    "urls": [
+      "https://docs.stripe.com/api/billing/meter/create",
+      "https://docs.stripe.com/api/prices/create",
+      "https://docs.stripe.com/api/prices/create?query=recurring",
+      "https://docs.stripe.com/api/test_clocks/advance",
+      "https://docs.stripe.com/api/test_clocks/delete",
+      "https://docs.stripe.com/billing/testing/test-clocks/api-advanced-usage",
+      "https://docs.stripe.com/api/billing/meter-event_summary/list",
+      "https://docs.stripe.com/testing",
+      "https://docs.stripe.com/disputes/api"
+    ],
+    "mechanism_for_failed": null,
+    "mechanism_for_canceled": null,
+    "failed_is_documented": false,
+    "canceled_is_documented_for_this_harness": false,
+    "payment_method_token": "pm_card_visa",
+    "quotes": [],
+    "sections": [
+      "purpose",
+      "meter",
+      "tiered_metered_price",
+      "test_clock",
+      "meter_event_summary",
+      "payment_methods",
+      "dispute_outcome",
+      "what_could_not_be_established"
+    ]
+  },
+  "parameters": {
+    "amount_cents": 2500,
+    "refund_cents": 1000,
+    "currency": "usd"
+  },
+  "objects": {
+    "customer": "cus_VH1UndPboZGZeK",
+    "payment_method": "pm_1UGTR5IWRG2AbpPzWS6K8Srb",
+    "payment_intent": "pi_3UGTRFIWRG2AbpPz0c7CIse8",
+    "charge": "ch_3UGTRFIWRG2AbpPz0aDY11Gb",
+    "refund": null,
+    "tenant_key": "org_1",
+    "database": "aurora_v1_stripeproof_e26dbc",
+    "account": "acct_1Pho8bIWRG2AbpPz",
+    "subscription": "sub_1UGTR7IWRG2AbpPzEkYrr1HW",
+    "test_clock": "clock_1UGTR4IWRG2AbpPzt1KTYzwu",
+    "meter": "mtr_test_61VPrO2p2bRiiEsvC41IWRG2AbpPzJ68",
+    "meter_event_name": "aurora_v1_stripe_proof_20260917T004323Z_e26dbc",
+    "price": "price_1UGTQiIWRG2AbpPzmFQFLaDf",
+    "product": "prod_VH1THXNrKZjEBS"
+  },
+  "objects_created": [
+    {
+      "type": "meter",
+      "id": "mtr_test_61VPrO2p2bRiiEsvC41IWRG2AbpPzJ68",
+      "utc": "2026-09-17T00:43:58Z"
+    },
+    {
+      "type": "product",
+      "id": "prod_VH1THXNrKZjEBS",
+      "utc": "2026-09-17T00:44:00Z"
+    },
+    {
+      "type": "price",
+      "id": "price_1UGTQiIWRG2AbpPzmFQFLaDf",
+      "utc": "2026-09-17T00:44:00Z"
+    },
+    {
+      "type": "test_clock",
+      "id": "clock_1UGTR4IWRG2AbpPzt1KTYzwu",
+      "utc": "2026-09-17T00:44:23Z"
+    },
+    {
+      "type": "customer",
+      "id": "cus_VH1UndPboZGZeK",
+      "utc": "2026-09-17T00:44:24Z"
+    },
+    {
+      "type": "payment_method",
+      "id": "pm_1UGTR5IWRG2AbpPzWS6K8Srb",
+      "utc": "2026-09-17T00:44:24Z"
+    },
+    {
+      "type": "subscription",
+      "id": "sub_1UGTR7IWRG2AbpPzEkYrr1HW",
+      "utc": "2026-09-17T00:44:27Z"
+    },
+    {
+      "type": "payment_intent",
+      "id": "pi_3UGTRFIWRG2AbpPz0c7CIse8",
+      "utc": "2026-09-17T00:44:34Z"
+    },
+    {
+      "type": "charge",
+      "id": "ch_3UGTRFIWRG2AbpPz0aDY11Gb",
+      "utc": "2026-09-17T00:44:34Z"
+    }
+  ],
+  "events_forwarded": [
+    {
+      "id": "evt_1UGTR8IWRG2AbpPzeOD6bO87",
+      "type": "customer.subscription.created",
+      "api_version": "2024-06-20"
+    },
+    {
+      "id": "evt_3UGTRFIWRG2AbpPz02LBFbLL",
+      "type": "payment_intent.succeeded",
+      "api_version": "2024-06-20"
+    }
+  ],
+  "steps": [
+    {
+      "n": 1,
+      "name": "guards G1 to G7",
+      "utc": "2026-09-17T00:43:26Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "every guard passes, or the run refuses with exit 3 having created nothing",
+      "result": "pass",
+      "note": "nothing was created before every guard passed"
+    },
+    {
+      "n": 2,
+      "name": "the current official Stripe documentation, read before any object was created",
+      "utc": "2026-09-17T00:43:56Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "the current official Stripe documentation is read and recorded before any object exists",
+      "result": "pass",
+      "note": "recorded verbatim in product-workspaces/aurora_meter_pro/docs/evidence/v1/phase-04/stripe-metering-docs.json"
+    },
+    {
+      "n": 3,
+      "name": "the meter, the product and the metered price",
+      "utc": "2026-09-17T00:44:01Z",
+      "provider_state": {
+        "account": "acct_1Pho8bIWRG2AbpPz",
+        "meter": "mtr_test_61VPrO2p2bRiiEsvC41IWRG2AbpPzJ68",
+        "meter_event_name": "aurora_v1_stripe_proof_20260917T004323Z_e26dbc",
+        "product": "prod_VH1THXNrKZjEBS",
+        "price": "price_1UGTQiIWRG2AbpPzmFQFLaDf",
+        "tiers": [
+          {
+            "up_to": 2,
+            "unit_amount": 0
+          },
+          {
+            "up_to": "inf",
+            "unit_amount": 25
+          }
+        ],
+        "livemode": false,
+        "response_stripe_version": "2024-06-20"
+      },
+      "event": null,
+      "ledger": null,
+      "expected": "a test-mode meter, product and metered price exist, livemode false",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 4,
+      "name": "the sample application, in its Pro profile, on the live adapters",
+      "utc": "2026-09-17T00:44:16Z",
+      "provider_state": {
+        "mode": ":test",
+        "events_outbox": "AuroraMeterExampleAi.Pro.Outbox",
+        "provider": "AuroraMeter.Pro.Stripe",
+        "api_version": "2025-11-17.clover",
+        "exporter": "AuroraMeter.Pro.Exporter.StripeMeterEvents",
+        "credits_client": "AuroraMeter.Pro.Credits.StripeClient.Live",
+        "meter_client": "Stripe.Billing.MeterEvent",
+        "account": "acct_1Pho8bIWRG2AbpPz",
+        "webhook_secret_configured": true
+      },
+      "event": null,
+      "ledger": null,
+      "expected": "the SAMPLE application boots in its Pro profile on a disposable database, with the live Stripe adapters and no fake anywhere, and the forwarder is ready before any money-shaped object exists",
+      "result": "pass",
+      "note": "transport: stripe listen --forward-to; the registered endpoint was not read, written or referenced"
+    },
+    {
+      "n": 5,
+      "name": "a disposable organisation in the sample own database",
+      "utc": "2026-09-17T00:44:22Z",
+      "provider_state": {
+        "tenant_key": "org_1",
+        "slug": "proof-1789605841",
+        "org_id": 1
+      },
+      "event": null,
+      "ledger": {
+        "balance": 0,
+        "reversed": 0,
+        "expired": 0,
+        "available": 0,
+        "held": 0,
+        "spendable": 0,
+        "promotional": 0,
+        "debt": 0,
+        "spent": 0,
+        "granted": 0,
+        "tenant_key": "org_1",
+        "lots": [],
+        "reversals": 0,
+        "grants": 0,
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": null
+        }
+      },
+      "expected": "a disposable organisation exists in the sample's own database, on the lot engine, with an empty wallet",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 6,
+      "name": "the test clock, the customer and the metered subscription",
+      "utc": "2026-09-17T00:44:33Z",
+      "provider_state": {
+        "test_clock": "clock_1UGTR4IWRG2AbpPzt1KTYzwu",
+        "customer": "cus_VH1UndPboZGZeK",
+        "payment_method": "pm_1UGTR5IWRG2AbpPzWS6K8Srb",
+        "subscription": "sub_1UGTR7IWRG2AbpPzEkYrr1HW",
+        "period_start": 1789605862,
+        "period_end": 1792197862,
+        "livemode": false
+      },
+      "event": {
+        "id": "evt_1UGTR8IWRG2AbpPzeOD6bO87",
+        "type": "customer.subscription.created",
+        "api_version": "2024-06-20",
+        "created": 1789605866,
+        "livemode": false
+      },
+      "ledger": {
+        "tenant_key": "org_1",
+        "generations": 0,
+        "usage_tokens": 0,
+        "sample_outbox": [],
+        "sample_outbox_count": 0,
+        "sample_outbox_quantity": 0,
+        "pro_outbox": [],
+        "pro_outbox_count": 0,
+        "pro_delivered": 0,
+        "pro_states": {},
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTR7IWRG2AbpPzEkYrr1HW"
+        }
+      },
+      "expected": "a test clock, a customer carrying the documented test payment method, and a metered subscription whose real customer.subscription.created reaches the sample's endpoint-mounted webhook",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 7,
+      "name": "a real off-session PaymentIntent granted credit through the sample own webhook",
+      "utc": "2026-09-17T00:44:40Z",
+      "provider_state": {
+        "payment_intent": "pi_3UGTRFIWRG2AbpPz0c7CIse8",
+        "charge": "ch_3UGTRFIWRG2AbpPz0aDY11Gb",
+        "amount_cents": 2500,
+        "livemode": false
+      },
+      "event": {
+        "id": "evt_3UGTRFIWRG2AbpPz02LBFbLL",
+        "type": "payment_intent.succeeded",
+        "api_version": "2024-06-20",
+        "created": 1789605874,
+        "livemode": false
+      },
+      "ledger": {
+        "balance": 25000000,
+        "reversed": 0,
+        "expired": 0,
+        "available": 25000000,
+        "held": 0,
+        "spendable": 25000000,
+        "promotional": 0,
+        "debt": 0,
+        "spent": 0,
+        "granted": 25000000,
+        "tenant_key": "org_1",
+        "lots": [
+          {
+            "state": "open",
+            "reversed": 0,
+            "category": "paid",
+            "available": 25000000,
+            "amount": 25000000,
+            "reserved": 0,
+            "consumed": 0
+          }
+        ],
+        "reversals": 0,
+        "grants": 1,
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTR7IWRG2AbpPzEkYrr1HW"
+        }
+      },
+      "expected": "a real off-session PaymentIntent for the documented test card reaches the sample's webhook and grants credit exactly once, on the paid lot",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 8,
+      "name": "the same payment event redelivered granted nothing further",
+      "utc": "2026-09-17T00:44:57Z",
+      "provider_state": {
+        "event": "evt_3UGTRFIWRG2AbpPz02LBFbLL"
+      },
+      "event": null,
+      "ledger": {
+        "balance": 25000000,
+        "reversed": 0,
+        "expired": 0,
+        "available": 25000000,
+        "held": 0,
+        "spendable": 25000000,
+        "promotional": 0,
+        "debt": 0,
+        "spent": 0,
+        "granted": 25000000,
+        "tenant_key": "org_1",
+        "lots": [
+          {
+            "state": "open",
+            "reversed": 0,
+            "category": "paid",
+            "available": 25000000,
+            "amount": 25000000,
+            "reserved": 0,
+            "consumed": 0
+          }
+        ],
+        "reversals": 0,
+        "grants": 1,
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTR7IWRG2AbpPzEkYrr1HW"
+        }
+      },
+      "expected": "the same event redelivered grants nothing further",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 99,
+      "name": "cleanup",
+      "utc": "2026-09-17T00:45:20Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "",
+      "result": "pass",
+      "note": "{  \"performed\": true,  \"deleted\": [    \"sub_1UGTR7IWRG2AbpPzEkYrr1HW (cancelled)\",    \"clock_1UGTR4IWRG2AbpPzt1KTYzwu (test clock, with its customers and subscriptions)\",    \"pm_1UGTR5IWRG2AbpPzWS6K8Srb (detached)\",    \"cus_VH1UndPboZGZeK (already gone at the provider)\",    \"price_1UGTQiIWRG2AbpPzmFQFLaDf (price deactivated; Stripe prices cannot be deleted)\",    \"prod_VH1THXNrKZjEBS (product deactivated; a product with a price cannot be deleted)\",    \"mtr_test_61VPrO2p2bRiiEsvC41IWRG2AbpPzJ68 (meter deactivated; Stripe meters cannot be deleted)\",    \"database aurora_v1_stripeproof_e26dbc\"  ],  \"retained_undeletable\": [    {      \"id\": \"pi_3UGTRFIWRG2AbpPz0c7CIse8\",      \"reason\": \"payment_intents cannot be deleted through the Stripe API in test mode\"    },    {      \"id\": \"ch_3UGTRFIWRG2AbpPz0aDY11Gb\",      \"reason\": \"charges cannot be deleted through the Stripe API in test mode\"    }  ],  \"failed\": [],  \"remaining_removable_for_run_id\": 1}"
+    }
+  ],
+  "final": {
+    "provider": null,
+    "local": null,
+    "ledger": null
+  },
+  "cleanup": {
+    "performed": true,
+    "deleted": [
+      "sub_1UGTR7IWRG2AbpPzEkYrr1HW (cancelled)",
+      "clock_1UGTR4IWRG2AbpPzt1KTYzwu (test clock, with its customers and subscriptions)",
+      "pm_1UGTR5IWRG2AbpPzWS6K8Srb (detached)",
+      "cus_VH1UndPboZGZeK (already gone at the provider)",
+      "price_1UGTQiIWRG2AbpPzmFQFLaDf (price deactivated; Stripe prices cannot be deleted)",
+      "prod_VH1THXNrKZjEBS (product deactivated; a product with a price cannot be deleted)",
+      "mtr_test_61VPrO2p2bRiiEsvC41IWRG2AbpPzJ68 (meter deactivated; Stripe meters cannot be deleted)",
+      "database aurora_v1_stripeproof_e26dbc"
+    ],
+    "retained_undeletable": [
+      {
+        "id": "pi_3UGTRFIWRG2AbpPz0c7CIse8",
+        "reason": "payment_intents cannot be deleted through the Stripe API in test mode"
+      },
+      {
+        "id": "ch_3UGTRFIWRG2AbpPz0aDY11Gb",
+        "reason": "charges cannot be deleted through the Stripe API in test mode"
+      }
+    ],
+    "failed": [],
+    "remaining_removable_for_run_id": 1
+  },
+  "findings": [
+    {
+      "id": "X68",
+      "status": "confirmed by this run",
+      "summary": "Webhook events and API responses arrive on two different Stripe contract versions.",
+      "observed_event_api_versions": [
+        "2024-06-20"
+      ],
+      "observed_response_stripe_versions": [
+        "2024-06-20"
+      ],
+      "sdk_default_api_version": "2025-11-17.clover",
+      "note": "Aurora Meter Pro parses the forwarded payload at the account default version and, in the same flow, reads objects back at the version it pins, then reconciles the two against each other. The harness's own unpinned reads answer at the account default and its pinned reads at the SDK default, which is why both appear above. Recorded separately, never normalised together. 04c owns the pin (P24)."
+    }
+  ],
+  "evidence_files": {
+    "latest": "sample-pro-proof.json",
+    "this_run": "runs/sample-pro-proof-stripe-proof-20260917T004323Z-e26dbc.json",
+    "index": "runs/index.ndjson",
+    "preserved_predecessor": {
+      "run_id": "stripe-proof-20260917T003212Z-8b8515",
+      "path": "runs/sample-pro-proof-stripe-proof-20260917T003212Z-8b8515.json"
+    },
+    "note": "The latest pointer is replaced on every run; every run's own document is kept under runs/ by run id and is never overwritten by a later run (X178)."
+  }
+}

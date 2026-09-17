@@ -43,6 +43,22 @@ defmodule AuroraMeterExampleAiWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
+  # The Stripe webhook, mounted here and not in the router.
+  #
+  # Stripe signs the RAW body. `Plug.Parsers` below consumes it, after which
+  # `Plug.Conn.read_body/2` answers `{:ok, "", conn}` and every signature
+  # check fails. A router `forward` is always after the parsers, so it cannot
+  # be the mount point however tempting it looks. See
+  # `AuroraMeterExampleAiWeb.Pro.WebhookMount`.
+  #
+  # The `if` is evaluated at compile time, so in the core profile this plug is
+  # not in the endpoint's pipeline at all: a request to /webhooks/stripe there
+  # reaches the router and 404s, which is the honest answer for an application
+  # with no billing in it.
+  if AuroraMeterExampleAi.Pro.available?() do
+    plug AuroraMeterExampleAiWeb.Pro.WebhookMount
+  end
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],

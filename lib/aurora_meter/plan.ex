@@ -5,11 +5,11 @@ defmodule AuroraMeter.Plan do
 
   Feature configs:
 
-    * `{:limit, n, :hard}` — hard cap; blocks at `n`.
-    * `{:metered, included, unit_price}` — allow overage; bill beyond `included`.
-    * `{:counter}` — measured, never blocked, never billed; no denominator.
-    * `{:feature, boolean}` — plain feature access (no quota).
-    * `{:feature, non_neg_integer}` — a plan-level value with no counter behind
+    * `{:limit, n, :hard}`: hard cap; blocks at `n`.
+    * `{:metered, included, unit_price}`: allow overage; bill beyond `included`.
+    * `{:counter}`: measured, never blocked, never billed; no denominator.
+    * `{:feature, boolean}`: plain feature access (no quota).
+    * `{:feature, non_neg_integer}`: a plan-level value with no counter behind
       it (seats, retention days, projects): always entitled; read it with
       `AuroraMeter.feature_value/3`.
 

@@ -517,11 +517,10 @@ defmodule AuroraMeter.Config do
   @doc """
   Milliseconds between gauge samples, or `0` for no internal timers.
 
-  ## Examples
-
-      iex> AuroraMeter.Config.metrics_interval()
-      10_000
-
+  Returns whatever the host configured. The default is `10_000`, and this
+  repository's own test configuration sets `0`, which is why the figure is
+  stated here rather than shown as an example: an example that asserts a
+  configured value is a test of the configuration it happens to run under.
   """
   @spec metrics_interval() :: non_neg_integer()
   def metrics_interval, do: get(:metrics_interval)

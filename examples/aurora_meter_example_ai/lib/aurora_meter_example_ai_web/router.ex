@@ -111,6 +111,33 @@ defmodule AuroraMeterExampleAiWeb.Router do
     end
   end
 
+  ## The Pro profile's pages
+  #
+  # The router's body is macro-expanded at compile time, so this `if` does not
+  # disable a route: in the core profile the route is **not in the table**. A
+  # request to /billing there is a 404, which is the honest answer from an
+  # application that has no billing in it.
+  #
+  # The Stripe webhook is deliberately NOT here. It has to see the raw request
+  # body and `Plug.Parsers` has already consumed it by the time a router runs,
+  # so it is mounted in the endpoint, above the parsers. See
+  # `AuroraMeterExampleAiWeb.Pro.WebhookMount`, which explains what goes wrong
+  # when it is not.
+  if AuroraMeterExampleAi.Pro.available?() do
+    scope "/", AuroraMeterExampleAiWeb do
+      pipe_through [:browser, :require_authenticated_user]
+
+      live_session :billing,
+        on_mount: [
+          {AuroraMeterExampleAiWeb.UserAuth, :require_owner},
+          {AuroraMeterExampleAiWeb.OrgHook, :assign_org},
+          {AuroraMeter.LiveView, {:subscribe, assign: :current_org, topics: [:credits]}}
+        ] do
+        live "/billing", Pro.BillingLive, :index
+      end
+    end
+  end
+
   ## Authentication routes
 
   scope "/", AuroraMeterExampleAiWeb do

@@ -8,9 +8,9 @@ defined here, and every later example uses these words in exactly this sense.
 You run a shop. Customers come in and take things. At some point you need to
 answer three questions, and they are genuinely different questions:
 
-1. **How much did this customer take?** — *metering*
-2. **Are they allowed to take this?** — *entitlements*
-3. **Who pays, and how much?** — *billing*
+1. **How much did this customer take?**: *metering*
+2. **Are they allowed to take this?**: *entitlements*
+3. **Who pays, and how much?**: *billing*
 
 Most billing libraries answer 3 and leave you to invent 1 and 2. Aurora Meter
 answers all three, and keeps them separate so you can use only the parts you
@@ -20,7 +20,7 @@ need.
 
 Everything in the library is about these four things.
 
-### Tenant — *who*
+### Tenant: *who*
 
 The customer being metered. Usually an organisation or an account, not a
 person: five people in one company share one allowance.
@@ -48,14 +48,14 @@ config :aurora_meter, tenant: MyApp.MeterTenant
 **The key must be stable.** If it changes, that customer looks like a brand new
 customer with a fresh, empty allowance. Use the database id, never the name.
 
-### Feature — *what*
+### Feature: *what*
 
 The thing being counted or gated, named by an atom: `:api_calls`,
 `:ai_generations`, `:seats`, `:export_to_pdf`.
 
 You choose these names. They are yours. The library never invents one.
 
-### Period — *when*
+### Period: *when*
 
 Allowances reset. A period is the window they reset in.
 
@@ -69,7 +69,7 @@ AuroraMeter.period(org)
 # %{start: ~U[2026-03-01 00:00:00Z], end: ~U[2026-04-01 00:00:00Z], source: :calendar}
 ```
 
-### Plan — *the rules*
+### Plan: *the rules*
 
 What a tenant is allowed, written once in a module and checked at compile time.
 
@@ -98,10 +98,10 @@ most common mistake.
 
 | You write | It means | `check/2` says | Money |
 |---|---|---|---|
-| `feature :pdf_export, true` | a switch that is on | `:ok` | — |
-| `feature :pdf_export, false` | a switch that is off | `{:error, :not_entitled}` | — |
-| `feature :seats, 5` | a number the plan carries | `:ok` | — |
-| `limit :runs, 50, :hard` | a wall | `:ok` until 50, then `{:error, :limit_exceeded}` | — |
+| `feature :pdf_export, true` | a switch that is on | `:ok` | none |
+| `feature :pdf_export, false` | a switch that is off | `{:error, :not_entitled}` | none |
+| `feature :seats, 5` | a number the plan carries | `:ok` | none |
+| `limit :runs, 50, :hard` | a wall | `:ok` until 50, then `{:error, :limit_exceeded}` | none |
 | `metered :runs, included: 1_000, unit_price: 2` | an allowance you may exceed | always `:ok` | billed after 1,000 |
 | `counter :runs` | just counting | always `:ok` | never |
 
@@ -120,8 +120,8 @@ The last one catches people out, so it has its own rule below.
 
 ### Why `counter` exists
 
-If your product is prepaid — customers buy credit up front and each request
-spends some — then nothing is billed at the end of the month, because the money
+If your product is prepaid (customers buy credit up front and each request
+spends some) then nothing is billed at the end of the month, because the money
 already left when the request ran.
 
 If you model that with `metered … included: 0`, every single request reads as
@@ -130,7 +130,7 @@ they are 6 over their limit and will be invoiced. Both halves of that sentence
 are false.
 
 `counter` measures and says nothing about money. Its `quota/2` reports
-`limit: nil`, `included: nil`, `percent: nil` — deliberately, because there is
+`limit: nil`, `included: nil`, `percent: nil`, deliberately, because there is
 no denominator. **Anything drawing a progress bar must treat `nil` as "no bar",
 never as `0`.** "0% of 0" is precisely the reading this kind exists to prevent.
 
@@ -166,7 +166,7 @@ AuroraMeter.check(org, :ai_generations)
 ```
 
 **Do not use `check/2` followed by `track/3` to enforce a hard limit.** Two
-requests arriving together both read 49 of 50, both pass, and both write — 51.
+requests arriving together both read 49 of 50, both pass, and both write, giving 51.
 Use `with_quota/4`, which reserves the count and the permission in one atomic
 step:
 
@@ -185,7 +185,7 @@ reservation is given back before the error is re-raised.
 
 There are exactly two ways money works here, and you can use either or both.
 
-### Shape one — subscription with overage
+### Shape one: subscription with overage
 
 The customer pays $20 a month, which includes 1,000 generations. The 1,001st
 still works and costs 2¢, invoiced at the end of the month by Stripe.
@@ -197,10 +197,10 @@ metered :ai_generations, included: 1_000, unit_price: 2
 The core counts. The **Pro** package reports the overage to Stripe. See
 [Allowance and overage](allowance-and-overage.md).
 
-### Shape two — prepaid credits
+### Shape two: prepaid credits
 
 The customer buys $25 of credit up front. Each request spends some. When the
-balance runs low, they top up — or their card is charged automatically.
+balance runs low, they top up, or their card is charged automatically.
 
 ```elixir
 AuroraMeter.Credits.debit(org, 1_500, "req:abc")   # spend $0.0015

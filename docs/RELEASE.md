@@ -1,6 +1,6 @@
 # Releasing Aurora Meter (free core)
 
-Manual, human-run steps — not automated (they touch credentials and the public
+Manual, human-run steps, not automated (they touch credentials and the public
 Hex registry).
 
 ## Pre-flight

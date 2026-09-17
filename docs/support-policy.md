@@ -139,11 +139,11 @@ upstream, so neither will receive further security patches.
 
 ## 6. Security
 
-Report a suspected vulnerability privately through
-<https://aurorameter.com/contact>, not through a public issue. A `SECURITY.md`
-with the disclosure process, the supported-version window and the response
-expectation is being added; this page will link to it rather than duplicate it,
-so that there is one description of the process and not two.
+Report a suspected vulnerability privately, not through a public issue.
+[`SECURITY.md`](../SECURITY.md) has the disclosure routes, the supported-version
+window for security fixes, what this package stores and what the host is
+responsible for. It is not duplicated here, so that there is one description of
+the process and not two.
 
 ## 7. Support
 

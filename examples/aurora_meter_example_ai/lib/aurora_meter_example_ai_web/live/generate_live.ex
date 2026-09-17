@@ -211,6 +211,18 @@ defmodule AuroraMeterExampleAiWeb.GenerateLive do
         <AuroraMeter.Components.credit_summary summary={@summary} />
       </div>
 
+      <%!-- Absent in the core profile, and absent rather than disabled.
+
+            The component has two definitions behind a COMPILE-TIME `if`, so
+            without Aurora Meter Pro there is no markup here at all and nothing
+            for a reader to click that would do nothing. A disabled button
+            labelled "Top up" is a payment surface that does not work, which is
+            the one thing a billing sample must never ship.
+
+            `test/pro_absent_test.exs` asserts the absence and the presence, in
+            both profiles, so neither half is taken on trust. --%>
+      <.top_up_affordance />
+
       <div id="spend-chart" class="mt-4">
         <AuroraMeter.Components.spend_chart points={@spend_points} label="Spend per day" />
       </div>

@@ -223,12 +223,202 @@ defmodule AuroraMeter.DocsClaimsTest do
                "it, or write \"not yet proven (phase NN)\":\n" <> Enum.join(problems, "\n")
     end
 
-    test "G05 at least one row is honest about not being proven yet" do
-      planned = Enum.filter(guarantee_rows(), &Regex.match?(@planned_proof, &1.proof))
+    test "G05 the not-yet-proven form is still recognised and still constrained" do
+      # This test used to require that at least one row said "not yet proven".
+      # That was a property of the tree on the day it was written (G10 said it)
+      # rather than an invariant, and closing `open-findings.md` X233 made the
+      # guard against the column flattering the code demand that the column
+      # under-claim somewhere. Both halves of what it was for survive: the form
+      # still has to parse, because the next unshipped guarantee will use it,
+      # and G07 below is what stops it being used by a guarantee that is proven.
+      planned = %{
+        id: "G99",
+        guarantee: "x",
+        conditions: "x",
+        voids: "x",
+        invariant: "I99",
+        proof: "not yet proven (phase 03)"
+      }
 
-      refute planned == [],
-             "no row of #{@guarantees} says \"not yet proven\". Either every V1 guarantee " <>
-               "has shipped, which it has not, or the column has started flattering the code"
+      assert proof_problem(planned, MapSet.new()) == nil,
+             "the not-yet-proven form no longer parses, so an unshipped guarantee has " <>
+               "nowhere honest to say so"
+
+      refute Regex.match?(@planned_proof, "proven later"),
+             "the not-yet-proven pattern matches free text, so it exempts anything"
+
+      # And every row on today's page resolves, which is the state X233 left.
+      known = MapSet.new(test_names(), &{&1.module, &1.full_name})
+
+      unresolved =
+        for row <- guarantee_rows(), problem = proof_problem(row, known), do: "  " <> problem
+
+      assert unresolved == [], Enum.join(unresolved, "\n")
+    end
+  end
+
+  @lib_glob "lib/**/*.ex"
+  @claims_fixture "test/support/claims_fixtures/docstring_only.exs"
+
+  # The doc-string half of the allow-list, keyed on the text of the permitted
+  # occurrence exactly as `@allowed` is. Empty is the right starting state: an
+  # entry is added only when a claim in a doc string is true for a written
+  # reason, and the test below fails an entry whose text has gone.
+  @allowed_docs [
+    {"lib/aurora_meter/exporter.ex",
+     "`:uncertain` is the only non-terminal state that cannot lose money",
+     "the sentence is about the outbox state machine, not about buffered counters: " <>
+       "it says which state the four rules err towards, and the reason is that an " <>
+       "uncertain item is retried or resolved by a person rather than dropped. It " <>
+       "withholds a promise rather than making one."},
+    {"lib/aurora_meter/credits.ex",
+     "returns every hold exactly once even when several were written in the same",
+     "a statement about a keyset cursor over rows, not about delivery. Ordering by " <>
+       "`(inserted_at, id)` is what makes paging unable to skip or repeat a row, and " <>
+       "`AuroraMeter.CreditsHistoryTest` is where it is proved."}
+  ]
+
+  describe "G06 the sweep reads lib/ doc strings" do
+    # `open-findings.md` X98. The sweep above reads `README.md` and `docs/`, and
+    # that is half the published surface: a `@moduledoc` renders on hexdocs
+    # exactly as a guide does, and a customer reading `AuroraMeter.Credits` on
+    # hex.pm cannot tell which of the two they are looking at. Two "exactly
+    # once" claims were found in Pro's doc strings during 02d, both legitimate,
+    # and the point of the row is that nothing was looking.
+    #
+    # Read as AST, never as text: a `#` comment is not a doc string, and a
+    # forbidden phrase quoted inside one is not a claim.
+    test "G06 no doc string in lib/ claims a bounded loss window" do
+      assert_no_doc_hits(@bounded_loss)
+    end
+
+    test "G06 no doc string in lib/ claims exactly-once delivery" do
+      assert_no_doc_hits(@exactly_once)
+    end
+
+    test "G06 no doc string in lib/ claims a global or globally serialized quota" do
+      assert_no_doc_hits(@global_quota)
+    end
+
+    test "G06 the doc-string sweep read the modules it was meant to read" do
+      strings = doc_strings()
+
+      assert length(strings) >= 100,
+             "the doc-string sweep found only #{length(strings)} doc strings under lib/. " <>
+               "An empty or shrunken selection is a failure, not a pass."
+
+      files = strings |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+
+      assert length(files) >= 30,
+             "only #{length(files)} files under lib/ carried a doc string"
+
+      assert "lib/aurora_meter/credits.ex" in files
+    end
+
+    test "G06 every doc-string exemption still exists and carries a reason" do
+      # The same three questions `@allowed` is asked: the text is still there,
+      # the reason is written, and the entry exempts something. An exemption
+      # that outlives its sentence is a standing hole.
+      absent =
+        for {path, snippet, _reason} <- @allowed_docs,
+            not (File.exists?(path) and String.contains?(File.read!(path), snippet)),
+            do: "  #{path}: #{inspect(snippet)}"
+
+      assert absent == [],
+             "doc-string exemptions that are no longer in the file:\n" <> Enum.join(absent, "\n")
+
+      unreasoned =
+        for {path, snippet, reason} <- @allowed_docs,
+            String.length(String.trim(reason)) < 40,
+            do: "  #{path}: #{inspect(snippet)}"
+
+      assert unreasoned == [],
+             "doc-string exemptions without a written reason:\n" <> Enum.join(unreasoned, "\n")
+
+      toothless =
+        for {path, snippet, _reason} <- @allowed_docs,
+            not Enum.any?(@forbidden, &String.contains?(String.downcase(snippet), &1)),
+            do: "  #{path}: #{inspect(snippet)}"
+
+      assert toothless == [],
+             "doc-string exemptions whose snippet carries no forbidden phrase, so they " <>
+               "exempt nothing and only hide the list's real size:\n" <>
+               Enum.join(toothless, "\n")
+    end
+
+    test "G06 a forbidden phrase in a comment is not a doc string" do
+      # The fixture defines one moduledoc and mentions the same phrase in a
+      # comment beside it. A grep finds both; the parser must find one.
+      strings = doc_strings_in(@claims_fixture)
+
+      assert Enum.any?(strings, fn {_path, _line, text} ->
+               String.contains?(text, "named only in the moduledoc")
+             end)
+
+      refute Enum.any?(strings, fn {_path, _line, text} ->
+               String.contains?(text, "named only in a comment")
+             end)
+    end
+  end
+
+  describe "G07 a guarantee is not allowed to stay pessimistic" do
+    # `open-findings.md` X233. G05 above catches a row that claims a proof it
+    # does not have. The opposite direction had nothing: `docs/guarantees.md`
+    # G10 read "not yet proven (phase 03)" while `docs/correctness.md` named
+    # fourteen tests for I06, phase 03 having landed months earlier. Under
+    # claiming is the safe direction and is still wrong, because the page a
+    # customer reads as the contract told them a shipped guarantee was unproven.
+    test "G07 no row says not yet proven while correctness.md names a test for its invariants" do
+      proven = invariants_with_tests()
+
+      wrong =
+        for row <- guarantee_rows(),
+            Regex.match?(@planned_proof, row.proof),
+            ids = invariant_ids(row),
+            ids != [],
+            Enum.all?(ids, &MapSet.member?(proven, &1)),
+            do: "  #{row.id} (#{Enum.join(ids, ", ")}) says #{inspect(row.proof)}"
+
+      assert wrong == [],
+             "#{@guarantees} rows that claim less than the suite proves. Every invariant " <>
+               "these rows name has at least one test in docs/correctness.md that exists, " <>
+               "so the Proven by cell must name one:\n" <> Enum.join(wrong, "\n")
+    end
+
+    test "G07 the invariant index it reads is not empty" do
+      proven = invariants_with_tests()
+
+      assert MapSet.size(proven) >= 10,
+             "docs/correctness.md names tests for only #{MapSet.size(proven)} invariants, " <>
+               "so the check above cannot fail"
+
+      assert MapSet.member?(proven, "I06")
+
+      rows = Enum.filter(guarantee_rows(), &(invariant_ids(&1) != []))
+
+      assert length(rows) >= 10,
+             "only #{length(rows)} guarantee rows name an invariant at all"
+    end
+
+    test "G07 a row that under-claims is reported" do
+      # The negative control: the same question, asked of a row built here.
+      proven = invariants_with_tests()
+
+      row = %{
+        id: "G99",
+        guarantee: "x",
+        conditions: "x",
+        voids: "x",
+        invariant: "I06",
+        proof: "not yet proven (phase 03)"
+      }
+
+      assert Regex.match?(@planned_proof, row.proof)
+      assert Enum.all?(invariant_ids(row), &MapSet.member?(proven, &1))
+
+      # and a row naming an invariant nothing proves is left alone
+      absent = %{row | invariant: "I99"}
+      refute Enum.all?(invariant_ids(absent), &MapSet.member?(proven, &1))
     end
   end
 
@@ -442,4 +632,106 @@ defmodule AuroraMeter.DocsClaimsTest do
 
   defp full_name(kind, nil, description), do: "#{kind} #{description}"
   defp full_name(kind, describe, description), do: "#{kind} #{describe} #{description}"
+
+  # -- G06: lib/ doc strings (open-findings.md X98) ---------------------------
+
+  defp assert_no_doc_hits(phrases) do
+    hits =
+      for {path, line, text} <- doc_strings(),
+          phrase <- phrases,
+          String.contains?(String.downcase(text), phrase),
+          not doc_allowed?(path, text),
+          do: {path, line, phrase}
+
+    assert hits == [],
+           "forbidden claims in doc strings under lib/. They render on hexdocs exactly as " <>
+             "the guides do, which is why X98 asked for this half of the sweep. Reword to " <>
+             "the matching row of #{@guarantees}, or add an allow-list entry to " <>
+             "test/aurora_meter/docs_claims_test.exs with a written reason:\n" <>
+             Enum.map_join(hits, "\n", fn {path, line, phrase} ->
+               "  #{path}:#{line}: #{inspect(phrase)}"
+             end)
+  end
+
+  defp doc_allowed?(path, text) do
+    Enum.any?(@allowed_docs, fn {allow_path, snippet, _reason} ->
+      allow_path == path and String.contains?(text, snippet)
+    end)
+  end
+
+  defp doc_strings do
+    @lib_glob |> Path.wildcard() |> Enum.sort() |> Enum.flat_map(&doc_strings_in/1)
+  end
+
+  # Every `@moduledoc`, `@doc`, `@typedoc` and `@shortdoc` string, from the AST.
+  # Reading the source as text would find the same words in a comment and in
+  # ordinary code, which is X84's trap and the reason the test-name parser above
+  # exists.
+  defp doc_strings_in(path) do
+    path
+    |> File.read!()
+    |> Code.string_to_quoted!(
+      literal_encoder: &{:ok, {:__block__, &2, [&1]}},
+      token_metadata: true,
+      unescape: false,
+      file: path
+    )
+    |> Macro.prewalk([], fn
+      {:@, _meta, [{attr, _, [argument]}]} = node, acc
+      when attr in [:moduledoc, :doc, :typedoc, :shortdoc] ->
+        {node, doc_binaries(path, argument) ++ acc}
+
+      node, acc ->
+        {node, acc}
+    end)
+    |> elem(1)
+    |> Enum.reverse()
+  end
+
+  defp doc_binaries(path, {:__block__, meta, [text]}) when is_binary(text),
+    do: [{path, meta[:line], text}]
+
+  defp doc_binaries(path, {:<<>>, _meta, parts}) do
+    for {:__block__, meta, [text]} <- parts, is_binary(text), do: {path, meta[:line], text}
+  end
+
+  defp doc_binaries(path, {:<>, _meta, arguments}),
+    do: Enum.flat_map(arguments, &doc_binaries(path, &1))
+
+  defp doc_binaries(_path, _other), do: []
+
+  # -- G07: a guarantee that under-claims (open-findings.md X233) -------------
+
+  @correctness "docs/correctness.md"
+  @correctness_heading ~r/^## (I\d\d) /
+  @correctness_test ~r/^- `([^`]+)` \/ `(.*)`$/
+
+  # The invariant ids a guarantee row names, from its Invariant cell. A cell may
+  # carry prose beside the ids ("I04 (by contrast: ...)"), so the ids are
+  # extracted rather than the cell split.
+  defp invariant_ids(row) do
+    ~r/\bI\d\d\b/ |> Regex.scan(row.invariant) |> Enum.map(&hd/1) |> Enum.uniq()
+  end
+
+  # Invariants whose section in docs/correctness.md names at least one test that
+  # is not PLANNED. A PLANNED bullet is a promise, and a guarantee row is
+  # entitled to say "not yet proven" while its tests are promises.
+  defp invariants_with_tests do
+    @correctness
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.reduce({nil, MapSet.new()}, fn line, {current, found} ->
+      cond do
+        match = Regex.run(@correctness_heading, line) ->
+          {Enum.at(match, 1), found}
+
+        current != nil and Regex.match?(@correctness_test, line) ->
+          {current, MapSet.put(found, current)}
+
+        true ->
+          {current, found}
+      end
+    end)
+    |> elem(1)
+  end
 end

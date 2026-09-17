@@ -35,7 +35,7 @@ same way:
 
 A `:counter` has nothing to be a percentage of, so `limit`, `included` and
 `percent` are all `nil` on purpose. Turn that `nil` into a zero and your page
-tells a paying customer they have used "0% of 0" and are presumably out — which
+tells a paying customer they have used "0% of 0" and are presumably out, which
 is exactly the reading this kind exists to prevent.
 
 **`percent` never exceeds 100, so it cannot tell you about overage.** It is
@@ -71,7 +71,7 @@ rules in it:
 
 It draws a counter as a bare count with no bar, shows a metered feature's
 overage as a figure rather than pretending the bar can express it, and inherits
-your colours through `currentColor` — there is no stylesheet to import and no
+your colours through `currentColor`: there is no stylesheet to import and no
 JavaScript.
 
 ## 2. Live, without polling
@@ -99,7 +99,7 @@ end
 
 Two things worth copying from that.
 
-**Subscribe only when `connected?/1`.** A LiveView mounts twice — once for the
+**Subscribe only when `connected?/1`.** A LiveView mounts twice: once for the
 static render, once for the socket. Subscribing in the first gives you a
 subscription belonging to a process that is about to die.
 
@@ -127,7 +127,7 @@ def handle_info({:aurora_meter, :low_balance, %{available: available, threshold:
 end
 ```
 
-`available` is what the customer can still spend — `balance` minus anything
+`available` is what the customer can still spend: `balance` minus anything
 currently held. Show `available`; show `held` separately if you show it at all
 ("$0.30 reserved for work in progress"), because a customer who sees only
 `balance` will wonder where the difference went.
@@ -154,7 +154,7 @@ AuroraMeter.Credits.spend_history(org, from: ~D[2026-01-01], to: ~D[2026-03-31],
 
 `spent` and `granted` are positive magnitudes; `net` is the balance delta.
 `balance_after` is the balance at the last entry in the bucket, and `nil` for a
-bucket with no entries — another `nil` to render rather than zero.
+bucket with no entries, another `nil` to render rather than zero.
 
 Refunds count against `granted`, not as spend, so `granted` can go negative in a
 window whose refunds exceeded its top-ups. That is correct and your chart should
@@ -182,8 +182,8 @@ end
 <AuroraMeter.Pro.Components.usage_dashboard tenant={@org} data={@dashboard} money={true} />
 ```
 
-That renders the money section first when the tenant has a ledger — balance,
-spend this period, runway, spend chart — then quota cards, daily charts and
+That renders the money section first when the tenant has a ledger (balance,
+spend this period, runway, spend chart), then quota cards, daily charts and
 monthly history. A product with no credit ledger simply gets no money section;
 you do not need to branch.
 
@@ -273,10 +273,10 @@ you want them. See [Telemetry](../telemetry.md).
 
 Two of those are worth alerting on rather than graphing:
 
-- **`[:aurora_meter, :flush, :error]`** — the database write failed and the
+- **`[:aurora_meter, :flush, :error]`**: the database write failed and the
   deltas are still pending. One is noise; a stream of them means usage is piling
   up in memory and will be lost if the node restarts.
-- **`[:aurora_meter, :credits, :settle]` with `overrun: true`** — a job cost more
+- **`[:aurora_meter, :credits, :settle]` with `overrun: true`**: a job cost more
   than it reserved. A few are normal. Many means your estimates are wrong and
   customers are going negative.
 
@@ -325,5 +325,5 @@ seconds for the timer. For money, `fund!/3` puts credit on an account and
 
 That is every surface: gate it, count it, charge for it, and show it. If you
 came here from one of the product examples, the last thing worth reading is
-[Testing](../testing.md) — most of the mistakes in this library's own history
+[Testing](../testing.md): most of the mistakes in this library's own history
 were tests that could not fail.

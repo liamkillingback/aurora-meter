@@ -150,7 +150,17 @@ defmodule AuroraMeterExampleAiWeb.OpsLive do
       </p>
       <div id="sources">
         <.figure label="tokens counter (projected)" value={@sources.tokens_counter} />
-        <.figure label="tokens staged in the outbox" value={@sources.tokens_outbox_quantity} />
+        <.figure
+          label="tokens staged, net of corrections"
+          value={@sources.tokens_outbox_quantity}
+          hint="this is the figure to compare with the counter"
+        />
+        <.figure
+          label="tokens staged, gross"
+          value={@sources.tokens_outbox_gross}
+          hint="a correction's quantity is a positive magnitude, so the gross sum counts it as an increase"
+        />
+        <.figure label="of which corrections" value={@sources.tokens_outbox_corrections} />
         <.figure label="token outbox rows" value={@sources.tokens_outbox_rows} />
         <.figure label="images counter (buffered)" value={@sources.images_counter} />
         <.figure

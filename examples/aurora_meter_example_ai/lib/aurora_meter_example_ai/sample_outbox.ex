@@ -102,6 +102,20 @@ defmodule AuroraMeterExampleAi.SampleOutbox do
       "tenant" => event.tenant_key,
       "feature" => to_string(event.feature),
       "quantity" => event.quantity,
+      # `kind` is `"usage"` or `"correction"`, and it is here because without
+      # it the quantity above is unreadable.
+      #
+      # A correction's `quantity` is the **magnitude of a reduction**, stored
+      # as a positive integer exactly as a usage event's is. Two rows reading
+      # `quantity: 4` therefore mean "four more" and "four fewer", and nothing
+      # on the row said which. Summing the column over-counted every
+      # correction twice: once for the original and once for the credit.
+      #
+      # Found by the real-provider proof run, which reconciled 587 staged
+      # against 579 at Stripe and was right both times. See
+      # `AuroraMeterExampleAi.Ops.net_quantity/2`.
+      "kind" => to_string(event.kind),
+      "original_event_id" => event.original_event_id,
       "occurred_at" => event.occurred_at && DateTime.to_iso8601(event.occurred_at),
       "dimensions" => event.dimensions,
       "plan_id" => event.plan_id,

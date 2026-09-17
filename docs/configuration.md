@@ -15,34 +15,34 @@ treated as Aurora Meter keys.
 
 | Key | Type | Required | Default |
 |---|---|---|---|
-| `:repo` | Ecto repo module | ✅ | — |
-| `:pubsub` | `Phoenix.PubSub` server name | ✅ | — |
-| `:plans` | module using `AuroraMeter.Plans` | ✅ | — |
-| `:tenant` | `AuroraMeter.Tenant` impl | — | `AuroraMeter.Tenant.Default` |
-| `:default_plan` | atom | — | `:free` |
-| `:storage` | `AuroraMeter.Storage` impl | — | `AuroraMeter.Storage.Ecto` |
-| `:provider` | `AuroraMeter.Billing.Provider` impl | — | `AuroraMeter.Billing.Noop` |
-| `:period_source` | `AuroraMeter.Period` impl | — | `AuroraMeter.Period.Calendar` (see [periods](periods.md) for the contract) |
-| `:clock` | `AuroraMeter.Clock` impl | — | `AuroraMeter.Clock.System`, the only value supported in production |
-| `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise` | — | `:warn` in 0.5.x, `:deny` from 1.0. What the entitlement functions do with a feature the tenant's plan does not declare (see below) |
-| `:plan_version_conflict` | `:raise \| :warn` | — | `:warn` in 0.5.x, `:raise` from 1.0. What `AuroraMeter.Plans.register!/0` does when a compiled plan version's commercial content differs from the snapshot registered for it (see below) |
-| `:durable_features` | list of atoms | — | `[]`. **Deprecated**: the legacy durable-track list, see [metering](metering.md) |
-| `:feature_sources` | map of atom to `:buffered \| :events` | — | `%{}`. Where each feature's commercial quantity comes from; anything not listed is `:buffered` (see below) |
-| `:events_outbox` | `AuroraMeter.Events.Outbox` impl or `nil` | — | `nil`. Called inside the transaction that records an event, so an export intent commits with the fact |
-| `:events_future_tolerance` | seconds | — | `300`. How far ahead of the node clock an `occurred_at` may be before `AuroraMeter.record/4` refuses it |
-| `:record_timeout` | ms | — | `15_000`. How long one durable write may take before it is `{:error, {:unavailable, :timeout}}` |
-| `:record_max_concurrency` | positive integer | — | `64`. How many callers may hold an open record transaction at once |
-| `:flush_interval` | ms | — | `5_000` |
-| `:broadcast_interval` | ms | — | `1_000` |
+| `:repo` | Ecto repo module | ✅ | n/a |
+| `:pubsub` | `Phoenix.PubSub` server name | ✅ | n/a |
+| `:plans` | module using `AuroraMeter.Plans` | ✅ | n/a |
+| `:tenant` | `AuroraMeter.Tenant` impl | no | `AuroraMeter.Tenant.Default` |
+| `:default_plan` | atom | no | `:free` |
+| `:storage` | `AuroraMeter.Storage` impl | no | `AuroraMeter.Storage.Ecto` |
+| `:provider` | `AuroraMeter.Billing.Provider` impl | no | `AuroraMeter.Billing.Noop` |
+| `:period_source` | `AuroraMeter.Period` impl | no | `AuroraMeter.Period.Calendar` (see [periods](periods.md) for the contract) |
+| `:clock` | `AuroraMeter.Clock` impl | no | `AuroraMeter.Clock.System`, the only value supported in production |
+| `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise` | no | `:warn` in 0.5.x, `:deny` from 1.0. What the entitlement functions do with a feature the tenant's plan does not declare (see below) |
+| `:plan_version_conflict` | `:raise \| :warn` | no | `:warn` in 0.5.x, `:raise` from 1.0. What `AuroraMeter.Plans.register!/0` does when a compiled plan version's commercial content differs from the snapshot registered for it (see below) |
+| `:durable_features` | list of atoms | no | `[]`. **Deprecated**: the legacy durable-track list, see [metering](metering.md) |
+| `:feature_sources` | map of atom to `:buffered \| :events` | no | `%{}`. Where each feature's commercial quantity comes from; anything not listed is `:buffered` (see below) |
+| `:events_outbox` | `AuroraMeter.Events.Outbox` impl or `nil` | no | `nil`. Called inside the transaction that records an event, so an export intent commits with the fact |
+| `:events_future_tolerance` | seconds | no | `300`. How far ahead of the node clock an `occurred_at` may be before `AuroraMeter.record/4` refuses it |
+| `:record_timeout` | ms | no | `15_000`. How long one durable write may take before it is `{:error, {:unavailable, :timeout}}` |
+| `:record_max_concurrency` | positive integer | no | `64`. How many callers may hold an open record transaction at once |
+| `:flush_interval` | ms | no | `5_000` |
+| `:broadcast_interval` | ms | no | `1_000` |
 | `:metrics_interval` | ms | | `10_000`. How often the store and cluster gauges are sampled; `0` switches the internal timers off and you drive `AuroraMeter.Telemetry.emit_gauges/0` yourself ([telemetry](telemetry.md)) |
 | `:metrics_feature_label` | boolean | | `false`. Whether `AuroraMeter.Telemetry.Metrics.metrics/1` tags on `:feature`. One time series per feature per metric, so it is opt-in |
 | `:metrics_scan_ceiling` | rows | | `50_000`. The largest counters table the cluster lag gauge scans for `unreconciled_keys`; above it the measurement is omitted rather than reported as zero |
-| `:history` | boolean | — | `true` — keep UTC day buckets for `AuroraMeter.history/3` |
-| `:subscription_cache_ttl` | ms | — | `5_000` — how long a plan lookup is cached; `0` disables |
-| `:cluster_sync` | boolean | — | `true` — exchange deltas and flushed totals between nodes so counters are cluster-wide ([clustering](clustering.md)) |
-| `:credits_currency` | string | — | `"usd"` — stamped on new credit balance rows ([credits](credits.md)) |
-| `:credits_overdraft_tolerance` | micro-dollars | — | `0` — how far below zero a hold or debit may take the available balance |
-| `:credits_low_balance_threshold` | micro-dollars or `nil` | — | `nil` — fire the low-balance event when the available balance drops below it; a tenant's own threshold overrides it |
+| `:history` | boolean | no | `true`: keep UTC day buckets for `AuroraMeter.history/3` |
+| `:subscription_cache_ttl` | ms | no | `5_000`: how long a plan lookup is cached; `0` disables |
+| `:cluster_sync` | boolean | no | `true`: exchange deltas and flushed totals between nodes so counters are cluster-wide ([clustering](clustering.md)) |
+| `:credits_currency` | string | no | `"usd"`: stamped on new credit balance rows ([credits](credits.md)) |
+| `:credits_overdraft_tolerance` | micro-dollars | no | `0`: how far below zero a hold or debit may take the available balance |
+| `:credits_low_balance_threshold` | micro-dollars or `nil` | no | `nil`: fire the low-balance event when the available balance drops below it; a tenant's own threshold overrides it |
 | `:credits_low_balance_handler` | `fun/1` or `nil` |  | `nil`. Called with `%{tenant_key, available, spendable, threshold, crossing_id}` after a low-balance crossing commits, in a supervised task, once per crossing |
 | `:credits_low_balance_handler_timeout` | positive integer |  | `5_000`. Milliseconds one handler call may take before it is killed. The caller never waits for it, so the write is neither failed nor delayed |
 | `:live_view_tenant` | `{module, function}` or `nil` | | `nil`. How `on_mount {AuroraMeter.LiveView, :subscribe}` finds the tenant, called with `(session, socket)`. There is no default resolver and the bare form raises without this key: `AuroraMeter.Tenant.Default` stringifies what it is given, so it maps `nil` to `""` and a fallback would put every unresolved tenant on one set of counters ([Phoenix](phoenix.md)) |

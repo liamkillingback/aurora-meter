@@ -23,6 +23,47 @@ end
 config :aurora_meter_example_ai, AuroraMeterExampleAiWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# The Pro profile, opt in and absent by default.
+#
+# `AURORA_SAMPLE_PRO=1` is the same flag `mix.exs` reads to decide whether
+# `aurora_meter_pro` is in the dependency tree at all, and the two have to
+# agree: configuring Pro without the dependency would name modules that do not
+# exist, and resolving the dependency without configuring it would leave a
+# commercial package installed and inert.
+#
+# A reader who has never set the flag never evaluates `config/pro.exs`, never
+# needs a Stripe key, and gets exactly the application build unit 09c
+# documents.
+#
+# `import_config "pro.exs"` is what this wants to be and it is **not allowed
+# here**: `config/runtime.exs` is read with imports disabled, because a runtime
+# configuration file is often copied to an external system without the rest of
+# `config/`, and Elixir refuses rather than producing a file that works on this
+# machine and not on that one. The refusal is
+#
+#     ** (RuntimeError) import_config/1 is not enabled for this configuration file
+#
+# and it arrives at the first `mix` task that starts the application, not at
+# compile time, which is why it is worth a comment rather than a silent
+# workaround. `Config.Reader.read!/2` is the supported way to read a second
+# file, and the two loops below apply what it returns.
+# `config_env() != :test` is the other half of the arrangement, and it is a
+# decision rather than a convenience. `config/pro.exs` refuses to load without
+# a real Stripe test-mode key, which is right for a development or production
+# boot: an application that silently fell back to a fake would look like it was
+# billing and would not be. A suite is the one place where the opposite holds,
+# because a suite that needed a credential could not run in CI at all.
+# `config/test.exs` imports `config/pro_test.exs` instead, which wires Aurora
+# Meter Pro's own fakes, and that file says so at the top.
+if System.get_env("AURORA_SAMPLE_PRO") == "1" and config_env() != :test do
+  __DIR__
+  |> Path.join("pro.exs")
+  |> Config.Reader.read!(env: config_env())
+  |> Enum.each(fn {app, keyword} ->
+    Enum.each(keyword, fn {key, value} -> config(app, key, value) end)
+  end)
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :aurora_meter_example_ai, AuroraMeterExampleAiWeb.Endpoint,

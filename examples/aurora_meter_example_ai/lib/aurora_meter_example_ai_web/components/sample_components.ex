@@ -18,6 +18,7 @@ defmodule AuroraMeterExampleAiWeb.SampleComponents do
       <.link navigate="/history" class="link">History</.link>
       <.link :if={owner?(@current_scope)} navigate="/ops" class="link">Operations</.link>
       <.link :if={owner?(@current_scope)} navigate="/dev/tools" class="link">Developer tools</.link>
+      <.billing_link current_scope={@current_scope} />
       <span class="ml-auto opacity-60">
         {@current_scope.user.email} &middot; {@current_scope.org.slug}
       </span>
@@ -57,6 +58,68 @@ defmodule AuroraMeterExampleAiWeb.SampleComponents do
   @spec money(integer() | nil) :: String.t()
   def money(nil), do: "-"
   def money(micros) when is_integer(micros), do: AuroraMeter.Credits.Money.format_compact(micros)
+
+  # ---------------------------------------------------------------------------
+  # The two profile-dependent affordances
+  # ---------------------------------------------------------------------------
+  #
+  # Both are written as a **compile-time** `if` around two whole definitions
+  # rather than as a runtime `:if` inside one. Three reasons, and the third is
+  # the one that decided it:
+  #
+  #   1. the core profile compiles an empty component, so there is no branch to
+  #      take on every render;
+  #   2. the absence is structural. A reader grepping this file for "billing"
+  #      in a core-profile checkout finds the explanation and no markup;
+  #   3. `AuroraMeterExampleAi.Pro.available?/0` is a compile-time constant, and
+  #      Elixir's type checker correctly reports a runtime `:if` on a constant
+  #      as a branch that can never succeed. Writing the guard where it belongs
+  #      removes the warning instead of silencing it.
+  #
+  # In the core profile these render nothing at all. Not a disabled button, not
+  # a greyed link, not a note about what you would get if you paid: a disabled
+  # control labelled "Billing" is a payment surface that does not work, and
+  # this sample does not ship one.
+
+  attr :current_scope, :map, required: true
+
+  if AuroraMeterExampleAi.Pro.available?() do
+    def billing_link(assigns) do
+      ~H"""
+      <.link :if={owner?(@current_scope)} navigate="/billing" class="link">Billing</.link>
+      """
+    end
+  else
+    def billing_link(assigns) do
+      ~H""
+    end
+  end
+
+  @doc """
+  The top-up affordance on `/generate`, or nothing at all.
+
+  It says where the money goes and when the credit arrives, because both are
+  true and a reader who does not know the second one will refresh the page
+  waiting for a figure that moves on a webhook.
+  """
+  attr :rest, :global
+
+  if AuroraMeterExampleAi.Pro.available?() do
+    def top_up_affordance(assigns) do
+      ~H"""
+      <p id="top-up-affordance" class="mt-2 text-sm" {@rest}>
+        <.link navigate="/billing" class="link">Top up at Stripe</.link>
+        <span class="opacity-60">
+          (test mode; credit appears when the webhook lands, not when you come back)
+        </span>
+      </p>
+      """
+    end
+  else
+    def top_up_affordance(assigns) do
+      ~H""
+    end
+  end
 
   defp owner?(%{user: %{role: "owner"}}), do: true
   defp owner?(_scope), do: false

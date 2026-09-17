@@ -241,9 +241,10 @@ defmodule AuroraMeter.Credits.LotMigration do
       iex> AuroraMeter.Credits.LotMigration.checkpoint_name("org_42")
       "lot_migration:org_42"
 
-      iex> AuroraMeter.Credits.LotMigration.checkpoint_name("ops@example.com")
-      "lot_migration:sha256-" <>
-      ...>   ("ops@example.com" |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower))
+      iex> digest = :sha256 |> :crypto.hash("ops@example.com") |> Base.encode16(case: :lower)
+      iex> AuroraMeter.Credits.LotMigration.checkpoint_name("ops@example.com") ==
+      ...>   "lot_migration:sha256-" <> digest
+      true
 
   """
   @spec checkpoint_name(String.t()) :: String.t()

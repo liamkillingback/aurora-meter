@@ -1,0 +1,152 @@
+# 10a: the dash scan, before and after
+
+`open-findings.md` X88. Both columns come from **one** detector
+(`tmp/v1/10a_dashcount.py`) run twice: once over a `git archive` of each
+package's HEAD, and once over the working tree this unit leaves. A sweep whose
+before and after come from two versions of one detector measures the detector,
+so the before tree is materialised rather than remembered.
+
+A second, independent detector agrees with the after column: the in-suite guard
+(`AuroraMeter.HouseStyleTest` and `AuroraMeter.Pro.HouseStyleTest`) reads the
+Elixir **AST** rather than the file text, and its run is in `10a-doc-test.log`.
+The two disagreed once, and the disagreement is recorded in `10a-report.md`
+section 4: the Python detector measured indentation against the file while the
+AST detector measured it against the dedented heredoc, so one dash in a doc
+string's list item was classified as code by the first and prose by the second.
+The AST detector was right, the Python one was corrected, and both columns here
+are from the corrected version.
+
+Classification, and it is the whole point of the row: a dash inside a fenced
+block, an inline code span, a URL or a `#` comment is not prose. X88 says so.
+
+TOTAL before: 642   after: 348   closed: 294
+SHIPPED AND RENDERED SURFACE (README, NOTICE, docs/ minus history, lib/ copy)
+  before: 299   after: 0   closed: 299
+
+### Before (git archive of each package's HEAD)
+
+| package | surface | copy | code, URL or fence | total |
+|---|---|---|---|---|
+| core | docs/ (renders on hexdocs) | 135 | 2 | 137 |
+| core | repository file | 94 | 6 | 100 |
+| core | lib/ (doc strings render on hexdocs; some strings reach a user) | 76 | 21 | 97 |
+| core | history (not swept) | 49 | 2 | 51 |
+| core | CHANGELOG (ships in the tarball; released entries are history) | 40 | 0 | 40 |
+| core | test/ | 2 | 8 | 10 |
+| core | README (ships in the Hex tarball) | 8 | 1 | 9 |
+| core | other | 0 | 3 | 3 |
+| core | examples/ | 1 | 1 | 2 |
+| core | priv/ | 0 | 1 | 1 |
+| pro | lib/ (doc strings render on hexdocs; some strings reach a user) | 34 | 34 | 68 |
+| pro | CHANGELOG (ships in the tarball; released entries are history) | 46 | 0 | 46 |
+| pro | docs/ (renders on hexdocs) | 29 | 1 | 30 |
+| pro | history (not swept) | 22 | 0 | 22 |
+| pro | README (ships in the Hex tarball) | 17 | 1 | 18 |
+| pro | repository file | 6 | 0 | 6 |
+| pro | test/ | 0 | 2 | 2 |
+| **both** | **everything** | **559** | **83** | **642** |
+
+### After (the working tree this unit leaves)
+
+| package | surface | copy | code, URL or fence | total |
+|---|---|---|---|---|
+| core | repository file | 88 | 6 | 94 |
+| core | history (not swept) | 49 | 2 | 51 |
+| core | CHANGELOG (ships in the tarball; released entries are history) | 40 | 0 | 40 |
+| core | test/ | 8 | 14 | 22 |
+| core | lib/ (doc strings render on hexdocs; some strings reach a user) | 0 | 20 | 20 |
+| core | other | 0 | 3 | 3 |
+| core | priv/ | 0 | 1 | 1 |
+| core | examples/ | 0 | 1 | 1 |
+| pro | CHANGELOG (ships in the tarball; released entries are history) | 46 | 0 | 46 |
+| pro | lib/ (doc strings render on hexdocs; some strings reach a user) | 0 | 34 | 34 |
+| pro | history (not swept) | 22 | 0 | 22 |
+| pro | test/ | 6 | 8 | 14 |
+| **both** | **everything** | **259** | **89** | **348** |
+
+### What is left, by file
+
+  core  plan.md                                                        prose                  86
+  pro   CHANGELOG.md                                                   prose                  46
+  core  CHANGELOG.md                                                   prose                  40
+  pro   lib/aurora_meter/pro/credits.ex                                comment                19
+  core  docs/adr/0006-counter-feature-kind.md                          prose                  9
+  pro   docs/adr/0003-request-audit-log.md                             prose                  7
+  core  plan.md                                                        fenced code            6
+  core  lib/aurora_meter/credits/ledger.ex                             comment                6
+  core  docs/evidence/phase-03/bench.md                                prose                  5
+  core  docs/launch/gtm.md                                             prose                  4
+  core  docs/launch/gtm.md                                             quotation              4
+  core  lib/aurora_meter/entitlements.ex                               comment                4
+  core  lib/aurora_meter/credits/series.ex                             comment                4
+  pro   lib/aurora_meter/pro/migration.ex                              comment                4
+  core  mix.exs                                                        comment                3
+  core  docs/adr/0005-prepaid-credit-ledger.md                         prose                  3
+  core  docs/adr/0001-resolved-decisions.md                            prose                  3
+  core  docs/evidence/phase-14/gate.txt                                code or string literal 3
+  pro   docs/adr/0002-prepaid-top-ups.md                               prose                  3
+  core  plan.md                                                        quotation              2
+  core  docs/adr/0003-buffered-vs-durable-and-period-seam.md           prose                  2
+  core  docs/evidence/phase-06/gate.txt                                code or string literal 2
+  core  docs/evidence/phase-16/gate.txt                                code or string literal 2
+  core  docs/evidence/phase-03/gate.txt                                code or string literal 2
+  core  docs/evidence/v1/phase-09/09b-components-liveview.md           code span or URL       2
+  core  docs/evidence/phase-00/gate.txt                                code or string literal 2
+  core  lib/aurora_meter/credits.ex                                    comment                2
+  core  lib/aurora_meter/credits/money.ex                              comment                2
+  core  test/aurora_meter/house_style_test.exs                         code or string literal 2
+  core  test/aurora_meter/credits_test.exs                             comment                2
+  core  test/aurora_meter/credits_concurrency_test.exs                 comment                2
+  core  test/support/style_fixtures/dashes.md                          prose                  2
+  core  test/support/style_fixtures/dashes.md                          code span or URL       2
+  pro   docs/evidence/v1/phase-01/flake.md                             prose                  2
+  pro   docs/evidence/v1/phase-01/i13.md                               prose                  2
+  pro   lib/aurora_meter/pro/subscriptions.ex                          comment                2
+  pro   lib/aurora_meter/pro/webhook.ex                                comment                2
+  pro   lib/aurora_meter/pro/credits.ex                                doc string code        2
+  pro   lib/aurora_meter/pro/credits/auto_top_up_worker.ex             comment                2
+  pro   test/aurora_meter/pro/house_style_test.exs                     code or string literal 2
+  pro   test/aurora_meter/pro/credits_test.exs                         comment                2
+  pro   test/support/style_fixtures/dashes.md                          prose                  2
+  pro   test/support/style_fixtures/dashes.md                          code span or URL       2
+  core  priv/test_repo/migrations/20260711000001_add_aurora_meter.exs  comment                1
+  core  docs/adr/0002-ets-counter-substrate.md                         prose                  1
+  core  docs/adr/0004-cluster-wide-counters.md                         prose                  1
+  core  docs/evidence/phase-05/gate.txt                                code or string literal 1
+  core  docs/evidence/phase-02/gate.txt                                code or string literal 1
+  core  docs/evidence/phase-07/gate.txt                                code or string literal 1
+  core  docs/evidence/phase-04/gate.txt                                code or string literal 1
+  core  docs/evidence/phase-15/gate.txt                                code or string literal 1
+  core  docs/evidence/phase-01/gate.txt                                code or string literal 1
+  core  demo/mix.exs                                                   comment                1
+  core  lib/aurora_meter/migration.ex                                  comment                1
+  core  lib/aurora_meter/counter.ex                                    comment                1
+  core  test/mix/tasks/install_test.exs                                comment                1
+  core  test/aurora_meter/credits_config_test.exs                      comment                1
+  core  test/aurora_meter/credits_series_test.exs                      comment                1
+  core  test/aurora_meter/credits_series_test.exs                      code or string literal 1
+  core  test/aurora_meter/config_test.exs                              comment                1
+  core  test/aurora_meter/examples_test.exs                            doc string             1
+  core  test/support/style_fixtures/dashes.exs                         doc string             1
+  core  test/support/style_fixtures/dashes.exs                         doc string code span   1
+  core  test/support/style_fixtures/dashes.exs                         doc string code        1
+  core  test/support/style_fixtures/dashes.exs                         comment                1
+  core  test/support/style_fixtures/dashes.exs                         code or string literal 1
+  core  test/support/style_fixtures/dashes.md                          fenced code            1
+  pro   docs/adr/0001-pro-scope.md                                     prose                  1
+  pro   docs/evidence/phase-12/gate.txt                                code or string literal 1
+  pro   docs/evidence/phase-11/gate.txt                                code or string literal 1
+  pro   docs/evidence/phase-10/gate.txt                                code or string literal 1
+  pro   docs/evidence/v1/phase-01/flake.md                             quotation              1
+  pro   docs/evidence/phase-13/gate.txt                                code or string literal 1
+  pro   docs/evidence/phase-08/gate.txt                                code or string literal 1
+  pro   docs/evidence/phase-09/gate.txt                                code or string literal 1
+  pro   lib/aurora_meter/pro/webhook.ex                                doc string code        1
+  pro   lib/aurora_meter/pro/dashboard.ex                              comment                1
+  pro   lib/aurora_meter/pro/schema/audit_event.ex                     comment                1
+  pro   test/support/style_fixtures/dashes.exs                         doc string             1
+  pro   test/support/style_fixtures/dashes.exs                         doc string code span   1
+  pro   test/support/style_fixtures/dashes.exs                         doc string code        1
+  pro   test/support/style_fixtures/dashes.exs                         comment                1
+  pro   test/support/style_fixtures/dashes.exs                         code or string literal 1
+  pro   test/support/style_fixtures/dashes.md                          fenced code            1

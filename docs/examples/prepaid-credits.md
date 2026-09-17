@@ -1,7 +1,7 @@
 # Example: pay-as-you-go on prepaid credit
 
 **The product.** Parsely is a document-parsing API. There is no monthly fee.
-Customers buy credit — $25 at a time — and each document spends some of it.
+Customers buy credit, $25 at a time, and each document spends some of it.
 A small PDF costs a fraction of a cent; a 900-page contract costs several
 dollars. New accounts get $5 free, which expires after 30 days.
 
@@ -30,7 +30,7 @@ That is not laziness. **The money is in the ledger, not in the plan.** A
 customer with credit may parse as much as they like; a customer without credit
 is stopped by the balance, not by a quota. Modelling these as
 `metered … included: 0` would make your dashboard announce that every single
-request is overage awaiting an invoice, which is false in both halves — see
+request is overage awaiting an invoice, which is false in both halves. See
 ["Why `counter` exists"](concepts.md#why-counter-exists).
 
 ## 2. Money is micro-dollars
@@ -52,7 +52,7 @@ Sub-cent amounts are the whole reason for the unit. Parsely charges $0.0015 per
 page; in cents that rounds to zero, and a million pages would be free.
 
 Which is also why `format/2` needs care: its default precision is 2, so a
-per-page price rendered with it reads `"$0.00"` — the very misreading the unit
+per-page price rendered with it reads `"$0.00"`, the very misreading the unit
 exists to prevent. Use `format_compact/1` for unit prices and `format/2` for
 balances.
 
@@ -72,10 +72,10 @@ Credits.grant(org, Money.from_cents(2_500), reference: "stripe:pi_3abc")
 This matters more than any other line in this guide. Stripe delivers each event
 at least once and retries for days. Without a stable reference, one $25 payment
 funds an account $50, or $75. Key it on something Stripe gives you and will
-repeat — the PaymentIntent id — never on a timestamp or a random value.
+repeat (the PaymentIntent id), never on a timestamp or a random value.
 
-When you need to know which of the two happened — to email a receipt exactly
-once, say — ask for the status:
+When you need to know which of the two happened (to email a receipt exactly
+once, say), ask for the status:
 
 ```elixir
 Credits.grant_with_status(org, amount, reference: "stripe:pi_3abc")
@@ -101,7 +101,7 @@ Credits.debit(org, 1_500, "req:#{request_id}")
 ### When you do not
 
 This is the normal case for real work. You know a document is about 200 pages,
-so it will cost about $0.30 — but you find out the true page count only after
+so it will cost about $0.30, but you find out the true page count only after
 the parser has run.
 
 Charging afterwards lets two large jobs start against one small balance and
@@ -161,7 +161,7 @@ the failure paths already right.
 
 ## 5. Calling it from inside your own transaction
 
-Parsely records the parsed text and settles the charge together — either both
+Parsely records the parsed text and settles the charge together, so either both
 land or neither does:
 
 ```elixir
@@ -185,13 +185,13 @@ would take your own writes down with it.
 > **If you write a test for this, do not use a sandboxed `DataCase`.** The Ecto
 > SQL sandbox holds a transaction of its own, so yours is nested inside it and
 > an abort unwinds no further than the sandbox's savepoint. This class of bug is
-> invisible there — it survived an audit round in this very library behind a
+> invisible there: it survived an audit round in this very library behind a
 > passing test.
 
 ## 6. Holds that nothing will ever close
 
 A hold is taken before the row that remembers it exists, and those two cannot be
-one write — the ledger is a different schema and often a different database. Kill
+one write: the ledger is a different schema and often a different database. Kill
 the process in between and money is reserved against a customer with nothing
 pointing at it. `available` stays low for ever and nobody knows why.
 
@@ -223,7 +223,7 @@ end
 `:older_than` is a `DateTime` and is required. `:reference_prefix` narrows to
 one kind of work and `:limit` defaults to 200.
 
-Give your holds references you can look up again — the document id, the job id —
+Give your holds references you can look up again (the document id, the job id),
 and run this on a schedule. Every prefix you use needs covering; a sweeper that
 only knows about `"doc:"` will not free a stranded `"query:"`.
 
@@ -267,8 +267,8 @@ A refund is not a debit. Use `reverse/4`:
 Credits.reverse(org, Money.from_cents(2_500), "stripe:re_3xyz", %{"source" => "refund"})
 ```
 
-It is never refused for want of balance — the money has already left Stripe, so
-refusing would only make the ledger disagree with reality — and it is idempotent
+It is never refused for want of balance (the money has already left Stripe, so
+refusing would only make the ledger disagree with reality), and it is idempotent
 on the reference like everything else.
 
 Reversals are written with `category: :reversal`, which keeps them out of two
@@ -280,7 +280,7 @@ places a plain negative debit did not belong:
   not see the money in their spend chart or in the burn rate behind their runway
   estimate.
 
-With Pro, you do not call this yourself — the Stripe webhook does, for
+With Pro, you do not call this yourself: the Stripe webhook does, for
 `charge.refunded` and for disputes, including putting the credit back if you win
 one.
 
@@ -305,7 +305,7 @@ defmodule Parsely.Billing do
 end
 ```
 
-The handler runs **after the crossing commits**, and only on a crossing — going
+The handler runs **after the crossing commits**, and only on a crossing: going
 from $6 to $4 fires once; going from $4 to $3 does not fire again. That is what
 you want for an email and is worth knowing before you write one that assumes
 otherwise.
@@ -323,8 +323,8 @@ Credits.spend_history(org, days: 30)
 #    balance_after: 24_998_500}, ...]
 ```
 
-`daily_burn` and `runway_days` are `nil` when there is nothing honest to report
-— a brand new account, or one that has spent nothing. Render the `nil`; do not
+`daily_burn` and `runway_days` are `nil` when there is nothing honest to report:
+a brand new account, or one that has spent nothing. Render the `nil`; do not
 turn it into a zero and tell a customer they have no runway left.
 
 `spend_history/2` is zero-filled across the whole range and sorted oldest
@@ -357,8 +357,8 @@ AuroraMeter.Pro.Credits.update_auto_top_up(org, %{
 })
 ```
 
-The details — how a charge that times out is not charged twice, what happens
-after three declines, and how a refund switches auto top-up off — are in the Pro
+The details (how a charge that times out is not charged twice, what happens
+after three declines, and how a refund switches auto top-up off) are in the Pro
 package's **Top-ups** guide.
 
 ## The whole thing, end to end

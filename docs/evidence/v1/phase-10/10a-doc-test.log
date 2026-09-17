@@ -1,0 +1,19 @@
+# 10a: the documentation guards, core
+
+Run 2026-09-17T00:15:22Z, `mix test` over the four guard modules
+this unit created or extended.
+
+```
+[mixlane] core _build is busy, waiting for the other agent to finish
+[mixlane] core lane acquired
+[mixlane] core: DB_PORT=5490 mix test test/aurora_meter/house_style_test.exs test/aurora_meter/docs_claims_test.exs test/aurora_meter/api_inventory_test.exs test/aurora_meter/doctests_test.exs test/aurora_meter/evidence_writes_test.exs test/aurora_meter/correctness_index_test.exs
+Compiling 10 files (.ex)
+Running ExUnit with seed: 51030, max_cases: 48
+Excluding tags: [:headless]
+
+.....................................................................................................................................................
+Finished in 3.3 seconds (3.2s async, 0.05s sync)
+
+Result: 149 passed (76 doctests, 73 tests)
+[mixlane] core exit=0 started=2026-09-17T00:15:49Z finished=2026-09-17T00:15:54Z
+```

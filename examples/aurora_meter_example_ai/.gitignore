@@ -35,3 +35,10 @@ aurora_meter_example_ai-*.tar
 npm-debug.log
 /assets/node_modules/
 
+
+# The Pro profile's own environment file. The example is committed; this is not.
+/.env
+
+# What mix sample.failure and scripts/pro-proof.sh write. /tmp/ above already
+# covers it; named here so the intent survives someone narrowing that rule.
+/tmp/sample-failures/

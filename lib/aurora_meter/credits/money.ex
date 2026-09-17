@@ -6,7 +6,7 @@ defmodule AuroraMeter.Credits.Money do
   `AuroraMeter.Credits` stores every amount as an integer number of
   micro-dollars (1 µ$ = 1e-6 USD, so `1_000_000` is one dollar and `10_000` is
   one cent). Integers keep the ledger exact under concurrency and let a price
-  of a few thousandths of a cent — a token, a request, a byte — be charged
+  of a few thousandths of a cent (a token, a request, a byte) be charged
   without rounding. Convert at the edges:
 
       iex> AuroraMeter.Credits.Money.from_cents(1_235)

@@ -115,7 +115,7 @@ defmodule AuroraMeter.Operations do
 
   Creates the row when the operation has never run, so an operation can be
   paused before it is first scheduled. Leaves `cursor` and `counts` exactly as
-  they are, so pausing never loses a position.
+  they are, so a paused operation keeps its position.
   """
   @spec pause(name()) :: :ok
   def pause(name), do: Checkpoints.pause(validate!(name))

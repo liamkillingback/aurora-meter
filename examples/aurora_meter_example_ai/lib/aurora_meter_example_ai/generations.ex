@@ -151,6 +151,68 @@ defmodule AuroraMeterExampleAi.Generations do
   @spec reference(String.t()) :: String.t()
   def reference(request_id), do: "gen:" <> request_id
 
+  ## The fault seam
+
+  @fault_key :aurora_meter_example_ai_fault
+  @fault_points [:after_record]
+
+  @doc """
+  Arms a fault at a named point **for the calling process only**.
+
+  This exists so that this application can prove what its own crash leaves
+  behind, rather than describing it. `docs/failures.md`'s `untrappable_death`
+  recipe arms `:after_record` with `fn -> Process.exit(self(), :kill) end` and
+  then calls `create/3` normally, so the event that survives is a real event
+  written by the real code path and the row that is missing is really missing.
+
+  There is exactly one point, and its position is the whole reason the recipe
+  is interesting:
+
+    * `:after_record` runs after `AuroraMeter.record/4` has returned, which is
+      after the event, its projection delta and its export intent have
+      committed, and **before** this application writes its own `generations`
+      row. That gap is deliberate (see the module documentation) and it is
+      where an orphan comes from.
+
+  It is a process-dictionary entry, so it costs one `Process.get/1` on the
+  money path and it cannot leak into another request, another test or another
+  tenant. A host copying this sample can delete these fifteen lines and lose
+  nothing but the ability to test its own crash.
+
+  ## Examples
+
+      Task.start(fn ->
+        AuroraMeterExampleAi.Generations.arm(:after_record, fn ->
+          Process.exit(self(), :kill)
+        end)
+
+        AuroraMeterExampleAi.Generations.create(scope, attrs, request_id)
+      end)
+
+  """
+  @spec arm(atom(), (-> any())) :: :ok
+  def arm(point, fun) when point in @fault_points and is_function(fun, 0) do
+    Process.put({@fault_key, point}, fun)
+    :ok
+  end
+
+  @doc "Disarms every fault point for the calling process."
+  @spec disarm() :: :ok
+  def disarm do
+    Enum.each(@fault_points, &Process.delete({@fault_key, &1}))
+    :ok
+  end
+
+  @spec fault(atom()) :: :ok
+  defp fault(point) do
+    case Process.get({@fault_key, point}) do
+      nil -> :ok
+      fun when is_function(fun, 0) -> _ = fun.()
+    end
+
+    :ok
+  end
+
   ## The gated path
 
   @spec gated(Orgs.Org.t(), map(), String.t()) :: {:ok, map()} | {:error, term()}
@@ -192,6 +254,11 @@ defmodule AuroraMeterExampleAi.Generations do
              metadata: %{"generation_id" => strip(reference)}
            ) do
         {:ok, event, recorded} ->
+          # The event, its projection delta and its export intent are durable
+          # from here. This application's own row is not written yet, and the
+          # gap between the two is where an orphan comes from. See `arm/2`.
+          fault(:after_record)
+
           {:ok,
            %{
              status: "settled",

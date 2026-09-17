@@ -1,0 +1,23 @@
+# 10a: mix docs, core
+
+Run 2026-09-17T00:15:58Z with --warnings-as-errors, which is what
+`mix check` runs, so every new extras file renders and every relative link in
+it resolves.
+
+```
+[mixlane] core: DB_PORT=5490 mix docs --warnings-as-errors --output /tmp/aurora_meter-10a-doc
+Compiling 21 files (.ex)
+Generating docs...
+View html docs at "/tmp/aurora_meter-10a-doc/index.html"
+[mixlane] core exit=0 started=2026-09-17T00:15:58Z finished=2026-09-17T00:16:01Z
+```
+
+Pages this unit added, as they appear in the built output:
+
+```
+/tmp/aurora_meter-10a-doc/architecture.html
+/tmp/aurora_meter-10a-doc/contributing.html
+/tmp/aurora_meter-10a-doc/mental-model.html
+/tmp/aurora_meter-10a-doc/security.html
+/tmp/aurora_meter-10a-doc/troubleshooting.html
+```

@@ -1,0 +1,72 @@
+{
+  "unit": "09d",
+  "gate_bullet": "G09 bullet 4: the real Stripe test-mode sample proof, run outside CI",
+  "result": "pass",
+  "run_id": "stripe-proof-20260917T011750Z-3651de",
+  "started_utc": "2026-09-17T01:17:50Z",
+  "finished_utc": "2026-09-17T01:21:06Z",
+  "host": "core:examples/aurora_meter_example_ai, AURORA_SAMPLE_PRO=1, unmodified",
+  "transport": "stripe listen --forward-to http://127.0.0.1:<port>/webhooks/stripe; the registered webhook endpoint was not read, written or referenced",
+  "steps": [
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {}
+  ],
+  "evidence_steps": 0,
+  "reconciliation": {
+    "ledger": {
+      "granted": 25000000,
+      "spent": 5790,
+      "reversed": 10000000,
+      "balance": 14994210,
+      "held": 0,
+      "available": 14994210,
+      "spendable": 14994210,
+      "debt": 0,
+      "identity": "granted - spent - reversed == balance; balance - held == available",
+      "holds": true
+    },
+    "export": {
+      "sample_outbox_rows": 21,
+      "pro_outbox_rows": 21,
+      "pro_delivered": 20,
+      "staged_gross": 587,
+      "staged_usage": 579,
+      "staged_corrections": 8,
+      "staged_net": 571,
+      "delivered_usage": 579,
+      "corrected": 8,
+      "net_for_the_period": 571,
+      "provider_summary": 579,
+      "identity": "staged usage - staged corrections == staged net; staged usage == delivered usage == provider summary",
+      "holds": true
+    },
+    "invoice": {
+      "metered_quantity": 579,
+      "delivered_total": 579,
+      "net_for_the_period": 571,
+      "difference_from_net": 8,
+      "holds": true
+    },
+    "corrected_tokens": 8,
+    "differences": [],
+    "uncertain": [
+      "A correction of 8 tokens was recorded after the meter events were delivered. This run did not send a meter event adjustment, so the invoice charges the uncorrected quantity and the difference is a reconciliation item rather than a figure this software may change. financial-correctness-review.md section 8.",
+      "The hosted Checkout redirect is not exercised: this profile confirms an off-session PaymentIntent, which produces the same payment_intent.succeeded the sample /billing page would. What is unproved is the browser round trip, not the grant."
+    ]
+  }
+}

@@ -112,7 +112,7 @@ defmodule AuroraMeter.Tenant.Default do
   @moduledoc """
   Default tenant resolver: passes binaries through and stringifies anything that
   implements `String.Chars` (integers, atoms, …). A term without `String.Chars`
-  raises `Protocol.UndefinedError` — configure a custom `AuroraMeter.Tenant`
+  raises `Protocol.UndefinedError`; configure a custom `AuroraMeter.Tenant`
   implementation for structs.
   """
 

@@ -5,15 +5,15 @@ defmodule AuroraMeter.Store do
 
   Owns the ETS tables that back real-time metering.
 
-  This process does nothing on the hot path — it merely creates and owns public,
+  This process does nothing on the hot path. It merely creates and owns public,
   named ETS tables so that writers (`AuroraMeter.Counter`) and readers hit ETS
   directly without a GenServer bottleneck:
 
-    * `:aurora_meter_counters` — `{tenant_key, feature, bucket} => value`, where
+    * `:aurora_meter_counters`: `{tenant_key, feature, bucket} => value`, where
       `bucket` is a period start (`DateTime`) or `{:day, Date}` for history
-    * `:aurora_meter_dirty` — counter keys changed since the last database flush
-    * `:aurora_meter_touched` — counter keys changed since the last PubSub broadcast
-    * `:aurora_meter_subscription_cache` — `tenant_key => {subscription, expires_at}`
+    * `:aurora_meter_dirty`: counter keys changed since the last database flush
+    * `:aurora_meter_touched`: counter keys changed since the last PubSub broadcast
+    * `:aurora_meter_subscription_cache`: `tenant_key => {subscription, expires_at}`
 
   It also listens on the subscription-invalidation PubSub topic so that a plan
   change applied on any node evicts the cached subscription on every node.

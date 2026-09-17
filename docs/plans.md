@@ -36,18 +36,18 @@ end
 
 ## Feature kinds
 
-- `limit :f, n, :hard` — a hard cap. `check/2` blocks at `n`.
-- `metered :f, included: i, unit_price: p` — allow overage beyond `i`; Pro bills
-  it. `included`/`unit_price` are for local estimates and display — Stripe is the
+- `limit :f, n, :hard`: a hard cap. `check/2` blocks at `n`.
+- `metered :f, included: i, unit_price: p`: allow overage beyond `i`; Pro bills
+  it. `included`/`unit_price` are for local estimates and display; Stripe is the
   billing source of truth.
-- `counter :f` — measured, never blocked, never billed. `check/2` is always
+- `counter :f`: measured, never blocked, never billed. `check/2` is always
   `:ok`, `remaining/2` is `:unlimited`, and `quota/2` reports
   `kind: :counter` with `limit`, `included` and `percent` all `nil`. Reach for
-  it when the money lives somewhere else — a prepaid credit ledger, an invoice
-  built outside Aurora Meter — and the plan only wants a number on the
+  it when the money lives somewhere else (a prepaid credit ledger, an invoice
+  built outside Aurora Meter) and the plan only wants a number on the
   dashboard.
-- `feature :f, boolean` — plain on/off access (no quota).
-- `feature :f, n` (non-negative integer) — a value the plan carries for your
+- `feature :f, boolean`: plain on/off access (no quota).
+- `feature :f, n` (non-negative integer): a value the plan carries for your
   code to read (seats, projects, retention days). Always entitled, never
   counted; `AuroraMeter.feature_value(tenant, :f, default)` returns `n`, and
   `quota/2` reports `kind: :feature, value: n`.
@@ -73,7 +73,7 @@ DSL to your formatter's `import_deps` for paren-free definitions:
 
 ## Counter or metered?
 
-They look similar — both count without blocking — but they say different things
+They look similar (both count without blocking) but they say different things
 to your customer, and the dashboard repeats whichever one you picked.
 
 | | `metered :f, included: i, unit_price: p` | `counter :f` |

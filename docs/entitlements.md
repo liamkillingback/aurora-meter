@@ -24,7 +24,7 @@ AuroraMeter.check(tenant, :ai_generations)
 | `counter f` | always `:ok` (measured, never billed) |
 | `feature f, true` | `:ok` |
 | `feature f, false` | `{:error, :not_entitled}` |
-| `feature f, n` (integer) | `:ok` — a plan value, read with `feature_value/3` |
+| `feature f, n` (integer) | `:ok`: a plan value, read with `feature_value/3` |
 | not declared on the plan | follows `:undeclared_feature_policy` (see below) |
 
 Helpers:
@@ -65,11 +65,11 @@ when nothing is entitled, so a renderer that draws "0 left" is correct.
 
 A subscription grants its plan only while its `status` is one of
 `AuroraMeter.Schema.Subscription.entitled_statuses/0` (`active`, `trialing`,
-`past_due`). Any other status — `canceled`, `unpaid`, `incomplete`, ... — falls
+`past_due`). Any other status (`canceled`, `unpaid`, `incomplete`, and so on) falls
 back to the configured `:default_plan`, so a cancellation synced from the
 billing provider revokes access without a separate downgrade step.
 
-## quota — everything a dashboard needs
+## quota: everything a dashboard needs
 
 ```elixir
 AuroraMeter.quota(tenant, :ai_generations)
@@ -92,16 +92,16 @@ AuroraMeter.quota(tenant, :requests)
 ```
 
 `percent: nil` is deliberate, and so are `limit: nil` and `included: nil`.
-**Anything rendering a bar must treat `nil` as "no bar", never as `0`** — a
+**Anything rendering a bar must treat `nil` as "no bar", never as `0`**: a
 counter has nothing to be a percentage *of*, and "0% of 0" is exactly the
 reading this kind exists to prevent. `AuroraMeter.Components.usage_meter/1`
 renders a counter as a bare count with no progress bar; do the same in your own
 renderer. See [ADR 0006](adr/0006-counter-feature-kind.md).
 
-`reserve/3` and `with_quota/4` still increment a counter — they simply never
-refuse it — so the count stays correct under any load.
+`reserve/3` and `with_quota/4` still increment a counter (they simply never
+refuse it), so the count stays correct under any load.
 
-## with_quota — gate, run, meter, atomically
+## with_quota: gate, run, meter, atomically
 
 `check/2` then `track/3` has a race: two concurrent requests can both pass a
 near-full hard limit. Use `with_quota/4`, which reserves atomically:
@@ -115,7 +115,7 @@ end
 ```
 
 It increments the counter (the reservation *is* the usage), runs the function,
-and — if the function raises — releases the reservation before re-raising. Under
+and, if the function raises, releases the reservation before re-raising. Under
 concurrency, a hard limit of `n` admits exactly `n` reservations.
 
 ### Over a feature whose source is `:events`

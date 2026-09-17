@@ -1,0 +1,1263 @@
+{
+  "schema": "aurora-v1-stripe-proof/1",
+  "profile": "sample",
+  "run_id": "stripe-proof-20260917T003212Z-8b8515",
+  "mode": "test",
+  "started_utc": "2026-09-17T00:32:12Z",
+  "finished_utc": "2026-09-17T00:38:36Z",
+  "result": "fail",
+  "branch": null,
+  "exit_code": 1,
+  "environment": {
+    "stripity_stripe": "3.3.2",
+    "sdk_default_api_version": "2025-11-17.clover",
+    "observed_response_stripe_version": [
+      "2024-06-20",
+      "2025-11-17.clover"
+    ],
+    "observed_event_api_versions": [
+      "2024-06-20"
+    ],
+    "stripe_cli": "stripe version 1.43.7",
+    "stripe_cli_reported_account_api_version": "2024-06-20",
+    "pro_sha": "dce6ffc",
+    "core_sha": "1a3a98e",
+    "elixir": "1.20.1",
+    "otp": "29",
+    "transport": "stripe listen --forward-to",
+    "registered_endpoint_modified": false,
+    "live_mode_used": false,
+    "credits_stripe_client": "AuroraMeter.Pro.Credits.StripeClient.Live",
+    "billing_provider": "AuroraMeter.Pro.Stripe"
+  },
+  "documentation": {
+    "read_before_objects_created": true,
+    "accessed_utc": "2026-09-15",
+    "urls": [
+      "https://docs.stripe.com/api/billing/meter/create",
+      "https://docs.stripe.com/api/prices/create",
+      "https://docs.stripe.com/api/prices/create?query=recurring",
+      "https://docs.stripe.com/api/test_clocks/advance",
+      "https://docs.stripe.com/api/test_clocks/delete",
+      "https://docs.stripe.com/billing/testing/test-clocks/api-advanced-usage",
+      "https://docs.stripe.com/api/billing/meter-event_summary/list",
+      "https://docs.stripe.com/testing",
+      "https://docs.stripe.com/disputes/api"
+    ],
+    "mechanism_for_failed": null,
+    "mechanism_for_canceled": null,
+    "failed_is_documented": false,
+    "canceled_is_documented_for_this_harness": false,
+    "payment_method_token": "pm_card_visa",
+    "quotes": [],
+    "sections": [
+      "purpose",
+      "meter",
+      "tiered_metered_price",
+      "test_clock",
+      "meter_event_summary",
+      "payment_methods",
+      "dispute_outcome",
+      "what_could_not_be_established"
+    ]
+  },
+  "parameters": {
+    "amount_cents": 2500,
+    "refund_cents": 1000,
+    "currency": "usd"
+  },
+  "objects": {
+    "customer": "cus_VH1IUzrPKbHmNG",
+    "payment_method": "pm_1UGTFmIWRG2AbpPztSx9JTbe",
+    "payment_intent": "pi_3UGTFwIWRG2AbpPz21447WUA",
+    "charge": "ch_3UGTFwIWRG2AbpPz2UT1cDbr",
+    "refund": "re_3UGTFwIWRG2AbpPz2N0YTdLH",
+    "tenant_key": "org_1",
+    "database": "aurora_v1_stripeproof_8b8515",
+    "account": "acct_1Pho8bIWRG2AbpPz",
+    "subscription": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3",
+    "test_clock": "clock_1UGTFlIWRG2AbpPzprHV6bH8",
+    "meter": "mtr_test_61VPrCiVSpLnjezGH41IWRG2AbpPz9dQ",
+    "meter_event_name": "aurora_v1_stripe_proof_20260917T003212Z_8b8515",
+    "price": "price_1UGTFOIWRG2AbpPzOs5IONF1",
+    "product": "prod_VH1HEvaNyM5hJM"
+  },
+  "objects_created": [
+    {
+      "type": "meter",
+      "id": "mtr_test_61VPrCiVSpLnjezGH41IWRG2AbpPz9dQ",
+      "utc": "2026-09-17T00:32:17Z"
+    },
+    {
+      "type": "product",
+      "id": "prod_VH1HEvaNyM5hJM",
+      "utc": "2026-09-17T00:32:18Z"
+    },
+    {
+      "type": "price",
+      "id": "price_1UGTFOIWRG2AbpPzOs5IONF1",
+      "utc": "2026-09-17T00:32:19Z"
+    },
+    {
+      "type": "test_clock",
+      "id": "clock_1UGTFlIWRG2AbpPzprHV6bH8",
+      "utc": "2026-09-17T00:32:42Z"
+    },
+    {
+      "type": "customer",
+      "id": "cus_VH1IUzrPKbHmNG",
+      "utc": "2026-09-17T00:32:43Z"
+    },
+    {
+      "type": "payment_method",
+      "id": "pm_1UGTFmIWRG2AbpPztSx9JTbe",
+      "utc": "2026-09-17T00:32:43Z"
+    },
+    {
+      "type": "subscription",
+      "id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3",
+      "utc": "2026-09-17T00:32:45Z"
+    },
+    {
+      "type": "payment_intent",
+      "id": "pi_3UGTFwIWRG2AbpPz21447WUA",
+      "utc": "2026-09-17T00:32:53Z"
+    },
+    {
+      "type": "charge",
+      "id": "ch_3UGTFwIWRG2AbpPz2UT1cDbr",
+      "utc": "2026-09-17T00:32:53Z"
+    },
+    {
+      "type": "refund",
+      "id": "re_3UGTFwIWRG2AbpPz2N0YTdLH",
+      "utc": "2026-09-17T00:34:20Z"
+    }
+  ],
+  "events_forwarded": [
+    {
+      "id": "evt_1UGTFpIWRG2AbpPzkozIsU1U",
+      "type": "customer.subscription.created",
+      "api_version": "2024-06-20"
+    },
+    {
+      "id": "evt_3UGTFwIWRG2AbpPz2nMUphlK",
+      "type": "payment_intent.succeeded",
+      "api_version": "2024-06-20"
+    },
+    {
+      "id": "evt_3UGTFwIWRG2AbpPz2g5ayxgx",
+      "type": "charge.refunded",
+      "api_version": "2024-06-20"
+    }
+  ],
+  "steps": [
+    {
+      "n": 1,
+      "name": "guards G1 to G7",
+      "utc": "2026-09-17T00:32:14Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "every guard passes, or the run refuses with exit 3 having created nothing",
+      "result": "pass",
+      "note": "nothing was created before every guard passed"
+    },
+    {
+      "n": 2,
+      "name": "the current official Stripe documentation, read before any object was created",
+      "utc": "2026-09-17T00:32:15Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "the current official Stripe documentation is read and recorded before any object exists",
+      "result": "pass",
+      "note": "recorded verbatim in product-workspaces/aurora_meter_pro/docs/evidence/v1/phase-04/stripe-metering-docs.json"
+    },
+    {
+      "n": 3,
+      "name": "the meter, the product and the metered price",
+      "utc": "2026-09-17T00:32:19Z",
+      "provider_state": {
+        "account": "acct_1Pho8bIWRG2AbpPz",
+        "meter": "mtr_test_61VPrCiVSpLnjezGH41IWRG2AbpPz9dQ",
+        "meter_event_name": "aurora_v1_stripe_proof_20260917T003212Z_8b8515",
+        "product": "prod_VH1HEvaNyM5hJM",
+        "price": "price_1UGTFOIWRG2AbpPzOs5IONF1",
+        "tiers": [
+          {
+            "up_to": 2,
+            "unit_amount": 0
+          },
+          {
+            "up_to": "inf",
+            "unit_amount": 25
+          }
+        ],
+        "livemode": false,
+        "response_stripe_version": "2024-06-20"
+      },
+      "event": null,
+      "ledger": null,
+      "expected": "a test-mode meter, product and metered price exist, livemode false",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 4,
+      "name": "the sample application, in its Pro profile, on the live adapters",
+      "utc": "2026-09-17T00:32:35Z",
+      "provider_state": {
+        "mode": ":test",
+        "events_outbox": "AuroraMeterExampleAi.Pro.Outbox",
+        "provider": "AuroraMeter.Pro.Stripe",
+        "api_version": "2025-11-17.clover",
+        "exporter": "AuroraMeter.Pro.Exporter.StripeMeterEvents",
+        "credits_client": "AuroraMeter.Pro.Credits.StripeClient.Live",
+        "meter_client": "Stripe.Billing.MeterEvent",
+        "account": "acct_1Pho8bIWRG2AbpPz",
+        "webhook_secret_configured": true
+      },
+      "event": null,
+      "ledger": null,
+      "expected": "the SAMPLE application boots in its Pro profile on a disposable database, with the live Stripe adapters and no fake anywhere, and the forwarder is ready before any money-shaped object exists",
+      "result": "pass",
+      "note": "transport: stripe listen --forward-to; the registered endpoint was not read, written or referenced"
+    },
+    {
+      "n": 5,
+      "name": "a disposable organisation in the sample own database",
+      "utc": "2026-09-17T00:32:41Z",
+      "provider_state": {
+        "tenant_key": "org_1",
+        "slug": "proof-1789605139",
+        "org_id": 1
+      },
+      "event": null,
+      "ledger": {
+        "balance": 0,
+        "reversed": 0,
+        "expired": 0,
+        "available": 0,
+        "held": 0,
+        "spendable": 0,
+        "promotional": 0,
+        "debt": 0,
+        "spent": 0,
+        "granted": 0,
+        "tenant_key": "org_1",
+        "lots": [],
+        "reversals": 0,
+        "grants": 0,
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": null
+        }
+      },
+      "expected": "a disposable organisation exists in the sample's own database, on the lot engine, with an empty wallet",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 6,
+      "name": "the test clock, the customer and the metered subscription",
+      "utc": "2026-09-17T00:32:52Z",
+      "provider_state": {
+        "test_clock": "clock_1UGTFlIWRG2AbpPzprHV6bH8",
+        "customer": "cus_VH1IUzrPKbHmNG",
+        "payment_method": "pm_1UGTFmIWRG2AbpPztSx9JTbe",
+        "subscription": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3",
+        "period_start": 1789605161,
+        "period_end": 1792197161,
+        "livemode": false
+      },
+      "event": {
+        "id": "evt_1UGTFpIWRG2AbpPzkozIsU1U",
+        "type": "customer.subscription.created",
+        "api_version": "2024-06-20",
+        "created": 1789605165,
+        "livemode": false
+      },
+      "ledger": {
+        "tenant_key": "org_1",
+        "generations": 0,
+        "usage_tokens": 0,
+        "sample_outbox": [],
+        "sample_outbox_count": 0,
+        "sample_outbox_quantity": 0,
+        "pro_outbox": [],
+        "pro_outbox_count": 0,
+        "pro_delivered": 0,
+        "pro_states": {},
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3"
+        }
+      },
+      "expected": "a test clock, a customer carrying the documented test payment method, and a metered subscription whose real customer.subscription.created reaches the sample's endpoint-mounted webhook",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 7,
+      "name": "a real off-session PaymentIntent granted credit through the sample own webhook",
+      "utc": "2026-09-17T00:32:59Z",
+      "provider_state": {
+        "payment_intent": "pi_3UGTFwIWRG2AbpPz21447WUA",
+        "charge": "ch_3UGTFwIWRG2AbpPz2UT1cDbr",
+        "amount_cents": 2500,
+        "livemode": false
+      },
+      "event": {
+        "id": "evt_3UGTFwIWRG2AbpPz2nMUphlK",
+        "type": "payment_intent.succeeded",
+        "api_version": "2024-06-20",
+        "created": 1789605172,
+        "livemode": false
+      },
+      "ledger": {
+        "balance": 25000000,
+        "reversed": 0,
+        "expired": 0,
+        "available": 25000000,
+        "held": 0,
+        "spendable": 25000000,
+        "promotional": 0,
+        "debt": 0,
+        "spent": 0,
+        "granted": 25000000,
+        "tenant_key": "org_1",
+        "lots": [
+          {
+            "state": "open",
+            "reversed": 0,
+            "category": "paid",
+            "available": 25000000,
+            "amount": 25000000,
+            "reserved": 0,
+            "consumed": 0
+          }
+        ],
+        "reversals": 0,
+        "grants": 1,
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3"
+        }
+      },
+      "expected": "a real off-session PaymentIntent for the documented test card reaches the sample's webhook and grants credit exactly once, on the paid lot",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 8,
+      "name": "the same payment event redelivered granted nothing further",
+      "utc": "2026-09-17T00:33:16Z",
+      "provider_state": {
+        "event": "evt_3UGTFwIWRG2AbpPz2nMUphlK"
+      },
+      "event": null,
+      "ledger": {
+        "balance": 25000000,
+        "reversed": 0,
+        "expired": 0,
+        "available": 25000000,
+        "held": 0,
+        "spendable": 25000000,
+        "promotional": 0,
+        "debt": 0,
+        "spent": 0,
+        "granted": 25000000,
+        "tenant_key": "org_1",
+        "lots": [
+          {
+            "state": "open",
+            "reversed": 0,
+            "category": "paid",
+            "available": 25000000,
+            "amount": 25000000,
+            "reserved": 0,
+            "consumed": 0
+          }
+        ],
+        "reversals": 0,
+        "grants": 1,
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3"
+        }
+      },
+      "expected": "the same event redelivered grants nothing further",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 9,
+      "name": "20 generations through the sample own path",
+      "utc": "2026-09-17T00:33:23Z",
+      "provider_state": {
+        "requested": 20,
+        "created": 20,
+        "first_error": "nil"
+      },
+      "event": null,
+      "ledger": {
+        "tenant_key": "org_1",
+        "generations": 20,
+        "usage_tokens": 579,
+        "sample_outbox": [
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 28,
+            "event_id": "gen:03840bf5-d2c7-44bb-8409-1c67437bd204"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 20,
+            "event_id": "gen:256b5280-b9c1-487c-b7ee-3cb67957f757"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 22,
+            "event_id": "gen:275b6b3f-9229-4e07-93a0-83345665072b"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:447c72fc-7a74-44b4-8c20-50d9c1b8c5f4"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 17,
+            "event_id": "gen:57b274fe-8457-4913-b841-00a95a7f4f57"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 17,
+            "event_id": "gen:58676337-49b0-46bb-a891-95a0a923cda0"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 16,
+            "event_id": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:653e8819-5d9c-4de2-bd26-5320084511ef"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 45,
+            "event_id": "gen:69e52c64-b8ba-47a1-8a2c-9375aab9ad06"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 20,
+            "event_id": "gen:6bd6e3ae-362c-4200-97d1-a3359df8837d"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:6cc847d6-5449-43ab-bdc9-4c667241875b"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 42,
+            "event_id": "gen:7492cb5b-16ee-4cb9-a96a-6293f5ef3c1c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 29,
+            "event_id": "gen:7ab0b734-00c8-47f8-955a-11c2ad8c19ef"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 28,
+            "event_id": "gen:a759d871-015f-4aa9-8d10-9182ae424b88"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 26,
+            "event_id": "gen:bd2ffaec-cdfc-423c-9d44-201aa7aa5c8c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 42,
+            "event_id": "gen:bfc6a918-154b-4cfc-bfc5-5a020f1c1515"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 39,
+            "event_id": "gen:c18fecc5-0273-4079-b673-106148737b39"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 24,
+            "event_id": "gen:d180c9be-8518-46b1-8200-053e9716a706"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 19,
+            "event_id": "gen:d44c102b-412f-4ced-84cc-eeb3e2d70cdf"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 46,
+            "event_id": "gen:f75b64b0-bc74-46ef-915f-6b175a91353c"
+          }
+        ],
+        "sample_outbox_count": 20,
+        "sample_outbox_quantity": 579,
+        "pro_outbox": [
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:58676337-49b0-46bb-a891-95a0a923cda0"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:a759d871-015f-4aa9-8d10-9182ae424b88"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:6bd6e3ae-362c-4200-97d1-a3359df8837d"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:447c72fc-7a74-44b4-8c20-50d9c1b8c5f4"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:6cc847d6-5449-43ab-bdc9-4c667241875b"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:03840bf5-d2c7-44bb-8409-1c67437bd204"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:d44c102b-412f-4ced-84cc-eeb3e2d70cdf"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:69e52c64-b8ba-47a1-8a2c-9375aab9ad06"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:d180c9be-8518-46b1-8200-053e9716a706"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:c18fecc5-0273-4079-b673-106148737b39"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:bfc6a918-154b-4cfc-bfc5-5a020f1c1515"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:7ab0b734-00c8-47f8-955a-11c2ad8c19ef"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:bd2ffaec-cdfc-423c-9d44-201aa7aa5c8c"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:f75b64b0-bc74-46ef-915f-6b175a91353c"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:653e8819-5d9c-4de2-bd26-5320084511ef"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:57b274fe-8457-4913-b841-00a95a7f4f57"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:7492cb5b-16ee-4cb9-a96a-6293f5ef3c1c"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:275b6b3f-9229-4e07-93a0-83345665072b"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "gen:256b5280-b9c1-487c-b7ee-3cb67957f757"
+          }
+        ],
+        "pro_outbox_count": 20,
+        "pro_delivered": 0,
+        "pro_states": {
+          "pending": 20
+        },
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3"
+        }
+      },
+      "expected": "twenty real generations run through the sample's own Generations.create/3, each holding, recording a durable event, settling, and staging BOTH outbox rows in the one transaction",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 10,
+      "name": "the staged items delivered to the real Stripe meter events API",
+      "utc": "2026-09-17T00:33:36Z",
+      "provider_state": {
+        "deliverer_output": "webhook signing secret obtained (value withheld; it is 70 characters long)\n[debug] QUERY OK source=\"aurora_meter_credit_balances\" db=0.6ms decode=0.9ms queue=1.1ms idle=24.2ms\nSELECT a0.\"currency\", count(a0.\"id\") FROM \"aurora_meter_credit_balances\" AS a0 GROUP BY a0.\"currency\" LIMIT 5 []\n\u001b[90m↳ AuroraMeter.Credits.stored_currencies/0, at: lib/aurora_meter/credits.ex:1488\u001b[0m\n[debug] QUERY OK source=\"aurora_meter_plan_versions\" db=6.6ms queue=1.0ms idle=44.3ms\nSELECT a0.\"id\", a0.\"plan_id\", a0.\"version\", a0.\"fingerprint\", a0.\"definition\", a0.\"effective_at\", a0.\"first_seen_at\" FROM \"aurora_meter_plan_versions\" AS a0 ORDER BY a0.\"plan_id\", a0.\"version\" []\n\u001b[90m↳ AuroraMeter.Plans.list_stored/1, at: lib/aurora_meter/plans.ex:1069\u001b[0m\n[debug] QUERY OK source=\"aurora_meter_plan_versions\" db=1.5ms idle=54.3ms\nSELECT a0.\"id\", a0.\"plan_id\", a0.\"version\", a0.\"fingerprint\", a0.\"definition\", a0.\"effective_at\", a0.\"first_seen_at\" FROM \"aurora_meter_plan_versions\" AS a0 ORDER BY a0.\"plan_id\", a0.\"version\" []\n\u001b[90m↳ AuroraMeter.Plans.list_stored/1, at: lib/aurora_meter/plans.ex:1069\u001b[0m\n[debug] QUERY OK db=0.8ms queue=1.2ms idle=57.2ms\nWITH batch AS (\n  SELECT id, plan_id, inserted_at\n  FROM aurora_meter_subscriptions\n  WHERE plan_version IS NULL\n  ORDER BY id\n  LIMIT $1\n  FOR UPDATE SKIP LOCKED\n),\nresolved AS (\n  SELECT b.id AS id,\n         COALESCE(v.version, '1') AS version,\n         v.fingerprint AS fingerprint,\n         COALESCE(v.effective_at, b.inserted_at) AS effective_at,\n         (v.version IS NULL) AS orphan\n  FROM batch b\n  LEFT JOIN LATERAL (\n    SELECT version, fingerprint, effective_at\n    FROM aurora_meter_plan_versions\n    WHERE plan_id = b.plan_id AND effective_at IS NULL\n    ORDER BY first_seen_at, version\n    LIMIT 1\n  ) v ON TRUE\n)\nUPDATE aurora_meter_subscriptions s\nSET plan_version = r.version,\n    plan_fingerprint = r.fingerprint,\n    plan_effective_at = r.effective_at\nFROM resolved r\nWHERE s.id = r.id\nRETURNING r.orphan\n [5000]\n[info] AuroraMeter.Plans.register!: registered=0 known=2 conflicts=0 assigned=0 orphan_plans=0\n[debug] QUERY OK source=\"aurora_meter_usage_reports\" db=0.6ms queue=1.3ms idle=139.8ms\nSELECT count(*) FROM \"aurora_meter_usage_reports\" AS a0 WHERE (a0.\"feature\" = $1) [\"tokens\"]\n\u001b[90m↳ AuroraMeter.Pro.Cutover.reported_rows/1, at: lib/aurora_meter/pro/cutover.ex:217\u001b[0m\n:ok\n:ok"
+      },
+      "event": null,
+      "ledger": {
+        "tenant_key": "org_1",
+        "generations": 20,
+        "usage_tokens": 579,
+        "sample_outbox": [
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 16,
+            "event_id": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 20,
+            "event_id": "gen:6bd6e3ae-362c-4200-97d1-a3359df8837d"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 28,
+            "event_id": "gen:a759d871-015f-4aa9-8d10-9182ae424b88"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 17,
+            "event_id": "gen:58676337-49b0-46bb-a891-95a0a923cda0"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 28,
+            "event_id": "gen:03840bf5-d2c7-44bb-8409-1c67437bd204"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 24,
+            "event_id": "gen:d180c9be-8518-46b1-8200-053e9716a706"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 45,
+            "event_id": "gen:69e52c64-b8ba-47a1-8a2c-9375aab9ad06"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:447c72fc-7a74-44b4-8c20-50d9c1b8c5f4"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 19,
+            "event_id": "gen:d44c102b-412f-4ced-84cc-eeb3e2d70cdf"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:6cc847d6-5449-43ab-bdc9-4c667241875b"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 39,
+            "event_id": "gen:c18fecc5-0273-4079-b673-106148737b39"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:653e8819-5d9c-4de2-bd26-5320084511ef"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 42,
+            "event_id": "gen:bfc6a918-154b-4cfc-bfc5-5a020f1c1515"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 17,
+            "event_id": "gen:57b274fe-8457-4913-b841-00a95a7f4f57"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 29,
+            "event_id": "gen:7ab0b734-00c8-47f8-955a-11c2ad8c19ef"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 42,
+            "event_id": "gen:7492cb5b-16ee-4cb9-a96a-6293f5ef3c1c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 26,
+            "event_id": "gen:bd2ffaec-cdfc-423c-9d44-201aa7aa5c8c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 22,
+            "event_id": "gen:275b6b3f-9229-4e07-93a0-83345665072b"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 46,
+            "event_id": "gen:f75b64b0-bc74-46ef-915f-6b175a91353c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 20,
+            "event_id": "gen:256b5280-b9c1-487c-b7ee-3cb67957f757"
+          }
+        ],
+        "sample_outbox_count": 20,
+        "sample_outbox_quantity": 579,
+        "pro_outbox": [
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:58676337-49b0-46bb-a891-95a0a923cda0"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:a759d871-015f-4aa9-8d10-9182ae424b88"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:6bd6e3ae-362c-4200-97d1-a3359df8837d"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:447c72fc-7a74-44b4-8c20-50d9c1b8c5f4"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:6cc847d6-5449-43ab-bdc9-4c667241875b"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:03840bf5-d2c7-44bb-8409-1c67437bd204"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:d44c102b-412f-4ced-84cc-eeb3e2d70cdf"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:69e52c64-b8ba-47a1-8a2c-9375aab9ad06"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:d180c9be-8518-46b1-8200-053e9716a706"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:c18fecc5-0273-4079-b673-106148737b39"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:bfc6a918-154b-4cfc-bfc5-5a020f1c1515"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:7ab0b734-00c8-47f8-955a-11c2ad8c19ef"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:bd2ffaec-cdfc-423c-9d44-201aa7aa5c8c"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:f75b64b0-bc74-46ef-915f-6b175a91353c"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:653e8819-5d9c-4de2-bd26-5320084511ef"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:57b274fe-8457-4913-b841-00a95a7f4f57"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:7492cb5b-16ee-4cb9-a96a-6293f5ef3c1c"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:275b6b3f-9229-4e07-93a0-83345665072b"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:256b5280-b9c1-487c-b7ee-3cb67957f757"
+          }
+        ],
+        "pro_outbox_count": 20,
+        "pro_delivered": 20,
+        "pro_states": {
+          "accepted": 20
+        },
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3"
+        }
+      },
+      "expected": "Pro's deliverer sends the staged items to the real Stripe meter events API",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 11,
+      "name": "Stripe's own meter event summary equals what this run recorded",
+      "utc": "2026-09-17T00:34:10Z",
+      "provider_state": {
+        "meter": "mtr_test_61VPrCiVSpLnjezGH41IWRG2AbpPz9dQ",
+        "customer": "cus_VH1IUzrPKbHmNG",
+        "summary_total": 579
+      },
+      "event": null,
+      "ledger": null,
+      "expected": "Stripe's own meter event summary equals the tokens this run recorded",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 12,
+      "name": "a correction after the export, bounded and immutable",
+      "utc": "2026-09-17T00:34:16Z",
+      "provider_state": {
+        "outcome": "{:ok, %AuroraMeter.Event{id: \"fc9f17ec-f0e8-4e86-b9a6-3e2c5a17a7c5\", event_id: \"credit:6be2f412-7576-4464-8eed-c8a71eab8221\", tenant_key: \"org_1\", feature: :tokens, quantity: 8, kind: :correction, original_event_id: \"gen:60ff3fad-ba96-4cb0-861d-b666250843ab\", occurred_at: ~U[2026-09-17 00:33:19.415773Z], recorded_at: ~U[2026-09-17 00:34:13.180233Z], period_start: ~U[2026-09-01 00:00:00Z], period_source: \"AuroraMeter.Period.Calendar\", plan_id: \"studio\", plan_version: \"1\", attribution: :resolved, seq: 21, dimensions: %{\"kind\" => \"text\", \"model\" => \"nimbus-1-mini\"}, metadata: %{\"ticket\" => \"09d-proof\"}, durability: :durable}, :inserted}",
+        "original_event": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab",
+        "original_quantity": 16,
+        "reduced_by": 8,
+        "usage_before": 579,
+        "usage_after": 571
+      },
+      "event": null,
+      "ledger": {
+        "tenant_key": "org_1",
+        "generations": 20,
+        "usage_tokens": 571,
+        "sample_outbox": [
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 16,
+            "event_id": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 20,
+            "event_id": "gen:6bd6e3ae-362c-4200-97d1-a3359df8837d"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 28,
+            "event_id": "gen:a759d871-015f-4aa9-8d10-9182ae424b88"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 17,
+            "event_id": "gen:58676337-49b0-46bb-a891-95a0a923cda0"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 28,
+            "event_id": "gen:03840bf5-d2c7-44bb-8409-1c67437bd204"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 24,
+            "event_id": "gen:d180c9be-8518-46b1-8200-053e9716a706"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 45,
+            "event_id": "gen:69e52c64-b8ba-47a1-8a2c-9375aab9ad06"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:447c72fc-7a74-44b4-8c20-50d9c1b8c5f4"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 19,
+            "event_id": "gen:d44c102b-412f-4ced-84cc-eeb3e2d70cdf"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:6cc847d6-5449-43ab-bdc9-4c667241875b"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 39,
+            "event_id": "gen:c18fecc5-0273-4079-b673-106148737b39"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 33,
+            "event_id": "gen:653e8819-5d9c-4de2-bd26-5320084511ef"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 42,
+            "event_id": "gen:bfc6a918-154b-4cfc-bfc5-5a020f1c1515"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 17,
+            "event_id": "gen:57b274fe-8457-4913-b841-00a95a7f4f57"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 29,
+            "event_id": "gen:7ab0b734-00c8-47f8-955a-11c2ad8c19ef"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 42,
+            "event_id": "gen:7492cb5b-16ee-4cb9-a96a-6293f5ef3c1c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 26,
+            "event_id": "gen:bd2ffaec-cdfc-423c-9d44-201aa7aa5c8c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 22,
+            "event_id": "gen:275b6b3f-9229-4e07-93a0-83345665072b"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 46,
+            "event_id": "gen:f75b64b0-bc74-46ef-915f-6b175a91353c"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 20,
+            "event_id": "gen:256b5280-b9c1-487c-b7ee-3cb67957f757"
+          },
+          {
+            "state": "delivered",
+            "feature": "tokens",
+            "quantity": 8,
+            "event_id": "credit:6be2f412-7576-4464-8eed-c8a71eab8221"
+          }
+        ],
+        "sample_outbox_count": 21,
+        "sample_outbox_quantity": 587,
+        "pro_outbox": [
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:60ff3fad-ba96-4cb0-861d-b666250843ab"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:58676337-49b0-46bb-a891-95a0a923cda0"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:a759d871-015f-4aa9-8d10-9182ae424b88"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:6bd6e3ae-362c-4200-97d1-a3359df8837d"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:447c72fc-7a74-44b4-8c20-50d9c1b8c5f4"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:6cc847d6-5449-43ab-bdc9-4c667241875b"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:03840bf5-d2c7-44bb-8409-1c67437bd204"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:d44c102b-412f-4ced-84cc-eeb3e2d70cdf"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:69e52c64-b8ba-47a1-8a2c-9375aab9ad06"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:d180c9be-8518-46b1-8200-053e9716a706"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:c18fecc5-0273-4079-b673-106148737b39"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:bfc6a918-154b-4cfc-bfc5-5a020f1c1515"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:7ab0b734-00c8-47f8-955a-11c2ad8c19ef"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:bd2ffaec-cdfc-423c-9d44-201aa7aa5c8c"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:f75b64b0-bc74-46ef-915f-6b175a91353c"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:653e8819-5d9c-4de2-bd26-5320084511ef"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:57b274fe-8457-4913-b841-00a95a7f4f57"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:7492cb5b-16ee-4cb9-a96a-6293f5ef3c1c"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:275b6b3f-9229-4e07-93a0-83345665072b"
+          },
+          {
+            "state": "accepted",
+            "attempts": 1,
+            "subject_ref": "gen:256b5280-b9c1-487c-b7ee-3cb67957f757"
+          },
+          {
+            "state": "pending",
+            "attempts": 0,
+            "subject_ref": "credit:6be2f412-7576-4464-8eed-c8a71eab8221"
+          }
+        ],
+        "pro_outbox_count": 21,
+        "pro_delivered": 20,
+        "pro_states": {
+          "accepted": 20,
+          "pending": 1
+        },
+        "subscription": {
+          "status": "active",
+          "plan_id": "studio",
+          "provider_subscription_id": "sub_1UGTFoIWRG2AbpPzK4ftOmQ3"
+        }
+      },
+      "expected": "a correction after the export reduces the reported quantity and leaves the original row untouched",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 99,
+      "name": "cleanup",
+      "utc": "2026-09-17T00:38:36Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "",
+      "result": "pass",
+      "note": "{  \"performed\": true,  \"deleted\": [    \"sub_1UGTFoIWRG2AbpPzK4ftOmQ3 (cancelled)\",    \"clock_1UGTFlIWRG2AbpPzprHV6bH8 (test clock, with its customers and subscriptions)\",    \"pm_1UGTFmIWRG2AbpPztSx9JTbe (detached)\",    \"cus_VH1IUzrPKbHmNG (already gone at the provider)\",    \"price_1UGTFOIWRG2AbpPzOs5IONF1 (price deactivated; Stripe prices cannot be deleted)\",    \"prod_VH1HEvaNyM5hJM (product deactivated; a product with a price cannot be deleted)\",    \"mtr_test_61VPrCiVSpLnjezGH41IWRG2AbpPz9dQ (meter deactivated; Stripe meters cannot be deleted)\",    \"database aurora_v1_stripeproof_8b8515\"  ],  \"retained_undeletable\": [    {      \"id\": \"pi_3UGTFwIWRG2AbpPz21447WUA\",      \"reason\": \"payment_intents cannot be deleted through the Stripe API in test mode\"    },    {      \"id\": \"ch_3UGTFwIWRG2AbpPz2UT1cDbr\",      \"reason\": \"charges cannot be deleted through the Stripe API in test mode\"    },    {      \"id\": \"re_3UGTFwIWRG2AbpPz2N0YTdLH\",      \"reason\": \"refunds cannot be deleted through the Stripe API in test mode\"    }  ],  \"failed\": [],  \"remaining_removable_for_run_id\": 1}"
+    }
+  ],
+  "final": {
+    "provider": null,
+    "local": null,
+    "ledger": null
+  },
+  "cleanup": {
+    "performed": true,
+    "deleted": [
+      "sub_1UGTFoIWRG2AbpPzK4ftOmQ3 (cancelled)",
+      "clock_1UGTFlIWRG2AbpPzprHV6bH8 (test clock, with its customers and subscriptions)",
+      "pm_1UGTFmIWRG2AbpPztSx9JTbe (detached)",
+      "cus_VH1IUzrPKbHmNG (already gone at the provider)",
+      "price_1UGTFOIWRG2AbpPzOs5IONF1 (price deactivated; Stripe prices cannot be deleted)",
+      "prod_VH1HEvaNyM5hJM (product deactivated; a product with a price cannot be deleted)",
+      "mtr_test_61VPrCiVSpLnjezGH41IWRG2AbpPz9dQ (meter deactivated; Stripe meters cannot be deleted)",
+      "database aurora_v1_stripeproof_8b8515"
+    ],
+    "retained_undeletable": [
+      {
+        "id": "pi_3UGTFwIWRG2AbpPz21447WUA",
+        "reason": "payment_intents cannot be deleted through the Stripe API in test mode"
+      },
+      {
+        "id": "ch_3UGTFwIWRG2AbpPz2UT1cDbr",
+        "reason": "charges cannot be deleted through the Stripe API in test mode"
+      },
+      {
+        "id": "re_3UGTFwIWRG2AbpPz2N0YTdLH",
+        "reason": "refunds cannot be deleted through the Stripe API in test mode"
+      }
+    ],
+    "failed": [],
+    "remaining_removable_for_run_id": 1
+  },
+  "findings": [
+    {
+      "id": "X68",
+      "status": "confirmed by this run",
+      "summary": "Webhook events and API responses arrive on two different Stripe contract versions.",
+      "observed_event_api_versions": [
+        "2024-06-20"
+      ],
+      "observed_response_stripe_versions": [
+        "2024-06-20",
+        "2025-11-17.clover"
+      ],
+      "sdk_default_api_version": "2025-11-17.clover",
+      "note": "Aurora Meter Pro parses the forwarded payload at the account default version and, in the same flow, reads objects back at the version it pins, then reconciles the two against each other. The harness's own unpinned reads answer at the account default and its pinned reads at the SDK default, which is why both appear above. Recorded separately, never normalised together. 04c owns the pin (P24)."
+    }
+  ],
+  "evidence_files": {
+    "latest": "sample-pro-proof.json",
+    "this_run": "runs/sample-pro-proof-stripe-proof-20260917T003212Z-8b8515.json",
+    "index": "runs/index.ndjson",
+    "preserved_predecessor": {
+      "run_id": "stripe-proof-20260917T002637Z-8c7e5a",
+      "path": "runs/sample-pro-proof-stripe-proof-20260917T002637Z-8c7e5a.json"
+    },
+    "note": "The latest pointer is replaced on every run; every run's own document is kept under runs/ by run id and is never overwritten by a later run (X178)."
+  }
+}

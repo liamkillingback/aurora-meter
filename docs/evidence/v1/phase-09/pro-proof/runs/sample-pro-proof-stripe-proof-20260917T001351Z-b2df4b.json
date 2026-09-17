@@ -1,0 +1,199 @@
+{
+  "schema": "aurora-v1-stripe-proof/1",
+  "profile": "sample",
+  "run_id": "stripe-proof-20260917T001351Z-b2df4b",
+  "mode": "test",
+  "started_utc": "2026-09-17T00:13:51Z",
+  "finished_utc": "2026-09-17T00:14:22Z",
+  "result": "fail",
+  "branch": null,
+  "exit_code": 1,
+  "environment": {
+    "stripity_stripe": "3.3.2",
+    "sdk_default_api_version": "2025-11-17.clover",
+    "observed_response_stripe_version": [
+      "2024-06-20"
+    ],
+    "observed_event_api_versions": [],
+    "stripe_cli": "stripe version 1.43.7",
+    "stripe_cli_reported_account_api_version": null,
+    "pro_sha": "dce6ffc",
+    "core_sha": "1a3a98e",
+    "elixir": "1.20.1",
+    "otp": "29",
+    "transport": "stripe listen --forward-to",
+    "registered_endpoint_modified": false,
+    "live_mode_used": false,
+    "credits_stripe_client": "AuroraMeter.Pro.Credits.StripeClient.Live",
+    "billing_provider": "AuroraMeter.Pro.Stripe"
+  },
+  "documentation": {
+    "read_before_objects_created": true,
+    "accessed_utc": "2026-09-15",
+    "urls": [
+      "https://docs.stripe.com/api/billing/meter/create",
+      "https://docs.stripe.com/api/prices/create",
+      "https://docs.stripe.com/api/prices/create?query=recurring",
+      "https://docs.stripe.com/api/test_clocks/advance",
+      "https://docs.stripe.com/api/test_clocks/delete",
+      "https://docs.stripe.com/billing/testing/test-clocks/api-advanced-usage",
+      "https://docs.stripe.com/api/billing/meter-event_summary/list",
+      "https://docs.stripe.com/testing",
+      "https://docs.stripe.com/disputes/api"
+    ],
+    "mechanism_for_failed": null,
+    "mechanism_for_canceled": null,
+    "failed_is_documented": false,
+    "canceled_is_documented_for_this_harness": false,
+    "payment_method_token": "pm_card_visa",
+    "quotes": [],
+    "sections": [
+      "purpose",
+      "meter",
+      "tiered_metered_price",
+      "test_clock",
+      "meter_event_summary",
+      "payment_methods",
+      "dispute_outcome",
+      "what_could_not_be_established"
+    ]
+  },
+  "parameters": {
+    "amount_cents": 2500,
+    "refund_cents": 1000,
+    "currency": "usd"
+  },
+  "objects": {
+    "customer": null,
+    "payment_method": null,
+    "payment_intent": null,
+    "charge": null,
+    "refund": null,
+    "tenant_key": null,
+    "database": "aurora_v1_stripeproof_b2df4b",
+    "account": "acct_1Pho8bIWRG2AbpPz",
+    "meter": "mtr_test_61VPquxoY0qzc0uaU41IWRG2AbpPzDHU",
+    "meter_event_name": "aurora_v1_stripe_proof_20260917T001351Z_b2df4b",
+    "price": "price_1UGSxdIWRG2AbpPzKDVt3gqX",
+    "product": "prod_VH0zCodkAQKVni"
+  },
+  "objects_created": [
+    {
+      "type": "meter",
+      "id": "mtr_test_61VPquxoY0qzc0uaU41IWRG2AbpPzDHU",
+      "utc": "2026-09-17T00:13:55Z"
+    },
+    {
+      "type": "product",
+      "id": "prod_VH0zCodkAQKVni",
+      "utc": "2026-09-17T00:13:57Z"
+    },
+    {
+      "type": "price",
+      "id": "price_1UGSxdIWRG2AbpPzKDVt3gqX",
+      "utc": "2026-09-17T00:13:58Z"
+    }
+  ],
+  "events_forwarded": [],
+  "steps": [
+    {
+      "n": 1,
+      "name": "guards G1 to G7",
+      "utc": "2026-09-17T00:13:53Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "every guard passes, or the run refuses with exit 3 having created nothing",
+      "result": "pass",
+      "note": "nothing was created before every guard passed"
+    },
+    {
+      "n": 2,
+      "name": "the current official Stripe documentation, read before any object was created",
+      "utc": "2026-09-17T00:13:54Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "the current official Stripe documentation is read and recorded before any object exists",
+      "result": "pass",
+      "note": "recorded verbatim in product-workspaces/aurora_meter_pro/docs/evidence/v1/phase-04/stripe-metering-docs.json"
+    },
+    {
+      "n": 3,
+      "name": "the meter, the product and the metered price",
+      "utc": "2026-09-17T00:13:58Z",
+      "provider_state": {
+        "account": "acct_1Pho8bIWRG2AbpPz",
+        "meter": "mtr_test_61VPquxoY0qzc0uaU41IWRG2AbpPzDHU",
+        "meter_event_name": "aurora_v1_stripe_proof_20260917T001351Z_b2df4b",
+        "product": "prod_VH0zCodkAQKVni",
+        "price": "price_1UGSxdIWRG2AbpPzKDVt3gqX",
+        "tiers": [
+          {
+            "up_to": 2,
+            "unit_amount": 0
+          },
+          {
+            "up_to": "inf",
+            "unit_amount": 25
+          }
+        ],
+        "livemode": false,
+        "response_stripe_version": "2024-06-20"
+      },
+      "event": null,
+      "ledger": null,
+      "expected": "a test-mode meter, product and metered price exist, livemode false",
+      "result": "pass",
+      "note": null
+    },
+    {
+      "n": 99,
+      "name": "cleanup",
+      "utc": "2026-09-17T00:14:22Z",
+      "provider_state": null,
+      "event": null,
+      "ledger": null,
+      "expected": "",
+      "result": "pass",
+      "note": "{  \"performed\": true,  \"deleted\": [    \"price_1UGSxdIWRG2AbpPzKDVt3gqX (price deactivated; Stripe prices cannot be deleted)\",    \"prod_VH0zCodkAQKVni (product deactivated; a product with a price cannot be deleted)\",    \"mtr_test_61VPquxoY0qzc0uaU41IWRG2AbpPzDHU (meter deactivated; Stripe meters cannot be deleted)\",    \"database aurora_v1_stripeproof_b2df4b\"  ],  \"retained_undeletable\": [],  \"failed\": [],  \"remaining_removable_for_run_id\": 0}"
+    }
+  ],
+  "final": {
+    "provider": null,
+    "local": null,
+    "ledger": null
+  },
+  "cleanup": {
+    "performed": true,
+    "deleted": [
+      "price_1UGSxdIWRG2AbpPzKDVt3gqX (price deactivated; Stripe prices cannot be deleted)",
+      "prod_VH0zCodkAQKVni (product deactivated; a product with a price cannot be deleted)",
+      "mtr_test_61VPquxoY0qzc0uaU41IWRG2AbpPzDHU (meter deactivated; Stripe meters cannot be deleted)",
+      "database aurora_v1_stripeproof_b2df4b"
+    ],
+    "retained_undeletable": [],
+    "failed": [],
+    "remaining_removable_for_run_id": 0
+  },
+  "findings": [
+    {
+      "id": "X68",
+      "status": "confirmed by this run",
+      "summary": "Webhook events and API responses arrive on two different Stripe contract versions.",
+      "observed_event_api_versions": [],
+      "observed_response_stripe_versions": [
+        "2024-06-20"
+      ],
+      "sdk_default_api_version": "2025-11-17.clover",
+      "note": "Aurora Meter Pro parses the forwarded payload at the account default version and, in the same flow, reads objects back at the version it pins, then reconciles the two against each other. The harness's own unpinned reads answer at the account default and its pinned reads at the SDK default, which is why both appear above. Recorded separately, never normalised together. 04c owns the pin (P24)."
+    }
+  ],
+  "evidence_files": {
+    "latest": "sample-pro-proof.json",
+    "this_run": "runs/sample-pro-proof-stripe-proof-20260917T001351Z-b2df4b.json",
+    "index": "runs/index.ndjson",
+    "preserved_predecessor": null,
+    "note": "The latest pointer is replaced on every run; every run's own document is kept under runs/ by run id and is never overwritten by a later run (X178)."
+  }
+}

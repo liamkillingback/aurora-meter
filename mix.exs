@@ -377,7 +377,12 @@ defmodule AuroraMeter.MixProject do
         "CHANGELOG.md",
         "LICENSE",
         "NOTICE.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
         "docs/getting-started.md",
+        "docs/mental-model.md",
+        "docs/architecture.md",
+        "docs/troubleshooting.md",
         "docs/api.md",
         "docs/guarantees.md",
         "docs/support-policy.md",
@@ -427,6 +432,10 @@ defmodule AuroraMeter.MixProject do
         # Reference is matched before Guides on purpose: ExDoc takes the first
         # group whose pattern matches, and the Guides pattern matches every
         # top-level file under docs/.
+        # Trust is matched before Guides for the same reason Reference is: the
+        # Guides pattern matches every top-level file under docs/, and these are
+        # the pages a reader checks before depending on the library.
+        Trust: ~r/docs\/(guarantees|correctness|architecture|mental-model|troubleshooting)\.md$/,
         Reference: ~r/docs\/(api|support-policy)\.md$/,
         Examples: ~r/docs\/examples\//,
         Operations: ~r/docs\/operations\//,

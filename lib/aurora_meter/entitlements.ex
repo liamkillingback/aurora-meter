@@ -59,7 +59,7 @@ defmodule AuroraMeter.Entitlements do
   `:counter`, `:boolean`, `:feature` (an integer plan value, carried in `value`)
   or `:undeclared`; `limit` is set for hard caps, `included` for metered
   allowances; `percent` is used relative to whichever applies (nil when neither
-  does, which includes every `:counter` — see ADR 0006).
+  does, which includes every `:counter`; see ADR 0006).
   """
   @type quota :: %{
           feature: atom(),
@@ -305,7 +305,7 @@ defmodule AuroraMeter.Entitlements do
   end
 
   @doc """
-  Remaining quota for a hard-limited feature, or `:unlimited` — which is what a
+  Remaining quota for a hard-limited feature, or `:unlimited`, which is what a
   metered feature, a counter and a plain feature all report, because none of
   them has a cap to count down from.
 
@@ -354,7 +354,7 @@ defmodule AuroraMeter.Entitlements do
 
   `period_start` names the period to count it against; without it the current
   one is used. A caller that will release the reservation later has to hold on
-  to the period it reserved in — see `with_quota/4`.
+  to the period it reserved in; see `with_quota/4`.
 
   Raises `ArgumentError` for a feature configured
   `feature_sources: %{name => :events}`. This is the bill-immediately primitive:

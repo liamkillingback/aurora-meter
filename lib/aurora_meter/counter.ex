@@ -30,9 +30,9 @@ defmodule AuroraMeter.Counter do
 
   Two key shapes share the table:
 
-    * `{tenant_key, feature, period_start}` — the billing-period counter that
+    * `{tenant_key, feature, period_start}`: the billing-period counter that
       entitlements and reporting read
-    * `{tenant_key, feature, {:day, date}}` — a UTC day bucket, maintained
+    * `{tenant_key, feature, {:day, date}}`: a UTC day bucket, maintained
       alongside the period counter when `:history` is enabled, feeding
       `AuroraMeter.history/3`
 
@@ -164,7 +164,7 @@ defmodule AuroraMeter.Counter do
   Releases a previously reserved `qty` (rollback on a failed function).
 
   `on` is the day the reservation was counted against. Without it the day
-  history is decremented from the clock — so work that started at 23:59:59 and
+  history is decremented from the clock, so work that started at 23:59:59 and
   gave up a second later took its release out of the *next* day, leaving one
   day permanently over-counted and the other under. The period counter was
   taught this; the day bucket beside it was not.
@@ -342,8 +342,8 @@ defmodule AuroraMeter.Counter do
   becomes `total + pending_flush`. Applied as a delta against a snapshot, so a
   bump that lands mid-rebase is kept exactly. Cold keys are skipped.
 
-  `source` says where the total came from, and only `:flush` — this node's own
-  write, which read the row back — clears `remote`. A total announced by
+  `source` says where the total came from, and only `:flush` (this node's own
+  write, which read the row back) clears `remote`. A total announced by
   another node is a database total *that node* saw, and this node may have
   applied gossiped deltas since; clearing `remote` for one of those told
   `remote_since_rebase/1` the view had not moved when it had, which is the one

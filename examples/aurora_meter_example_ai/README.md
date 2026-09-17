@@ -183,6 +183,90 @@ component whose assigns did not change. `GenerateLive` passes
 `data-usage={@usage_version}` for that reason, and
 `test/.../usage_meter_change_tracking_test.exs` shows both halves.
 
+## The Pro profile
+
+Everything above is the **core profile**: MIT, Elixir and Postgres, no
+credential, no provider, no payment. It is the profile this sample is written
+for and it is what you get if you never read this section.
+
+The **Pro profile** adds Aurora Meter Pro and a real Stripe **test-mode**
+integration: a `/billing` page, credit top-ups, auto-recharge, the Stripe
+webhook, and export through Pro's outbox onto Stripe's Billing Meters. It is
+opt in, it is absent by default, and turning it on takes four commands.
+
+```bash
+mix hex.organization auth phxtemplates --key "$AURORA_HEX_READ_KEY"   # once, by you
+cp .env.example .env && $EDITOR .env                                   # your own TEST-MODE values
+set -a; . ./.env; set +a
+export AURORA_SAMPLE_PRO=1
+mix deps.get
+mix ecto.migrate
+mix ecto.migrate --migrations-path priv/repo/pro_migrations
+PORT=4021 mix phx.server
+```
+
+`.env.example` lists every variable by name with an empty value, and says what
+each one is for. **No key of any kind is in this repository**, and
+`test/secret_scan_test.exs` fails the suite if one appears.
+
+### What the flag actually changes
+
+| | core profile | Pro profile |
+|---|---|---|
+| dependencies | `mix.lock` | `mix.pro.lock`, which adds `aurora_meter_pro`, `oban` and `stripity_stripe` |
+| build directory | `_build/core` | `_build/pro` |
+| migrations | `priv/repo/migrations` | that, then `priv/repo/pro_migrations` |
+| supervision tree | as above | plus Oban and `AuroraMeter.Pro` |
+| routes | as above | plus `/billing` |
+| endpoint | as above | plus the Stripe webhook, **above `Plug.Parsers`** |
+| outbox | `SampleOutbox` | `AuroraMeterExampleAi.Pro.Outbox`, which calls both |
+| `/generate` | no top-up affordance at all | a link to `/billing` |
+
+Two of those rows are worth a sentence each.
+
+**The webhook is mounted in the endpoint, not in the router.** Stripe signs the
+raw request body and `Plug.Parsers` consumes it, so a router `forward` makes
+every event fail verification with a 400 and the symptom appears at the far end
+of the system as customers who paid and were never credited. There is a test
+that mounts it the wrong way round and asserts the 400.
+
+**The outbox is a composite, not a swap.** The obvious configuration is
+`events_outbox: AuroraMeter.Pro.Outbox`, and it works, and it quietly takes
+away this application's own record of what it metered: the orphan recovery
+path, the hold policy, `mix sample.repair`, four figures on `/ops` and five of
+the eight failure recipes all read `sample_outbox_items`. Thirty-one tests went
+red the moment the flag was set. `AuroraMeterExampleAi.Pro.Outbox` is three
+lines and calls both, in the one transaction.
+
+### Without a licence
+
+Nothing about the core profile changes, and that is asserted rather than
+claimed: `test/pro_absent_test.exs` reads every compiled module's import table
+and fails if anything in this application references `AuroraMeter.Pro` outside
+the two guarded trees. In the core profile the answer is **nothing at all**.
+
+The Pro-only tests are tagged `:pro` and excluded when the package is absent,
+and the exclusion prints a loud banner naming the files and how to run them,
+because a silently skipped suite reports as a pass.
+
+## The failure catalogue
+
+`docs/failures.md` is eight ways this application can fail, what each leaves in
+the database and in the ledger, and what to do about it. Every one of them
+runs:
+
+```bash
+mix sample.failure                      # list them
+mix sample.failure untrappable_death    # run one
+mix sample.failure all                  # the seven that need no provider
+mix sample.failure --check              # re-assert the last run's JSON
+```
+
+`test/sample_failure_test.exs` asserts the end state each recipe documents, and
+cross-checks the document's headings against the implemented recipes in both
+directions, so the catalogue cannot drift from the software without the suite
+going red.
+
 ## Testing
 
 ```bash

@@ -7,7 +7,7 @@ defmodule Demo do
   def run do
     org = "org_#{System.unique_integer([:positive])}"
     line()
-    IO.puts("Aurora Meter demo — tenant #{org}")
+    IO.puts("Aurora Meter demo: tenant #{org}")
     line()
 
     {:ok, _} = AuroraMeter.subscribe(org, :free)

@@ -62,3 +62,14 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# The Pro profile under test, with the provider seams pointed at Aurora Meter
+# Pro's own fakes. The flag is the same one `mix.exs` reads to decide whether
+# the package is in the dependency tree at all, so the two cannot disagree.
+#
+# `config/pro.exs` is deliberately NOT imported here: it refuses to load
+# without a real Stripe test-mode key, and a suite that needed a credential
+# could not run in CI. See `config/pro_test.exs` for why the two are separate.
+if System.get_env("AURORA_SAMPLE_PRO") == "1" do
+  import_config "pro_test.exs"
+end

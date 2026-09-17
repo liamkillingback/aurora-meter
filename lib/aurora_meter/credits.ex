@@ -26,8 +26,8 @@ defmodule AuroraMeter.Credits do
   A `hold/4` reserves an estimate against the available balance (`balance -
   held`), refusing with `:insufficient_credits` when it would go below zero
   (minus `:credits_overdraft_tolerance`). `settle/3` then debits the actual
-  cost — which may exceed the hold; the balance can go negative and the
-  overrun is reported in telemetry — and releases the whole hold, while
+  cost (which may exceed the hold; the balance can go negative and the
+  overrun is reported in telemetry) and releases the whole hold, while
   `release/1` drops the hold without charging. `debit/4` is a hold and a
   settle in one step. `with_credits/4` runs all of that around a function,
   releasing the hold if the function fails or raises.
@@ -40,7 +40,7 @@ defmodule AuroraMeter.Credits do
 
   Grants are `:paid` by default; a `:promotional` grant (a sign-up bonus, a
   goodwill top-up) is consumed before paid credit and may carry an
-  `:expires_at`. `reverse/4` — a refund or chargeback — is exempt: it takes a
+  `:expires_at`. `reverse/4` (a refund or chargeback) is exempt: it takes a
   paid grant back and leaves the promotional figure alone. `expire_due/1`, which
   you run from a scheduler, removes what is left of expired grants, never taking
   the balance below zero.
@@ -202,7 +202,7 @@ defmodule AuroraMeter.Credits do
   @typedoc """
   One bucket of a money series. `spent` and `granted` are positive magnitudes
   (a chart never has to think about signs), `net` is `granted - spent`, and
-  `balance_after` is the ledger balance after the last entry in the bucket —
+  `balance_after` is the ledger balance after the last entry in the bucket, and
   `nil` when the bucket has no entries at all.
   """
   @type money_point :: %{
@@ -360,12 +360,12 @@ defmodule AuroraMeter.Credits do
 
   Options:
 
-    * `:reference` — **required**; the idempotency key (a payment id, an
+    * `:reference`: **required**; the idempotency key (a payment id, an
       invoice number). A second grant with the same reference for the same
       tenant returns the existing entry as `{:ok, existing}` without crediting
       again.
-    * `:category` — `:paid` (default), `:promotional` or `:adjustment`.
-    * `:expires_at` — `DateTime`; promotional grants only.
+    * `:category`: `:paid` (default), `:promotional` or `:adjustment`.
+    * `:expires_at`: `DateTime`; promotional grants only.
     * `:metadata`: a map stored on the entry.
     * `:source`: a map naming where the money came from, stored on the credit
       lot this grant creates. Ignored on a wallet that has not been cut over to
@@ -396,7 +396,7 @@ defmodule AuroraMeter.Credits do
   already been granted.
 
   Decided under the balance row's lock, so two concurrent deliveries of the
-  same payment cannot both be told they are the new one — which is what
+  same payment cannot both be told they are the new one, which is what
   decides whether the host announces the payment.
   """
   @spec grant_with_status(term(), pos_integer(), keyword()) ::
@@ -439,7 +439,7 @@ defmodule AuroraMeter.Credits do
 
   @doc """
   Settles the hold under `reference`: debits `actual_amount` and releases the
-  whole hold. Never fails for lack of credit — an actual cost above the hold
+  whole hold. Never fails for lack of credit: an actual cost above the hold
   takes the balance negative and is flagged as `overrun: true` in the
   `[:aurora_meter, :credits, :settle]` telemetry metadata.
 
@@ -449,7 +449,7 @@ defmodule AuroraMeter.Credits do
   Options:
 
     * `:metadata`: stored on the settle entry.
-    * `:tenant` — assert the hold belongs to this tenant. A hold whose
+    * `:tenant`: assert the hold belongs to this tenant. A hold whose
       `tenant_key` is anything else answers `{:error, :not_found}` and nothing
       is written. Without it the reference alone identifies the hold, which is
       what it has always done and is safe because `(kind, reference)` is unique
@@ -525,7 +525,7 @@ defmodule AuroraMeter.Credits do
 
   @doc """
   Takes `amount` back off `tenant` for money that has already left the payment
-  provider — a refund, a chargeback.
+  provider: a refund, or a chargeback.
 
   Unlike `debit/4` this is never refused for want of balance. The money is
   gone whatever the ledger says, so refusing would only make the two disagree;
@@ -757,8 +757,8 @@ defmodule AuroraMeter.Credits do
   Holds that are still open and were taken before `:older_than`, oldest first.
 
   For a host that has to find reservations nothing will ever close. A hold is
-  taken before the row that remembers it exists — there is no way to make those
-  two one write, since they are in different databases as often as not — so a
+  taken before the row that remembers it exists (there is no way to make those
+  two one write, since they are in different databases as often as not), so a
   process killed in between leaves money reserved against a tenant with nothing
   left pointing at it. Only the host can tell such a hold from one whose work
   is simply still running, so the ledger's part is to list them.
@@ -768,13 +768,13 @@ defmodule AuroraMeter.Credits do
 
   Options:
 
-    * `:older_than` — required, a `DateTime`. Build it from
+    * `:older_than`: required, a `DateTime`. Build it from
       `AuroraMeter.Clock.now/0`, which is the clock the hold's `inserted_at` was
       stamped by.
-    * `:limit` — default 200.
+    * `:limit`: default 200.
     * `:reference_prefix`: narrow to one kind of work; a prefix match.
-    * `:tenant` — only this tenant's holds.
-    * `:after` — a `{inserted_at, id}` pair from the last row of the previous
+    * `:tenant`: only this tenant's holds.
+    * `:after`: a `{inserted_at, id}` pair from the last row of the previous
       page. Results are ordered by `(inserted_at, id)`, so paging with this
       returns every hold exactly once even when several were written in the same
       microsecond. Ordering by `inserted_at` alone, which is what releases
@@ -819,12 +819,12 @@ defmodule AuroraMeter.Credits do
 
   Options:
 
-    * `:older_than` — required, a `DateTime`. Omitting it raises `KeyError`.
-    * `:limit` — default 200, the most holds one run examines.
-    * `:tenant` — sweep one tenant.
+    * `:older_than`: required, a `DateTime`. Omitting it raises `KeyError`.
+    * `:limit`: default 200, the most holds one run examines.
+    * `:tenant`: sweep one tenant.
     * `:reference_prefix`: sweep one kind of work.
-    * `:after` — a cursor from a previous report, to page.
-    * `:reconciler` — use this instead of the configured one. A module, a
+    * `:after`: a cursor from a previous report, to page.
+    * `:reconciler`: use this instead of the configured one. A module, a
       `{module, function}` pair or a one-argument function. Passing
       `fn _ -> :keep end` is a dry run: it reports what a sweep would look at
       and writes nothing.
@@ -858,8 +858,8 @@ defmodule AuroraMeter.Credits do
   Holds `estimate`, runs `fun`, and settles or releases depending on what it
   returns.
 
-  `fun` must return `{:ok, result, actual_amount}` — the hold is settled for
-  `actual_amount` and `{:ok, result}` is returned — or `{:error, reason}`,
+  `fun` must return `{:ok, result, actual_amount}` (the hold is settled for
+  `actual_amount` and `{:ok, result}` is returned) or `{:error, reason}`,
   which releases the hold and is returned as-is. If `fun` raises, throws or
   exits, the hold is released and the error propagates. Any other return
   value releases the hold and raises `ArgumentError`.
@@ -991,12 +991,12 @@ defmodule AuroraMeter.Credits do
 
   Options:
 
-    * `:limit` — default 50.
+    * `:limit`: default 50.
     * `:cursor`: page from here. Take it from `cursor/1` on the last entry of
       the previous page; only entries strictly older than it are returned.
     * `:before`: a `DateTime`; only entries whose `inserted_at` is strictly
       before it. A **filter**, not a cursor: see below.
-    * `:kinds` — which kinds to include; defaults to
+    * `:kinds`: which kinds to include; defaults to
       `#{inspect(@default_history_kinds)}`, i.e. holds and releases (the
       bookkeeping around a settlement) are hidden unless asked for.
     * `:reference_prefix`: only entries whose `reference` begins with this
@@ -1114,18 +1114,18 @@ defmodule AuroraMeter.Credits do
   @doc """
   Returns `tenant`'s money movement as zero-filled buckets, oldest first.
 
-  Every bucket in the range is present — a bucket the ledger never touched is
-  `spent: 0, granted: 0, net: 0, balance_after: nil` — so a chart can render
+  Every bucket in the range is present (a bucket the ledger never touched is
+  `spent: 0, granted: 0, net: 0, balance_after: nil`), so a chart can render
   the list straight through with no gap handling. Buckets are UTC.
 
   Options:
 
-    * `:days` — how many days back from `:to`, default 30.
-    * `:from` / `:to` — explicit `Date` bounds (inclusive), overriding `:days`.
-    * `:bucket` — `:day` (default) or `:month`. A month bucket is dated its
+    * `:days`: how many days back from `:to`, default 30.
+    * `:from` / `:to`: explicit `Date` bounds (inclusive), overriding `:days`.
+    * `:bucket`: `:day` (default) or `:month`. A month bucket is dated its
       first day; the first and last month of a range that does not start and
       end on month boundaries are partial.
-    * `:kinds` — which kinds count as spend, default
+    * `:kinds`: which kinds count as spend, default
       `[:settle, :debit, :expire]`. `:hold` and `:release` move `held` rather
       than `balance`, so they are never spend and are rejected.
 
@@ -1181,7 +1181,7 @@ defmodule AuroraMeter.Credits do
   (integer division, so a tenant spending a few micro-dollars a month burns
   `0`), and is `nil` when the tenant has spent nothing at all. `runway_days` is
   `available / daily_burn`, and is `nil` whenever `daily_burn` is `nil` or
-  zero — there is no honest number of days to show when nothing is being spent.
+  zero: there is no honest number of days to show when nothing is being spent.
   The period comes from the configured period source, the same one `quota/2`
   reports.
 
@@ -1272,8 +1272,8 @@ defmodule AuroraMeter.Credits do
 
   @doc """
   Expires promotional grants whose `expires_at` is at or before `now`
-  (default: now), removing what is left of each — `min(promotional balance,
-  grant amount)`, never below zero — as an `:expire` entry referenced
+  (default: now), removing what is left of each (`min(promotional balance,
+  grant amount)`, never below zero) as an `:expire` entry referenced
   `"expire:<grant id>"`, and stamping the grant's `expired_at`. Returns the
   number of grants expired. Run it periodically (a `Quantum` job, an Oban
   cron, or a plain timer).
