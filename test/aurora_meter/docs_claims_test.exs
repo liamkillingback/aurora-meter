@@ -100,6 +100,75 @@ defmodule AuroraMeter.DocsClaimsTest do
        "is a ledger idempotency contract, not a delivery guarantee."}
   ]
 
+  # -- G02: strictness claims -------------------------------------------------
+  #
+  # R13, finding X570. G01's three families are lists of **phrases**, and a
+  # phrase list can only ban a claim somebody wrote down. The sixteen false
+  # hard-limit claims X570 found never used G01's vocabulary: not one said
+  # "global quota" or "globally serialized". They asserted that a cap is exact
+  # under concurrency and then said nothing at all about nodes, and silence is
+  # not a phrase that can go in a banned list.
+  #
+  # So this family triggers on the **strictness claim** rather than on the
+  # cluster claim, and then requires the qualification near it. That inversion
+  # is the whole point: "a cap of n admits exactly n" is true on one node and
+  # false across a cluster (G2 and G4), so the sentence is not wrong, it is
+  # unfinished. The guard asks for the rest of it.
+  #
+  # Each entry is {id, pattern, what the pattern is reading}. Keeping them
+  # separate rather than as one alternation means a failure names the shape it
+  # matched, and the control below can assert every shape is still live.
+  #
+  # Scope note: this family covers `docs/launch/`, which `house_style_test`
+  # excludes from the dash sweep as "a superseded draft kept as history". The
+  # difference is deliberate. A dash in history is a typographic artefact of
+  # when it was written; a false correctness claim in a draft of a public
+  # launch post is a sentence somebody may still paste. R13 found one there.
+  # "exactly" on its own is an adverb: `docs/phoenix.md` says a race is "exactly
+  # the window the first paragraph describes", which is prose, not a promise.
+  # The claim shape is "exactly" followed by a QUANTITY, so that is what the
+  # four numeric patterns below require. Without this the guard cries wolf, and
+  # a guard that cries wolf is switched off.
+  @exactly_n "exactly\\s+(?:[0-9][0-9,]*|`?n`?|one|two|three|four|five|six|seven|eight|nine|ten|twenty|fifty|a hundred|the (?:cap|limit|quota|allowance))\\b"
+
+  @strictness_claims [
+    {:exact_cap,
+     ~r/(limit|cap|quota|allowance)[^.!?]{0,80}(admits?|allows?|grants?|succeed(ed)?|admitted)[^.!?]{0,30}#{@exactly_n}/i,
+     "a cap of n admits exactly n"},
+    {:exact_cap_reversed,
+     ~r/#{@exactly_n}[^.!?]{0,60}(admitted|admits?|succeed(ed)?|allowed)[^.!?]{0,60}(limit|cap|quota)/i,
+     "exactly n against a cap of n, with the number first"},
+    {:exact_under_load,
+     ~r/(under (any [a-z ]{0,24})?(concurrency|load|contention)|however many|no matter how many|at the same (time|moment)|simultaneously|all at once)[^.!?]{0,110}#{@exactly_n}/i,
+     "exactness asserted of concurrency in general"},
+    {:exact_under_load_reversed,
+     ~r/#{@exactly_n}[^.!?]{0,110}(under (any [a-z ]{0,24})?(concurrency|load|contention)|however many|no matter how many|at the same (time|moment)|simultaneously|all at once)/i,
+     "the same, with the quantifier after the number"},
+    {:limits_hold,
+     ~r/(hard )?(limit|cap|quota)s?[^.!?]{0,70}(hold|holds|stay|stays|remain|remains)[^.!?]{0,40}(under (concurrency|load)|correct|exact|right|accurate|at once|at the same (time|moment)|simultaneously|in parallel)/i,
+     "a limit that holds or stays correct under concurrency"},
+    # Deliberately without "exact": exactness claims carry a quantity and are
+    # read by the four patterns above. Unanchored, "exact" also matches inside
+    # "exactly the window the first paragraph describes", which is prose. What
+    # is left are the quality words, which are only ever a promise.
+    {:correct_under_concurrency,
+     ~r/\b(correct|correctly|accurate|accurately|safe|safely|right)\b[^.!?]{0,50}under (any )?(concurrency|load|contention)/i,
+     "correctness asserted of concurrency in general"},
+    {:cannot_both,
+     ~r/concurrent[^.!?]{0,80}cannot both[^.!?]{0,80}(limit|cap|quota|last unit)|cannot both[^.!?]{0,80}(limit|cap|quota|last unit)/i,
+     "two concurrent callers cannot both take the last unit"}
+  ]
+
+  # What finishes the sentence. Either half is enough, because either half tells
+  # the reader the truth: naming one node scopes the strict claim correctly, and
+  # naming the cluster behaviour supplies the bound. What is forbidden is
+  # neither.
+  @node_qualification ~r/\bon (one|a|this|that|each|a single|any single) node\b|\bone node\b|\bper node\b|\bsingle node\b|\bnode'?s (own )?view\b|\blocal view\b|\bmore than one node\b|\bother nodes?\b|\bacross (a |the |your |every )?(cluster|nodes)\b|\bcluster[- ]wide\b|\bovershoot\b|\bbroadcast[_ ]interval\b/i
+
+  # `{path, snippet, reason}`, keyed on text exactly as @allowed is and checked
+  # by the same hygiene test, so an exemption cannot outlive its sentence.
+  @strictness_allowed []
+
   @planned_proof ~r/^not yet proven \(phase \d\d\)$/
   @proof ~r/^`([A-Za-z0-9_.]+)` \/ `(test [^`]*)`/
   @pro_proof ~r/^`pro:` `(AuroraMeter\.Pro\.[A-Za-z0-9_.]+)`/
@@ -148,6 +217,134 @@ defmodule AuroraMeter.DocsClaimsTest do
              "allow-list entries whose snippet carries no forbidden phrase, so they " <>
                "exempt nothing and only hide the list's real size:\n" <>
                Enum.join(toothless, "\n")
+    end
+  end
+
+  describe "G02 a strictness claim carries its scope" do
+    test "G02 no package document asserts an exact cap without naming one node or the cluster" do
+      hits = for path <- scanned_paths(), hit <- strictness_hits(path), do: hit
+
+      assert hits == [],
+             "hard-limit claims that assert exactness under concurrency and never say " <>
+               "where. G2 makes `reserve` and `with_quota` strict on ONE node; G4 says a " <>
+               "burst across N nodes can exceed the cap by what the other N minus 1 " <>
+               "admitted within one `:broadcast_interval`. Scope the sentence (\"on one " <>
+               "node\") or finish it (name the overshoot and the interval). D09, I05, " <>
+               "X570:\n" <>
+               Enum.map_join(hits, "\n", fn {path, line, id, what, sentence} ->
+                 # A fenced code block has no sentence terminator, so it
+                 # arrives here as one very long "sentence". Truncate for the
+                 # message only: the scan itself reads all of it.
+                 excerpt =
+                   if String.length(sentence) > 240,
+                     do: String.slice(sentence, 0, 240) <> " ...",
+                     else: sentence
+
+                 "  #{path}:#{line}: #{id} (#{what})\n    #{inspect(excerpt)}"
+               end)
+    end
+
+    test "G02 every allow-listed strictness claim still exists and carries a reason" do
+      absent =
+        for {path, snippet, _reason} <- @strictness_allowed,
+            not (File.exists?(path) and String.contains?(File.read!(path), snippet)),
+            do: "  #{path}: #{inspect(snippet)}"
+
+      assert absent == [],
+             "allow-listed strictness claims that are no longer in the file:\n" <>
+               Enum.join(absent, "\n")
+
+      unreasoned =
+        for {path, snippet, reason} <- @strictness_allowed,
+            String.length(String.trim(reason)) < 40,
+            do: "  #{path}: #{inspect(snippet)}"
+
+      assert unreasoned == [],
+             "entries without a written reason:\n" <> Enum.join(unreasoned, "\n")
+    end
+
+    test "G02 the control: each of the seven shapes is caught, and the qualified form is not" do
+      # The claims this really shipped, restored one by one. Every one of them
+      # sat in package documentation until X570, and every one must be caught
+      # here or this guard has tested nothing.
+      restored = [
+        {:exact_cap, "Under concurrency, a hard limit of `n` admits exactly `n` reservations."},
+        {:exact_cap_reversed,
+         "Twenty tasks against a cap of two, and exactly two are admitted for that limit."},
+        {:exact_under_load, "Under load, a hard limit of 50 admits exactly 50."},
+        {:exact_under_load_reversed,
+         "A cap of five admits exactly five, no matter how many arrive at once."},
+        {:limits_hold, "Gate, run and meter atomically, so hard limits hold under concurrency."},
+        {:correct_under_concurrency,
+         "An atomic `with_quota/4` keeps it correct under concurrency."},
+        {:cannot_both,
+         "The reservation is the usage, so two concurrent calls cannot both squeeze " <>
+           "through the last unit of a hard limit."}
+      ]
+
+      # A real sentence often trips more than one shape, so the assertion is
+      # that the shape is AMONG the matches, not that it is the first. Asserting
+      # on ordering would make this control fail whenever the table is
+      # reordered, which tests nothing about the claim.
+      for {id, sentence} <- restored do
+        assert id in strictness_shapes(sentence),
+               "the restored claim #{inspect(sentence)} was read as " <>
+                 "#{inspect(strictness_shapes(sentence))}, which does not include #{id}"
+
+        assert unqualified_claims(sentence) != [],
+               "#{id}: a restored unqualified claim was not caught"
+      end
+
+      # Every shape in the table is exercised above, so a pattern cannot be
+      # added without a claim that proves it reads something.
+      assert Enum.sort(Enum.map(restored, &elem(&1, 0))) ==
+               Enum.sort(Enum.map(@strictness_claims, &elem(&1, 0)))
+
+      # And the adverb is not the claim: X570's neighbourhood is full of
+      # sentences using "exactly" to mean "precisely this", and every one of
+      # them must pass.
+      for innocent <- [
+            "which is exactly the window the first paragraph describes, and under concurrency it happens",
+            "behaviour is exactly what it was under load",
+            "that is exactly what concurrent delivery defeats"
+          ] do
+        assert strictness_shapes(innocent) == [],
+               "the adverb was read as a promise: #{inspect(innocent)}"
+      end
+
+      # And the repaired sentences pass, so the guard is not simply banning the
+      # word "exactly".
+      for repaired <- [
+            "Under load on one node, a hard limit of 50 admits exactly 50.",
+            "On one node, under any amount of concurrency, a cap of five admits exactly five.",
+            "Under any concurrency, `with_quota/4` against a cap of `n` admits exactly `n`. " <>
+              "On more than one node it is expected and bounded."
+          ] do
+        assert unqualified_claims(repaired) == [],
+               "a correctly scoped claim was refused: #{inspect(repaired)}"
+      end
+    end
+
+    test "G02 the control: the scan reads the real files, and the qualification must be near" do
+      assert scanned_paths() != []
+      assert Enum.any?(scanned_paths(), &(&1 == @readme))
+
+      # A qualification four sentences away does not finish the sentence. This
+      # is the proximity rule the old I05 did not have: it accepted the caveat
+      # anywhere on the page, and a control walked straight through it by
+      # deleting the sentence and leaving the word.
+      far =
+        "Under load, a hard limit of 50 admits exactly 50. One. Two. Three. Four. " <>
+          "Across a cluster the overshoot is bounded."
+
+      assert unqualified_claims(far) != [],
+             "a qualification four sentences away was accepted as finishing the claim"
+
+      near =
+        "Under load, a hard limit of 50 admits exactly 50. " <>
+          "Across a cluster the overshoot is bounded."
+
+      assert unqualified_claims(near) == []
     end
   end
 
@@ -497,6 +694,75 @@ defmodule AuroraMeter.DocsClaimsTest do
           String.contains?(downcased, phrase),
           not allowed?(path, text),
           do: {path, line, phrase, String.trim(text)}
+    end)
+  end
+
+  # -- G02: strictness with its scope ----------------------------------------
+  #
+  # The unit of the scan is a **sentence**, not a line. A markdown file wraps at
+  # eighty columns, so "Under load, a hard limit of 50 admits exactly 50" is one
+  # sentence spread over two lines and a per-line scan reads neither half. The
+  # text is unwrapped first, then split on sentence ends, and a claim in
+  # sentence `i` is finished by a qualification in `i` or `i + 1`. That is the
+  # rule 11d wrote for I05 ("the same sentence or the next"), made literal.
+  defp strictness_hits(path) do
+    text = File.read!(path)
+
+    for {sentence, id, what} <- unqualified_claims(text),
+        not allowed_strictness?(path, sentence),
+        do: {path, sentence_line(text, sentence), id, what, sentence}
+  end
+
+  # Every claim in `text` that no neighbouring sentence scopes. Public to the
+  # tests above so the control can feed it a sentence and watch it caught.
+  defp unqualified_claims(text) do
+    sentences = sentences(text)
+    windows = Enum.zip(sentences, Enum.drop(sentences, 1) ++ [""])
+
+    for {sentence, next} <- windows,
+        {id, what} <- List.wrap(first_strictness_match(sentence)),
+        not Regex.match?(@node_qualification, sentence <> " " <> next),
+        do: {sentence, id, what}
+  end
+
+  defp first_strictness_match(sentence) do
+    Enum.find_value(@strictness_claims, fn {id, pattern, what} ->
+      Regex.match?(pattern, sentence) and {id, what}
+    end)
+  end
+
+  defp strictness_shapes(sentence) do
+    for {id, pattern, _what} <- @strictness_claims,
+        Regex.match?(pattern, sentence),
+        do: id
+  end
+
+  defp sentences(text) do
+    text
+    |> String.replace(~r/\s+/, " ")
+    |> String.split(~r/(?<=[.!?])\s+/)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  # Best-effort line number for the message. The sentence has been unwrapped, so
+  # it is located by its first few words, which is enough to point an author at
+  # the paragraph.
+  defp sentence_line(text, sentence) do
+    needle = sentence |> String.split(" ") |> Enum.take(4) |> Enum.join(" ")
+
+    text
+    |> String.split("\n")
+    |> Enum.find_index(&String.contains?(&1, needle))
+    |> case do
+      nil -> 0
+      index -> index + 1
+    end
+  end
+
+  defp allowed_strictness?(path, sentence) do
+    Enum.any?(@strictness_allowed, fn {allow_path, snippet, _reason} ->
+      allow_path == path and String.contains?(sentence, snippet)
     end)
   end
 

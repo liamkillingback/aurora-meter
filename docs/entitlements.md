@@ -99,7 +99,7 @@ renders a counter as a bare count with no progress bar; do the same in your own
 renderer. See [ADR 0006](adr/0006-counter-feature-kind.md).
 
 `reserve/3` and `with_quota/4` still increment a counter (they simply never
-refuse it), so the count stays correct under any load.
+refuse it), so the count on that node stays correct under any load.
 
 ## with_quota: gate, run, meter, atomically
 
@@ -116,7 +116,11 @@ end
 
 It increments the counter (the reservation *is* the usage), runs the function,
 and, if the function raises, releases the reservation before re-raising. Under
-concurrency, a hard limit of `n` admits exactly `n` reservations.
+concurrency on one node, a hard limit of `n` admits exactly `n` reservations. On
+more than one node the comparison is against that node's own view, so a cap can
+be overshot by what the other nodes admitted in the last `:broadcast_interval`:
+[Guarantees](guarantees.md) G2 and G4 state the two halves, and
+[Clustering](clustering.md) gives the arithmetic and how to tighten the bound.
 
 ### Over a feature whose source is `:events`
 

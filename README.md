@@ -21,7 +21,7 @@ Aurora Meter is a library that does them with a few function calls:
 # count: an ETS increment, nothing touches the database
 AuroraMeter.track(org, :ai_generations)
 
-# gate, run and meter atomically, so hard limits hold under concurrency
+# gate, run and meter in one step: exact on a node, bounded across a cluster
 AuroraMeter.with_quota(org, :ai_generations, fn ->
   generate_report()
 end)
@@ -241,8 +241,12 @@ AuroraMeter.quota(org, :requests)
 
 `with_quota/4` reserves first (increment, compare, roll back on breach), runs the
 function, and rolls the reservation back if the function raises. The
-reservation is the usage, so two concurrent calls cannot both squeeze through
-the last unit of a hard limit.
+reservation is the usage, so on one node two concurrent calls cannot both take
+the last unit of a hard limit. Across a cluster each node compares against its
+own view, so a cap can be overshot by what the other nodes admitted in the last
+`:broadcast_interval` (one second by default). [Clustering](docs/clustering.md)
+has the arithmetic and the tuning; [the guarantee page](docs/guarantees.md) G2
+and G4 state both halves exactly.
 
 ### Prepaid credits
 

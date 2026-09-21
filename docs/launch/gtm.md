@@ -43,8 +43,9 @@ metering, and plan-gating as a few function calls, on the BEAM.
 >
 > - **Meter**: ETS-backed counters, 3.4M incr/sec measured (micro, median of
 >   five runs; 1,804 durable events/sec end to end), nothing on the DB hot path.
-> - **Entitle**: `check/2` and an atomic `with_quota/4` (correct hard limits under
->   concurrency).
+> - **Entitle**: `check/2` and a one-step `with_quota/4` (hard limits exact on a
+>   node under any concurrency, and across a cluster overshooting by at most what
+>   the other nodes admitted in the last broadcast interval).
 > - **Plans**: a small compile-time DSL.
 > - Free + MIT. A commercial Pro tier adds Stripe + dashboards.
 >

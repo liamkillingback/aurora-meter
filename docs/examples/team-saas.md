@@ -173,7 +173,11 @@ Bramble.Projects.create(org, %{name: "Rebrand"})
 # {:error, :limit_exceeded}
 ```
 
-Under any amount of concurrency, a cap of 2 admits exactly 2.
+On one node, under any amount of concurrency, a cap of 2 admits exactly 2. On
+more than one node the cap is checked against that node's view, so a simultaneous
+burst can overshoot it by what the other nodes admitted in the last
+`:broadcast_interval`. [Clustering](../clustering.md) has the bound and the
+tuning.
 
 **The reservation is the usage.** `with_quota/4` increments the counter itself, so
 do not also call `track/3`, or every project counts twice.
@@ -317,7 +321,7 @@ AuroraMeter.entitled?(org, :pdf_export)        # => false on :free
 # Can this person be invited?
 Bramble.Members.can_invite?(org)               # 3 seats vs COUNT(*)
 
-# Create a project, safely, under any concurrency
+# Create a project, safely on this node, under any concurrency
 Bramble.Projects.create(org, attrs)            # {:ok, _} | {:error, :limit_exceeded}
 
 # What should the dashboard say?

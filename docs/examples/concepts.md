@@ -178,8 +178,12 @@ case AuroraMeter.with_quota(org, :ai_generations, fn -> generate() end) do
 end
 ```
 
-Under load, a hard limit of 50 admits exactly 50. If your function raises, the
-reservation is given back before the error is re-raised.
+Under load on one node, a hard limit of 50 admits exactly 50. If your function
+raises, the reservation is given back before the error is re-raised. On more than
+one node the gate is still one step, but against that node's view of the count,
+so a burst can admit a little over the cap: at most what the other nodes admitted
+in the last `:broadcast_interval`, one second by default.
+[Clustering](../clustering.md) has the arithmetic.
 
 ## Money: the two shapes
 
