@@ -4,7 +4,7 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-rc.1] - 2026-09-17
+## [1.0.0] - 2026-09-22
 
 **Release candidate. Not published.** It exists so that the archive audited for
 release, the clean room installation, the sample's build and the soak all run

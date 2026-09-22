@@ -11,15 +11,6 @@ def deps do
 end
 ```
 
-While 1.0.0 is still a release candidate, that requirement resolves nothing: a
-`~>` requirement never admits a pre-release. Pin the candidate to try it:
-
-```elixir
-def deps do
-  [{:aurora_meter, "1.0.0-rc.1"}]
-end
-```
-
 ## 2. Install
 
 With [Igniter](https://hexdocs.pm/igniter) in your dev deps, one command does

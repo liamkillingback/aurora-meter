@@ -42,7 +42,7 @@ documentation set missing every guide. That is a property of the archive, not a
 fault in it: hexdocs already serves the guides and no consumer compiles them.
 
 ```bash
-git tag v1.0.0-rc.1
+git tag v1.0.0
 git push origin main --tags
 mix hex.publish           # publishes the package and the docs to hexdocs.pm
 ```
