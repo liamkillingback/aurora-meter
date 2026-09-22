@@ -6,10 +6,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0] - 2026-09-22
 
-**Release candidate. Not published.** It exists so that the archive audited for
-release, the clean room installation, the sample's build and the soak all run
-against the exact tree that becomes 1.0.0. The final release is this tree with
-the version and this heading's date changed.
+**The first stable release.** The archive audited for release, the clean room
+installation, the sample's build and the soak all ran against this exact tree,
+not against an approximation of it.
 
 ### Upgrading: read this first
 
