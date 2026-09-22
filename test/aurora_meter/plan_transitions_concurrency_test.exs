@@ -496,6 +496,7 @@ defmodule AuroraMeter.PlanTransitionsConcurrencyTest do
   @waiting_sql """
   SELECT count(*) FROM pg_stat_activity
    WHERE wait_event_type = 'Lock' AND state = 'active'
+     AND datname = current_database()
   """
 
   defp await_waiters(target, deadline, best) do

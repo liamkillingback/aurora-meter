@@ -211,6 +211,13 @@ if Code.ensure_loaded?(Oban) do
     # the rendezvous silently never fires (`open-findings.md` X186). This reads
     # `pg_stat_activity.wait_event_type` instead, which has the same property
     # and says what it means.
+    #
+    # It IS filtered on `datname`, and that is not a contradiction: the sentence
+    # above is about `pg_locks`, where a `transactionid` row carries no database.
+    # `pg_stat_activity` carries `datname`, so the filter costs nothing and keeps
+    # a neighbour on another database out of the count. Without it this test
+    # fails deterministically whenever anything else is busy on the same server
+    # (`open-findings.md` X650).
     defp forced_race(locked_id, eligible) do
       parent = self()
       {:ok, holder} = Task.Supervisor.start_link()
@@ -315,6 +322,7 @@ if Code.ensure_loaded?(Oban) do
           """
           SELECT count(*) FROM pg_stat_activity
            WHERE wait_event_type = 'Lock' AND state = 'active' AND pid <> pg_backend_pid()
+             AND datname = current_database()
           """,
           []
         )
