@@ -78,6 +78,15 @@ defmodule AuroraMeterExampleAi.SecretScanTest do
       assert Redact.line("outbox item 7f3a delivered") == "outbox item 7f3a delivered"
     end
 
+    test "the redaction filter replaces an Aurora Meter package repository key" do
+      # Built here rather than written out, so no key-shaped literal is in the tree.
+      key = "amp_" <> String.duplicate("k2", 26)
+
+      assert Redact.line("mix hex.repo add aurorameter ... --auth-key " <> key) =~ "[redacted]"
+      refute Redact.line("--auth-key " <> key) =~ key
+      assert Redact.line("AURORA_METER_KEY=" <> key) == "[redacted]"
+    end
+
     test "L09d-1 the redaction filter catches a truncated key, which the scan deliberately does not" do
       # The two lists differ on purpose and this test is where that decision is
       # pinned. `Redact.line/1` must swallow a fragment; the repository scan

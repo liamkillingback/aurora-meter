@@ -537,6 +537,13 @@ jobs:
   #
   # Until then the Pro profile is covered by 09d's local run against real
   # Stripe, recorded in core docs/evidence/v1/phase-09, and NOT by CI.
+  #
+  # Since 2026-10 Pro is no longer in the hex.pm organisation: it is served
+  # from the self-hosted `aurorameter` repository (storefront
+  # docs/pro-package-repo-plan.md). A Pro leg would now run
+  # `mix hex.repo add aurorameter https://aurorameter.com/repo` with a
+  # repository key from a CI secret. It is the same class of action, so the
+  # same owner decision.
   # ---------------------------------------------------------------------------
 
   secrets:

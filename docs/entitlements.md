@@ -48,8 +48,9 @@ granted access for the life of the install. `:undeclared_feature_policy`
 config :aurora_meter, undeclared_feature_policy: :allow
 ```
 
-The default is `:warn` in the 0.5.x transition release and `:deny` from 1.0. The
-full table, the upgrade sequence and the scanner that lists what would change are
+The default is `:deny` from 1.0; 0.4.0 allowed an undeclared feature silently,
+and `:warn` keeps that answer while logging it, which is the setting to upgrade
+with. The full table, the upgrade sequence and the scanner that lists what would change are
 in [Configuration](configuration.md#undeclared_feature_policy).
 
 Two things worth knowing here. "Undeclared" means *not on this tenant's plan*, so

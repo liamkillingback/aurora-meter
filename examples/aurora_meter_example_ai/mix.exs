@@ -75,13 +75,16 @@ defmodule AuroraMeterExampleAi.MixProject do
 
   # The same shape Aurora Meter Pro uses for its own dependency on core
   # (`aurora_meter_pro/mix.exs`): a sibling checkout if there is one, the
-  # private Hex package otherwise. In a customer's copy of this sample there is
-  # no sibling, so the second branch is the one they take, and it is the branch
+  # private Hex package otherwise, from the self-hosted `aurorameter`
+  # repository (not hex.pm). In a customer's copy of this sample there is no
+  # sibling, so the second branch is the one they take, and it is the branch
   # the README documents:
   #
-  #     mix hex.organization auth phxtemplates --key "$AURORA_HEX_READ_KEY"
+  #     mix hex.repo add aurorameter https://aurorameter.com/repo \
+  #       --fetch-public-key SHA256:+g07CrUcsckpovkT9THeaiPWYLyyAP0p/OS+iZ1qTT8 \
+  #       --auth-key "$AURORA_METER_KEY"
   #
-  # run once, by the operator, with a read-only key from their own environment.
+  # run once, by the operator, with the key from their aurorameter.com account.
   # **No key is read by this file, and none is ever written into it.**
   defp pro_dep do
     path = Path.expand("../../../aurora_meter_pro", __DIR__)
@@ -93,7 +96,7 @@ defmodule AuroraMeterExampleAi.MixProject do
       # Pro 1.0 requires it. `~> 0.3` would have resolved the published 0.3.0,
       # which declares core `~> 0.4` and does not compile against this tree
       # (`open-findings.md` X420, build unit 11c).
-      {:aurora_meter_pro, "~> 1.0", organization: "phxtemplates"}
+      {:aurora_meter_pro, "~> 1.0", repo: "aurorameter"}
     end
   end
 

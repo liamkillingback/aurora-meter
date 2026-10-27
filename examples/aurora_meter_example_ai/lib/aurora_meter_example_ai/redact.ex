@@ -40,7 +40,10 @@ defmodule AuroraMeterExampleAi.Redact do
     # Hex API keys are printed by `mix hex.user key generate` as a bare 32+
     # character base-32-ish blob, which is unmatchable on its own. What IS
     # matchable is the assignment a script or a log line would carry.
-    ~r/\b(?:HEX_API_KEY|AURORA_HEX_READ_KEY|STRIPE_SECRET_KEY|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET)\s*[=:]\s*\S+/,
+    ~r/\b(?:HEX_API_KEY|AURORA_HEX_READ_KEY|AURORA_METER_KEY|STRIPE_SECRET_KEY|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET)\s*[=:]\s*\S+/,
+    # Aurora Meter package repository keys carry a prefix, so they are
+    # matchable bare: `amp_` and 52 base-32 characters.
+    ~r/\bamp_[a-z2-7]{20,}/,
     ~r/\bBearer\s+[A-Za-z0-9._\-]+/,
     ~r/\bStripe-Signature:\s*\S+/i
   ]

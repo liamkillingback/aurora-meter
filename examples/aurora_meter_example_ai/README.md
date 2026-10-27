@@ -195,7 +195,7 @@ webhook, and export through Pro's outbox onto Stripe's Billing Meters. It is
 opt in, it is absent by default, and turning it on takes four commands.
 
 ```bash
-mix hex.organization auth phxtemplates --key "$AURORA_HEX_READ_KEY"   # once, by you
+mix hex.repo add aurorameter https://aurorameter.com/repo --fetch-public-key SHA256:+g07CrUcsckpovkT9THeaiPWYLyyAP0p/OS+iZ1qTT8 --auth-key "$AURORA_METER_KEY"   # once, by you
 cp .env.example .env && $EDITOR .env                                   # your own TEST-MODE values
 set -a; . ./.env; set +a
 export AURORA_SAMPLE_PRO=1

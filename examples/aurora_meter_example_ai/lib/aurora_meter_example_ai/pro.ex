@@ -84,7 +84,7 @@ defmodule AuroraMeterExampleAi.Pro do
 
       The Pro profile is opt in:
 
-          mix hex.organization auth phxtemplates --key "$AURORA_HEX_READ_KEY"
+          mix hex.repo add aurorameter https://aurorameter.com/repo --fetch-public-key SHA256:+g07CrUcsckpovkT9THeaiPWYLyyAP0p/OS+iZ1qTT8 --auth-key "$AURORA_METER_KEY"
           export AURORA_SAMPLE_PRO=1
           mix deps.get
           mix ecto.migrate

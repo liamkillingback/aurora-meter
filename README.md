@@ -421,28 +421,28 @@ metered-API SaaS on this core.
 
 ## Upgrading
 
-**0.4.0 requires schema version 6.** Coming from 0.3.x, add a migration for
-versions 3 through 6 (credit ledger, promotional snapshots, open-hold index,
-and idempotent flush receipts):
+**1.0 requires schema version 10.** The last release on Hex before 1.0 is
+0.4.0 (schema 6), so an existing install goes straight from 0.4.0 to 1.0; the
+0.5.0 transition release was never published. Its behaviour changes are in 1.0,
+and two of them can be set back while you upgrade:
 
-```bash
-mix aurora_meter.gen.migration -r MyApp.Repo --from 3
-mix ecto.migrate
+```elixir
+config :aurora_meter,
+  undeclared_feature_policy: :warn,   # 1.0 default is :deny
+  plan_version_conflict: :warn        # 1.0 default is :raise
 ```
 
-An 0.1 install also needs the history table from 0.2: use `--from 2`. An
-unreleased checkout already on schema 5 needs `--from 6`. Apply migrations
-before starting the updated application.
+The schema moves in order, with two data tasks between the versions:
 
-Custom storage adapters must implement `flush_batch/3`: commit the batch ID,
-counter deltas and history deltas atomically, and return current totals on
-repeat delivery without applying the deltas again. Keep flush receipts while
-any node could retry them; this release does not automatically prune receipts.
-See [ADR 0007](docs/adr/0007-idempotent-flush-batches.md).
+```bash
+mix aurora_meter.gen.migration --upgrade -r MyApp.Repo
+mix aurora_meter.events.backfill
+mix aurora_meter.credits.migrate_lots
+```
 
-For features that should be measured without billing, use `counter(:f)` instead
-of `metered(:f, included: 0, unit_price: 0)`; see
-[ADR 0006](docs/adr/0006-counter-feature-kind.md).
+[Upgrading to 1.0](docs/upgrading-to-1.0.md) is the procedure: which version
+each task sits between, which writers to stop first, what each step locks, and
+where rollback stops being possible. Read it before you start.
 
 See the [changelog](CHANGELOG.md) for everything else that changed.
 
