@@ -424,6 +424,99 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       end
     end
 
+    describe "subscribe/1 without on_mount" do
+      test "a key subscribed with subscribe/1 is accepted by handle_usage and assign_quota" do
+        tenant = unique_tenant()
+        {:ok, _} = AuroraMeter.subscribe(tenant, :free)
+        :ok = AuroraMeter.track(tenant, :ai_generations, 2)
+        socket = connected_socket()
+
+        :ok = LiveView.subscribe(tenant)
+
+        socket = LiveView.handle_usage(usage_message(tenant, :ai_generations, 2, nil), socket)
+        assert socket.assigns.aurora_meter_usage.ai_generations.value == 2
+
+        socket =
+          LiveView.assign_quota(
+            usage_message(tenant, :ai_generations, 2, nil),
+            socket,
+            :quota,
+            :ai_generations
+          )
+
+        assert socket.assigns.quota.used == 2
+
+        socket = LiveView.assign_quotas(usage_message(tenant, :ai_generations, 2, nil), socket)
+        assert Enum.any?(socket.assigns.quotas, &(&1.feature == :ai_generations))
+      end
+
+      test "a key that was never subscribed, or was unsubscribed, is dropped" do
+        mine = unique_tenant()
+        theirs = unique_tenant()
+        socket = connected_socket()
+
+        :ok = LiveView.subscribe(mine)
+
+        assert LiveView.handle_usage(usage_message(theirs, :requests, 9, nil), socket) == socket
+
+        assert LiveView.assign_quota(
+                 usage_message(theirs, :requests, 9, nil),
+                 socket,
+                 :q,
+                 :requests
+               ) ==
+                 socket
+
+        :ok = LiveView.unsubscribe(mine)
+        assert LiveView.handle_usage(usage_message(mine, :requests, 1, nil), socket) == socket
+      end
+
+      test "with no subscription and no on_mount, every message is dropped" do
+        socket = connected_socket()
+        tenant = unique_tenant()
+
+        assert LiveView.handle_usage(usage_message(tenant, :requests, 1, nil), socket) == socket
+        assert LiveView.assign_quotas(usage_message(tenant, :requests, 1, nil), socket) == socket
+      end
+
+      test "credits messages are accepted only when the credits topic was subscribed" do
+        tenant = unique_tenant()
+        socket = connected_socket()
+        message = {:aurora_meter, :credits, %{tenant_key: tenant, available: 5}}
+
+        :ok = LiveView.subscribe(tenant)
+        assert LiveView.handle_credits(message, socket) == socket
+
+        :ok = LiveView.subscribe(tenant, topics: [:credits])
+
+        assert LiveView.handle_credits(message, socket).assigns.aurora_meter_credits.available ==
+                 5
+      end
+    end
+
+    describe "argument order" do
+      test "a socket-first call raises naming the order instead of returning the message" do
+        socket = mounted(unique_tenant())
+        message = usage_message("t", :requests, 1, nil)
+
+        assert_raise ArgumentError, ~r/message first and the socket second/, fn ->
+          LiveView.handle_usage(socket, message)
+        end
+
+        assert_raise ArgumentError, ~r/handle_credits/, fn ->
+          LiveView.handle_credits(socket, message)
+        end
+
+        assert_raise ArgumentError, ~r/assign_quota/, fn ->
+          LiveView.assign_quota(socket, message, :quota, :requests)
+        end
+
+        assert_raise ArgumentError, ~r/assign_quotas/, fn ->
+          LiveView.assign_quotas(socket, message)
+        end
+      end
+    end
+
     defp connected_socket, do: %Socket{transport_pid: self()}
 
     defp mounted(tenant, opts \\ []) do

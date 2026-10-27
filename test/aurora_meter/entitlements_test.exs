@@ -337,7 +337,7 @@ defmodule AuroraMeter.EntitlementsTest do
     assert AuroraMeter.usage(tenant, :ai_generations) == 3
   end
 
-  test "I03 a reservation committed against a captured day lands in that day's bucket (partial until 02c)" do
+  test "I03 a reservation committed against a captured day lands in that day's bucket" do
     # Partial until 02c: `lib/` has no clock seam (open finding C11), so the
     # crossing is expressed by passing the period and the day explicitly, which
     # is exactly what `with_quota/4` captures before the callback runs. 02c

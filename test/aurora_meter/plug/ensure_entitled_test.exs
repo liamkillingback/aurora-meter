@@ -198,11 +198,11 @@ if Code.ensure_loaded?(Plug.Test) do
 
       test "I20 a tenant term the host's AuroraMeter.Tenant module refuses propagates, not 503" do
         # AuroraMeter.Tenant.Default has no clause for a tuple, so to_key/1 raises
-        # Protocol.UndefinedError. That is a host configuration fault (meter a
+        # an ArgumentError naming the fix. That is a host configuration fault (meter a
         # struct, configure a tenant module), and a 503 would send an operator to
         # look at a database that is perfectly well. Found by this file: the term
         # above was a tuple on the first run and the plug answered 503.
-        assert_raise Protocol.UndefinedError, fn ->
+        assert_raise ArgumentError, ~r/cannot turn a tuple into a tenant key/, fn ->
           call_plug({:org, "org_1"},
             feature: :api_access,
             tenant: {__MODULE__, :tenant_from_assign}

@@ -25,6 +25,7 @@ defmodule AuroraMeter.PlanVersionsTest do
   alias AuroraMeter.Schema.PlanVersion
   alias AuroraMeter.Schema.Subscription
   alias AuroraMeter.Storage
+  alias AuroraMeter.Test.EditedVersionPlans
 
   # `:versioned` version 2 becomes effective here, and `AuroraMeter.TestPlans`
   # dates it there.
@@ -289,6 +290,98 @@ defmodule AuroraMeter.PlanVersionsTest do
     assert log =~ "[error]"
     assert log =~ "plan versioned version 1"
     assert log =~ "Publish the change as a new version instead"
+  end
+
+  test "I17 under plan_version_conflict warn an in-place edit reprices nobody" do
+    clear_registry!()
+    assert :ok = Plans.register!()
+    tenant = subscribe!(:versioned, version: "1")
+    sold = Plans.get(:versioned, "1")
+    assert sold.price == 2_000
+
+    with_config(
+      [
+        {:aurora_meter, :plan_version_conflict, :warn},
+        {:aurora_meter, :plans, AuroraMeter.Test.EditedVersionPlans}
+      ],
+      fn ->
+        log = capture_log(fn -> assert :ok = Plans.register!() end)
+        assert log =~ "tenants pinned to it keep what they bought"
+
+        # Every read of version 1 is the published definition, not the edit
+        # (the edited module says price 9_900 and seats 5).
+        assert Plans.get(:versioned, "1").price == 2_000
+        assert Plans.get(:versioned, "1").fingerprint == sold.fingerprint
+        assert Entitlements.plan(tenant).price == 2_000
+        assert Entitlements.plan(tenant).features == sold.features
+        assert Plans.all()[:versioned].price == 2_000
+        assert Plans.base(:versioned).price == 2_000
+        assert hd(Plans.versions(:versioned)).price == 2_000
+
+        # A version that is not in conflict still resolves from code.
+        assert Plans.get(:free, "1") ==
+                 EditedVersionPlans.__aurora_plans__()[{:free, "1"}]
+      end
+    )
+  end
+
+  test "I17 a registration deferred by a misordered tree runs once the repo is up and pins the edit" do
+    clear_registry!()
+    assert :ok = Plans.register!()
+    Plans.reset_registry()
+
+    with_config(
+      [
+        {:aurora_meter, :plan_version_conflict, :raise},
+        {:aurora_meter, :plans, AuroraMeter.Test.EditedVersionPlans},
+        {:aurora_meter, :repo, AuroraMeter.Test.NotStartedRepo}
+      ],
+      fn ->
+        # Aurora Meter above the Repo: nothing is registered and nothing raised.
+        capture_log(fn -> assert :ok = Plans.register!() end)
+        assert Plans.registry_state() == :deferred
+        assert Plans.get(:versioned, "1").price == 9_900
+
+        # The repo comes up, and the background registration that
+        # AuroraMeter.start_link/1 starts finds the conflict. Under :raise it
+        # crashes with the conflict error rather than letting the edit stand.
+        Application.put_env(:aurora_meter, :repo, AuroraMeter.TestRepo)
+
+        capture_log(fn ->
+          {pid, ref} = spawn_monitor(fn -> Plans.await_repo_and_register(interval: 1) end)
+
+          assert_receive {:DOWN, ^ref, :process, ^pid,
+                          {%PlanVersionConflictError{conflicts: [conflict]}, _stack}},
+                         5_000
+
+          assert conflict.plan_id == "versioned"
+        end)
+
+        assert Plans.get(:versioned, "1").price == 2_000
+      end
+    )
+  end
+
+  test "I17 the deferred registration is started only when registration was deferred" do
+    {:ok, sup} = Supervisor.start_link([], strategy: :one_for_one)
+
+    Plans.reset_registry()
+    assert :ok = Plans.register!()
+    assert :ok = Plans.start_deferred_registration(sup)
+    assert Supervisor.which_children(sup) == []
+
+    Plans.reset_registry()
+
+    with_config([{:aurora_meter, :repo, AuroraMeter.Test.NotStartedRepo}], fn ->
+      capture_log(fn -> assert :ok = Plans.register!() end)
+      assert :ok = Plans.start_deferred_registration(sup, interval: 1)
+
+      assert [{{Plans, :deferred_registration}, child, :worker, _}] =
+               Supervisor.which_children(sup)
+
+      assert is_pid(child)
+      Supervisor.stop(sup)
+    end)
   end
 
   test "I17 a storage adapter without snapshot support warns once and leaves code authoritative" do

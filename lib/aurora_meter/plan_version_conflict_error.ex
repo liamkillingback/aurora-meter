@@ -22,9 +22,9 @@ defmodule AuroraMeter.PlanVersionConflictError do
   compares the same two values and reaches the same answer.
 
   Configuration `plan_version_conflict: :warn` logs the same message through
-  `Logger.error/1` and lets the boot continue. That is the default in the 0.5.x
-  transition release so an upgrading host sees the problem before it becomes a
-  failed deploy, and `:raise` is the default from 1.0.
+  `Logger.error/1` and lets the boot continue; `:raise` is the default. Under
+  both, the conflicted version keeps resolving to its stored definition, so
+  tenants pinned to it keep what they bought and the edit applies to nobody.
   """
 
   alias AuroraMeter.Plans.Snapshot
@@ -78,7 +78,7 @@ defmodule AuroraMeter.PlanVersionConflictError do
       "    plan :#{example.plan_id}, version: \"#{next_version(example.version)}\", " <>
       "effective_at: ~U[2026-01-01 00:00:00Z] do\n      # the new price and limits\n    end\n\n" <>
       "Or revert the edit. Setting `config :aurora_meter, plan_version_conflict: :warn` " <>
-      "logs this instead of raising, which is the transition-release default and not a fix. " <>
+      "logs this instead of raising and keeps the stored definition in force; it is not a fix. " <>
       "The stored definitions are in aurora_meter_plan_versions:\n\n" <>
       "    SELECT plan_id, version, encode(fingerprint, 'hex'), definition\n" <>
       "    FROM aurora_meter_plan_versions ORDER BY plan_id, version;\n"

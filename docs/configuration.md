@@ -24,8 +24,8 @@ treated as Aurora Meter keys.
 | `:provider` | `AuroraMeter.Billing.Provider` impl | no | `AuroraMeter.Billing.Noop` |
 | `:period_source` | `AuroraMeter.Period` impl | no | `AuroraMeter.Period.Calendar` (see [periods](periods.md) for the contract) |
 | `:clock` | `AuroraMeter.Clock` impl | no | `AuroraMeter.Clock.System`, the only value supported in production |
-| `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise` | no | `:warn` in 0.5.x, `:deny` from 1.0. What the entitlement functions do with a feature the tenant's plan does not declare (see below) |
-| `:plan_version_conflict` | `:raise \| :warn` | no | `:warn` in 0.5.x, `:raise` from 1.0. What `AuroraMeter.Plans.register!/0` does when a compiled plan version's commercial content differs from the snapshot registered for it (see below) |
+| `:undeclared_feature_policy` | `:allow \| :warn \| :deny \| :raise` | no | `:deny`. What the entitlement functions do with a feature the tenant's plan does not declare (see below) |
+| `:plan_version_conflict` | `:raise \| :warn` | no | `:raise`. What `AuroraMeter.Plans.register!/0` does when a compiled plan version's commercial content differs from the snapshot registered for it (see below) |
 | `:durable_features` | list of atoms | no | `[]`. **Deprecated**: the legacy durable-track list, see [metering](metering.md) |
 | `:feature_sources` | map of atom to `:buffered \| :events` | no | `%{}`. Where each feature's commercial quantity comes from; anything not listed is `:buffered` (see below) |
 | `:events_outbox` | `AuroraMeter.Events.Outbox` impl or `nil` | no | `nil`. Called inside the transaction that records an event, so an export intent commits with the fact |
@@ -88,7 +88,7 @@ count the key exists to prevent, so changing a source is a deploy.
 ## `:undeclared_feature_policy`
 
 A feature the tenant's **effective plan** does not declare is not a question
-Aurora Meter can answer, and until 0.5.0 it answered it permissively anyway. The
+Aurora Meter can answer, and before 1.0 it answered it permissively anyway. The
 policy says what to do instead. A feature some *other* plan declares counts as
 undeclared here: a `:free` tenant reaching a `:pro` only feature is exactly the
 case this exists for.
@@ -129,7 +129,7 @@ The recommended sequence, in this order:
 1. Run `mix aurora_meter.features --strict`. It lists what your configuration
    references that no plan declares, and every feature declared on some plans and
    not others, with the plans that would deny it.
-2. Set `:warn` (the default in 0.5.x) and leave it for a release. Each undeclared
+2. Set `:warn` and leave it for a release. Each undeclared
    feature logs once per node, which catches the names only reachable at runtime.
 3. Fix the plans or the call sites, then set `:deny`.
 
@@ -144,8 +144,8 @@ count or unit price, a feature value or a recurring credit **inside an existing
 version** is a conflict.
 
 ```elixir
-config :aurora_meter, plan_version_conflict: :raise   # the 1.0 default
-config :aurora_meter, plan_version_conflict: :warn    # the 0.5.x default
+config :aurora_meter, plan_version_conflict: :raise   # the default
+config :aurora_meter, plan_version_conflict: :warn    # log and continue
 ```
 
 `:raise` fails the boot with `AuroraMeter.PlanVersionConflictError`, naming the
@@ -165,7 +165,7 @@ end
 
 ### Upgrading from 0.4.x
 
-Leave it at the 0.5.x default of `:warn` for one release. If the log is quiet,
+Set `:warn` for one release. If the log is quiet,
 set `:raise`. If it is not, you have found a plan block somebody edited in
 place, and the stored definitions are in `aurora_meter_plan_versions`:
 

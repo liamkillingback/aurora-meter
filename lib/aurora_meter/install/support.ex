@@ -110,7 +110,7 @@ defmodule AuroraMeter.Install.Support do
   For a message that has to name a version. A refusal that tells a host to add a
   dependency and invents the version it asks for is a refusal that will be wrong
   one release from now, so the number comes from the same table
-  `--check-support` prints (repair unit R5).
+  `--check-support` prints.
   """
   @spec floor_for(atom()) :: String.t() | nil
   def floor_for(app) do
@@ -129,7 +129,7 @@ defmodule AuroraMeter.Install.Support do
   this suite will ever run, and a check that asked for itself could not be
   exercised from here at all. That is the whole reason the switch raised
   `UndefinedFunctionError` in a host without Oban through a unit whose subject
-  was the installer (`open-findings.md` X375, repair unit R5).
+  was the installer.
 
   The second argument distinguishes the two states that look the same from a
   host's side and need opposite answers: no Oban at all, and Oban added after

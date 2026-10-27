@@ -16,6 +16,11 @@ if Code.ensure_loaded?(Igniter) do
       * add `AuroraMeter` to your application's children, after the repo and PubSub
       * create a `MyApp.Plans` module with a `:free` and a `:pro` plan (never overwrites one you have)
       * generate the migration that delegates to `AuroraMeter.Migration`
+      * set test-friendly timers in `config/test.exs` (`flush_interval` and
+        `broadcast_interval` of an hour, `metrics_interval: 0`), only when absent
+      * add `:aurora_meter` to `import_deps` in `.formatter.exs`, so the plans
+        DSL (`plan :free do`, `limit :x, 50, :hard`) keeps its parenthesis-free
+        form under `mix format`
 
     Options: `--repo`, `--pubsub`, `--plans` (module names; all inferred when
     omitted), `--feature-policy`, `--events-source`, `--oban` and
@@ -97,15 +102,14 @@ if Code.ensure_loaded?(Igniter) do
     A refusal (a bad `--feature-policy`, a bad `--events-source`, `--oban`
     without Oban) writes nothing and **exits 1**, so `set -e` and `if ! mix ...`
     do what you expect. Igniter's own behaviour is to display the issues and
-    exit 0; this task and Aurora Meter Pro's wrap `run/1` to add the status
-    (`open-findings.md` X366).
+    exit 0; this task and Aurora Meter Pro's wrap `run/1` to add the status.
 
     `--dry-run` prints its change set whether or not you are at a terminal.
     Igniter treats a run whose standard input is not a character device as
     `--yes`, and `--yes` suppresses the diff, so the plain
     `mix aurora_meter.install --dry-run` in a CI step printed **nothing at all**:
     it wrote no file, which is right, and reported no change set, which is the
-    only reason to run it (X376). A dry run writes nothing and is never asked to
+    only reason to run it. A dry run writes nothing and is never asked to
     confirm, so an implicit `--yes` has nothing to agree to here and this task
     drops it. Pass `--yes` explicitly and you get the quiet form you asked for.
 
@@ -123,6 +127,7 @@ if Code.ensure_loaded?(Igniter) do
     alias Igniter.Libs.Ecto, as: IgniterEcto
     alias Igniter.Project.Application, as: IgniterApp
     alias Igniter.Project.Config, as: IgniterConfig
+    alias Igniter.Project.Formatter, as: IgniterFormatter
     alias Igniter.Project.Module, as: IgniterModule
 
     @impl Igniter.Mix.Task
@@ -189,6 +194,10 @@ if Code.ensure_loaded?(Igniter) do
       |> IgniterConfig.configure("config.exs", :aurora_meter, [:plans], plans)
       |> feature_policy(settings.policy, opts[:feature_policy])
       |> feature_sources(settings.feature_sources)
+      |> test_config()
+      |> IgniterFormatter.import_dep(:aurora_meter)
+      # Igniter 0.8.3 and 0.8.4 placed this child after the Endpoint whatever
+      # `after:` said; mix.exs requires 0.8.5, where that is fixed upstream.
       |> IgniterApp.add_new_child(AuroraMeter, after: fn mod -> mod in [repo, Phoenix.PubSub] end)
       |> create_plans(plans)
       |> IgniterEcto.gen_migration(repo, "add_aurora_meter",
@@ -197,6 +206,18 @@ if Code.ensure_loaded?(Igniter) do
       )
       |> maybe_oban(opts[:oban], repo)
       |> Igniter.add_notice(Templates.quickstart(repo, pubsub, plans, settings))
+    end
+
+    # The periodic flush and broadcast fire every 5 s and 1 s by default. In a
+    # test suite a timer firing mid-test reaches the database from Aurora
+    # Meter's own process, which has no sandbox connection, and logs an
+    # ownership error; an hour keeps them out of the way, and tests drive both
+    # with `AuroraMeter.Test.flush!/0` and `broadcast!/0`. `configure_new`, so a
+    # value the host chose is never changed.
+    defp test_config(igniter) do
+      Enum.reduce(Templates.test_config(), igniter, fn {key, value}, acc ->
+        IgniterConfig.configure_new(acc, "test.exs", :aurora_meter, [key], value)
+      end)
     end
 
     # -- the two keys a host is expected to tune -------------------------------
@@ -407,14 +428,37 @@ else
       end
     end
 
-    defp install(_args, true, settings) do
+    defp install(args, true, settings) do
       Mix.shell().info(dry_run_report())
-      Mix.shell().info(Templates.manual_steps(settings))
+      Mix.shell().info(Templates.manual_steps(settings, host_modules(args)))
     end
 
     defp install(args, _dry_run, settings) do
-      Mix.Task.run("aurora_meter.gen.migration", args)
-      Mix.shell().info(Templates.manual_steps(settings))
+      # Only the repo switches: the generator refuses switches it does not
+      # understand, and --feature-policy and --events-source are this task's.
+      Mix.Task.run("aurora_meter.gen.migration", repo_args(args))
+      Mix.shell().info(Templates.manual_steps(settings, host_modules(args)))
+    end
+
+    defp repo_args(args) do
+      {opts, _rest, _invalid} =
+        OptionParser.parse(args, switches: [repo: :keep], aliases: [r: :repo])
+
+      Enum.flat_map(Keyword.get_values(opts, :repo), &["-r", &1])
+    end
+
+    # The modules the host actually has, so the printed block can be pasted as
+    # it is: the repo the generator just used, and PubSub and Plans under the
+    # application's own namespace. Printing `MyApp.Repo` booted with a
+    # misleading warning for anybody who pasted it.
+    defp host_modules(args) do
+      repo =
+        case Mix.Ecto.parse_repo(args) do
+          [repo | _] -> repo
+          [] -> nil
+        end
+
+      Templates.host_modules(Mix.Project.config()[:app], repo)
     end
 
     defp dry_run_report do

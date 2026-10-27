@@ -55,7 +55,7 @@ defmodule AuroraMeter.LiveDashboard.Sections do
 
   Every age here is `AuroraMeter.Clock.monotonic_ms/0`, an in-memory span inside
   one node. Never a wall clock: a millisecond duration read from a clock that
-  can step backwards is the defect `open-findings.md` X100 measured.
+  can step backwards can come out negative.
   """
 
   import Ecto.Query, only: [from: 2]
@@ -346,23 +346,4 @@ defmodule AuroraMeter.LiveDashboard.Sections do
   defp class_for(%Postgrex.Error{}), do: :database_unavailable
   defp class_for(%ArgumentError{}), do: :error
   defp class_for(_other), do: :error
-end
-
-defmodule AuroraMeter.LiveDashboard.NotStartedError do
-  @moduledoc """
-  **Internal.** Not part of the supported API (see [API inventory](api.md)).
-  It may change in any release, including a patch. A host mounts
-  `AuroraMeter.LiveDashboard.Page`; this is what that page is built from.
-
-  Raised inside `AuroraMeter.LiveDashboard.Sections` when a node-local table or
-  process the section reads is absent, which means the supervision tree is not
-  running. `read/1` converts it into `{:unavailable, :not_started}`; it is never
-  raised out of this module.
-  """
-
-  defexception [:table]
-
-  @impl Exception
-  def message(%{table: table}),
-    do: "the ETS table #{inspect(table)} does not exist, so AuroraMeter is not started"
 end

@@ -27,7 +27,7 @@ defmodule AuroraMeter.Credits.LotMigration do
   5. **Report**: one `aurora_meter_checkpoints` row per wallet, plus the run's
      own cursor row. A shadow run and a real run keep **separate** cursor rows,
      so a rehearsal can never tell the real migration that it has already
-     covered ground it has not touched (`open-findings.md` X427).
+     covered ground it has not touched.
 
   Steps 2 to 5 are one transaction, so a wallet is either entirely migrated or
   entirely untouched. Step 1 holds no lock, so a wallet with a long history
@@ -72,8 +72,8 @@ defmodule AuroraMeter.Credits.LotMigration do
 
   A real cutover was refused while there was no lot-aware refund path: a paid
   refund on a cut-over wallet would have gone through `reverse/4`, consumed
-  promotional lots in spend order and written nothing into `reversed`
-  (`open-findings.md` X250). `AuroraMeter.Credits.reverse_lot/4` is that path
+  promotional lots in spend order and written nothing into `reversed`.
+  `AuroraMeter.Credits.reverse_lot/4` is that path
   and is the gate's own condition, so from the release that carries it
   `shadow: false` is permitted and `cutover_blocked/0` answers `nil`.
 
@@ -81,7 +81,7 @@ defmodule AuroraMeter.Credits.LotMigration do
   default: `allow_cutover: true` has to be asked for explicitly on every run
   that writes.
 
-  **Both refund paths are lot aware from repair unit R1**, and that is the
+  **Both refund paths are lot aware from 1.0.0**, and that is the
   correction this paragraph used to need. Opening the gate on `reverse_lot/4`
   alone left `reverse/4` planning a reversal as a debit, so a host that had no
   payment provenance, or an `aurora_meter_pro` fallback that could not match
@@ -291,8 +291,8 @@ defmodule AuroraMeter.Credits.LotMigration do
   is not. A tenant key is host supplied and may hold a space, an `@` or a
   slash; `AuroraMeter.Operations.pause/1` raises on anything outside
   `[a-z_]+:[A-Za-z0-9_.:-]+`, and a migration that raises halfway through a run
-  because one customer's key has an `@` in it is not a migration
-  (`open-findings.md` X221). The row's `counts` always carries the verbatim
+  because one customer's key has an `@` in it is not a migration.
+  The row's `counts` always carries the verbatim
   `tenant_key`, so a digested name is still resolvable.
 
   ## Examples
@@ -324,19 +324,19 @@ defmodule AuroraMeter.Credits.LotMigration do
   See the module documentation. The check is behavioural rather than a version
   number: it asks whether the lot-aware refund path
   (`AuroraMeter.Credits.reverse_lot/4`) exists, so it opened itself when that
-  path shipped in build unit 06e and nothing else could have opened it. It
+  path shipped and nothing else could have opened it. It
   answers `nil` from that release on, and the clause below is kept so a node
   running an older core still refuses rather than silently cutting wallets over.
 
   **What the probe cannot tell you**, and it is worth saying rather than
   leaving for someone to discover: `AuroraMeter.Credits` and this module ship in
   one package, so within a release the probe can only report that release's own
-  state. It was written to order two build units during development, not to
+  state. It was written to order two changes during development, not to
   version-check a deployment, and a core that carried `reverse_lot/4` without
-  repair unit R1's wallet-wide fix would have answered `nil` while
+  the wallet-wide fix would have answered `nil` while
   `AuroraMeter.Credits.reverse/4` was still planning a refund as a debit. No
-  such core was ever published: 06e and R1 are both unreleased at the time of
-  writing, so `reverse_lot/4` and the lot-aware `reverse/4` reach Hex together.
+  such core was ever published: `reverse_lot/4` and the lot-aware `reverse/4`
+  reached Hex together in 1.0.0.
   """
   @spec cutover_blocked() :: %{finding: String.t(), reason: String.t()} | nil
   def cutover_blocked do
@@ -380,8 +380,7 @@ defmodule AuroraMeter.Credits.LotMigration do
 
   `:cursor` is how far the **real** migration has got, which is the one an
   operator means by "where has this got to". `:shadow_cursor` is how far the
-  rehearsal has got. They are separate rows and neither steers the other
-  (`open-findings.md` X427).
+  rehearsal has got. They are separate rows and neither steers the other.
 
   Options: `:repo`, and `:limit` (default 200) on the wallet rows read back.
   """

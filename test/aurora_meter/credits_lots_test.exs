@@ -30,9 +30,20 @@ defmodule AuroraMeter.CreditsLotsTest do
   alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
-  @oct ~U[2026-10-01 00:00:00Z]
-  @nov ~U[2026-11-01 00:00:00Z]
-  @dec ~U[2026-12-01 00:00:00Z]
+
+  # Expiry dates one, two and three months ahead of today, at a month start.
+  # They were fixed 2026 dates, which stopped being in the future when the
+  # calendar passed them; what the tests need is only the order and that all
+  # three are ahead of now.
+  defp oct, do: month_start_ahead(1)
+  defp nov, do: month_start_ahead(2)
+  defp dec, do: month_start_ahead(3)
+
+  defp month_start_ahead(n) do
+    today = Date.utc_today()
+    months = today.year * 12 + today.month - 1 + n
+    DateTime.new!(Date.new!(div(months, 12), rem(months, 12) + 1, 1), ~T[00:00:00], "Etc/UTC")
+  end
 
   test "I10 a grant writes one lot whose quantities, state and reference match the ledger row" do
     tenant = lot_wallet()
@@ -68,14 +79,14 @@ defmodule AuroraMeter.CreditsLotsTest do
       Credits.grant(tenant, 3 * @dollar,
         reference: "a",
         category: :promotional,
-        expires_at: @oct
+        expires_at: oct()
       )
 
     {:ok, _} =
       Credits.grant(tenant, 5 * @dollar,
         reference: "b",
         category: :promotional,
-        expires_at: @nov
+        expires_at: nov()
       )
 
     {:ok, _} = Credits.grant(tenant, 10 * @dollar, reference: "p")
@@ -108,7 +119,7 @@ defmodule AuroraMeter.CreditsLotsTest do
       Credits.grant(tenant, 4 * @dollar,
         reference: "promo",
         category: :promotional,
-        expires_at: @nov
+        expires_at: nov()
       )
 
     {:ok, _} = Credits.grant(tenant, 6 * @dollar, reference: "paid")
@@ -132,13 +143,13 @@ defmodule AuroraMeter.CreditsLotsTest do
       Credits.grant(tenant, 5 * @dollar,
         reference: "due",
         category: :promotional,
-        expires_at: @oct
+        expires_at: oct()
       )
 
     {:ok, _} = Credits.grant(tenant, 4 * @dollar, reference: "later", category: :promotional)
     {:ok, _} = Credits.hold(tenant, 2 * @dollar, "h1")
 
-    assert {:ok, report} = Credits.expire_due(@dec, limit: 10)
+    assert {:ok, report} = Credits.expire_due(dec(), limit: 10)
     assert report.expired == 1
 
     due = lot(tenant, "due")
@@ -168,14 +179,14 @@ defmodule AuroraMeter.CreditsLotsTest do
       Credits.grant(tenant, 5 * @dollar,
         reference: "oct",
         category: :promotional,
-        expires_at: @oct
+        expires_at: oct()
       )
 
     {:ok, _} =
       Credits.grant(tenant, 10 * @dollar,
         reference: "nov",
         category: :promotional,
-        expires_at: @nov
+        expires_at: nov()
       )
 
     # Spends soonest-expiry first, so October pays all 5 and November pays 7.
@@ -185,13 +196,13 @@ defmodule AuroraMeter.CreditsLotsTest do
 
     # October is already exhausted, so the sweep at the end of October has
     # nothing of its own to take and does not reach into November's remainder.
-    assert {:ok, report} = Credits.expire_due(~U[2026-10-02 00:00:00Z], limit: 10)
+    assert {:ok, report} = Credits.expire_due(DateTime.add(oct(), 1, :day), limit: 10)
     assert report.expired == 0
     assert lot(tenant, "nov").available == 3 * @dollar
     assert Credits.balance(tenant).balance == 3 * @dollar
 
     # And in December November expires its own three, and no more.
-    assert {:ok, report} = Credits.expire_due(@dec, limit: 10)
+    assert {:ok, report} = Credits.expire_due(dec(), limit: 10)
     assert report.expired == 1
     assert lot(tenant, "nov").expired == 3 * @dollar
     assert lot(tenant, "oct").expired == 0
@@ -209,19 +220,19 @@ defmodule AuroraMeter.CreditsLotsTest do
     # would be asserting about a lot the release still believed was live.
     tenant = lot_wallet()
 
-    AuroraMeter.Test.with_clock(~U[2026-09-15 00:00:00.000000Z], fn ->
+    AuroraMeter.Test.with_clock(DateTime.utc_now(), fn ->
       {:ok, _} =
         Credits.grant(tenant, 5 * @dollar,
           reference: "promo",
           category: :promotional,
-          expires_at: @oct
+          expires_at: oct()
         )
 
       {:ok, _} = Credits.hold(tenant, 2 * @dollar, "h1")
     end)
 
     release =
-      AuroraMeter.Test.with_clock(@dec, fn ->
+      AuroraMeter.Test.with_clock(dec(), fn ->
         assert {:ok, _} = Credits.expire_due(AuroraMeter.Clock.db_now(), limit: 10)
         assert lot(tenant, "promo").expired == 3 * @dollar
 
@@ -253,16 +264,16 @@ defmodule AuroraMeter.CreditsLotsTest do
       Credits.grant(tenant, 5 * @dollar,
         reference: "promo",
         category: :promotional,
-        expires_at: @oct
+        expires_at: oct()
       )
 
     {:ok, _} =
-      AuroraMeter.Test.with_clock(~U[2026-09-15 00:00:00.000000Z], fn ->
+      AuroraMeter.Test.with_clock(DateTime.utc_now(), fn ->
         Credits.hold(tenant, 2 * @dollar, "h1")
       end)
 
     settle =
-      AuroraMeter.Test.with_clock(@dec, fn ->
+      AuroraMeter.Test.with_clock(dec(), fn ->
         assert {:ok, _} = Credits.expire_due(AuroraMeter.Clock.db_now(), limit: 10)
 
         # The work really ran and really cost 1.5 USD, so it is paid for out of
@@ -293,19 +304,19 @@ defmodule AuroraMeter.CreditsLotsTest do
       Credits.grant(tenant, 3 * @dollar,
         reference: "promo",
         category: :promotional,
-        expires_at: @oct
+        expires_at: oct()
       )
 
     lot_id = lot(tenant, "promo").id
 
-    assert {:ok, %{examined: 1, expired: 1}} = Credits.expire_due(@dec, limit: 10)
+    assert {:ok, %{examined: 1, expired: 1}} = Credits.expire_due(dec(), limit: 10)
 
     # The second pass does not examine it at all, which is stronger than
     # refusing it: `available = 0` takes the lot out of the candidate set, so a
     # sweep that runs every half hour does no work per already-expired lot
     # rather than one refused transaction each. The reference is idempotent as
     # well (finding L7), and the assertion below names the exact string.
-    assert {:ok, %{examined: 0, expired: 0, failed: 0}} = Credits.expire_due(@dec, limit: 10)
+    assert {:ok, %{examined: 0, expired: 0, failed: 0}} = Credits.expire_due(dec(), limit: 10)
 
     rows =
       TestRepo.all(

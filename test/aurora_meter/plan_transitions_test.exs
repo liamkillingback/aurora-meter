@@ -358,8 +358,12 @@ defmodule AuroraMeter.PlanTransitionsTest do
   test "I17 an applied transition changes plan_id, plan_version, fingerprint and effective time" do
     {tenant, _} = subscribed(:pro)
 
+    # Scheduled from inside September, so @next_month is in the future
+    # whatever today's date is.
     {:ok, scheduled} =
-      Subscriptions.schedule_transition(tenant, :scale, ref: "r", effective_at: @next_month)
+      AuroraMeter.Test.with_clock(@inside_september, fn ->
+        Subscriptions.schedule_transition(tenant, :scale, ref: "r", effective_at: @next_month)
+      end)
 
     {:ok, %{applied: 1}} = Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
 
@@ -448,11 +452,13 @@ defmodule AuroraMeter.PlanTransitionsTest do
     {tenant, _} = subscribed(:pro)
 
     {:ok, _} =
-      Subscriptions.schedule_transition(tenant, :scale,
-        ref: "r",
-        confirm: :provider,
-        effective_at: @next_month
-      )
+      AuroraMeter.Test.with_clock(@inside_september, fn ->
+        Subscriptions.schedule_transition(tenant, :scale,
+          ref: "r",
+          confirm: :provider,
+          effective_at: @next_month
+        )
+      end)
 
     {:ok, confirmed} =
       Subscriptions.confirm_transition(tenant, "r", provider_ref: "sub_1", now: @inside_september)
@@ -544,10 +550,12 @@ defmodule AuroraMeter.PlanTransitionsTest do
         {:ok, _} = AuroraMeter.subscribe(tenant, :pro)
 
         {:ok, _} =
-          Subscriptions.schedule_transition(tenant, :scale,
-            ref: "r",
-            effective_at: DateTime.add(@next_month, i, :day)
-          )
+          AuroraMeter.Test.with_clock(@inside_september, fn ->
+            Subscriptions.schedule_transition(tenant, :scale,
+              ref: "r",
+              effective_at: DateTime.add(@next_month, i, :day)
+            )
+          end)
 
         tenant
       end
@@ -582,10 +590,12 @@ defmodule AuroraMeter.PlanTransitionsTest do
         {:ok, _} = AuroraMeter.subscribe(tenant, :pro)
 
         {:ok, _} =
-          Subscriptions.schedule_transition(tenant, :scale,
-            ref: "r",
-            effective_at: DateTime.add(@next_month, i, :day)
-          )
+          AuroraMeter.Test.with_clock(@inside_september, fn ->
+            Subscriptions.schedule_transition(tenant, :scale,
+              ref: "r",
+              effective_at: DateTime.add(@next_month, i, :day)
+            )
+          end)
 
         tenant
       end

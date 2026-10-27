@@ -206,8 +206,8 @@ and `assert_fired!/2` take the same option.
    proves nothing about what was committed.
 
 And two more. **Every module that exercises a fault point carries
-`@moduletag :fault`**, so `mix v1.faults` (`test --only fault --seed 0`, added
-by build unit 01f and wired into CI) runs it; without the tag it silently drops
+`@moduletag :fault`**, so `mix v1.faults` (`test --only fault --seed 0`, wired
+into CI) runs it; without the tag it silently drops
 out of the lane that exists to run it. And **every configuration change goes
 through `AuroraMeter.Test.Config`.** `Application.put_env/3` with a hand-written
 `on_exit` loses the race when the test process is killed, and silently overlaps
@@ -304,7 +304,7 @@ letting a proof go quiet:
 
 ### The test clock is no longer temporary
 
-`AuroraMeter.Test.Clock` was 01b's placeholder and build unit 02c deleted it.
+`AuroraMeter.Test.Clock` was a placeholder and has been removed.
 The real seam is `AuroraMeter.Clock` behind the `clock:` key, with
 `AuroraMeter.Clock.Fixed` shipping in `lib/` and `AuroraMeter.Test.with_clock/2`
 to install it. See "Freezing the clock" above: it is a host-facing facility, not

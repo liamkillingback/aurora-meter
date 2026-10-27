@@ -8,7 +8,7 @@ defmodule AuroraMeter.MixProject do
   # candidate `1.0.0-rc.1` was cut on 2026-09-17 and never published: `~> 1.0`
   # does not match a pre-release, so shipping it would have left every documented
   # install snippet unresolvable.
-  @version "1.0.0"
+  @version "1.0.1"
   @source_url "https://github.com/liamkillingback/aurora-meter"
 
   def project do
@@ -171,7 +171,7 @@ defmodule AuroraMeter.MixProject do
         {:plug, "~> 1.15", optional: true},
         # Optional: powers the one-step `mix aurora_meter.install`. Hosts without
         # it get the print-the-steps fallback.
-        {:igniter, "~> 0.8", optional: true},
+        {:igniter, ">= 0.8.5 and < 1.0.0", optional: true},
         # Optional: powers the `AuroraMeter.Oban.*` workers. Every operation they
         # wrap is public and directly callable, so a host with another scheduler
         # (or none) loses nothing, and the whole namespace is compiled behind
@@ -205,7 +205,11 @@ defmodule AuroraMeter.MixProject do
     else
       [
         {:phoenix_live_view, live_view_requirement(), optional: true},
-        {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true}
+        {:phoenix_html, "~> 3.3 or ~> 4.0", optional: true},
+        # Test only and never shipped: `Phoenix.LiveViewTest` needs it to mount
+        # a real LiveView, which is how the documented live meter snippet is
+        # proved end to end (`test/aurora_meter/live_meter_end_to_end_test.exs`).
+        {:lazy_html, ">= 0.1.0", only: :test}
       ]
     end
   end
@@ -245,14 +249,13 @@ defmodule AuroraMeter.MixProject do
   # everything the optional-dependency criteria are about stays testable in a
   # build without it.
   #
-  # The requirement is the 0.8 line rather than "~> 0.8". For a two-segment
-  # requirement `~> 0.8` means `>= 0.8.0 and < 1.0.0`, which would carry 0.9 as
-  # well, and `Phoenix.LiveDashboard.PageBuilder`'s callback set has changed
-  # across minor versions. Declaring a range wider than the one the matrix
-  # resolves is a support claim nothing tests, which is what decision D12
-  # forbids. The resolved version is recorded in
-  # docs/evidence/v1/phase-08/08b-optional-integrations.md with the callback set
-  # read from its source.
+  # The requirement is the 0.8 and 0.9 lines, and stops before 0.10: for a
+  # two-segment requirement `~> 0.8` would mean `>= 0.8.0 and < 1.0.0`, and
+  # `Phoenix.LiveDashboard.PageBuilder`'s callback set has changed across minor
+  # versions. Each line the range admits is resolved by a CI leg: the committed
+  # lock carries 0.8, and the `dashboard-0.9` leg sets AURORA_DASHBOARD=0.9,
+  # which pins the 0.9 line and resolves into its own lock file. Declaring a
+  # range wider than the matrix resolves would be a support claim nothing tests.
   #
   # AURORA_NO_DASHBOARD removes it on its own. AURORA_NO_METRICS removes it TOO,
   # and that is not tidiness: phoenix_live_dashboard declares
@@ -271,7 +274,7 @@ defmodule AuroraMeter.MixProject do
          System.get_env("AURORA_NO_LIVEVIEW") == "1" do
       []
     else
-      [{:phoenix_live_dashboard, ">= 0.8.0 and < 0.9.0", optional: true}]
+      [{:phoenix_live_dashboard, dashboard_requirement(), optional: true}]
     end
   end
 
@@ -341,22 +344,35 @@ defmodule AuroraMeter.MixProject do
     end
   end
 
+  # `AURORA_DASHBOARD=0.9` pins the 0.9 line for the `dashboard-0.9` CI leg. It
+  # is a build switch for this repository's CI, not a consumer API.
+  defp dashboard_requirement do
+    case System.get_env("AURORA_DASHBOARD") do
+      nil -> ">= 0.8.0 and < 0.10.0"
+      "" -> ">= 0.8.0 and < 0.10.0"
+      "0.9" -> "~> 0.9.1"
+      other -> Mix.raise("AURORA_DASHBOARD must be \"0.9\", got: #{inspect(other)}")
+    end
+  end
+
   # A LiveView leg resolves a different dependency set from the committed lock,
   # so it resolves into its own lock file outside the working tree. mix.lock is
   # then untouchable by any leg, locally as well as in CI, and no leg can commit
   # a lock change by accident.
   defp lockfile do
-    case System.get_env("AURORA_LIVEVIEW") do
-      nil -> "mix.lock"
-      "" -> "mix.lock"
-      version -> Path.join(System.tmp_dir!(), "aurora_meter-liveview-#{version}.lock")
+    case {System.get_env("AURORA_LIVEVIEW", ""), System.get_env("AURORA_DASHBOARD", "")} do
+      {"", ""} -> "mix.lock"
+      {"", dashboard} -> Path.join(System.tmp_dir!(), "aurora_meter-dashboard-#{dashboard}.lock")
+      {version, _} -> Path.join(System.tmp_dir!(), "aurora_meter-liveview-#{version}.lock")
     end
   end
 
+  # Hex shows at most 300 characters, and its search reads this field, so it is
+  # written in the words a buyer searches with.
   defp description do
-    "Real-time usage metering, plan entitlements, and Stripe-ready billing " <>
-      "primitives for Phoenix: count, gate, and bill on the BEAM. The free core of " <>
-      "aurorameter.com."
+    "Usage limits, quotas and usage-based billing for Phoenix and Elixir SaaS: " <>
+      "real-time metering, plan entitlements, prepaid credits and AI/LLM token " <>
+      "billing, ready for Stripe Billing Meters. MIT core of Aurora Meter."
   end
 
   defp package do
@@ -372,28 +388,32 @@ defmodule AuroraMeter.MixProject do
       # priv/ holds only the lib's own test-repo migration and dialyzer PLTs, so it
       # is deliberately excluded — consumers generate their migration via
       # `mix aurora_meter.gen.migration`, which embeds the template in code.
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md NOTICE.md)
+      files:
+        ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md NOTICE.md usage-rules.md)
     ]
   end
 
   defp docs do
     [
       main: "readme",
+      # docs/correctness.md is not an extra: it is the engineering index of the
+      # invariants, written against the build programme's evidence and test
+      # names, and the published pages link to it in the source repository.
+      #
+      # "Start here" first: a reader landing on HexDocs meets the README, the
+      # getting started guide, the mental model and the Phoenix guide before
+      # anything else, and the project files come last.
       extras: [
         "README.md",
-        "CHANGELOG.md",
-        "LICENSE",
-        "NOTICE.md",
-        "SECURITY.md",
-        "CONTRIBUTING.md",
         "docs/getting-started.md",
         "docs/mental-model.md",
+        "docs/phoenix.md",
+        "docs/llm-billing-with-req-llm.md",
         "docs/architecture.md",
         "docs/troubleshooting.md",
         "docs/api.md",
         "docs/guarantees.md",
         "docs/support-policy.md",
-        "docs/correctness.md",
         "docs/upgrading-to-1.0.md",
         "docs/upgrading-to-lots.md",
         "docs/examples/concepts.md",
@@ -408,7 +428,6 @@ defmodule AuroraMeter.MixProject do
         "docs/exporters.md",
         "docs/periods.md",
         "docs/entitlements.md",
-        "docs/phoenix.md",
         "docs/plans.md",
         "docs/credits.md",
         "docs/telemetry.md",
@@ -433,7 +452,12 @@ defmodule AuroraMeter.MixProject do
         # and test/aurora_meter/release_metadata_test.exs fails if one appears
         # here without being moved off its list.
         "docs/adr/0010-undeclared-features-and-config-strictness.md",
-        "docs/adr/0015-period-contract-and-clock-seam.md"
+        "docs/adr/0015-period-contract-and-clock-seam.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "NOTICE.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md"
       ],
       groups_for_extras: [
         # Reference is matched before Guides on purpose: ExDoc takes the first
@@ -442,12 +466,14 @@ defmodule AuroraMeter.MixProject do
         # Trust is matched before Guides for the same reason Reference is: the
         # Guides pattern matches every top-level file under docs/, and these are
         # the pages a reader checks before depending on the library.
-        Trust: ~r/docs\/(guarantees|correctness|architecture|mental-model|troubleshooting)\.md$/,
+        "Start here": ~r/(^README\.md|docs\/(getting-started|mental-model|phoenix)\.md)$/,
+        Trust: ~r/docs\/(guarantees|architecture|troubleshooting)\.md$/,
         Reference: ~r/docs\/(api|support-policy)\.md$/,
         Examples: ~r/docs\/examples\//,
         Operations: ~r/docs\/operations\//,
         Guides: ~r/docs\/[^\/]+$/,
-        ADRs: ~r/docs\/adr\//
+        ADRs: ~r/docs\/adr\//,
+        Project: ~r/^(CHANGELOG\.md|LICENSE|NOTICE\.md|SECURITY\.md|CONTRIBUTING\.md)$/
       ],
       groups_for_modules: groups_for_modules(),
       # These modules carry `@moduledoc false` on purpose, so ExDoc renders no

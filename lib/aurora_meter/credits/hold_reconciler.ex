@@ -90,7 +90,7 @@ defmodule AuroraMeter.Credits.HoldReconciler do
   `amount` because micro-USD money is spelled `amount` throughout this package
   (`api-change-map.md` section 5), and the trap is that
   `AuroraMeter.Credits.pending_holds/1`, the other half of this job, hands back
-  the raw row rather than this map (`open-findings.md` X396). If you are reading
+  the raw row rather than this map. If you are reading
   a figure off a row, read `held_delta`.
   """
   @type hold :: %{

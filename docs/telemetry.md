@@ -10,9 +10,8 @@ handler, running a reporter and deciding what leaves your network are all yours.
 table below is checked against it on each `mix test`, in both directions: an
 event emitted and not listed here fails the suite, and so does one listed here
 and not emitted. The check reads the parsed form of `lib/` rather than grepping
-it, so an event emitted through a module attribute is found like any other
-(`open-findings.md` X222), and `docs/telemetry.md` is checked as well as
-`docs/api.md`, because for five releases only the latter was (X232).
+it, so an event emitted through a module attribute is found like any other,
+and `docs/telemetry.md` is checked as well as `docs/api.md`, because for five releases only the latter was.
 
 ## The rules for a metric tag
 
@@ -104,10 +103,10 @@ ruinous on a counter.
 | `[:aurora_meter, :store, :gauge]` | execute | `counter_keys`, `dirty_keys`, `oldest_pending_age_ms`, `pending_batch_age_ms`, `pending_batch_items` | `node` | none | 1.0.0 |
 | `[:aurora_meter, :credits, kind]` | family | `amount`, `available_after`, `balance_after`, `spendable_after` | `category`, `deferred`, `duplicate`, `overrun`, `reference`, `tenant_key` | none | 0.4.0 |
 | `[:aurora_meter, :credits, :low_balance]` | execute | `available`, `spendable`, `threshold` | `crossing_id`, `handler`, `tenant_key` | none | 0.4.0 |
-| `[:aurora_meter, :credits, :hold_reconciliation]` | execute | `age_seconds`, `amount`, `duration` | `decision`, `outcome`, `reference`, `tenant_key` | none | 0.6.0 |
-| `[:aurora_meter, :credits, :conservation_error]` | execute | `balance_delta`, `expired_delta`, `held_delta`, `promotional_delta` | `operation`, `reference`, `tenant_key` | none | 0.6.0 |
-| `[:aurora_meter, :credits, :lot_migration]` | execute | `blocked`, `deferred`, `duration_ms`, `migrated`, `rows`, `wallets` | `shadow`, `state` | `state` | 0.6.0 |
-| `[:aurora_meter, :credits, :recurrence]` | execute | `amount`, `rollover_amount` | `name`, `period_start`, `plan_id`, `plan_version`, `reason`, `result`, `tenant_key` | `result` | 0.6.0 |
+| `[:aurora_meter, :credits, :hold_reconciliation]` | execute | `age_seconds`, `amount`, `duration` | `decision`, `outcome`, `reference`, `tenant_key` | none | 1.0.0 |
+| `[:aurora_meter, :credits, :conservation_error]` | execute | `balance_delta`, `expired_delta`, `held_delta`, `promotional_delta` | `operation`, `reference`, `tenant_key` | none | 1.0.0 |
+| `[:aurora_meter, :credits, :lot_migration]` | execute | `blocked`, `deferred`, `duration_ms`, `migrated`, `rows`, `wallets` | `shadow`, `state` | `state` | 1.0.0 |
+| `[:aurora_meter, :credits, :recurrence]` | execute | `amount`, `rollover_amount` | `name`, `period_start`, `plan_id`, `plan_version`, `reason`, `result`, `tenant_key` | `result` | 1.0.0 |
 | `[:aurora_meter, :plans, :transition]` | execute | `count` | `from_plan_id`, `from_version`, `ref`, `result`, `tenant_key`, `to_plan_id`, `to_version` | `result` | 1.0.0 |
 | `[:aurora_meter, :events, :backfill, :batch]` | execute | `batches`, `scanned`, `updated` | `cursor` | none | 1.0.0 |
 | `[:aurora_meter, :record]` | span | `count`, `duration`, `monotonic_time`, `system_time` | `batch_size`, `durability`, `feature`, `kind`, `projection`, `result`, `tenant_key` | `kind`, `result` | 1.0.0 |
@@ -147,7 +146,7 @@ whole of a rebuild. That silence is asserted, not assumed: see
 `AuroraMeter.EventsReplayTest`.
 
 `declared` is `false` when no plan declares the feature. It is metadata on
-`track` and `reserve` from 0.5.0, and it is a report rather than a refusal:
+`track` and `reserve` from 1.0.0, and it is a report rather than a refusal:
 `track/4` counts an undeclared feature under every `:undeclared_feature_policy`.
 
 Aurora Meter Pro emits events of its own. They are catalogued in Pro's own
@@ -197,8 +196,8 @@ gauge tick and never on the apply path.
 
 ### Which clock each age uses, and why
 
-This matters enough to be written down, because getting it wrong is the failure
-`open-findings.md` X100 records: a duration measured against a wall clock goes
+This matters enough to be written down, because getting it wrong is a real
+failure: a duration measured against a wall clock goes
 negative across an NTP step, and a negative duration in a histogram is worse
 than no duration at all.
 
@@ -271,7 +270,7 @@ rather than rotting quietly.
 | Settlement above its hold created debt | `credits.settle.amount` above the reserved `amount` on the same event | [credits.md](credits.md#hold-settle-release) |
 | The host hold policy is not running | `credits.hold_reconciliation.duration` with `outcome: :callback_timeout` or `:callback_exit`, steady | [operations.md section 3](operations.md#3-recovering-stale-holds) |
 | The policy released work that then completed | `credits.hold_reconciliation.duration` with `outcome: :released_by_other`, and a `settle_missed:` debit beside it | [credits.md](credits.md#hold-settle-release) |
-| The ledger cannot account for a movement | `[:aurora_meter, :credits, :conservation_error]` at all | [correctness.md](correctness.md#i10-every-ledger-amount-has-exact-provenance-and-conservation) |
+| The ledger cannot account for a movement | `[:aurora_meter, :credits, :conservation_error]` at all | [correctness.md](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md#i10-every-ledger-amount-has-exact-provenance-and-conservation) |
 | Promotional credit is not expiring | `credits.expire.amount` at zero while granted lots age past their expiry | [credits.md](credits.md#promotional-credit-and-expiry) |
 | A recurring allowance did not land | `credits.recurrence.amount` missing for a period | [credits.md](credits.md#recurring-allowances) |
 | Customers run dry without warning | `credits.low_balance.available` crossings clustered at zero | [credits.md](credits.md#low-balance) |
@@ -435,4 +434,4 @@ rather than as its message.
 - [Alerts](alerts.md): five worked alert examples with their derivations.
 - [Operations](operations.md): what runs, how often, and what to alert on.
 - [Clustering](clustering.md): what the cluster guarantees and what it does not.
-- [Correctness](correctness.md): the invariants these signals are evidence for.
+- [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md): the invariants these signals are evidence for.

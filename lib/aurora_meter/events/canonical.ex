@@ -4,9 +4,8 @@ defmodule AuroraMeter.Events.Canonical do
   decision 2), and the validation every durable write passes before it is
   allowed near a connection. Not part of the supported surface.
 
-  Build unit 03a landed the part the legacy backfill needs:
-  `canonical_json/1`, `encode/1` and `legacy_payload_hash/1`. Build unit 03b
-  owns this module and added the facade's validation, the caller-id rules and
+  It holds the part the legacy backfill needs (`canonical_json/1`, `encode/1`
+  and `legacy_payload_hash/1`), the facade's validation, the caller-id rules and
   `payload_hash/1` for a freshly recorded event. There is one canonical form
   and it lives here; two encodings of "the same payload" is exactly the defect
   the hash exists to detect.
@@ -20,7 +19,7 @@ defmodule AuroraMeter.Events.Canonical do
   language computes them and a hash can be reproduced by hand from a row. JSON
   is self-delimiting: every element is quoted and escaped, so no field value
   can impersonate the separator between two elements. `encode/1` is fixed by
-  the hashes 03a's backfill has already written; it cannot be changed without
+  the hashes the legacy backfill has already written; it cannot be changed without
   invalidating every `payload_hash` in every database that has run the V7
   backfill.
 
@@ -37,7 +36,7 @@ defmodule AuroraMeter.Events.Canonical do
   wants the whole list. Sizes are measured on the **JSON text** the caller is
   sending, with `byte_size/1`, never on what Postgres would store: a
   compressible payload of any size passes a stored-size test
-  (`open-findings.md` X104), and the limit is a promise about the request.
+  , and the limit is a promise about the request.
   """
 
   alias AuroraMeter.Clock
@@ -203,9 +202,8 @@ defmodule AuroraMeter.Events.Canonical do
   the two fields a correction fills: `kind` is `"correction"` and
   `original_event_id` names the fact being reduced. `feature`, `occurred_at`
   and `dimensions` come from the original, which is why this takes the original
-  rather than a draft (`architecture-map.md` 4.2, and `open-findings.md` X110:
-  the encoding a shipped migration has already written is immutable, so a
-  correction reuses it and never re-encodes it).
+  rather than a draft: the encoding a shipped migration has already written is
+  immutable, so a correction reuses it and never re-encodes it.
 
   `original` is any map carrying `:feature`, `:event_id`, `:occurred_at` and
   `:dimensions`, which both a `t:AuroraMeter.Schema.Event.t/0` row and an

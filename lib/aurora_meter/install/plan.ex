@@ -40,7 +40,7 @@ defmodule AuroraMeter.Install.Plan do
       KiB, neither of which `AuroraMeter.track/4` ever rejected. Without it the
       operator is told to run version 8 with an option their generated
       migration has no way to carry, and the only route is to hand-edit a
-      generated file (build unit 11a, `open-findings.md` X428). Omitted from the
+      generated file. Omitted from the
       generated body when not given, so the default stays `true` and a host that
       never needed it has nothing extra in its committed migration.
 

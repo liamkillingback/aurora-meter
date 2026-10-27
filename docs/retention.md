@@ -164,8 +164,7 @@ A paused table is reported as a `:paused` reason rather than as a failure.
 ## Sizing, measured
 
 `priv/v1/receipt_sizing.exs` produces these numbers; they were measured on
-PostgreSQL with one million synthetic receipts on 15 September 2026, and
-`docs/evidence/v1/phase-05/05d-sizing.md` carries the full output.
+PostgreSQL with one million synthetic receipts on 15 September 2026.
 
 | | |
 |---|---|

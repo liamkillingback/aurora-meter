@@ -18,7 +18,7 @@ defmodule AuroraMeter.Schema.CreditRecurrence do
   `"recurring:<tenant_key>:<name>:<plan_id>:<plan_version>:<period_start>"`
   instead. Two tenants on one plan reach the same period on the same day, and
   with one string for both the second tenant's grant would be refused as a
-  duplicate of the first tenant's (`open-findings.md` X273).
+  duplicate of the first tenant's.
 
   ## policy is written once and never updated
 

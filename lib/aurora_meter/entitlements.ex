@@ -2,7 +2,7 @@ defmodule AuroraMeter.Entitlements do
   @moduledoc """
   Plan resolution and the entitlement gate.
 
-  Semantics (see plan.md D12 and ADR 0010): a `:hard` limit blocks at its cap; a
+  Semantics (see ADR 0010): a `:hard` limit blocks at its cap; a
   `:metered` feature is always allowed (overage is billed); a `:counter` is
   always allowed and never billed (ADR 0006); a `{:feature, false}` is denied.
   `with_quota/4` reserves atomically so hard limits are correct under
@@ -30,7 +30,7 @@ defmodule AuroraMeter.Entitlements do
   per feature per node. `AuroraMeter.track/4` is deliberately outside all of
   this and keeps counting: metering is not entitlement.
 
-  The default is `:warn` in the 0.5.x transition release and `:deny` from 1.0;
+  The default is `:deny`;
   `config :aurora_meter, undeclared_feature_policy: :allow` restores the 0.4.x
   behaviour exactly.
 
@@ -83,9 +83,8 @@ defmodule AuroraMeter.Entitlements do
   Assigns `plan_id` to `tenant` locally (no billing provider).
 
   The plan has to exist. A plan id no plans module declares used to be written
-  and then silently resolved to the default plan for the life of the install; in
-  the transition release it is written with a warning, and from 1.0 it is
-  `{:error, changeset}` with `plan_id: ["is not a known plan"]`.
+  and then silently resolved to the default plan for the life of the install;
+  from 1.0 it is `{:error, changeset}` with `plan_id: ["is not a known plan"]`.
   """
   @spec subscribe(term(), atom() | String.t()) ::
           {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
@@ -110,7 +109,7 @@ defmodule AuroraMeter.Entitlements do
 
   The row records the version, its fingerprint and the instant the assignment
   started, so a later deploy of a new version cannot change what this tenant was
-  sold (D05).
+  sold.
   """
   @spec subscribe(term(), atom() | String.t(), keyword() | :strict | :transition) ::
           {:ok, Subscription.t()} | {:error, Ecto.Changeset.t()}
@@ -196,7 +195,7 @@ defmodule AuroraMeter.Entitlements do
   keeps version 1's limits, feature values, price and recurring credits when
   version 2 becomes effective, and keeps them when version 1's block is deleted
   from the plans module, because the definition is resolved from the registered
-  snapshot (`v1-release.md` 07.03, invariant I17).
+  snapshot (invariant I17).
 
   A row with no `plan_version` at all (written before core schema version 10 and
   not yet named by `AuroraMeter.Plans.register!/0`) resolves to the plan's

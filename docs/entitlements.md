@@ -38,7 +38,7 @@ AuroraMeter.feature_value(tenant, :seats, 1)  # the plan's value (boolean or int
 
 ## Features the plan does not declare
 
-Until 0.5.0 an undeclared feature was permitted, silently, with a warning that
+Before 1.0 an undeclared feature was permitted, silently, with a warning that
 only existed in a build compiled in `:dev`. That meant a misspelled feature name
 granted access for the life of the install. `:undeclared_feature_policy`
 (`:allow | :warn | :deny | :raise`) now decides:

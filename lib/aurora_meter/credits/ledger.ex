@@ -316,7 +316,7 @@ defmodule AuroraMeter.Credits.Ledger do
       because `category: :reversal` is kept. `Schema.CreditTransaction.reversal?/1`
       is the single predicate that knows both shapes.
 
-  ## On a cut-over wallet (repair unit R1)
+  ## On a cut-over wallet
 
   It takes the credit back off the wallet's **non-promotional** lots, in spend
   order, draining `available`, then `consumed`, then `reserved`, and writing
@@ -580,9 +580,10 @@ defmodule AuroraMeter.Credits.Ledger do
       examined.
 
   Returns `{:ok, report}` where `report` is `%{examined:, expired:, skipped:,
-  cursor:}`. `cursor` is `{expires_at, id}` when the page came back full and
-  `nil` when it did not, so a caller that pages knows whether more work is
-  waiting. `skipped` counts a grant the ledger refused: already expired (another
+  cursor:}`. `cursor` is set when the page came back full and `nil` when it did
+  not, so a caller that pages knows whether more work is waiting: `{expires_at,
+  id}` in the legacy grant phase and `{:lots, expires_at, id}` in the lot
+  phase. `skipped` counts a grant the ledger refused: already expired (another
   run reached it first) or wholly covered by a pending hold.
 
   ## Two things the cursor is not
@@ -604,6 +605,24 @@ defmodule AuroraMeter.Credits.Ledger do
     now = DateTime.truncate(now, :second)
     limit = Keyword.get(opts, :limit)
 
+    case Keyword.get(opts, :after) do
+      {:lots, nil, nil} ->
+        empty = %{examined: 0, expired: 0, skipped: 0, failed: 0}
+        {report, cursor} = expire_lots_phase(empty, now, limit, nil)
+        {:ok, Map.put(report, :cursor, cursor)}
+
+      {:lots, %DateTime{} = at, id} ->
+        # The grant phase finished on an earlier page; resume the lot phase.
+        empty = %{examined: 0, expired: 0, skipped: 0, failed: 0}
+        {report, cursor} = expire_lots_phase(empty, now, limit, {at, id})
+        {:ok, Map.put(report, :cursor, cursor)}
+
+      _grant_cursor_or_nil ->
+        expire_due_from_grants(now, limit, opts)
+    end
+  end
+
+  defp expire_due_from_grants(now, limit, opts) do
     due =
       from(t in CreditTransaction,
         join: b in CreditBalance,
@@ -620,56 +639,67 @@ defmodule AuroraMeter.Credits.Ledger do
       |> Config.repo().all()
 
     report =
-      Enum.reduce(due, %{examined: 0, expired: 0, skipped: 0, failed: 0}, fn {id, _at}, acc ->
-        acc = %{acc | examined: acc.examined + 1}
+      tally(due, %{examined: 0, expired: 0, skipped: 0, failed: 0}, &attempt_expiry(&1, now))
 
-        case attempt_expiry(id, now) do
-          :expired -> %{acc | expired: acc.expired + 1}
-          :skipped -> %{acc | skipped: acc.skipped + 1}
-          :failed -> %{acc | failed: acc.failed + 1}
-        end
-      end)
+    case expire_due_cursor(due, limit) do
+      nil ->
+        # The grant phase reached its end, so the lot phase runs from its start
+        # with whatever budget the page has left. It has a keyset cursor of its
+        # own, `{:lots, expires_at, id}`, so a bounded page that fills up in
+        # this phase says so and the next page resumes here rather than
+        # reporting the scan complete with due lots still open.
+        {report, cursor} = expire_lots_phase(report, now, remaining_budget(limit, report), nil)
+        {:ok, Map.put(report, :cursor, cursor)}
 
-    cursor = expire_due_cursor(due, limit)
-
-    # The lot phase runs once per scan, when the legacy phase has reached its
-    # end, and it shares the page's budget. It carries no cursor of its own,
-    # deliberately: the candidate set is recomputed from a fresh `now` on every
-    # run and every lot is idempotent (a second pass finds `available = 0` and
-    # is refused), so an interrupted lot phase resumes by being run again. The
-    # `{expires_at, id}` cursor shape belongs to the worker's checkpoint, which
-    # is 05c's, and wiring a second cursor into it is 06b's cutover work.
-    report = expire_lots_phase(report, now, remaining_budget(limit, report), cursor)
-
-    {:ok, Map.put(report, :cursor, cursor)}
+      cursor ->
+        {:ok, Map.put(report, :cursor, cursor)}
+    end
   end
 
-  defp remaining_budget(nil, _report), do: nil
-  defp remaining_budget(limit, report), do: max(limit - report.examined, 0)
-
-  defp expire_lots_phase(report, _now, 0, _cursor), do: report
-  defp expire_lots_phase(report, _now, _budget, cursor) when cursor != nil, do: report
-
-  defp expire_lots_phase(report, now, budget, _cursor) do
-    from(l in CreditLot,
-      where:
-        l.state == ^:open and not is_nil(l.expires_at) and l.expires_at <= ^now and
-          l.available > 0,
-      order_by: [asc: l.expires_at, asc: l.seq],
-      select: l.id
-    )
-    |> expire_due_limit(budget)
-    |> Config.repo().all()
-    |> Enum.reduce(report, fn id, acc ->
+  # One attempt per due row, counted by its outcome.
+  defp tally(due, report, attempt) do
+    Enum.reduce(due, report, fn {id, _at}, acc ->
       acc = %{acc | examined: acc.examined + 1}
 
-      case attempt_lot_expiry(id, now) do
+      case attempt.(id) do
         :expired -> %{acc | expired: acc.expired + 1}
         :skipped -> %{acc | skipped: acc.skipped + 1}
         :failed -> %{acc | failed: acc.failed + 1}
       end
     end)
   end
+
+  defp remaining_budget(nil, _report), do: nil
+  defp remaining_budget(limit, report), do: max(limit - report.examined, 0)
+
+  defp expire_lots_phase(report, now, budget, after_key) do
+    due =
+      from(l in CreditLot,
+        where:
+          l.state == ^:open and not is_nil(l.expires_at) and l.expires_at <= ^now and
+            l.available > 0,
+        order_by: [asc: l.expires_at, asc: l.id],
+        select: {l.id, l.expires_at}
+      )
+      |> expire_lots_after(after_key)
+      |> expire_due_limit(budget)
+      |> Config.repo().all()
+
+    report = tally(due, report, &attempt_lot_expiry(&1, now))
+
+    cursor =
+      case expire_due_cursor(due, budget) do
+        nil -> nil
+        {at, id} -> {:lots, at, id}
+      end
+
+    {report, cursor}
+  end
+
+  defp expire_lots_after(query, nil), do: query
+
+  defp expire_lots_after(query, {%DateTime{} = at, id}),
+    do: where(query, [l], l.expires_at > ^at or (l.expires_at == ^at and l.id > ^id))
 
   # `attempt_expiry/2`'s shape, for the same reason: one wallet's fault must
   # not starve the wallets behind it, and the direction it fails in is the safe
@@ -1175,7 +1205,7 @@ defmodule AuroraMeter.Credits.Ledger do
   It goes through `Allocator.spendable_figure/2`, which is the planner's own
   `debt > 0` refusal expressed as a number, so this figure and
   `AuroraMeter.Credits.sufficient?/2` built on it cannot say a wallet may spend
-  something `hold/4` would refuse (repair unit R3, findings X357 and X361).
+  something `hold/4` would refuse.
   """
   @spec spendable(String.t()) :: integer()
   def spendable(tenant_key) do
@@ -1200,7 +1230,7 @@ defmodule AuroraMeter.Credits.Ledger do
   hold or debit would be allowed to take.** While `debt > 0` the answer is
   nothing, because the `{:hold, ...}` and `{:debit, ...}` clauses refuse with
   `:debt_outstanding` before they look at a lot, so both figures report that
-  and neither can be positive (repair unit R3, findings X357 and X361). They
+  and neither can be positive. They
   come through `Allocator.spendable_figure/2` and
   `Allocator.promotional_spendable_figure/2`, which are that refusal written as
   a number and are the only implementation of it.
@@ -1208,8 +1238,7 @@ defmodule AuroraMeter.Credits.Ledger do
   Until repair unit R2 the question could not arise: every incoming value
   repaid debt out of eligible availability of any category, so an outstanding
   debt implied no availability at all. R2 stops a debt being repaid out of
-  credit the wallet already holds when that credit is promotional (finding
-  X355), which is what `architecture-map.md` 7.2's promotional rule costs, and
+  credit the wallet already holds when that credit is promotional, which is what `architecture-map.md` 7.2's promotional rule costs, and
   it made this state ordinary. Between R2 and R3 a refunded wallet reported
   `promotional_spendable: 4_000_000` and could spend none of it.
 
@@ -1937,7 +1966,7 @@ defmodule AuroraMeter.Credits.Ledger do
   needs and all it permits: a wallet with rows in it has to have those rows
   replayed into lots first, and that replay, its per-wallet reconciliation
   report and the refusal to cut over an ambiguous wallet are
-  `mix aurora_meter.credits.migrate_lots` (build unit 06b). This raises rather
+  `mix aurora_meter.credits.migrate_lots`. This raises rather
   than cutting over a wallet it cannot vouch for.
 
   The flag is set under the balance row's own `FOR UPDATE` lock, which is what

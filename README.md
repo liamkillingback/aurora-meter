@@ -29,8 +29,11 @@ end)
 ```
 
 ```heex
-<.usage_meter tenant={@org} feature={:ai_generations} />
+<.usage_meter quota={@quota} />
 ```
+
+That meter updates live over PubSub: see [Live usage in LiveView](#live-usage-in-liveview)
+for the three lines that wire it.
 
 It is a dependency, not a hosted service. Your app keeps its data, and the free
 core is MIT with no email gate, no trial and no expiry.
@@ -65,7 +68,7 @@ the number.
 | 1 process, flush of 1,000 dirty keys | end-to-end | 22,619 rows/s | 59,192.45 us |
 
 Every mode, its workload, its run-to-run spread and its raw records are in
-[docs/evidence/v1/phase-08/08c-results.md](https://github.com/liamkillingback/aurora-meter/blob/main/docs/evidence/v1/phase-08/08c-results.md),
+[the benchmark results](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/evidence/v1/phase-08/08c-results.md),
 which is the only artifact any claim about performance cites. The figures this
 table used to carry were measured against a counter row 0.4.0 replaced, and the
 spread-key number is **lower** now on this machine, not higher; the measurement
@@ -180,7 +183,8 @@ AuroraMeter.track(42, :ai_generations)           # an integer, stored as "42"
 AuroraMeter.track(:acme, :ai_generations)        # anything with String.Chars
 ```
 
-Pass an Ecto struct or any other term and tell Aurora Meter how to read the key:
+Pass an Ecto struct or any other term and tell Aurora Meter how to read the key
+(the struct in each clause must exist in your application):
 
 ```elixir
 defmodule MyApp.Tenant do
@@ -188,7 +192,6 @@ defmodule MyApp.Tenant do
 
   @impl true
   def to_key(%MyApp.Accounts.Org{id: id}), do: "org_#{id}"
-  def to_key(%MyApp.Accounts.Scope{org_id: id}), do: "org_#{id}"
   def to_key(key) when is_binary(key), do: key
 end
 
@@ -196,11 +199,43 @@ end
 config :aurora_meter, tenant: MyApp.Tenant
 ```
 
-Then `AuroraMeter.track(current_org, :ai_generations)` and
-`<.usage_meter tenant={@current_org} ... />` work with the struct you already
-have in your assigns. Plans are attached to the same key with
-`AuroraMeter.subscribe(org, :pro)`, so subscribe with exactly the term you
-meter with.
+Then `AuroraMeter.track(current_org, :ai_generations)` works with the struct you
+already have in your assigns. Handed a struct without a resolver, the default
+raises an `ArgumentError` that shows this recipe.
+
+### Phoenix 1.8 (phx.gen.auth scopes)
+
+`mix phx.gen.auth` in Phoenix 1.8 assigns `@current_scope`, a
+`%MyApp.Accounts.Scope{}`. Resolve it to the customer you bill, here the user
+(use `scope.org.id` instead if your scope carries an organisation):
+
+```elixir
+defmodule MyApp.AuroraTenant do
+  @behaviour AuroraMeter.Tenant
+
+  @impl true
+  def to_key(%MyApp.Accounts.Scope{user: %{id: id}}), do: "user_#{id}"
+  def to_key(key) when is_binary(key), do: key
+end
+
+# config/config.exs
+config :aurora_meter, tenant: MyApp.AuroraTenant
+```
+
+And in the router, after the hook that assigns the scope:
+
+```elixir
+live_session :require_authenticated_user,
+  on_mount: [
+    {MyAppWeb.UserAuth, :require_authenticated},
+    {AuroraMeter.LiveView, {:subscribe, assign: :current_scope}}
+  ] do
+  # your live routes
+end
+```
+
+Plans are attached to the same key with `AuroraMeter.subscribe(org, :pro)`, so
+subscribe with exactly the term you meter with.
 
 ## The three jobs
 
@@ -287,18 +322,52 @@ UTC, and `bucket: :month` rolls the same series up by month.
 
 ### Live usage in LiveView
 
-Two drop-in components read the live ETS counters over PubSub. LiveView and
+Drop-in components read the live ETS counters over PubSub. LiveView and
 Phoenix.HTML are optional dependencies; the core runs headless without them.
+Pass the quota map, not the tenant: a component re-renders only when its
+assigns change, and the quota is the assign that changes when usage does.
 
 ```elixir
-# mount/3
-if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
+defmodule MyAppWeb.DashboardLive do
+  use MyAppWeb, :live_view
+
+  import AuroraMeter.Components
+
+  def mount(_params, _session, socket) do
+    org = socket.assigns.current_org
+    if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
+    {:ok, assign(socket, quota: AuroraMeter.quota(org, :ai_generations))}
+  end
+
+  def handle_info({:aurora_meter, :usage, _payload} = message, socket) do
+    {:noreply, AuroraMeter.LiveView.assign_quota(message, socket, :quota, :ai_generations)}
+  end
+
+  def render(assigns) do
+    ~H"""
+    <.usage_meter quota={@quota} />
+    """
+  end
+end
 ```
 
-```heex
-<.usage_meter tenant={@org} feature={:ai_generations} />
-<.usage_summary tenant={@org} />
+`subscribe/1` remembers the tenant in the LiveView process, so `assign_quota/4`
+accepts that tenant's messages and drops any other tenant's. Instead of calling
+it in `mount/3` you can subscribe in the `live_session`, from an assign an
+earlier hook set:
 
+```elixir
+live_session :default,
+  on_mount: [{MyAppWeb.Auth, :current_org}, {AuroraMeter.LiveView, {:subscribe, assign: :current_org}}] do
+  live "/dashboard", MyAppWeb.DashboardLive
+end
+```
+
+For every feature at once, assign `AuroraMeter.LiveView.quotas(org)` and use
+`assign_quotas/2` with `<.usage_summary quotas={@quotas} />`. The credit
+components take plain data:
+
+```heex
 <.spend_chart points={AuroraMeter.Credits.spend_history(@org, days: 30)} />
 <.credit_summary summary={AuroraMeter.Credits.summary(@org)} />
 ```
@@ -321,7 +390,7 @@ with the condition that makes it true, the thing that takes it away, the
 invariant it rests on and the test that proves it. Read it before you rely on
 any of this. The design choices behind it are recorded as
 [ADRs](docs/adr/0001-resolved-decisions.md), and every invariant with its tests
-is in [the correctness index](docs/correctness.md).
+is in [the correctness index](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md).
 
 The short version:
 
@@ -422,9 +491,8 @@ metered-API SaaS on this core.
 ## Upgrading
 
 **1.0 requires schema version 10.** The last release on Hex before 1.0 is
-0.4.0 (schema 6), so an existing install goes straight from 0.4.0 to 1.0; the
-0.5.0 transition release was never published. Its behaviour changes are in 1.0,
-and two of them can be set back while you upgrade:
+0.4.0 (schema 6), so an existing install goes straight from 0.4.0 to 1.0. Two
+of 1.0's behaviour changes can be set back while you upgrade:
 
 ```elixir
 config :aurora_meter,
@@ -472,7 +540,7 @@ questions a reader actually has:
 - [Guarantees](docs/guarantees.md): the contract, one row per guarantee, each
   with the conditions that make it hold, what voids it, and the named test that
   proves it.
-- [Correctness](docs/correctness.md): the same ground per invariant, with the
+- [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md): the same ground per invariant, with the
   prerequisites, the known limits and a link to the evidence.
 - [Architecture](docs/architecture.md): which process writes which table, where
   the seams are, and which direction the core and Pro dependency runs.

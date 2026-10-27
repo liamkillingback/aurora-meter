@@ -70,6 +70,54 @@ defmodule AuroraMeter.ConfigTest do
     assert_raise NimbleOptions.ValidationError, fn -> Config.validate!() end
   end
 
+  describe ":repo and :pubsub are checked at boot" do
+    setup do
+      repo = Application.get_env(:aurora_meter, :repo)
+      pubsub = Application.get_env(:aurora_meter, :pubsub)
+
+      on_exit(fn ->
+        Application.put_env(:aurora_meter, :repo, repo)
+        Application.put_env(:aurora_meter, :pubsub, pubsub)
+      end)
+    end
+
+    test "a repo module that does not exist names the key, the value and an example" do
+      Application.put_env(:aurora_meter, :repo, MyApp.Repo)
+
+      error = assert_raise ArgumentError, fn -> Config.validate!() end
+
+      assert error.message =~
+               "config :aurora_meter, repo: MyApp.Repo names a module that does not exist"
+
+      assert error.message =~ "for example:"
+    end
+
+    test "the Phoenix.PubSub module instead of a server name is refused" do
+      Application.put_env(:aurora_meter, :pubsub, Phoenix.PubSub)
+
+      error = assert_raise ArgumentError, fn -> Config.validate!() end
+      assert error.message =~ "pubsub: Phoenix.PubSub is the Phoenix.PubSub module"
+      assert error.message =~ "{Phoenix.PubSub, name:"
+    end
+
+    test "a PubSub name with no running process is logged at start, not raised" do
+      Application.put_env(:aurora_meter, :pubsub, MyApp.NotRunningPubSub)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert Config.warn_pubsub_not_running() == :ok
+        end)
+
+      assert log =~
+               "config :aurora_meter, pubsub: MyApp.NotRunningPubSub names no running process"
+    end
+
+    test "the running test PubSub logs nothing" do
+      log = ExUnit.CaptureLog.capture_log(fn -> Config.warn_pubsub_not_running() end)
+      refute log =~ "names no running process"
+    end
+  end
+
   test "validate!/0 raises when a key has the wrong type" do
     original = Application.get_env(:aurora_meter, :flush_interval)
     Application.put_env(:aurora_meter, :flush_interval, "nope")

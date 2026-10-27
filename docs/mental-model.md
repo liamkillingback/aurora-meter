@@ -37,13 +37,13 @@ anything you can invoice from. See
 A retry of the same id is reported as a duplicate rather than applied again,
 and a different payload under an id already used is reported as a conflict
 rather than accepted quietly. That is what an invoice can be built from. See
-[Guarantees](guarantees.md) G10 and [Correctness](correctness.md) I06 and I07.
+[Guarantees](guarantees.md) G10 and [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md) I06 and I07.
 
 The consequence people trip over: `with_quota/4` on a feature whose reporting
 source is `:events` gates the work in ETS while the billable fact is the
 separately committed event. Both are correct and they are not the same number
 at the same instant. [Metering](metering.md) and
-[Correctness](correctness.md) I08 set out which source answers which question.
+[Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md) I08 set out which source answers which question.
 
 ## Why a fact is not money
 
@@ -55,7 +55,7 @@ because conservation is a per-wallet property: the balance equals the sum of
 that wallet's transactions, and there is no way to check sufficiency and spend
 in one step without holding the row. That is a lock wait under load, and it is
 the price of not spending the same micro-dollar twice. See
-[Credits](credits.md) and [Correctness](correctness.md) I10 and I11.
+[Credits](credits.md) and [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md) I10 and I11.
 
 So: count usage with `track/4`, gate it with `with_quota/4`, record the
 invoiceable fact with `record/4`, and move money with `Credits`. Four different
@@ -149,7 +149,7 @@ your own metadata. See [SECURITY.md](../SECURITY.md).
 - [Getting started](getting-started.md): install and the first counter.
 - [Guarantees](guarantees.md): the contract, one row per guarantee, each with
   what voids it and the test that proves it.
-- [Correctness](correctness.md): the same ground per invariant, with the
+- [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md): the same ground per invariant, with the
   prerequisites, the known limits and the evidence.
 - [Concepts](examples/concepts.md): tenant, feature, period, plan, and the two
   shapes money takes.

@@ -4,14 +4,13 @@ defmodule AuroraMeter.Schema.EventTotal do
   period and generation.
 
   It is a **derived** table. Every row here can be rebuilt by summing the
-  events it came from, which is what `AuroraMeter.Events.Replay` (build unit
-  03d) does into a fresh `generation` while the active one keeps serving reads.
+  events it came from, which is what `AuroraMeter.Events.Replay` does into a fresh `generation` while the active one keeps serving reads.
   Nothing bills from this table that could not be billed from the events
   themselves; it exists so that a dashboard, a quota and a report do not each
   have to aggregate the whole event history.
 
   The delta for an accepted event is written inside the same transaction as the
-  event row, so the two cannot disagree (L-03b-1). Duplicates contribute
+  event row, so the two cannot disagree. Duplicates contribute
   nothing: a retry of an identity that is already recorded adds no quantity and
   no event count.
 

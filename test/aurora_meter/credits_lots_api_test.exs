@@ -17,8 +17,19 @@ defmodule AuroraMeter.CreditsLotsApiTest do
   alias AuroraMeter.Test.LedgerFixtures
 
   @dollar 1_000_000
-  @oct ~U[2026-10-01 00:00:00Z]
-  @nov ~U[2026-11-01 00:00:00Z]
+
+  # Expiry dates one and two months ahead of today, at a month start.
+  # They were fixed 2026 dates, which stopped being in the future when the
+  # calendar passed them; what the tests need is only the order and that both
+  # are ahead of now.
+  defp oct, do: month_start_ahead(1)
+  defp nov, do: month_start_ahead(2)
+
+  defp month_start_ahead(n) do
+    today = Date.utc_today()
+    months = today.year * 12 + today.month - 1 + n
+    DateTime.new!(Date.new!(div(months, 12), rem(months, 12) + 1, 1), ~T[00:00:00], "Etc/UTC")
+  end
 
   test "I10 Lots.list returns lots in the documented spend order" do
     tenant = lot_wallet()
@@ -31,14 +42,14 @@ defmodule AuroraMeter.CreditsLotsApiTest do
       Credits.grant(tenant, 4 * @dollar,
         reference: "promo-nov",
         category: :promotional,
-        expires_at: @nov
+        expires_at: nov()
       )
 
     {:ok, _} =
       Credits.grant(tenant, 3 * @dollar,
         reference: "promo-oct",
         category: :promotional,
-        expires_at: @oct
+        expires_at: oct()
       )
 
     {:ok, _} = Credits.grant(tenant, 2 * @dollar, reference: "promo-none", category: :promotional)

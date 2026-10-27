@@ -67,7 +67,7 @@ defmodule AuroraMeter.Plan do
 
   It is the version `AuroraMeter.Plans.register!/0` backfills onto every
   subscription written before plan versions existed, so a tenant's commercial
-  contract is named rather than implied (D05).
+  contract is named rather than implied.
   """
   @spec base_version() :: String.t()
   def base_version, do: "1"

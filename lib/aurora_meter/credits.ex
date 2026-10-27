@@ -123,17 +123,23 @@ defmodule AuroraMeter.Credits do
   the next run; one grant failing never fails the sweep, because a database
   that cannot be reached for one tenant must not starve the grants behind it.
 
-  `cursor` is `{expires_at, id}` of the last grant examined when the page came
-  back full, and `nil` when it did not, so a caller that pages knows whether
-  more work is waiting. The map may gain keys in a later release.
+  `cursor` is `nil` when the scan reached its end, and otherwise the position
+  to pass back as `:after`: `{expires_at, id}` while the scan is still in
+  legacy grants, `{:lots, expires_at, id}` once it has moved on to credit lots.
+  Treat it as opaque and hand it back unchanged. The map may gain keys in a
+  later release.
   """
   @type expiry_report :: %{
           examined: non_neg_integer(),
           expired: non_neg_integer(),
           skipped: non_neg_integer(),
           failed: non_neg_integer(),
-          cursor: {DateTime.t(), Ecto.UUID.t()} | nil
+          cursor: expiry_cursor() | nil
         }
+
+  @typedoc "The position `expire_due/2` resumes from. Opaque: pass it back as `:after`."
+  @type expiry_cursor ::
+          {DateTime.t(), Ecto.UUID.t()} | {:lots, DateTime.t() | nil, Ecto.UUID.t() | nil}
 
   @typedoc """
   A tenant's balance snapshot, in micro-dollars.
@@ -174,8 +180,8 @@ defmodule AuroraMeter.Credits do
 
   **Which of these are claims about spending and which are totals.**
   `spendable` and `promotional_spendable` report what `hold/4` and `debit/4`
-  would accept, and are the two the planner's own refusal is mirrored into
-  (repair unit R3, findings X357 and X361). `balance`, `promotional`, `held`,
+  would accept, and are the two the planner's own refusal is mirrored into.
+  `balance`, `promotional`, `held`,
   `debt` and `expired` report what the wallet holds, owes or has lost, and are
   not reduced by a refusal. `available` is the arithmetic identity
   `balance - held` and stays one: it is what `runway_days` divides and what
@@ -338,8 +344,7 @@ defmodule AuroraMeter.Credits do
       the debt. `hold/4` and `debit/4` refuse with `:debt_outstanding` while
       `debt` is outstanding, whatever credit the wallet is holding, and this
       function answers `false` for every amount in that state, because
-      `spendable` is never positive there (repair unit R3, findings X357 and
-      X361).
+      `spendable` is never positive there.
 
   ## Examples
 
@@ -561,8 +566,7 @@ defmodule AuroraMeter.Credits do
   cover the amount, the difference becomes `debt`: the call is still never
   refused, and the balance still falls by the full amount.
 
-  **Nor is that debt repaid out of a promotion afterwards**, which is repair
-  unit R2 and finding X355. The exclusion above used to hold for exactly one
+  **Nor is that debt repaid out of a promotion afterwards.** The exclusion above used to hold for exactly one
   transaction: the next `release` or `settle` repaid the debt in spend order,
   which takes promotional credit first, so the promotion paid for the refund one
   ordinary event later. A debt is now never repaid out of credit the wallet
@@ -571,12 +575,11 @@ defmodule AuroraMeter.Credits do
   **grant** makes out of its own new lot, which is how a wallet left owing money
   beside a live promotion is unfrozen.
 
-  Until repair unit R1 the lot path did not do this. A reversal on a cut-over
+  Before 1.0.0 the lot path did not do this. A reversal on a cut-over
   wallet was planned as a debit, which drains lots in spend order and so takes
-  **promotional credit first**, and it wrote nothing into `reversed`
-  (`open-findings.md` X250). The sentence above about not consuming promotional
-  credit was true of the legacy writer and false of the allocator; it is now
-  true of both.
+  **promotional credit first**, and it wrote nothing into `reversed`.
+  The sentence above about not consuming promotional credit was true of the
+  legacy writer and false of the allocator; it is now true of both.
 
   ## Its own kind, and its own reference namespace
 
@@ -619,9 +622,9 @@ defmodule AuroraMeter.Credits do
 
   **A promotional lot is never touched**, whatever order it sorts in and
   however late it was granted, and the debt this call creates is not repaid out
-  of one afterwards either (repair unit R2, finding X355). A promotion did not
-  come from that payment and cannot be handed back to it, which is the rule
-  `v1-release.md` 10.1 states. Since repair unit R1 the wallet-wide `reverse/4`
+  of one afterwards either. A promotion did not
+  come from that payment and cannot be handed back to it. Since 1.0.0 the
+  wallet-wide `reverse/4`
   keeps that rule too, so the difference between the two functions is the cap
   and the provenance rather than whether a promotion survives.
 
@@ -785,8 +788,8 @@ defmodule AuroraMeter.Credits do
   The callback `reconcile_holds/1` invokes is handed a different shape, a
   `t:AuroraMeter.Credits.HoldReconciler.hold/0`, whose `amount` **is** the
   reservation: the reconciler maps this row's `held_delta` onto it. The word is
-  the same in the two halves of one job and only one of them is the money
-  (`open-findings.md` X396). To list holds in the shape the callback sees, run
+  the same in the two halves of one job and only one of them is the money.
+  To list holds in the shape the callback sees, run
   the dry run below rather than reading a column.
 
   Options:
@@ -801,7 +804,7 @@ defmodule AuroraMeter.Credits do
       page. Results are ordered by `(inserted_at, id)`, so paging with this
       returns every hold exactly once even when several were written in the same
       microsecond. Ordering by `inserted_at` alone, which is what releases
-      before 0.6.0 did, could skip one and repeat another.
+      before 1.0.0 did, could skip one and repeat another.
 
   ## Examples
 
@@ -918,7 +921,7 @@ defmodule AuroraMeter.Credits do
   decision only the host can make. Core already ships the sweep that calls it
   (`AuroraMeter.Oban.HoldReconciliation`, in `AuroraMeter.Oban.cron_entries/1`);
   with no `:credits_hold_reconciler` configured it keeps every hold, so the
-  default is to do nothing rather than to guess (`open-findings.md` X397).
+  default is to do nothing rather than to guess.
 
   ## Examples
 
@@ -1066,7 +1069,7 @@ defmodule AuroraMeter.Credits do
   ## Paging, and why `:before` cannot do it
 
   The list is ordered by the ledger's own ordering key, which is a Postgres
-  identity column and not a timestamp (findings L20, X213). `:before` compares
+  identity column and not a timestamp. `:before` compares
   `inserted_at`, so paging with it compares a different column from the one that
   ordered the page: **two entries written in the same microsecond have no order
   under it, so one can be skipped and another repeated** (finding L8). It is
@@ -1367,10 +1370,13 @@ defmodule AuroraMeter.Credits do
     * `:limit` - the most grants to examine in this page. Unbounded when absent,
       which makes `expire_due(now, [])` exactly `expire_due(now)` with a report
       instead of a count.
-    * `:after` - `{expires_at, id}`, the cursor a previous page returned.
+    * `:after` - the cursor a previous page returned.
 
-  Returns `{:ok, report}`. `report.cursor` is `{expires_at, id}` when the page
-  came back full and `nil` when the scan reached its end.
+  Returns `{:ok, report}`. `report.cursor` is set when the page came back full
+  and `nil` when the scan reached its end. The scan covers legacy grants first
+  and then credit lots, and the cursor carries the position in either, so a
+  bounded page that fills up in the lot phase is resumed rather than reported
+  complete.
 
   **Pin `now` across the pages of one scan.** The candidate set is
   `expires_at <= now`, which moves, so recomputing `now` between pages would

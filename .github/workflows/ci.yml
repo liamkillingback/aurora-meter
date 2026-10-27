@@ -189,6 +189,24 @@ jobs:
             docs: "no"
             package: "no"
             experimental: "no"
+          # The 0.9 line of the optional phoenix_live_dashboard, which the
+          # declared range admits from 1.0.1. The committed lock carries 0.8;
+          # this leg pins 0.9 and resolves into its own lock file, so both lines
+          # the range claims are compiled and tested.
+          - leg: dashboard-0.9
+            elixir: "1.20.4"
+            otp: "29.0.6"
+            dashboard: "0.9"
+            unlock: "no"
+            headless: "no"
+            no_liveview: "no"
+            audits: "no"
+            suites: "no"
+            dialyzer: "no"
+            coverage: "no"
+            docs: "no"
+            package: "no"
+            experimental: "no"
     env:
       MIX_ENV: test
       # config/config.exs:24 reads DB_PORT (the earlier comment here named
@@ -197,6 +215,7 @@ jobs:
       AURORA_HEADLESS: ${{ matrix.headless == 'yes' && '1' || '' }}
       AURORA_NO_LIVEVIEW: ${{ matrix.no_liveview == 'yes' && '1' || '' }}
       AURORA_LIVEVIEW: ${{ matrix.liveview || '' }}
+      AURORA_DASHBOARD: ${{ matrix.dashboard || '' }}
     services:
       postgres:
         image: postgres:16.13
@@ -261,7 +280,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "AURORA_HEADLESS=${AURORA_HEADLESS:-<unset>} AURORA_NO_LIVEVIEW=${AURORA_NO_LIVEVIEW:-<unset>} AURORA_LIVEVIEW=${AURORA_LIVEVIEW:-<unset>}"
-          mix deps | grep -E 'phoenix_live_view|phoenix_html|igniter|oban' || echo "no optional integration is present on this leg"
+          mix deps | grep -E 'phoenix_live_view|phoenix_live_dashboard|phoenix_html|igniter|oban' || echo "no optional integration is present on this leg"
 
       - name: Check formatting
         run: mix format --check-formatted

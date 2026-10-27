@@ -27,12 +27,25 @@ defmodule AuroraMeter.Tenant do
 
         @impl true
         def to_key(%MyApp.Accounts.Org{id: id}), do: "org_\#{id}"
-        def to_key(%MyApp.Accounts.Scope{org_id: id}), do: "org_\#{id}"
         def to_key(key) when is_binary(key), do: key
       end
 
       # config/config.exs
       config :aurora_meter, tenant: MyApp.Tenant
+
+  Each struct named in a clause must exist in your application, or the module
+  does not compile.
+
+  ## Phoenix 1.8 scopes
+
+  `mix phx.gen.auth` in Phoenix 1.8 puts a `%MyApp.Accounts.Scope{}` in
+  `@current_scope`. Resolve it to the thing that owns the subscription:
+
+      def to_key(%MyApp.Accounts.Scope{user: %{id: id}}), do: "user_\#{id}"
+
+  or, when your scope carries an organisation, `"org_\#{scope.org.id}"`.
+  `AuroraMeter.Tenant.Default` raises `ArgumentError` with this recipe when it
+  is handed a struct.
 
   ## What an implementation must return
 
@@ -46,9 +59,8 @@ defmodule AuroraMeter.Tenant do
       satisfies this; a custom one must too, which is the `to_key(key) when
       is_binary(key), do: key` clause in the example above.
     * **`""` is not a key.** An empty key used to be accepted, and every tenant
-      whose resolver could not answer then shared one set of counters. In this
-      release it warns once per node; in Aurora Meter 1.0 it raises. Anything
-      that is not a binary raises in both.
+      whose resolver could not answer then shared one set of counters. It
+      raises `ArgumentError`, as does anything that is not a binary.
   """
 
   alias AuroraMeter.Config
@@ -111,9 +123,13 @@ end
 defmodule AuroraMeter.Tenant.Default do
   @moduledoc """
   Default tenant resolver: passes binaries through and stringifies anything that
-  implements `String.Chars` (integers, atoms, …). A term without `String.Chars`
-  raises `Protocol.UndefinedError`; configure a custom `AuroraMeter.Tenant`
-  implementation for structs.
+  implements `String.Chars` (integers, atoms and so on).
+
+  Anything else, a struct such as a Phoenix 1.8 `%Scope{}` or an Ecto schema,
+  a map or a tuple, raises `ArgumentError` naming the fix: configure a custom
+  `AuroraMeter.Tenant` implementation that reads the key from it. The message
+  names the struct module, never the term itself, so personal data held in the
+  struct is not copied into a log line.
   """
 
   @behaviour AuroraMeter.Tenant
@@ -121,5 +137,41 @@ defmodule AuroraMeter.Tenant.Default do
   @impl AuroraMeter.Tenant
   @spec to_key(term()) :: String.t()
   def to_key(tenant) when is_binary(tenant), do: tenant
-  def to_key(tenant), do: to_string(tenant)
+
+  def to_key(tenant) do
+    to_string(tenant)
+  rescue
+    error in Protocol.UndefinedError ->
+      if error.protocol == String.Chars,
+        do: reraise(ArgumentError, [message: unknown_tenant_message(tenant)], __STACKTRACE__),
+        else: reraise(error, __STACKTRACE__)
+  end
+
+  @spec unknown_tenant_message(term()) :: String.t()
+  defp unknown_tenant_message(tenant) do
+    """
+    AuroraMeter.Tenant.Default cannot turn #{describe(tenant)} into a tenant key. \
+    It accepts strings and anything with String.Chars (integers, atoms). For a \
+    struct, tell Aurora Meter which field identifies the customer:
+
+        defmodule MyApp.AuroraTenant do
+          @behaviour AuroraMeter.Tenant
+
+          @impl true
+          def to_key(%MyApp.Accounts.Scope{user: %{id: id}}), do: "user_\#{id}"
+          def to_key(key) when is_binary(key), do: key
+        end
+
+        # config/config.exs
+        config :aurora_meter, tenant: MyApp.AuroraTenant
+
+    See the AuroraMeter.Tenant documentation.
+    """
+  end
+
+  defp describe(%module{}), do: "a %#{inspect(module)}{} struct"
+  defp describe(map) when is_map(map), do: "a map"
+  defp describe(tuple) when is_tuple(tuple), do: "a tuple"
+  defp describe(list) when is_list(list), do: "a list"
+  defp describe(_other), do: "this term"
 end

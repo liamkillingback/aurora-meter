@@ -48,8 +48,8 @@ defmodule AuroraMeter.Checkpoints do
 
   `heartbeat/3` stamps `cursor["heartbeat_at"]` and `cursor["runner"]` so an
   operator can tell a stalled task from a finished one. **Nothing in this
-  package decides an exclusion question from its age.** `open-findings.md` X100
-  measured `clock_timestamp()` stepping backwards nine times in 300 seconds,
+  package decides an exclusion question from its age.** A measurement on a
+  development host saw `clock_timestamp()` stepping backwards nine times in 300 seconds,
   worst 439 ms, on a 32.5 second cadence, so "the heartbeat is older than N
   seconds" is not a sound test for "the runner is gone" at any N a person would
   pick. The sound test is `claim/3`: a session advisory lock dies with the
@@ -350,7 +350,7 @@ defmodule AuroraMeter.Checkpoints do
   uses, and it has no clock in it: the lock is granted or it is not, and it is
   released by `pg_advisory_unlock`, by the connection closing or by the process
   that held it dying. A runner killed with `kill -9` therefore leaves nothing
-  behind to time out (`open-findings.md` X100).
+  behind to time out.
 
   The lock key is `{0x4155524E, :erlang.phash2(name)}`. The namespace is
   distinct from the fixed-key namespace `0x4155524F` that

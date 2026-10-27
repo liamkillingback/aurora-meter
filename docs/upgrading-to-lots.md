@@ -12,7 +12,7 @@ written for the person running the upgrade, not for the person who wrote it.
 
 ## Who needs this page
 
-**A new installation does not.** From 0.5.0 a wallet is on lots from the moment
+**A new installation does not.** From 1.0.0 a wallet is on lots from the moment
 it is created: the statement that creates a wallet marks it as the allocator's,
 so a host who installs Aurora Meter today never has a legacy wallet and never
 runs this task. Everything on this page is about wallets that already existed

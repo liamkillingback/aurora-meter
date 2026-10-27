@@ -29,7 +29,7 @@ defmodule AuroraMeter.Schema.CreditTransaction do
   `seq` is the order. It is a Postgres identity column, assigned in commit
   order, and it is what every query that reconstructs what happened first sorts
   by. `inserted_at` is a wall-clock stamp and is not monotonic, so it orders
-  nothing (findings L20, X213). `hold_transaction_id` names the hold a `settle`
+  nothing. `hold_transaction_id` names the hold a `settle`
   or `release` row closes, and `updated_at` is stamped by the database the
   first time the row is updated in place.
   """

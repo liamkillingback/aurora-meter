@@ -4,8 +4,8 @@ defmodule AuroraMeter.Schema.PlanVersion do
 
   Written only by `AuroraMeter.Plans.register!/0`, from compiled code, and never
   updated: a row is immutable once inserted. The table is **not** a plan
-  catalogue and nothing reads it to decide what a plan is. Code is authoritative
-  (`v1-release.md` 07.02); the snapshot exists so a subscription or an event
+  catalogue and nothing reads it to decide what a plan is. Code is authoritative;
+  the snapshot exists so a subscription or an event
   that names a version whose block has been deleted from the host's plans module
   is still interpretable.
 

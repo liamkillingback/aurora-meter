@@ -30,8 +30,12 @@ defmodule AuroraMeter.LiveView do
 
   ## The contract
 
-  `subscribe/1` subscribes to one topic, the tenant's usage topic, exactly as it
-  did in 0.4.0. `subscribe/2` opts into the credits topic as well.
+  `subscribe/1` subscribes to one topic, the tenant's usage topic.
+  `subscribe/2` opts into the credits topic as well. Both record the tenant key
+  in the calling process, which is what lets `handle_usage/2`,
+  `assign_quota/4`, `assign_quotas/2` and `handle_credits/2` accept that
+  tenant's messages in the same LiveView without an `on_mount/4` hook.
+  `unsubscribe/1,2` removes the record again.
 
   **Topics.** `AuroraMeter.Broadcaster.topic/1` of the resolved tenant key,
   which is `"aurora_meter:tenant:" <> tenant_key`, and
@@ -133,7 +137,14 @@ defmodule AuroraMeter.LiveView do
     key = resolve_key!(tenant, "subscribe/2")
     names = topic_names!(opts)
 
-    do_subscribe(key, names, [])
+    case do_subscribe(key, names, []) do
+      :ok ->
+        remember(key, names)
+        :ok
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -154,8 +165,10 @@ defmodule AuroraMeter.LiveView do
   @spec unsubscribe(term(), keyword()) :: :ok
   def unsubscribe(tenant, opts) when is_list(opts) do
     key = resolve_key!(tenant, "unsubscribe/2")
+    names = topic_names!(opts)
 
-    Enum.each(topic_names!(opts), &PubSub.unsubscribe(Config.pubsub(), topic_for(key, &1)))
+    Enum.each(names, &PubSub.unsubscribe(Config.pubsub(), topic_for(key, &1)))
+    forget(key, names)
   end
 
   @doc """
@@ -188,6 +201,55 @@ defmodule AuroraMeter.LiveView do
         # accumulate registrations and a caller that gives up leaves none.
         Enum.each(done, &PubSub.unsubscribe(Config.pubsub(), topic_for(key, &1)))
         {:error, reason}
+    end
+  end
+
+  # `subscribe/1,2` takes no socket, so the tenant keys it subscribed are kept
+  # in the calling process, which is the process `handle_info/2` later runs in.
+  # The `handle_*` and `assign_*` helpers below accept a message for a key
+  # recorded here as well as for the socket's own `:aurora_meter_tenant_key`,
+  # and for no other key: a message for a tenant this process never subscribed
+  # to is dropped, never folded in.
+  @subscribed_key {__MODULE__, :subscribed}
+
+  @spec remember(String.t(), [topic_name()]) :: :ok
+  defp remember(key, names) do
+    current = Process.get(@subscribed_key, %{})
+    topics = MapSet.union(Map.get(current, key, MapSet.new()), MapSet.new(names))
+    Process.put(@subscribed_key, Map.put(current, key, topics))
+    :ok
+  end
+
+  @spec forget(String.t(), [topic_name()]) :: :ok
+  defp forget(key, names) do
+    current = Process.get(@subscribed_key, %{})
+
+    case Map.fetch(current, key) do
+      {:ok, topics} ->
+        left = MapSet.difference(topics, MapSet.new(names))
+
+        updated =
+          if MapSet.size(left) == 0,
+            do: Map.delete(current, key),
+            else: Map.put(current, key, left)
+
+        Process.put(@subscribed_key, updated)
+
+      :error ->
+        :ok
+    end
+
+    :ok
+  end
+
+  @doc false
+  # Whether the calling process subscribed to `key`'s `topic` through
+  # `subscribe/1,2`. Internal: the helpers below are the supported readers.
+  @spec subscribed?(String.t(), topic_name()) :: boolean()
+  def subscribed?(key, topic) do
+    case Process.get(@subscribed_key) do
+      %{^key => topics} -> MapSet.member?(topics, topic)
+      _other -> false
     end
   end
 
@@ -352,16 +414,23 @@ defmodule AuroraMeter.LiveView do
           {:noreply, AuroraMeter.LiveView.handle_usage(message, socket)}
         end
 
-    A message whose `tenant_key` is not the socket's is dropped and the socket
-    returned unchanged. That is the whole reason the key is on the payload: see
-    "Switching tenant" above.
+    A message is accepted for the socket's own `:aurora_meter_tenant_key` or a
+    key this process subscribed to with `subscribe/1,2`; any other is dropped
+    and the socket returned unchanged. That is the whole reason the key is on
+    the payload: see "Switching tenant" above.
+
+    Raises `ArgumentError` when called socket first (`socket |>
+    handle_usage(message)`), rather than returning the message as the socket.
 
     Entirely optional. Matching the raw message yourself is fully supported and
     is what `docs/phoenix.md` shows first.
     """
     @spec handle_usage(term(), Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+    def handle_usage(%Phoenix.LiveView.Socket{}, message),
+      do: wrong_order!("handle_usage", message)
+
     def handle_usage({:aurora_meter, :usage, %{tenant_key: key} = payload}, socket) do
-      if key == socket.assigns[:aurora_meter_tenant_key] do
+      if accepts?(socket, key, :usage) do
         entry = %{value: payload[:value], period_start: payload[:period_start]}
         usage = Map.put(socket.assigns[:aurora_meter_usage] || %{}, payload[:feature], entry)
         Phoenix.Component.assign(socket, :aurora_meter_usage, usage)
@@ -389,18 +458,23 @@ defmodule AuroraMeter.LiveView do
     never moves, however correctly the socket is subscribed. Putting the number
     in an assign is the fix, and this is that line.
 
-    The tenant comes from `socket.assigns.aurora_meter_tenant_key`, which
-    `on_mount/4` and `switch_tenant/2` maintain, so a message that arrives after
-    a switch is dropped for the same reason `handle_usage/2` drops it.
+    A message is accepted when its `tenant_key` is the socket's own
+    `:aurora_meter_tenant_key` (maintained by `on_mount/4` and
+    `switch_tenant/2`) or a key this LiveView process subscribed to with
+    `subscribe/1,2`. Any other key is dropped, so a message that arrives after
+    a switch or an `unsubscribe/1` never shows another tenant's numbers.
 
     Optional in the same way `handle_usage/2` is: assigning
     `AuroraMeter.quota(org, feature)` yourself does exactly this.
     """
     @spec assign_quota(term(), Phoenix.LiveView.Socket.t(), atom(), atom()) ::
             Phoenix.LiveView.Socket.t()
+    def assign_quota(%Phoenix.LiveView.Socket{}, message, _assign, _feature),
+      do: wrong_order!("assign_quota", message)
+
     def assign_quota({:aurora_meter, :usage, %{tenant_key: key}}, socket, assign, feature)
         when is_atom(assign) and is_atom(feature) do
-      if key == socket.assigns[:aurora_meter_tenant_key] do
+      if accepts?(socket, key, :usage) do
         Phoenix.Component.assign(socket, assign, AuroraMeter.quota(key, feature))
       else
         socket
@@ -430,8 +504,11 @@ defmodule AuroraMeter.LiveView do
     `handle_usage/2` does.
     """
     @spec assign_quotas(term(), Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+    def assign_quotas(%Phoenix.LiveView.Socket{}, message),
+      do: wrong_order!("assign_quotas", message)
+
     def assign_quotas({:aurora_meter, :usage, %{tenant_key: key}}, socket) do
-      if key == socket.assigns[:aurora_meter_tenant_key] do
+      if accepts?(socket, key, :usage) do
         Phoenix.Component.assign(socket, :quotas, AuroraMeter.LiveView.quotas(key))
       else
         socket
@@ -450,6 +527,9 @@ defmodule AuroraMeter.LiveView do
     A message whose `tenant_key` is not the socket's is dropped.
     """
     @spec handle_credits(term(), Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+    def handle_credits(%Phoenix.LiveView.Socket{}, message),
+      do: wrong_order!("handle_credits", message)
+
     def handle_credits({:aurora_meter, :credits, %{tenant_key: key} = payload}, socket) do
       update_credits(socket, key, fn current ->
         threshold = current[:low_balance_threshold]
@@ -482,12 +562,31 @@ defmodule AuroraMeter.LiveView do
     @spec update_credits(Phoenix.LiveView.Socket.t(), String.t(), (map() -> map())) ::
             Phoenix.LiveView.Socket.t()
     defp update_credits(socket, key, fun) do
-      if key == socket.assigns[:aurora_meter_tenant_key] do
+      if accepts?(socket, key, :credits) do
         current = socket.assigns[:aurora_meter_credits] || %{}
         Phoenix.Component.assign(socket, :aurora_meter_credits, fun.(current))
       else
         socket
       end
+    end
+
+    # The socket's own tenant (set by `on_mount/4` or `switch_tenant/2`), or a
+    # key this process subscribed to with `subscribe/1,2`. Nothing else: with
+    # neither, every message is dropped, because accepting one for a tenant
+    # this socket never asked about would show it another customer's numbers.
+    @spec accepts?(Phoenix.LiveView.Socket.t(), String.t(), topic_name()) :: boolean()
+    defp accepts?(socket, key, topic) do
+      key == socket.assigns[:aurora_meter_tenant_key] or subscribed?(key, topic)
+    end
+
+    # The message-first order matches `handle_info/2`; a socket-first pipe used
+    # to fall through to the catch-all and return the message as the socket.
+    @spec wrong_order!(String.t(), term()) :: no_return()
+    defp wrong_order!(name, _message) do
+      raise ArgumentError,
+            "AuroraMeter.LiveView.#{name} takes the message first and the socket second, " <>
+              "like handle_info/2. Call it as AuroraMeter.LiveView.#{name}(message, socket, ...) " <>
+              "rather than piping the socket into it."
     end
 
     @spec assign_and_subscribe(Phoenix.LiveView.Socket.t(), term(), [topic_name()]) ::

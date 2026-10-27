@@ -65,9 +65,9 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
   leaves those two constraints `NOT VALID` (still enforced on every new row, and
   recorded in the schema marker) instead of proving them against history.
 
-  Until build unit 11a the generated file had no way to carry that option, so
+  Before 1.0 the generated file had no way to carry that option, so
   the only route from the backfill's advice to a working upgrade was to
-  hand-edit a generated migration (`open-findings.md` X428). The flag emits it
+  hand-edit a generated migration. The flag emits it
   on the file covering version 8 and on no other file. Without the flag nothing
   is emitted and the default, `true`, stands.
   """
@@ -78,13 +78,42 @@ defmodule Mix.Tasks.AuroraMeter.Gen.Migration do
 
   alias AuroraMeter.Install.Plan
 
-  @switches [from: :integer, validate_checks: :boolean, upgrade: :boolean]
+  # Every switch this task understands. `repo`, `no_compile` and
+  # `no_deps_check` are read by `Mix.Ecto.parse_repo/1` and
+  # `Mix.Ecto.ensure_repo/2` rather than here, and are declared so that an
+  # unknown switch can be refused. An undeclared switch used to be dropped
+  # silently, so `--to 5`, which an earlier api.md row documented, generated
+  # the full range without saying so.
+  @switches [
+    from: :integer,
+    validate_checks: :boolean,
+    upgrade: :boolean,
+    repo: :keep,
+    no_compile: :boolean,
+    no_deps_check: :boolean
+  ]
+
+  @doc false
+  @spec switches() :: keyword()
+  def switches, do: @switches
 
   @impl Mix.Task
   @spec run([String.t()]) :: :ok
   def run(args) do
+    {opts, _rest, invalid} = OptionParser.parse(args, strict: @switches, aliases: [r: :repo])
+
+    if invalid != [] do
+      names = Enum.map_join(invalid, ", ", fn {name, _value} -> name end)
+
+      Mix.raise(
+        "mix aurora_meter.gen.migration does not understand #{names}. It takes -r/--repo, " <>
+          "--from N, --upgrade, --no-validate-checks, --no-compile and --no-deps-check. " <>
+          "There is no --to: a generated range always ends at the installed package's " <>
+          "latest schema version."
+      )
+    end
+
     repos = Mix.Ecto.parse_repo(args)
-    {opts, _rest, _invalid} = OptionParser.parse(args, switches: @switches)
 
     if repos == [] do
       Mix.raise("no ecto repo found: pass one with `-r MyApp.Repo` or set `:ecto_repos`.")

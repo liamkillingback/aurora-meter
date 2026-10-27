@@ -90,7 +90,7 @@ defmodule AuroraMeter.MigrationGuardsTest do
 
   @unique_index "aurora_meter_events_tenant_event_id_index"
 
-  describe "L-11b-1: an unknown option raises rather than being dropped" do
+  describe "an unknown option raises rather than being dropped" do
     test "I19 up/1 raises ArgumentError naming the unknown option" do
       error = assert_raise(ArgumentError, fn -> Migration.up(nonsense: 1) end)
 
@@ -154,7 +154,7 @@ defmodule AuroraMeter.MigrationGuardsTest do
     end
   end
 
-  describe "L-11b-2: a repository that would migrate into another schema refuses to boot" do
+  describe "a repository that would migrate into another schema refuses to boot" do
     test "I19 validate! raises PrefixError when the repo sets migration_default_prefix" do
       error =
         with_repo(PrefixedRepo, fn ->
@@ -206,7 +206,7 @@ defmodule AuroraMeter.MigrationGuardsTest do
     end
   end
 
-  describe "L-11b-2: a migration running under a prefix refuses before it creates anything" do
+  describe "a migration running under a prefix refuses before it creates anything" do
     test "I19 mix ecto.migrate --prefix raises PrefixError and creates no table" do
       Migrations.with_database(fn repo ->
         repo.query!("CREATE SCHEMA tenant_a", [])
@@ -238,7 +238,7 @@ defmodule AuroraMeter.MigrationGuardsTest do
     end
   end
 
-  describe "L-11b-3: down is refused unless the loss is confirmed" do
+  describe "down is refused unless the loss is confirmed" do
     test "I19 down(version: 10, to: 1) raises DataLossError and changes nothing" do
       Migrations.with_database(fn repo ->
         Migrations.up(repo, from: 1, version: 10, concurrently: false)
@@ -315,7 +315,7 @@ defmodule AuroraMeter.MigrationGuardsTest do
     end
   end
 
-  describe "L-11b-4: version 8 converges on one valid index" do
+  describe "version 8 converges on one valid index" do
     test "I16 it drops the index a real aborted concurrent create left behind" do
       Migrations.with_database(fn repo ->
         Migrations.up(repo, from: 1, version: 7)

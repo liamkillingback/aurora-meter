@@ -66,8 +66,8 @@ every node shares one distributed `Phoenix.PubSub` adapter, not a local one.
 In order of likelihood:
 
 1. **The feature is not declared on that tenant's plan.** The undeclared-feature
-   policy decides what happens then: `:warn` in 0.5.x (allowed, logged once per
-   feature per node) and `:deny` from 1.0. Run `mix aurora_meter.features` to
+   policy decides what happens then: `:deny` by default, or `:warn` (allowed,
+   logged once per feature per node) if you set it. Run `mix aurora_meter.features` to
    list every feature your code names and where it is declared.
 2. **The subscription is not in an entitled state.** A plan is granted only
    while the subscription's status is `active`, `trialing` or `past_due`.

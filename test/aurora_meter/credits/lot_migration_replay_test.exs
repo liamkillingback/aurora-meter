@@ -393,7 +393,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
     assert detail.amount > detail.available + detail.wallet_reserved
   end
 
-  test "X276 an expiry the legacy attribution over-counted because a hold blocked a spend" do
+  test "an expiry the legacy attribution over-counted because a hold blocked a spend" do
     # The shrunk form of the 37 command history the generated-history property
     # produced at seed 1337. Five commands, and the whole disagreement is one
     # micro-dollar:
@@ -422,7 +422,7 @@ defmodule AuroraMeter.Credits.LotMigrationReplayTest do
     assert detail.amount == detail.available + detail.wallet_reserved
   end
 
-  test "X261 an expiry that destroyed a grant a hold had reserved blocks the wallet" do
+  test "an expiry that destroyed a grant a hold had reserved blocks the wallet" do
     # The legacy expiry guard is `max(balance - held, 0)` for the whole wallet,
     # so the 10 USD promotion covers the 1 USD hold and the sweep destroys the
     # 1 USD promotion the hold was actually reserving. No lot assignment

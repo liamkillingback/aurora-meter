@@ -51,7 +51,10 @@ next flush re-bases it unconditionally.
   (one `:flush_interval` if PubSub dropped a message).
 - **Bounded overshoot on hard limits.** `reserve/3` and `with_quota/4` enforce
   against the local view, so a burst spread across N nodes can exceed a hard cap
-  by what the other N−1 nodes admitted within one `:broadcast_interval`. Lower
+  by what the other N−1 nodes admitted within one `:broadcast_interval` plus
+  one gossip delivery: the time a tick takes to be published, delivered and
+  applied. At the default interval that addition is lost in the rounding; at
+  25 ms it was measured at about 6 percent of the window. Lower
   the interval to tighten it (cost: one PubSub message per node per tick), or
   mark the feature durable and reconcile invoices from the event log.
 - **Idempotent flushes.** A flush with nothing pending writes nothing. Re-basing
@@ -95,13 +98,8 @@ cluster-wide as in 0.2.
 
 ## Rolling upgrades
 
-**0.4.x to 0.5.0.** No schema change, and no change to the gossip or
-announcement messages, so a cluster part way through the deploy is a cluster of
-nodes that agree. 0.5.0 adds warnings, not behaviour: see
-[Upgrading to 1.0](upgrading-to-1.0.md) for what each one is telling you.
-
-**0.5.x to 1.0.0.** Read the upgrade note first. 1.0 turns the 0.5.x warnings
-into failures, which is a boot-time decision on each node rather than anything
+**0.4.x to 1.0.0.** Read [Upgrading to 1.0](upgrading-to-1.0.md) first. 1.0
+refuses what 0.4 allowed (an undeclared feature, an unknown configuration key), which is a boot-time decision on each node rather than anything
 the cluster negotiates, so a node that starts is a node that agrees with the
 others. Any schema version 1.0 needs is applied before the deploy, as always.
 

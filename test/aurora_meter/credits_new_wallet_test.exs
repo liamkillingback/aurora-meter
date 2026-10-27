@@ -28,6 +28,7 @@ defmodule AuroraMeter.CreditsNewWalletTest do
   alias AuroraMeter.Credits
   alias AuroraMeter.Credits.Lots
   alias AuroraMeter.Credits.Recurrences
+  alias AuroraMeter.Oban.CreditExpiry
   alias AuroraMeter.Schema.CreditAllocation
   alias AuroraMeter.Schema.CreditBalance
   alias AuroraMeter.Schema.CreditLot
@@ -36,6 +37,14 @@ defmodule AuroraMeter.CreditsNewWalletTest do
   @dollar 1_000_000
   @september ~U[2026-09-15 12:00:00Z]
   @october_start ~U[2026-10-01 00:00:00Z]
+
+  # A month start `n` months ahead of today, for a promotional expiry that has
+  # to be in the future whenever the suite runs.
+  defp month_start_ahead(n) do
+    today = Date.utc_today()
+    months = today.year * 12 + today.month - 1 + n
+    DateTime.new!(Date.new!(div(months, 12), rem(months, 12) + 1, 1), ~T[00:00:00], "Etc/UTC")
+  end
 
   # -- the money, per lot, on a wallet a host could really have ----------------
 
@@ -57,14 +66,14 @@ defmodule AuroraMeter.CreditsNewWalletTest do
       Credits.grant(tenant, 4 * @dollar,
         reference: "promo_late",
         category: :promotional,
-        expires_at: ~U[2026-12-01 00:00:00Z]
+        expires_at: month_start_ahead(2)
       )
 
     {:ok, _} =
       Credits.grant(tenant, 3 * @dollar,
         reference: "promo_soon",
         category: :promotional,
-        expires_at: ~U[2026-11-01 00:00:00Z]
+        expires_at: month_start_ahead(1)
       )
 
     {:ok, _} =
@@ -162,7 +171,7 @@ defmodule AuroraMeter.CreditsNewWalletTest do
       Credits.grant(tenant, 3 * @dollar,
         reference: "old_promo",
         category: :promotional,
-        expires_at: ~U[2026-11-01 00:00:00Z]
+        expires_at: month_start_ahead(1)
       )
 
     {:ok, _} = Credits.hold(tenant, 5 * @dollar, "old_job")
@@ -284,9 +293,13 @@ defmodule AuroraMeter.CreditsNewWalletTest do
     assert lot.expires_at == @october_start
 
     # And the allowance is spendable, which is the difference between a row and
-    # a feature.
-    assert Credits.balance(tenant).spendable == 5 * @dollar
-    assert {:ok, _} = Credits.debit(tenant, 2 * @dollar, "spend_allowance")
+    # a feature. Read inside the period it was granted for: the lot expires at
+    # @october_start, so after that date it is correctly no longer spendable.
+    with_clock(DateTime.add(@september, 3_600, :second), fn ->
+      assert Credits.balance(tenant).spendable == 5 * @dollar
+      assert {:ok, _} = Credits.debit(tenant, 2 * @dollar, "spend_allowance")
+    end)
+
     assert Lots.get(tenant, lot.reference).consumed == 2 * @dollar
   end
 
@@ -348,53 +361,108 @@ defmodule AuroraMeter.CreditsNewWalletTest do
     assert Credits.balance(other).expired == @dollar
   end
 
-  test "X384 a bounded expiry page over a new wallet's lots carries no cursor, so the sweep reports complete with work left" do
-    # **A limit the decision makes reachable, pinned rather than hidden.**
-    # `Ledger.expire_due/2` runs in two phases: the legacy grant scan, which
-    # carries a `{expires_at, id}` keyset cursor, and then the lot phase, which
-    # shares the page's budget and deliberately carries no cursor of its own
-    # (`ledger.ex`, `expire_lots_phase/4`, with the reasoning beside it: every
-    # lot expiry is idempotent, so an interrupted phase resumes by being run
-    # again, and a second cursor in the worker's checkpoint was left to 06b).
-    #
-    # While no wallet could reach the allocator that was unobservable. Now it is
-    # the ordinary case: `AuroraMeter.Oban.CreditExpiry` pages until a batch
-    # returns no cursor, so on a new installation it does exactly one batch per
-    # run and reports `stopped: :complete` with work still waiting.
-    #
-    # **No money is at risk**: the candidate set is recomputed from a fresh
-    # `now` every run and the remaining lots are expired by the next one. What
-    # is wrong is the report an operator reads and the rate a backlog drains.
-    # Filed as `open-findings.md` X384.
+  test "X384 a bounded expiry page over a new wallet's lots carries a cursor, and paging drains every due lot" do
+    # `Ledger.expire_due/2` runs in two phases: the legacy grant scan and then
+    # the lot phase, which every wallet created since 1.0 goes through. The lot
+    # phase used to carry no cursor, so a bounded page that filled up there
+    # returned `cursor: nil` with due lots still open, and
+    # `AuroraMeter.Oban.CreditExpiry`, which pages until the cursor is nil,
+    # reported `stopped: :complete` after one batch. It now carries
+    # `{:lots, expires_at, id}` and the next page resumes from it.
     tenant = unique_tenant("newwallet")
     past = DateTime.add(DateTime.utc_now(), -1, :day)
 
     for n <- 1..6 do
       {:ok, _} =
         Credits.grant(tenant, @dollar,
-          reference: "x381_#{n}_#{tenant}",
+          reference: "x384_#{n}_#{tenant}",
           category: :promotional,
           expires_at: past
         )
     end
 
     assert length(lots(tenant)) == 6
+    now = DateTime.utc_now()
 
-    # A page bounded at two examines two, expires two...
-    assert {:ok, report} = Credits.expire_due(DateTime.utc_now(), limit: 2)
-    assert report.examined == 2
-    assert report.expired == 2
-
-    # ...and then says there is nothing more to come, which is the defect.
-    # Four lots are still open and due.
-    assert is_nil(report.cursor)
+    # A page bounded at two examines two, expires two, and says more is waiting.
+    assert {:ok, first} = Credits.expire_due(now, limit: 2)
+    assert first.examined == 2
+    assert first.expired == 2
+    assert {:lots, %DateTime{}, _id} = first.cursor
     assert Enum.count(lots(tenant), &(&1.state == :open)) == 4
 
-    # The next run does find them, which is why this is a reporting and rate
-    # defect rather than a money one.
-    assert {:ok, _} = Credits.expire_due(DateTime.utc_now(), limit: 10)
+    # Paging with the same pinned instant drains the rest, page by page, and
+    # the scan ends with a nil cursor only when nothing due is left.
+    pages = page_until_done(now, first.cursor, 1)
+    assert pages == 4
+
     assert Enum.all?(lots(tenant), &(&1.state == :expired))
     assert Credits.balance(tenant).expired == 6 * @dollar
+  end
+
+  test "X384 a page that fills up exactly at the end of the grant phase hands the lot phase on" do
+    legacy = LedgerFixtures.legacy_wallet!(unique_tenant("newwallet_legacy"))
+    fresh = unique_tenant("newwallet_fresh")
+    past = DateTime.add(DateTime.utc_now(), -1, :day)
+
+    {:ok, _} =
+      Credits.grant(legacy, @dollar,
+        reference: "x384_legacy_#{legacy}",
+        category: :promotional,
+        expires_at: past
+      )
+
+    {:ok, _} =
+      Credits.grant(fresh, @dollar,
+        reference: "x384_fresh_#{fresh}",
+        category: :promotional,
+        expires_at: past
+      )
+
+    now = DateTime.utc_now()
+    {:ok, first} = Credits.expire_due(now, limit: 1, after: nil)
+
+    # Whatever the first page covered, paging to the end expires both wallets.
+    page_until_done(now, first.cursor, 1)
+
+    # A legacy wallet records expiry on the grant row; its promotional
+    # remainder is what goes. A new wallet reports it as `expired`.
+    assert Credits.balance(legacy).promotional == 0
+    assert Credits.balance(legacy).balance == 0
+    assert Credits.balance(fresh).expired == @dollar
+  end
+
+  if Code.ensure_loaded?(AuroraMeter.Oban.CreditExpiry) do
+    test "X384 the expiry worker pages through a new wallet's lots and reports complete only at the end" do
+      tenant = unique_tenant("newwallet")
+      past = DateTime.add(DateTime.utc_now(), -1, :day)
+
+      for n <- 1..5 do
+        {:ok, _} =
+          Credits.grant(tenant, @dollar,
+            reference: "x384_worker_#{n}_#{tenant}",
+            category: :promotional,
+            expires_at: past
+          )
+      end
+
+      job = %Oban.Job{args: %{"batch_size" => 2, "max_batches" => 10}}
+      assert {:ok, report} = CreditExpiry.perform(job)
+
+      # Two, two and one: three batches, and `:complete` only after the third.
+      assert report.counts["expired"] == 5
+      assert report.stopped == :complete
+      assert report.batches >= 3
+      assert Enum.all?(lots(tenant), &(&1.state == :expired))
+    end
+  end
+
+  defp page_until_done(_now, nil, pages), do: pages
+
+  defp page_until_done(now, cursor, pages) do
+    {:ok, report} = Credits.expire_due(now, limit: 2, after: cursor)
+    if report.examined == 0, do: assert(is_nil(report.cursor))
+    page_until_done(now, report.cursor, pages + 1)
   end
 
   # -- helpers -----------------------------------------------------------------

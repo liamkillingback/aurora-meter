@@ -344,7 +344,7 @@ defmodule AuroraMeter.KillTest do
     report!(context, :kill, "I01 Store killed before the flush")
   end
 
-  test "I03 Counter.commit_work after a Store restart seeds rather than raising (C6, fixed in 03b)",
+  test "I03 Counter.commit_work after a Store restart seeds rather than raising",
        context do
     %{tenant: tenant, period: period} = context
     on = Date.utc_today()

@@ -287,7 +287,7 @@ AuroraMeter.check(org, :some_new_thing)   # => {:error, :not_entitled}
 `quota/2` answers `kind: :undeclared, enabled: false`. `track/4` still counts
 it, because metering is not entitlement.
 
-Up to and including 0.5.x it was the other way around: an undeclared feature was
+Before 1.0 it was the other way around: an undeclared feature was
 allowed and logged a warning. That default was changed because a feature nobody
 declared is more often a typo than a plan, and a typo that quietly grants access
 is the expensive direction to be wrong in.

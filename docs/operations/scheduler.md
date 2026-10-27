@@ -222,12 +222,12 @@ Two things follow from that, and they have different owners.
 
 **The one this package owns: a wedged job must not stop its worker for ever.**
 Every worker here that is unique at all has `:executing` among its uniqueness
-states, so a job in that state deduplicates a new enqueue. Until repair unit R9 the period beside it was
+states, so a job in that state deduplicates a new enqueue. Before 1.0.0 the period beside it was
 `:infinity`, which never lapses, so **one node death stopped that worker
 permanently**: the crontab ticked, every insert collapsed into the corpse, and
 Oban looked healthy the whole time. Aurora Meter Pro's outbox deliverer was
 measured doing exactly that in a soak run, with usage accumulating and never
-being billed (`open-findings.md` X486). Every period is now finite:
+being billed. Every period is now finite:
 
 <!-- scheduler:periods -->
 

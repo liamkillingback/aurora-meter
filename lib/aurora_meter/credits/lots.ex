@@ -91,7 +91,7 @@ defmodule AuroraMeter.Credits.Lots do
   `from_bucket` and `to_bucket` are not redundant with `kind`: a `consume` can
   come out of `available` (a debit) or out of `reserved` (a settlement against
   its own hold), and a `reverse` out of any of three. Folding a lot's
-  allocations back into its five quantities needs the source (finding X249).
+  allocations back into its five quantities needs the source.
   """
   @type allocation :: %{
           id: Ecto.UUID.t(),

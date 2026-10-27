@@ -3,7 +3,7 @@
 Where the state lives, which process may write it, and where the seams are. For
 what the library promises about that state, read [Guarantees](guarantees.md);
 for how each promise is enforced and what voids it, read
-[Correctness](correctness.md). This page is the map, not the contract.
+[Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md). This page is the map, not the contract.
 
 ## 1. Three regions of state
 
@@ -150,14 +150,14 @@ A recurring source of confusion, written once:
   feature declares. A `:buffered` feature bills from the persisted counter; an
   `:events` feature bills from `aurora_meter_event_totals`. One feature has one
   source, and a cutover between them has a watermark.
-  ([Correctness](correctness.md) I08.)
+  ([Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md) I08.)
 - **"What can this tenant spend?"** reads the wallet, which is neither of the
   above. Usage and money are separate systems that a plan connects.
 
 ## 7. Further reading
 
 - [Guarantees](guarantees.md), the contract, with what voids each row.
-- [Correctness](correctness.md), per invariant, with prerequisites and limits.
+- [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md), per invariant, with prerequisites and limits.
 - [The mental model](mental-model.md), if this page arrived before that one.
 - [Clustering](clustering.md), for what changes with more than one node.
 - [Storage adapters](storage-adapters.md), for writing your own.

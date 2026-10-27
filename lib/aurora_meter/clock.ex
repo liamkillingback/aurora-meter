@@ -153,9 +153,7 @@ defmodule AuroraMeter.Clock.System do
   backwards 6 times and further (largest 2.647191 s) on an exact 60 second
   offset-resync cadence, which `multi_time_warp`, the OTP 29 default, licenses.
   `+C no_time_warp` removes it, but the host owns `+C` and this is a library, so
-  a VM flag is a diagnosis and never a remedy. The full measurement, the six
-  candidate bases and the decision are in
-  `docs/evidence/v1/phase-02/02c-clock-choice.md`.
+  a VM flag is a diagnosis and never a remedy.
 
   So: **do not compare `now/0` against a persisted timestamp.** Use `db_now/0`,
   and stamp the row with the database too.

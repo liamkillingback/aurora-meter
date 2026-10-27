@@ -97,8 +97,7 @@ each stepped backwards 13 times, largest 1.330921 s; `System.system_time/1`
 stepped backwards 6 times and further, largest 2.647191 s, on an exact 60 second
 cadence; `System.monotonic_time/1` never. `+C no_time_warp` removes the resync,
 but the host owns `+C` and this is a library, so a VM flag is a diagnosis and
-not a remedy. The full measurement is in
-`docs/evidence/v1/phase-02/02c-clock-choice.md`.
+not a remedy.
 
 So `Clock.System.now/0` reads `System.system_time/1` for **cost** (about 31 ns
 against 323 ns, and `AuroraMeter.track/4` reads it on every increment), the

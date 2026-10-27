@@ -73,7 +73,7 @@ defmodule AuroraMeter.Subscriptions.Transitions do
   `{:ok, _}` on `schedule_transition/3`, `cancel_transition/3` or
   `confirm_transition/3` is a `pattern_match` error**. Nothing in this package's
   `lib/` matches on one, which is why the core's own dialyzer was green and
-  Aurora Meter Pro's was not (`open-findings.md` X304).
+  Aurora Meter Pro's was not.
   """
   @type result :: {:ok, PlanTransition.t()} | {:error, {atom(), term()}}
 

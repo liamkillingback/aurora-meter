@@ -7,8 +7,8 @@ defmodule AuroraMeter.Billing.Provider do
   ## Four required callbacks and two optional ones
 
   The first four are what every provider has to answer. The last two exist for
-  scheduled plan changes (build unit 07b) and are optional because a plan change
-  that needs no provider is free core functionality (decision D03): a host
+  scheduled plan changes and are optional because a plan change
+  that needs no provider is free core functionality: a host
   moving a tenant between locally declared plans has a complete feature with no
   provider at all, and `AuroraMeter.Billing.Noop` implements neither.
 
@@ -50,8 +50,8 @@ defmodule AuroraMeter.Billing.Provider do
   @doc """
   Asks the provider to make the plan change, before it is applied locally.
 
-  **Optional**, and implemented by Aurora Meter Pro in build unit 07c. It is the
-  "provider first, local second" half of task 07.07: the local transition stays
+  **Optional**, and implemented by Aurora Meter Pro. It is the "provider first,
+  local second" half of a scheduled plan change: the local transition stays
   `pending` and visible until the provider's subscription shows the new price,
   at which point `AuroraMeter.Subscriptions.confirm_transition/3` records the
   provider's reference and applies it.

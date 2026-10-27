@@ -79,12 +79,14 @@ defmodule AuroraMeter.ADRFormatTest do
     end
   end
 
-  test "00c every V1 ADR names at least one build unit under Verification" do
+  # Published ADRs no longer carry internal build unit ids (1.0.1); what the
+  # section must still do is say how the decision is verified.
+  test "00c every V1 ADR says how it is verified" do
     for path <- v1_files() do
       body = section(File.read!(path), "Verification")
 
-      assert body =~ ~r/\b\d{2}[a-f]\b/,
-             "#{path}: 'Verification' names no build unit id"
+      assert String.trim(body) != "",
+             "#{path}: 'Verification' is empty"
     end
   end
 

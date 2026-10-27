@@ -101,8 +101,7 @@ defmodule AuroraMeter.Storage do
   A durable operation an adapter may support.
 
   `:durable_events` covers `c:record_events/2`, `c:load_event/2` and
-  `c:load_event_total/3`; `:corrections` covers `record_correction/2` (build
-  unit 03e); `:projection_generations` covers `c:begin_projection_generation/0`,
+  `c:load_event_total/3`; `:corrections` covers `record_correction/2`; `:projection_generations` covers `c:begin_projection_generation/0`,
   `c:projection_state/0`, `c:write_projection_totals/2`,
   `c:drain_projection_seed/2` and `c:activate_projection/1`;
   `:event_streaming` covers `c:stream_events/2`.
@@ -144,7 +143,7 @@ defmodule AuroraMeter.Storage do
 
   A correction's feature, occurrence instant, period, plan attribution and
   dimensions are the original's, read inside the transaction that holds it
-  under lock, so they cannot drift from it (L-03e-2). `quantity` is the
+  under lock, so they cannot drift from it. `quantity` is the
   **magnitude of the reduction**, a positive integer, or `:remaining` for
   `AuroraMeter.replace/4`, whose magnitude is `original.quantity` less the
   corrections already committed and is therefore not known until then.
@@ -259,8 +258,7 @@ defmodule AuroraMeter.Storage do
   **Not one of the two callbacks `api-change-map.md` 1.2 lists.** It is here
   rather than as raw SQL inside `AuroraMeter.Plans` so that the whole of this
   feature sits behind one capability, and an adapter that cannot store snapshots
-  is not asked to run a statement against a table it does not have (finding
-  X286).
+  is not asked to run a statement against a table it does not have.
   """
   @callback assign_legacy_plan_versions(pos_integer()) ::
               {:ok, %{assigned: non_neg_integer(), orphans: non_neg_integer()}}
@@ -271,7 +269,7 @@ defmodule AuroraMeter.Storage do
   Records a batch of events in **one** transaction, with their projection
   deltas and the configured outbox's intent.
 
-  The three are one commit or none of them (L-03b-1). Results are returned in
+  The three are one commit or none of them. Results are returned in
   the caller's input order. An entry whose `(tenant_key, event_id)` already
   exists with an equal `payload_hash` is `:duplicate` and contributes no totals
   delta and no outbox item; one with a different hash rolls the whole batch
@@ -334,7 +332,7 @@ defmodule AuroraMeter.Storage do
 
   `seq` and not `id`: event ids are random v4 UUIDs, so a keyset scan ordered
   by `id` can silently miss a row committed by a transaction that started
-  earlier (`open-findings.md` L20).
+  earlier.
 
   Options: `:limit`, `:tenant`, `:feature`, `:from` and `:to` (on
   `occurred_at`, half-open).

@@ -54,7 +54,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
   end
 
   describe "the documented operator sequence" do
-    test "I19 X427 shadow then real, with no extra flags, migrates the wallets" do
+    test "I19 shadow then real, with no extra flags, migrates the wallets" do
       keys = wallets([:paid_only, :debits, :released_hold])
 
       # Step 1 of docs/upgrading-to-lots.md, exactly as written.
@@ -78,7 +78,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
       end
     end
 
-    test "I19 X427 the rehearsal leaves the real cursor untouched" do
+    test "I19 the rehearsal leaves the real cursor untouched" do
       wallets([:paid_only, :debits])
 
       {:ok, _} = LotMigration.run(shadow: true)
@@ -93,7 +93,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
   end
 
   describe "a run that migrates nothing" do
-    test "I19 X427 says so when it skipped everything, and fails" do
+    test "I19 says so when it skipped everything, and fails" do
       keys = wallets([:paid_only, :debits])
 
       # The state the shared cursor produced: the real cursor sits past every
@@ -114,7 +114,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
       end
     end
 
-    test "I19 X427 says so when there was nothing to do, and does not fail" do
+    test "I19 says so when there was nothing to do, and does not fail" do
       # **The discrimination.** Same `wallets: 0`, opposite verdict. Without this
       # the test above would pass for a build that failed every idle re-run.
       keys = wallets([:paid_only, :debits])
@@ -132,7 +132,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
       assert MigrateLots.report({:ok, again}) == :ok
     end
 
-    test "I19 X427 does not erase the cursor it did not advance" do
+    test "I19 does not erase the cursor it did not advance" do
       # The half that makes an interrupted real run resumable at all, and the
       # half 11b depends on. A zero-wallet run used to write a null cursor, so
       # the run after it started from the beginning again.
@@ -151,7 +151,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
   end
 
   describe "retry-blocked" do
-    test "I19 X434 reaches a wallet behind the cursor" do
+    test "I19 reaches a wallet behind the cursor" do
       # The documented remedy for a blocked wallet is to fix the data and re-run
       # with --retry-blocked. Every wallet it is for is behind the cursor,
       # because the run that declined it carried on past it, so resuming from
@@ -172,7 +172,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
       assert summary.resumed_from == nil
     end
 
-    test "I19 X434 does not drag the forward cursor backwards" do
+    test "I19 does not drag the forward cursor backwards" do
       wallets([:paid_only, :debits])
       forward = max_key()
       Checkpoints.put("lot_migration", %{"tenant_key" => forward}, %{}, "complete")
@@ -199,7 +199,7 @@ defmodule AuroraMeter.Credits.LotCursorTest do
   end
 
   describe "the cursor rows themselves" do
-    test "I19 X427 the shadow cursor cannot collide with a wallet's checkpoint" do
+    test "I19 the shadow cursor cannot collide with a wallet's checkpoint" do
       # `checkpoint_name/1` always emits "lot_migration:" <> something, and the
       # wallet listing selects on that prefix. So the aggregate rows are
       # unreachable as wallets even for a tenant whose key is literally

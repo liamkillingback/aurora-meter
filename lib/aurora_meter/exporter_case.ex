@@ -571,7 +571,7 @@ defmodule AuroraMeter.ExporterCase do
   The guard is the point. A caller that lets an adapter's raise, exit or throw
   escape has lost the outcome of every item in the call rather than recording
   them as uncertain, and the difference between the three is only which
-  construct catches them. Build unit 04b's deliverer owes the same guard, and
+  construct catches them. An exporter's deliverer owes the same guard, and
   the telemetry event `[:aurora_meter, :exporter, :exception]` beside it.
   """
   @spec call(map(), [Item.t()]) ::

@@ -48,7 +48,7 @@ defmodule AuroraMeter.Events.Replay do
   session advisory lock on a pinned connection. It dies with the connection, so
   a runner killed with `kill -9` leaves nothing to expire. The heartbeat in the
   checkpoint cursor is a **report for a human** and nothing subtracts it from
-  anything: `open-findings.md` X100 measured the one clock every node shares
+  anything: the one clock every node shares was measured
   stepping backwards 439 ms on a 32.5 second cadence, and a lease compared
   against it can invert.
 

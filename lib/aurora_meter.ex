@@ -152,10 +152,16 @@ defmodule AuroraMeter do
       # the same call again, after a timeout you never saw the answer to
       #=> {:ok, %AuroraMeter.Event{}, :duplicate}
 
-  **An unknown outcome is retryable with the same `id`, never with a fresh
-  one.** Every `{:error, {:unavailable, _}}` means "this may or may not have
-  committed"; repeating the call with the same identity is the only safe answer,
-  and it is always safe.
+  **An unknown outcome is retryable with the same `id` and the same payload,
+  never with a fresh id.** Every `{:error, {:unavailable, _}}` means "this may
+  or may not have committed"; repeating the call with the same identity and the
+  same payload is the only safe answer. The payload includes `occurred_at` to
+  the microsecond, so a retry that stamps a fresh current time is a
+  `{:error, {:conflict, existing}}`, not a duplicate. Persist the payload before
+  you call, or keep your own record of what you recorded: the
+  `AuroraMeter.Events.Outbox` seam gives you one. Customer content is not in the
+  event at all, so deciding that two requests with the same quantity,
+  dimensions and instant are different requests is the caller's job.
 
   ## Options
 
@@ -252,7 +258,7 @@ defmodule AuroraMeter do
   for ever. That is what makes a corrected invoice explicable six months later.
 
       AuroraMeter.record(org, :api_calls, 10, id: "req_1", occurred_at: at)
-      AuroraMeter.correct(org, "req_1", 3, id: "credit_1", metadata: %{"ticket" => "SUP-42"})
+      AuroraMeter.correct(org, "req_1", 3, id: "credit_1", metadata: %{"ticket" => "support-42"})
       #=> {:ok, %AuroraMeter.Event{kind: :correction, quantity: 3}, :inserted}
 
       AuroraMeter.Events.total(org, :api_calls, period.start)
@@ -657,18 +663,21 @@ defmodule AuroraMeter do
   the work twice for no reason.
 
   Starting Aurora Meter **below** the host's Repo is what lets registration
-  happen at boot. Above it, registration is deferred with one warning and
-  retried on the first lookup that needs a stored snapshot, rather than failing:
-  in 0.4.0 `start_link/1` did no database work at all, and this release is not
-  entitled to turn a supervision order that used to work into a failed boot.
+  happen at boot. Above it, registration is deferred with one warning and run
+  in the background as soon as the repo is running, rather than failing the
+  boot. A conflict found then cannot refuse a boot that already happened: it
+  is logged as a crash of that background process, and the conflicted version
+  resolves to its stored definition either way.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
     AuroraMeter.Config.validate!()
+    AuroraMeter.Config.warn_pubsub_not_running()
 
     case AuroraMeter.Supervisor.start_link(opts) do
       {:ok, pid} ->
         AuroraMeter.Plans.register!()
+        AuroraMeter.Plans.start_deferred_registration(pid)
         {:ok, pid}
 
       other ->

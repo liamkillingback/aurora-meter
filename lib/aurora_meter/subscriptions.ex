@@ -13,7 +13,7 @@ defmodule AuroraMeter.Subscriptions do
   ## Moving a tenant between plans
 
   A plan change is **explicit and scheduled**. Redeploying a plan definition
-  never moves anybody (decision D05, invariant I17); a tenant moves because
+  never moves anybody (invariant I17); a tenant moves because
   somebody scheduled it, at an instant they chose, with a reference they can
   cancel or retry.
 
@@ -208,7 +208,7 @@ defmodule AuroraMeter.Subscriptions do
   would carry, the tenant's current `period`, and a `provider` section.
 
   `price` is the plan's **declared list price** in cents and never an invoice
-  amount: core computes no proration (decision D05). The `provider` section
+  amount: core computes no proration. The `provider` section
   comes from the optional `c:AuroraMeter.Billing.Provider.describe_plan_change/3`
   callback and is `%{status: :not_configured, detail: %{}}` on a core-only
   installation, `%{status: :error, detail: %{reason: ...}}` for a provider that

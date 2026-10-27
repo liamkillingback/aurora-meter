@@ -153,8 +153,8 @@ defmodule AuroraMeter.Storage.Ecto do
   The most rows of `schema` one `insert_all/3` statement can carry.
 
   Derived from the schema, because Postgres's 65,535 bind-parameter ceiling is
-  per statement and `insert_all/3` spends one parameter per column per row
-  (`open-findings.md` X338). Public so that a test can flush one row more than
+  per statement and `insert_all/3` spends one parameter per column per row.
+  Public so that a test can flush one row more than
   this against a real database rather than trusting the arithmetic.
 
   ## Examples
@@ -244,29 +244,101 @@ defmodule AuroraMeter.Storage.Ecto do
         {:ok, history_totals} = add_history(history)
         %{counters: counter_totals, history: history_totals}
       else
+        # The batch already committed: answer the current totals. One
+        # statement per table with the keys passed as arrays, not one SELECT
+        # per row, because a retried batch can hold every key a node touched
+        # since its last flush (`open-findings.md` X372).
+        counter_values = current_counter_values(counters)
+        history_values = current_history_values(history)
+
         %{
           counters:
-            Enum.map(counters, fn row ->
+            counters
+            |> Enum.zip(counter_values)
+            |> Enum.map(fn {row, value} ->
               %{
                 tenant_key: row.tenant_key,
                 feature: to_string(row.feature),
                 period_start: row.period_start,
-                value: load_counter(row.tenant_key, row.feature, row.period_start) || 0
+                value: value || 0
               }
             end),
           history:
-            Enum.map(history, fn row ->
+            history
+            |> Enum.zip(history_values)
+            |> Enum.map(fn {row, value} ->
               %{
                 tenant_key: row.tenant_key,
                 feature: to_string(row.feature),
                 date: row.date,
-                value: load_history(row.tenant_key, row.feature, row.date) || 0
+                value: value || 0
               }
             end)
         }
       end
     end)
   end
+
+  # The persisted value for each row, in the order given, `nil` where there is
+  # no row. `WITH ORDINALITY` keeps the order without comparing keys in Elixir,
+  # and the arrays cost three bind parameters whatever the batch size.
+  defp current_counter_values([]), do: []
+
+  defp current_counter_values(rows) do
+    %{rows: values} =
+      repo().query!(
+        """
+        SELECT c.value
+          FROM unnest($1::text[], $2::text[], $3::timestamp[])
+               WITH ORDINALITY AS u(tenant_key, feature, period_start, ord)
+          LEFT JOIN aurora_meter_counters c
+            ON c.tenant_key = u.tenant_key
+           AND c.feature = u.feature
+           AND c.period_start = u.period_start
+         ORDER BY u.ord
+        """,
+        [
+          Enum.map(rows, & &1.tenant_key),
+          Enum.map(rows, &to_string(&1.feature)),
+          Enum.map(rows, &naive_second(&1.period_start))
+        ]
+      )
+
+    Enum.map(values, fn [value] -> value end)
+  end
+
+  defp current_history_values([]), do: []
+
+  defp current_history_values(rows) do
+    %{rows: values} =
+      repo().query!(
+        """
+        SELECT h.value
+          FROM unnest($1::text[], $2::text[], $3::date[])
+               WITH ORDINALITY AS u(tenant_key, feature, bucket_start, ord)
+          LEFT JOIN aurora_meter_history h
+            ON h.tenant_key = u.tenant_key
+           AND h.feature = u.feature
+           AND h.bucket_kind = 'day'
+           AND h.bucket_start = u.bucket_start
+         ORDER BY u.ord
+        """,
+        [
+          Enum.map(rows, & &1.tenant_key),
+          Enum.map(rows, &to_string(&1.feature)),
+          Enum.map(rows, & &1.date)
+        ]
+      )
+
+    Enum.map(values, fn [value] -> value end)
+  end
+
+  # `period_start` is a `:utc_datetime` column (`timestamp(0)`), which is what
+  # Ecto would have cast the value to in `load_counter/3`.
+  defp naive_second(%DateTime{} = at),
+    do: at |> DateTime.to_naive() |> NaiveDateTime.truncate(:second)
+
+  defp naive_second(%NaiveDateTime{} = at), do: NaiveDateTime.truncate(at, :second)
 
   @impl AuroraMeter.Storage
   def upsert_counters(rows) do
@@ -776,8 +848,7 @@ defmodule AuroraMeter.Storage.Ecto do
   process holds: `Ecto.Adapters.SQL`'s implementation matches on a
   `conn_mode: :transaction` connection in the process dictionary, and the
   sandbox's own `BEGIN` is issued inside the connection process rather than
-  through it. The value is measured rather than assumed in
-  `docs/evidence/v1/phase-03/03b-in-transaction.md`, including under
+  through it. The value was measured rather than assumed, including under
   `Ecto.Adapters.SQL.Sandbox`, because the correct implementation depends on an
   observable fact about `ecto_sql` and not on a reading of its documentation.
   """

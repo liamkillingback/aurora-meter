@@ -143,7 +143,7 @@ defmodule AuroraMeter.ExportedIdiomTest do
            """
   end
 
-  test "I20 X426 no shipped lib file asks function_exported?/3 without loading the module first" do
+  test "I20 no shipped lib file asks function_exported?/3 without loading the module first" do
     files = Path.wildcard(@lib_glob)
 
     assert length(files) > 50,
@@ -241,7 +241,7 @@ defmodule AuroraMeter.ExportedIdiomTest do
            "a bare call on a variable module is the common shape and must be seen"
   end
 
-  test "I20 X426 the guard reads the variable forms the package actually uses" do
+  test "I20 the guard reads the variable forms the package actually uses" do
     # Watched failing before it was trusted passing (X350), on the exact shapes
     # in `lib/`: the safe one must be silent and the bare one must be reported,
     # with the module in a variable in both.

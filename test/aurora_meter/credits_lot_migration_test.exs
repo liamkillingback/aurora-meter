@@ -125,7 +125,7 @@ defmodule AuroraMeter.CreditsLotMigrationTest do
     end
   end
 
-  test "I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape (X266)" do
+  test "I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape" do
     # **The test finding X266 asks for, and it is two wallets rather than one
     # because the two row shapes are permanent.**
     #

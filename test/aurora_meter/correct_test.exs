@@ -29,7 +29,9 @@ defmodule AuroraMeter.CorrectTest do
     AuroraMeter.Test.reset!()
     :ok = RecordingOutbox.start!()
     tenant = unique_tenant("correct")
-    at = ~U[2026-09-10 12:00:00.000000Z]
+    # An instant inside the tenant's current period and not in the future,
+    # relative to today rather than to the day the test was written.
+    at = instant_in_current_period(tenant)
     %{tenant: tenant, at: at, period: AuroraMeter.period(tenant).start}
   end
 

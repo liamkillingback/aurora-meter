@@ -21,8 +21,8 @@ defmodule Mix.Tasks.AuroraMeter.Credits.MigrateLots do
 
   It was refused while `AuroraMeter.Credits.reverse/4` did not take the lot
   path, because a paid refund on a cut-over wallet would have consumed
-  promotional lots in spend order. Both refund calls are lot aware from repair
-  unit R1, so `--no-shadow` writes. Everything else still works without it: the
+  promotional lots in spend order. Both refund calls are lot aware from 1.0.0,
+  so `--no-shadow` writes. Everything else still works without it: the
   replay, the reconciliation, the per-wallet report and the list of wallets that
   cannot be migrated are all produced by the shadow run.
 
@@ -30,8 +30,8 @@ defmodule Mix.Tasks.AuroraMeter.Credits.MigrateLots do
 
   The documented sequence is a shadow run, then a real one. They resume from
   **different** checkpoint rows, so the rehearsal cannot leave the real run's
-  cursor past the last wallet and make it examine nothing
-  (`open-findings.md` X427). A run that examines no wallet never overwrites
+  cursor past the last wallet and make it examine nothing.
+  A run that examines no wallet never overwrites
   either cursor, and `--retry-blocked` starts from the first wallet, because
   every wallet it is for is behind the cursor.
 

@@ -142,7 +142,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
   end
 
   describe "validate_checks" do
-    test "I19 X428 --no-validate-checks emits the option on the version 8 file and nowhere else",
+    test "I19 --no-validate-checks emits the option on the version 8 file and nowhere else",
          %{path: path} do
       # `AuroraMeter.track/4` never rejected a non-positive quantity and never
       # bounded metadata, so a 0.4.x database can hold rows core schema version
@@ -166,7 +166,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
       end
     end
 
-    test "I19 X428 without the flag nothing is emitted, so the default stands", %{path: path} do
+    test "I19 without the flag nothing is emitted, so the default stands", %{path: path} do
       generate(path, from: 7)
 
       for name <- ["v7", "v8_concurrent", "v9_to_v10"] do
@@ -175,7 +175,7 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
       end
     end
 
-    test "I19 X428 the emitted option is one AuroraMeter.Migration.up/1 actually accepts" do
+    test "I19 the emitted option is one AuroraMeter.Migration.up/1 actually accepts" do
       # The option is only a remedy if the runtime reads it. Asserting the
       # string alone would pass just as well for a misspelling.
       [file] =
@@ -347,6 +347,41 @@ defmodule Mix.Tasks.AuroraMeter.Gen.MigrationTest do
 
       assert error.message =~ "--upgrade and --from"
       assert Path.wildcard(Path.join(path, "*.exs")) == []
+    end
+
+    test "an undeclared switch such as --to is refused rather than ignored" do
+      error =
+        assert_raise Mix.Error, fn ->
+          Mix.Tasks.AuroraMeter.Gen.Migration.run(["-r", "AuroraMeter.TestRepo", "--to", "5"])
+        end
+
+      assert error.message =~ "does not understand --to"
+      assert error.message =~ "There is no --to"
+    end
+
+    test "docs/api.md lists exactly the switches the task declares" do
+      row =
+        "docs/api.md"
+        |> File.read!()
+        |> String.split("\n")
+        |> Enum.find(&String.starts_with?(&1, "| `Mix.Tasks.AuroraMeter.Gen.Migration`"))
+
+      documented =
+        ~r/`(-r|--[a-z-]+)`/
+        |> Regex.scan(row, capture: :all_but_first)
+        |> List.flatten()
+        |> MapSet.new()
+
+      declared =
+        Mix.Tasks.AuroraMeter.Gen.Migration.switches()
+        |> Enum.map(fn
+          {:repo, _} -> "-r"
+          {:validate_checks, _} -> "--no-validate-checks"
+          {name, _} -> "--" <> String.replace(Atom.to_string(name), "_", "-")
+        end)
+        |> MapSet.new()
+
+      assert documented == declared
     end
 
     test "the upgrade guide's own command is the one the task accepts" do

@@ -326,7 +326,7 @@ defmodule AuroraMeter.CreditsLowBalanceTest do
     )
   end
 
-  test "I11 a handler that needs a connection gets one while the writer holds a pinned one (X269)" do
+  test "I11 a handler that needs a connection gets one while the writer holds a pinned one" do
     # **The regression for X269, and it is the shape Pro's payment paths use.**
     # `AuroraMeter.Pro.Lock.with_lock/2` wraps a ledger call in
     # `Repo.checkout/1`, which pins a connection to the writer for the length of

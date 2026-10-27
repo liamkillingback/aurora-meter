@@ -19,7 +19,7 @@ paragraph and says what to check by hand instead.
 > **A sentence here names the invariant it rests on, or it is not written.**
 
 [Guarantees and limits](guarantees.md) is the contract, with a test named
-against every row. [Correctness](correctness.md) is the longer form, invariant by
+against every row. [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md) is the longer form, invariant by
 invariant. If this page and either of those disagree, they are right and this
 page is a defect.
 
@@ -517,5 +517,5 @@ Oban and carry the worker name, which is how to chart run counts per worker.
   measured sizing.
 * [Rebuilding the event projection](replay.md): the replay runbook.
 * [Credits](credits.md): the hold, settle and release contract behind section 3.
-* [Guarantees and limits](guarantees.md) and [Correctness](correctness.md): what
+* [Guarantees and limits](guarantees.md) and [Correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md): what
   is promised, under what conditions, and which test holds it.

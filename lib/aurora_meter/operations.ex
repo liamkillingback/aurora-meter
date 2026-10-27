@@ -202,7 +202,7 @@ defmodule AuroraMeter.Operations do
   scan) and returns `{:ok, %{cursor: cursor, counts: counts}}` or
   `{:error, reason}`. A `cursor` of `nil` means the scan reached its end.
 
-  The loop is the whole of lower-level invariants L05c-1 to L05c-3, in one place
+  The loop holds three rules in one place
   rather than once per worker:
 
     1. The pause is read **before every batch**, including the first, so pausing

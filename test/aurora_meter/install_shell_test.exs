@@ -76,7 +76,7 @@ defmodule AuroraMeter.InstallShellTest do
     end
   end
 
-  describe "--oban on a host that cannot have it (X375)" do
+  describe "--oban on a host that cannot have it" do
     test "I20 no Oban at all: the message names the line to add to mix.exs" do
       assert {:error, message} = Support.oban_switch(false, false)
 

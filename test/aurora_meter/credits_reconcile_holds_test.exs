@@ -588,7 +588,7 @@ defmodule AuroraMeter.CreditsReconcileHoldsTest do
   end
 
   describe "recovery beside expiry" do
-    test "I12 a reconciler release on an expired grant returns spendable credit (L1, fixed in 06a)" do
+    test "I12 a reconciler release on an expired grant returns spendable credit" do
       # The reconciler's version of `AuroraMeter.CreditsTest`'s L1 test. A
       # recovery decision must not weaken the guarantee holds carry (D09), so
       # the value a released hold returns is exactly what `Credits.release/2`

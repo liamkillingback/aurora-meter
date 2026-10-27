@@ -314,6 +314,12 @@ and why `handle_usage/2` and `handle_credits/2` drop a message whose key is not
 the socket's. If you match the raw messages yourself and you support switching,
 compare `tenant_key` against `socket.assigns.aurora_meter_tenant_key`.
 
+If you call `AuroraMeter.LiveView.subscribe/1` in `mount/3` instead of using the
+hook, the helpers (`assign_quota/4`, `assign_quotas/2`, `handle_usage/2`,
+`handle_credits/2`) accept that tenant's messages too: `subscribe/1` records the
+key in the LiveView process and `unsubscribe/1` removes it. A message for a key
+recorded neither way is dropped.
+
 ### Topics, if you want to subscribe yourself
 
 ```elixir
@@ -341,7 +347,7 @@ before a figure goes in front of a customer.
     and convergent across nodes, and nothing stronger.
   * **For an events-source feature the counter is a display and gating value.**
     The billable fact is the committed event. See
-    [metering](metering.md) and [correctness](correctness.md).
+    [metering](metering.md) and [correctness](https://github.com/liamkillingback/aurora-meter/blob/v1.0.1/docs/correctness.md).
 
 ## Related
 

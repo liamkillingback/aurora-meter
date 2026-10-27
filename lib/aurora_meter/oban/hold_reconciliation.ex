@@ -31,7 +31,7 @@ if Code.ensure_loaded?(Oban) do
         |> AuroraMeter.Oban.HoldReconciliation.new()
         |> Oban.insert()
 
-    **The cursor is never a job argument** (L05c-1). It lives in
+    **The cursor is never a job argument**. It lives in
     `aurora_meter_checkpoints` under `"hold_reconciliation:global"`, so two jobs
     for this worker read the same position rather than each carrying its own
     stale copy.

@@ -86,7 +86,7 @@ it behind:
   `@spec`, and prints the return type that `@spec` declares. A module with an
   `iex>` example must be named by a `doctest` declaration somewhere.
 - `AuroraMeter.Bench.ClaimsTest`: a published throughput figure must come from
-  the measurement artifact under `docs/evidence/`, and a superseded figure may
+  the benchmark's recorded measurement, and a superseded figure may
   not reappear anywhere.
 
 Each of those has a fixture or a negative control beside it, so if you think one

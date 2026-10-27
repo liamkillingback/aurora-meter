@@ -69,6 +69,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     ordinary reason. Fetch it with `AuroraMeter.quota/2` in `mount/3` and again
     wherever you handle the usage message:
 
+        import AuroraMeter.Components
+
         def mount(_params, session, socket) do
           org = MyApp.Accounts.org_for_session!(session)
           if connected?(socket), do: AuroraMeter.LiveView.subscribe(org)
@@ -79,8 +81,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:noreply, AuroraMeter.LiveView.assign_quota(message, socket, :quota, :ai_generations)}
         end
 
-    `AuroraMeter.LiveView.assign_quota/4` is that second line; it drops a
-    message for another tenant and re-reads the quota for the socket's own.
+        def render(assigns) do
+          ~H"<.usage_meter quota={@quota} />"
+        end
+
+    `AuroraMeter.LiveView.assign_quota/4` is that second line; it accepts a
+    message for the tenant this process subscribed to (or the socket's own,
+    with the `on_mount` hook) and drops any other. Instead of `subscribe/1` in
+    `mount/3`, the hook can subscribe for the whole `live_session`:
+
+        on_mount {AuroraMeter.LiveView, {:subscribe, assign: :current_org}}
 
     Exactly one of `quota`, or `tenant` **and** `feature`, is required. Passing
     neither, or both, raises rather than guessing which one the caller meant.

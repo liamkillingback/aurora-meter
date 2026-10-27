@@ -54,7 +54,7 @@ defmodule AuroraMeter.ConfigSchemaColdTest do
     :ok
   end
 
-  test "I20 X426 ensure_exports!/4 accepts a module nothing has loaded" do
+  test "I20 ensure_exports!/4 accepts a module nothing has loaded" do
     unload!(Complete)
 
     refute :erlang.module_loaded(Complete),
@@ -70,7 +70,7 @@ defmodule AuroraMeter.ConfigSchemaColdTest do
              "nothing had happened to load it yet. That is X426 in the boot path."
   end
 
-  test "I20 X426 and still refuses a module that really lacks the function" do
+  test "I20 and still refuses a module that really lacks the function" do
     # The other direction. Without this the test above passes for a check that
     # has stopped checking.
     unload!(Partial)

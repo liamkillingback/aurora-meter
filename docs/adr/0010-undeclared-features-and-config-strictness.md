@@ -7,9 +7,9 @@ and 0006 (counter feature kind) for the feature vocabulary this policy applies t
 
 ## Context
 
-This ADR supersedes the second half of `plan.md` decision D12 ("feature not
-declared in the plan gives `:ok` (permissive) plus `Logger.warning` in `:dev`")
-and restores decision D20 ("NimbleOptions schema validated at boot, fail fast"),
+This ADR supersedes the original design decision that a feature not declared in
+the plan gives `:ok` (permissive) plus `Logger.warning` in `:dev`, and restores
+the decision that the NimbleOptions schema is validated at boot and fails fast,
 which the implementation drifted away from. It does not edit `plan.md`.
 
 Three defects share one shape: the library answers a question about a name it
@@ -31,7 +31,7 @@ library's default plan and no error.
 the tenant to the default plan.
 
 Each of the three can change what a customer is entitled to, which is why the
-policy is recorded here rather than decided inside a build unit.
+policy is recorded here rather than decided inside an implementation change.
 
 ## Decision
 
@@ -62,16 +62,14 @@ returns a changeset error instead of falling through to the default plan.
 
 ## Consequences
 
-This is the transition contract required by D04, and both values are stated
-together so no later unit ships 1.0 semantics in a 0.5.x release. The 0.5.0
-transition release defaults to `:warn`, prints the exact snippet
-`config :aurora_meter, undeclared_feature_policy: :allow` that restores today's
-behaviour, and ships `mix aurora_meter.features` so a host can scan its own code
-for names no plan declares. 1.0 defaults to `:deny`, and configuration generated
-for a new install is `:deny`.
+Both values are stated together so the transition is explicit. `:warn` prints the
+exact snippet `config :aurora_meter, undeclared_feature_policy: :allow` that
+restores the old behaviour, and `mix aurora_meter.features` lets a host scan its
+own code for names no plan declares. 1.0 defaults to `:deny`, and configuration
+generated for a new install is `:deny`.
 
 A host that never reads the warning and upgrades straight from 0.4.x to 1.0 gets
-denials. That is the intended outcome of D04 and not an accident: the alternative,
+denials. That is the intended outcome and not an accident: the alternative,
 keeping a permissive default forever, means a misspelled feature name silently
 grants access for the life of the install. The behaviour is stated in the release
 notes and in the guarantee table rather than left to be discovered.
@@ -89,7 +87,6 @@ publishes.
 
 ## Verification
 
-Unit 02b (table driven tests over every entry point crossed with every policy
-value, plus unknown configuration keys, binary feature names and `subscribe/2`),
-01c (I04: denial does not change reservation arithmetic) and 02d (the wording of
-the guarantee table). No test for any of this exists yet.
+Table driven tests over every entry point crossed with every policy value, plus
+unknown configuration keys, binary feature names and `subscribe/2`; I04 (denial
+does not change reservation arithmetic); and the wording of the guarantee table.

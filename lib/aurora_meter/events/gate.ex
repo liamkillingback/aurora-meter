@@ -20,7 +20,7 @@ defmodule AuroraMeter.Events.Gate do
 
   A concurrency limit at this timescale must not be decided by comparing two
   wall-clock instants: the shared database clock steps backwards by hundreds of
-  milliseconds on this hardware (`open-findings.md` X100), and a node clock is
+  milliseconds on this hardware, and a node clock is
   worse. So the gate counts and monitors; it never expires anything. The only
   time value here is the `GenServer.call/3` timeout, which is OTP's own
   monotonic timer and not a comparison of two stamped instants, and a caller
@@ -47,7 +47,7 @@ defmodule AuroraMeter.Events.Gate do
   means `:record_max_concurrency` callers are already admitted.
   `{:error, :unavailable}` means the gate did not answer: it is restarting, or
   it is too busy to reply within #{@call_timeout} ms. Neither is a reason to
-  fall back to buffered tracking (L-03b-4).
+  fall back to buffered tracking.
   """
   @spec enter() :: {:ok, permit()} | {:error, :overloaded | :unavailable}
   def enter do

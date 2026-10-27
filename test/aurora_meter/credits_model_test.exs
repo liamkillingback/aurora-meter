@@ -500,7 +500,7 @@ defmodule AuroraMeter.CreditsModelTest do
   end
 
   describe "ordering the query does not fix" do
-    test "I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a)" do
+    test "I10 two grants due in one pass expire in an order the query does not fix" do
       # `ledger.ex:251-259` selects the due grant ids with `repo.all/1` and no
       # `order_by`, while `expire_locked/3` (`:296-298`) clamps each grant by the
       # wallet as it stands when its turn comes. Two grants due in one pass can
@@ -553,7 +553,7 @@ defmodule AuroraMeter.CreditsModelTest do
   end
 
   describe "the clock the ledger orders itself by" do
-    test "I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq (L20, fixed in 06a)" do
+    test "I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq" do
       # `apply_entry/3` stamps `inserted_at` from `DateTime.utc_now()`
       # (`ledger.ex:452`) and then every query that has to know what happened
       # first orders by that column: `remaining_on_grant/3` (`:345`), which

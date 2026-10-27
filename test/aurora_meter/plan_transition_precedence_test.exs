@@ -82,7 +82,7 @@ defmodule AuroraMeter.PlanTransitionPrecedenceTest do
              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)
   end
 
-  test "X296 a provider naming the plan id without the version cancels, and Aurora Meter Pro no longer produces that shape" do
+  test "a provider naming the plan id without the version cancels, and Aurora Meter Pro no longer produces that shape" do
     # **Rewritten by build unit 07c, and the core behaviour it asserts is
     # unchanged.** What changed is the premise. When 07b wrote this test,
     # `AuroraMeter.Pro.Subscriptions.sync/1` sent `plan_id` and no version, so
@@ -162,7 +162,12 @@ defmodule AuroraMeter.PlanTransitionPrecedenceTest do
   end
 
   test "I17 a transition effective before a later cancellation applies normally" do
-    {tenant, _} = scheduled(:scale, effective_at: ~U[2026-10-01 00:00:00Z])
+    # Scheduled from a frozen instant before the effective date, so the
+    # transition is in the future whatever today's date is.
+    {tenant, _} =
+      AuroraMeter.Test.with_clock(~U[2026-09-16 10:00:00Z], fn ->
+        scheduled(:scale, effective_at: ~U[2026-10-01 00:00:00Z])
+      end)
 
     assert {:ok, %{applied: 1}} =
              Subscriptions.apply_due_transitions(tenant: tenant, now: @far_future)

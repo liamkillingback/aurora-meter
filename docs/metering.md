@@ -135,7 +135,10 @@ soft quotas, and the wrong one for anything you invoice.
 For usage you invoice, use `AuroraMeter.record/4`. You supply the identity, and
 one transaction writes the fact, its projected total and the export intent
 together, so a retry after a write you never saw the answer to is reported as a
-duplicate rather than charged again:
+duplicate rather than charged again. A retry is safe with the same `id` **and
+the same payload**: `occurred_at` is part of the payload to the microsecond, so
+persist the payload (or read it back from your `AuroraMeter.Events.Outbox` row)
+before you call, rather than stamping a fresh instant on the retry:
 
 ```elixir
 config :aurora_meter, feature_sources: %{tokens: :events}

@@ -79,6 +79,14 @@ defmodule AuroraMeter.Plans do
   # version ever, not one per call.
   @snapshots_key {AuroraMeter, :plan_snapshots}
 
+  # `%{{plans_module, plan_id_atom, version} => true}`: the compiled versions
+  # whose content differs from the snapshot registered for them. Every lookup of
+  # one of these resolves to the stored (published) definition, so an in-place
+  # edit reprices nobody under either `plan_version_conflict` setting. Keyed by
+  # the plans module so a module swapped in at runtime does not inherit
+  # another module's verdict.
+  @conflicts_key {AuroraMeter, :plan_conflicts}
+
   # And the negative half is bounded, because `get/2` is public and a caller can
   # ask for any string at all. Past this many entries the cache stops growing
   # and says so once.
@@ -170,7 +178,7 @@ defmodule AuroraMeter.Plans do
   `plan/2` is the form without options and `plan/3` the form with them: Elixir
   parses `plan :pro, version: "2" do ... end` as three arguments, the id, the
   keyword list and the `do` block, not as two. Existing plans modules are
-  untouched, because a block with no options is still `plan/2` (finding X289).
+  untouched, because a block with no options is still `plan/2`.
   """
   defmacro plan(id, opts), do: __plan__(id, opts)
 
@@ -324,8 +332,8 @@ defmodule AuroraMeter.Plans do
       spendable, and the tenant would hold the same micro-dollar twice.
     * an expiry on a non-promotional allowance. Only promotional grants expire
       (`AuroraMeter.Schema.CreditTransaction` refuses an `:expires_at` on any
-      other category), which is also `v1-release.md` 10.1's rule that paid
-      top-ups do not expire unless their own contract says so.
+      other category), which is also the rule that paid top-ups do not expire
+      unless their own contract says so.
     * a name or a plan id that is not lower snake case. Both become part of the
       recurrence key, which is read by splitting on `:`.
 
@@ -423,7 +431,8 @@ defmodule AuroraMeter.Plans do
     now = Clock.now()
 
     Map.new(module.__aurora_plan_index__(), fn {id, versions} ->
-      {id, Map.fetch!(plans, {id, effective_version(versions, now)})}
+      version = effective_version(versions, now)
+      {id, published(module, id, version, Map.fetch!(plans, {id, version}))}
     end)
   end
 
@@ -441,7 +450,12 @@ defmodule AuroraMeter.Plans do
 
     case Map.fetch(module.__aurora_plan_index__(), id) do
       {:ok, versions} ->
-        Map.get(module.__aurora_plans__(), {id, effective_version(versions, Clock.now())})
+        version = effective_version(versions, Clock.now())
+
+        case Map.fetch(module.__aurora_plans__(), {id, version}) do
+          {:ok, plan} -> published(module, id, version, plan)
+          :error -> nil
+        end
 
       :error ->
         nil
@@ -453,15 +467,17 @@ defmodule AuroraMeter.Plans do
 
   Compiled definitions first; then the snapshot registered in
   `aurora_meter_plan_versions`, which is what keeps a subscription readable
-  after its version's block has been deleted from the plans module
-  (`v1-release.md` 07.03). A version in neither is `nil`, and
+  after its version's block has been deleted from the plans module.
+  A version in neither is `nil`, and
   `AuroraMeter.Entitlements.plan/1` then falls back to the default plan and says
   so once.
   """
   @spec get(atom(), String.t()) :: Plan.t() | nil
   def get(id, version) when is_atom(id) and is_binary(version) do
-    case Map.fetch(plans_module().__aurora_plans__(), {id, version}) do
-      {:ok, plan} -> plan
+    module = plans_module()
+
+    case Map.fetch(module.__aurora_plans__(), {id, version}) do
+      {:ok, plan} -> published(module, id, version, plan)
       :error -> snapshot(id, version)
     end
   end
@@ -482,8 +498,9 @@ defmodule AuroraMeter.Plans do
     module = plans_module()
 
     with {:ok, versions} <- Map.fetch(module.__aurora_plan_index__(), id),
-         {nil, version} <- List.first(versions, :none) do
-      Map.get(module.__aurora_plans__(), {id, version})
+         {nil, version} <- List.first(versions, :none),
+         {:ok, plan} <- Map.fetch(module.__aurora_plans__(), {id, version}) do
+      published(module, id, version, plan)
     else
       _no_base -> nil
     end
@@ -505,7 +522,9 @@ defmodule AuroraMeter.Plans do
     compiled =
       module.__aurora_plan_index__()
       |> Map.get(id, [])
-      |> Enum.map(fn {_at, version} -> Map.fetch!(plans, {id, version}) end)
+      |> Enum.map(fn {_at, version} ->
+        published(module, id, version, Map.fetch!(plans, {id, version}))
+      end)
 
     known = MapSet.new(compiled, & &1.version)
 
@@ -528,7 +547,7 @@ defmodule AuroraMeter.Plans do
   This is the **attribution** question, not the entitlement one. `get/1` answers
   "what may this tenant do now"; this answers "which commercial contract was
   this usage sold under", and the two differ for every backdated fact. A
-  recorded event keeps the answer it was given here (D05, L17.12): no later
+  recorded event keeps the answer it was given here: no later
   process recomputes it, so a plan redeploy or a plan change cannot reprice
   history.
 
@@ -548,7 +567,7 @@ defmodule AuroraMeter.Plans do
        after `instant` gives its `from` pair, because before the first recorded
        change the tenant was on what that change moved them off.
     5. Nothing covers the instant: `{:error, :unresolved}`. An instant before any
-       recorded plan history is a state, never a guess at today's plan (L17.13).
+       recorded plan history is a state, never a guess at today's plan.
 
   ## Examples
 
@@ -758,18 +777,24 @@ defmodule AuroraMeter.Plans do
        rest.
 
   It **never** changes a non-NULL `plan_id`, `plan_version` or
-  `plan_fingerprint` (L17.4). Registration cannot move a tenant between
+  `plan_fingerprint`. Registration cannot move a tenant between
   contracts; only an explicit transition can, and that is a later release.
 
   Two things it refuses to fail on, because neither is a reason to stop a host
   from booting:
 
     * a storage adapter with no snapshot support, which logs one warning and
-      leaves compiled code as the only authority (D12: reported, not silently
+      leaves compiled code as the only authority (reported, not silently
       ignored);
     * a repo that is not running yet, which logs one warning naming the
-      boot-order requirement, flags the registry `:deferred` and retries once on
-      the first snapshot miss.
+      boot-order requirement and flags the registry `:deferred`.
+      `AuroraMeter.start_link/1` then registers in the background as soon as
+      the repo is running, conflict check included, and the first snapshot
+      miss retries too.
+
+  A conflict always pins the conflicted version to its stored definition
+  before it is reported, so tenants on that version keep what they bought
+  under both `plan_version_conflict` settings.
 
   Do not call it inside a transaction of your own: the batch loop opens its own.
   """
@@ -794,6 +819,64 @@ defmodule AuroraMeter.Plans do
   end
 
   @doc false
+  # Started by `AuroraMeter.start_link/1` when `register!/0` had to defer
+  # because the repo was not running yet (Aurora Meter above the Repo in the
+  # host's supervision tree). Before 1.0.1 the deferred registration was only
+  # retried on a stored-snapshot miss, which a compiled version never causes,
+  # so the conflict check never ran and even `plan_version_conflict: :raise`
+  # let an in-place edit through. This polls until the repo is up and then
+  # registers, conflict check included.
+  #
+  # Temporary: a conflict under `:raise` crashes this process with
+  # `AuroraMeter.PlanVersionConflictError` in the crash report, after
+  # `register!/0` has already pinned the conflicted versions to their stored
+  # definitions, and it is not restarted to raise the same error again.
+  @spec start_deferred_registration(pid() | atom(), keyword()) :: :ok
+  def start_deferred_registration(supervisor, opts \\ []) do
+    if registry_state() == :deferred do
+      spec = %{
+        id: {__MODULE__, :deferred_registration},
+        start: {Task, :start_link, [fn -> await_repo_and_register(opts) end]},
+        restart: :temporary
+      }
+
+      case Supervisor.start_child(supervisor, spec) do
+        {:ok, _pid} -> :ok
+        {:error, {:already_started, _pid}} -> :ok
+        {:error, :already_present} -> :ok
+        {:error, reason} -> Logger.error("AuroraMeter.Plans: #{inspect(reason)}")
+      end
+    end
+
+    :ok
+  end
+
+  @doc false
+  # The loop `start_deferred_registration/2` runs, public so the suite can run it
+  # in a process of its own. Returns `:ok` once registration has run, or as soon
+  # as something else has already completed it.
+  @spec await_repo_and_register(keyword()) :: :ok
+  def await_repo_and_register(opts \\ []) do
+    await_loop(Keyword.get(opts, :interval, 100), Keyword.get(opts, :max_interval, 5_000))
+  end
+
+  defp await_loop(interval, max) do
+    cond do
+      registry_state() != :deferred ->
+        :ok
+
+      repo_ready?() ->
+        mark(:retrying)
+        register!()
+        await_loop(interval, max)
+
+      true ->
+        Process.sleep(interval)
+        await_loop(min(interval * 2, max), max)
+    end
+  end
+
+  @doc false
   # The registry's state on this node: `:ok`, `:deferred`, `:unsupported` or
   # `nil` when `register!/0` has never run here.
   @spec registry_state() :: :ok | :deferred | :unsupported | nil
@@ -807,6 +890,7 @@ defmodule AuroraMeter.Plans do
   def reset_registry do
     :persistent_term.erase(@registry_key)
     :persistent_term.erase(@snapshots_key)
+    :persistent_term.erase(@conflicts_key)
     :ok
   end
 
@@ -823,20 +907,56 @@ defmodule AuroraMeter.Plans do
     # made against what the database actually holds.
     {:ok, current} = list_stored(:all)
 
-    compiled
-    |> conflicts(current)
-    |> report_conflicts!()
+    found = conflicts(compiled, current)
+
+    # The cache and the conflict set are written BEFORE the report, so a
+    # conflicted version resolves to its stored definition from this moment on
+    # whatever the report does next: logs under `:warn`, raises under `:raise`.
+    # A raise at boot stops the host; a raise from a deferred registration
+    # cannot stop a boot that already happened, and this is what keeps it from
+    # letting the edit through in the meantime.
+    load_cache(current)
+    pin_conflicts(found)
+    report_conflicts!(found)
 
     report = assign_legacy()
-    load_cache(current)
     mark(:ok)
 
     Logger.info(
       "AuroraMeter.Plans.register!: registered=#{inserted} known=#{length(current)} " <>
-        "conflicts=0 assigned=#{report.assigned} orphan_plans=#{report.orphans}"
+        "conflicts=#{length(found)} assigned=#{report.assigned} orphan_plans=#{report.orphans}"
     )
 
     :ok
+  end
+
+  defp pin_conflicts(found) do
+    module = plans_module()
+
+    pinned =
+      Map.new(found, fn conflict ->
+        {{module, String.to_existing_atom(conflict.plan_id), conflict.version}, true}
+      end)
+
+    if pinned == %{} and :persistent_term.get(@conflicts_key, nil) in [nil, %{}] do
+      :ok
+    else
+      :persistent_term.put(@conflicts_key, pinned)
+    end
+  end
+
+  # The compiled definition, unless this version was found edited in place,
+  # in which case the definition the tenants on it were sold. Cheap on the hot
+  # path: one `:persistent_term.get/2` of a map that is empty on every host
+  # whose plans module matches its registry.
+  defp published(module, id, version, compiled) do
+    case :persistent_term.get(@conflicts_key, nil) do
+      conflicts when is_map_key(conflicts, {module, id, version}) ->
+        snapshot(id, version) || compiled
+
+      _none ->
+        compiled
+    end
   end
 
   # A refused insert is reported rather than counted as a miss. Silently
@@ -924,10 +1044,16 @@ defmodule AuroraMeter.Plans do
   defp report_conflicts!(conflicts) do
     case Config.plan_version_conflict() do
       :raise -> raise PlanVersionConflictError, conflicts: conflicts
-      :warn -> Logger.error(PlanVersionConflictError.format(conflicts))
+      :warn -> Logger.error(PlanVersionConflictError.format(conflicts) <> warn_note())
     end
 
     :ok
+  end
+
+  defp warn_note do
+    "\nUnder plan_version_conflict: :warn the boot continues and the stored definition " <>
+      "of each version above stays in force: tenants pinned to it keep what they bought, " <>
+      "and the edit applies to nobody until it is published as a new version.\n"
   end
 
   defp assign_legacy do
@@ -1115,8 +1241,8 @@ defmodule AuroraMeter.Plans do
   defp warn_deferred do
     ConfigSchema.warn_once(:plan_registry, "deferred", fn ->
       "AuroraMeter.Plans.register!: #{inspect(Config.repo())} is not running, so plan " <>
-        "versions were not registered at boot. Entitlements resolve from compiled code and " <>
-        "registration is retried once on the first lookup that needs a stored snapshot. " <>
+        "versions were not registered at boot. Entitlements resolve from compiled code until " <>
+        "it is, and registration runs in the background as soon as the repo is running. " <>
         "Start AuroraMeter below your Repo in the supervision tree to register at boot."
     end)
   end

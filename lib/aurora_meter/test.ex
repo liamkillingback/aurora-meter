@@ -82,12 +82,67 @@ defmodule AuroraMeter.Test do
     :ok
   end
 
-  @doc "Flushes dirty counters to the database now; returns the number of keys persisted."
+  @doc """
+  Flushes dirty counters to the database now; returns the number of keys persisted.
+
+  The write happens in Aurora Meter's own `AuroraMeter.Flusher` process, not in
+  the test process, so under the Ecto SQL sandbox that process needs access to
+  the test's connection. When it has none this raises `RuntimeError` naming the
+  two fixes: allow the Flusher on your connection,
+
+      Ecto.Adapters.SQL.Sandbox.allow(MyApp.Repo, self(), Process.whereis(AuroraMeter.Flusher))
+
+  or run the test `async: false` with the sandbox in shared mode,
+
+      Ecto.Adapters.SQL.Sandbox.mode(MyApp.Repo, {:shared, self()})
+
+  Any other storage failure raises with the reason the Flusher reported. The
+  batch stays pending either way, exactly as it does for a failed periodic
+  flush.
+  """
   @spec flush!() :: non_neg_integer()
   def flush! do
-    {:ok, count} = Flusher.flush()
-    count
+    case Flusher.flush() do
+      {:ok, count} -> count
+      {:error, reason} -> raise RuntimeError, flush_failure_message(reason)
+    end
   end
+
+  @doc false
+  @spec flush_failure_message(term()) :: String.t()
+  def flush_failure_message(reason) do
+    if ownership_error?(reason) do
+      repo = inspect(AuroraMeter.Config.repo())
+
+      """
+      AuroraMeter.Test.flush!/0 could not write: the AuroraMeter.Flusher process \
+      has no connection in the Ecto SQL sandbox. The flush runs in Aurora Meter's \
+      own process, not in your test process, so the sandbox has to let it in. \
+      Either allow it on your test's connection:
+
+          Ecto.Adapters.SQL.Sandbox.allow(#{repo}, self(), Process.whereis(AuroraMeter.Flusher))
+
+      or run the test with `async: false` and the sandbox in shared mode:
+
+          Ecto.Adapters.SQL.Sandbox.mode(#{repo}, {:shared, self()})
+
+      The underlying error was: #{format_reason(reason)}
+      """
+    else
+      "AuroraMeter.Test.flush!/0 failed; the batch stays pending and is retried: " <>
+        format_reason(reason)
+    end
+  end
+
+  defp ownership_error?(reason) do
+    text = format_reason(reason)
+
+    String.contains?(text, "DBConnection.OwnershipError") or
+      String.contains?(text, "cannot find ownership process")
+  end
+
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason), do: inspect(reason)
 
   @doc "Broadcasts touched counters to subscribed LiveViews (and gossips deltas) now."
   @spec broadcast!() :: :ok
@@ -104,7 +159,7 @@ defmodule AuroraMeter.Test do
   `AuroraMeter.subscribe/3` starts the assignment at the database's clock, which
   is right for a real subscription and wrong for a test whose usage is dated in
   the past: every such event would be attributed before the contract existed and
-  stamped `attribution: :plan_unresolved` (build unit 07c). This writes the row
+  stamped `attribution: :plan_unresolved`. This writes the row
   with an explicit `plan_effective_at` instead, which is a supported field of
   `AuroraMeter.Storage.put_subscription/1`, so a test about something other than
   attribution can have the tenant a real host would have.

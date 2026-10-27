@@ -4,6 +4,37 @@ All notable changes to Aurora Meter are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-10-27
+
+A patch release: fixes, documentation and package metadata. No schema change:
+`AuroraMeter.Migration.latest_version()` is still 10, and no new public API.
+
+### Fixed
+
+- **The live meter updates.** `AuroraMeter.LiveView.subscribe/1,2` now records the tenant in the LiveView process, so `assign_quota/4`, `assign_quotas/2`, `handle_usage/2` and `handle_credits/2` accept that tenant's messages without an `on_mount` hook. A message for any other tenant is still dropped. The README snippet now works as written ([Phoenix](docs/phoenix.md)).
+- **Correction to promised behaviour: `plan_version_conflict: :warn` now reprices nobody.** The documentation said an in-place edit to a published plan version leaves tenants on what they bought; under `:warn` the code applied the edit. A conflicted version now resolves to its stored definition under both settings ([Plans](docs/plans.md)).
+- **A deferred plan registration runs.** With Aurora Meter above the Repo in the supervision tree, registration (and its conflict check) was deferred and never retried, so even `:raise` let an edit through. It now runs in the background once the repo is up.
+- The expiry sweep's lot phase carries its own cursor, so a bounded page reports more work instead of `:complete` with due lots left open.
+- A retried flush batch reads its totals back in one statement per table instead of one per row.
+- `mix aurora_meter.gen.migration` refuses an unknown switch (such as `--to`) instead of ignoring it; `docs/api.md` lists the real switches.
+- `AuroraMeter.Tenant.Default` raises a helpful `ArgumentError` for a struct, with the recipe, instead of `Protocol.UndefinedError`.
+- `:repo` and `:pubsub` are validated at boot with the key, the value and an example. `AuroraMeter.Test.flush!/0` explains a sandbox ownership error.
+- The `AuroraMeter.LiveView` helpers raise when called socket first.
+- The installer's fallback prints your application's modules, not `MyApp.*`.
+- Compiles on the documented Elixir 1.15 floor again: `AuroraMeter.LiveDashboard.NotStartedError` was defined after a pattern that matches it, which Elixir 1.15 rejects.
+
+### Changed
+
+- The installer writes test timers to `config/test.exs` and adds `:aurora_meter` to `import_deps` in `.formatter.exs`. It requires Igniter 0.8.5 or later, which places the child before the Endpoint.
+- The optional `phoenix_live_dashboard` range admits 0.9.x.
+- The Hex description names quotas, usage limits, usage-based billing, prepaid credits and LLM token billing.
+
+### Added (docs)
+
+- [Charge customers for LLM tokens with ReqLLM](docs/llm-billing-with-req-llm.md), and a Phoenix 1.8 scopes section in the README and [Getting started](docs/getting-started.md).
+- `usage-rules.md` for AI coding agents, shipped in the package.
+- HexDocs opens with "Start here"; references to unpublished versions and internal ids are gone, and a test keeps them out.
+
 ## [1.0.0] - 2026-09-22
 
 **The first stable release.** The archive audited for release, the clean room
@@ -12,8 +43,7 @@ not against an approximation of it.
 
 ### Upgrading: read this first
 
-`AuroraMeter.Migration.latest_version()` is **10**. 0.4.0 and the 0.5.0
-transition release both carried 6, so an existing install has four schema
+`AuroraMeter.Migration.latest_version()` is **10**. 0.4.0 carried 6, so an existing install has four schema
 versions to apply and two data tasks to run between them. The full route, with
 what each step locks and what it does to your data, is
 [docs/upgrading-to-1.0.md](docs/upgrading-to-1.0.md). The short form:
@@ -57,13 +87,10 @@ lots are being built is the one interleaving the cutover cannot repair.
 
 **Rolling back over step 3 is not supported.** Everything before it is
 reversible. The rehearsal that established this route ran it against all four
-published pairings a customer can be in; the numbers are in
-`docs/evidence/v1/phase-11/` and in the storefront's `migration-matrix.md`.
+published pairings a customer can be in.
 
-Everything below landed after the 0.5.0 transition release and is not in any
-published version. The 0.5.0 section beneath is a historical record of that
-release and is deliberately not rewritten, including its statement that the
-schema version is 6: that was true of 0.5.0.
+The groundwork section after this release was prepared as a transition release
+that was never published; all of it shipped in 1.0.0.
 
 ### Added
 
@@ -100,8 +127,7 @@ schema version is 6: that was true of 0.5.0.
 - **The README's throughput table is now a measurement.** Every figure it
   carries was produced by this suite on a named machine and toolchain on a named
   date, is the median of five runs each in a fresh BEAM, is labelled micro or
-  end to end, and links
-  `docs/evidence/v1/phase-08/08c-results.md`. The figures it carried before were
+  end to end, and links the benchmark results. The figures it carried before were
   measured against the 0.3 counter row that 0.4.0 replaced, and the headline one
   is **lower** now, not higher: the spread-key figure the page used to carry was
   about a third above what this machine measures today. A figure that is lower
@@ -207,8 +233,8 @@ schema version is 6: that was true of 0.5.0.
   current assignment and from the applied transition history for one before it,
   and `AuroraMeter.record/4` stamps the answer onto `plan_id` and `plan_version`
   once, at record time. Nothing recomputes it afterwards, so neither a plan
-  redeploy nor a plan change can reprice a fact that is already recorded
-  (decision D05). A correction copies its original's stamp rather than resolving
+  redeploy nor a plan change can reprice a fact that is already recorded.
+  A correction copies its original's stamp rather than resolving
   it again, so a credit issued after an upgrade is priced as the fact it
   reverses was (invariant I09). The common case costs **no query at all**: an
   instant inside the current assignment is answered from the cached
@@ -281,8 +307,8 @@ schema version is 6: that was true of 0.5.0.
   `AuroraMeter.PlanVersionConflictError` when a compiled version's commercial
   content differs from the one already registered. The message names the plan,
   the version and both fingerprints, and the remedy is to publish a new version.
-  `config :aurora_meter, plan_version_conflict: :warn` logs it instead and is
-  the default in 0.5.x; `:raise` is the default from 1.0.
+  `config :aurora_meter, plan_version_conflict: :warn` logs it instead;
+  `:raise` is the default.
 - **Existing customers get an explicit version, not a new one.** The first boot
   after core schema version 10 names the contract of every subscription written
   before plan versions existed: the plan's base version, its fingerprint, and
@@ -771,7 +797,7 @@ schema version is 6: that was true of 0.5.0.
   last provider call at 09:24:16 and none after it, 225 outbox items left leased
   by a node that no longer existed, and pending climbing 350 to 2,762. Nothing
   in the ledger was wrong. What had stopped was the path that turns correct
-  usage into revenue (`open-findings.md` X486).
+  usage into revenue.
 
   Every period is now finite: `CreditExpiry` 3600, `HoldReconciliation` 1800,
   `RecurringGrants` 3600, `PlanTransitions` 900, `Retention` unchanged at 3600.
@@ -819,7 +845,7 @@ schema version is 6: that was true of 0.5.0.
   documentation now states both columns with a worked example, the
   `t:AuroraMeter.Credits.HoldReconciler.hold/0` typedoc names the trap from the
   other side, and two tests pin the pair so a later change to either has to face
-  it (`open-findings.md` X396).
+  it.
 
 - **`AuroraMeter.Credits.with_credits/4` does not release the hold when the
   process is killed untrappably, and the documentation used to imply it did.**
@@ -847,7 +873,7 @@ schema version is 6: that was true of 0.5.0.
   that installs it and configures nothing is exactly as safe as one that does
   not. What was missing was anything leading a reader from the crash to them.
   `with_credits/4`, `docs/credits.md` and `docs/metering.md` now do, and the
-  behaviour is asserted rather than described (`open-findings.md` X397).
+  behaviour is asserted rather than described.
 
 - **`mix aurora_meter.install` produced an application that could not start.**
   The starter plans module it generates was written as a whole
@@ -964,11 +990,11 @@ schema version is 6: that was true of 0.5.0.
 
 This section accumulates. **Every unit that changes behaviour appends its own
 entry here rather than leaving the whole changelog to be written from memory at
-release time**, which is finding X86 in the other direction.
+release time**.
 
-## [0.5.0] - 2026-09-15
+## 1.0.0 groundwork (never published on its own)
 
-The transition release. It warns about everything 1.0 will refuse and refuses
+Prepared as a transition release and shipped in 1.0.0. It warns about everything 1.0 will refuse and refuses
 nothing itself, so an application can be upgraded, watched for a while and fixed
 before the defaults change under it. **No schema change**
 (`AuroraMeter.Migration.latest_version()` is 6, as in 0.4.0), nothing new is
@@ -994,11 +1020,10 @@ source and Pro's subscription-aligned source both satisfy the contract.
   unbounded while the database is unreachable; usage export and scheduled work
   are at-least-once with idempotent effects. Some documentation said otherwise
   before this release, and the corrections are listed under Fixed below.
-- **`docs/upgrading-to-1.0.md`**: every 0.5.x warning against what 1.0 does
+- **`docs/upgrading-to-1.0.md`**: every transition warning against what 1.0 does
   instead, the staged sequence for `undeclared_feature_policy` with the
   `mix aurora_meter.features --strict` step, the `:allow` escape for a host that
-  wants to keep today's behaviour deliberately, and the statement that 0.5.0
-  needs no migration.
+  wants to keep today's behaviour deliberately.
 - **`docs/api.md`**, the published API inventory: every public module and
   function with its stability class, the release it arrived in and what it
   returns, plus the list of internal modules nothing here covers.
@@ -1123,7 +1148,7 @@ source and Pro's subscription-aligned source both satisfy the contract.
 
 - **`config :aurora_meter, durable_features: [...]`.** A non-empty list now logs
   one deprecation line per node at boot. The key still works and is kept until
-  2.0; nothing changes in 0.5.x or 1.0. 1.0 introduces `feature_sources`, which
+  2.0; nothing changes in 1.0. 1.0 introduces `feature_sources`, which
   says where a feature's commercial quantity comes from rather than bolting an
   event row onto a buffered count, and `AuroraMeter.record/4` for usage that
   must not be lost. An empty list, which is the default, warns about nothing.

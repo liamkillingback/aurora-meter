@@ -535,7 +535,7 @@ defmodule AuroraMeter.CreditsTest do
       assert %{balance: 0, promotional: 0} = Credits.balance(tenant)
     end
 
-    test "I12 a release after the grant expired returns spendable credit (L1, fixed in 06a)" do
+    test "I12 a release after the grant expired returns spendable credit" do
       # L1, the mirror of the test above. Expiry leaves alone what a hold has
       # reserved, which is right; what it cannot do is remember. When the hold
       # is released the value goes back to the balance as ordinary spendable

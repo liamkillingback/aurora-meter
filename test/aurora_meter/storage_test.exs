@@ -69,6 +69,61 @@ defmodule AuroraMeter.StorageTest do
     assert Storage.load_history(tenant, :ai, date) == 8
   end
 
+  test "a retried batch reads its totals back in one statement per table, not one per row" do
+    tenant = unique_tenant()
+    id = Ecto.UUID.generate()
+    keys = for n <- 1..40, do: :"feature_#{n}"
+
+    counters =
+      Enum.map(keys, &%{tenant_key: tenant, feature: &1, period_start: @period, delta: 2})
+
+    history =
+      Enum.map(keys, &%{tenant_key: tenant, feature: &1, date: ~D[2026-07-03], delta: 2})
+
+    # One key that has no row at all by the time of the retry answers 0.
+    missing = %{tenant_key: tenant, feature: :never_written, period_start: @period, delta: 1}
+
+    assert {:ok, _} = Storage.flush_batch(id, counters, history)
+    assert {:ok, _} = Storage.add_counters([%{hd(counters) | delta: 3}])
+
+    handler = "x372-#{id}"
+    test_pid = self()
+
+    :telemetry.attach(
+      handler,
+      [:aurora_meter, :test_repo, :query],
+      fn _event, _measurements, _metadata, _config -> send(test_pid, :query) end,
+      nil
+    )
+
+    try do
+      assert {:ok, %{counters: retried_counters, history: retried_history}} =
+               Storage.flush_batch(id, counters ++ [missing], history)
+
+      # The receipt insert, the transaction, and two reads. Not eighty-one.
+      queries = count_messages(:query)
+      assert queries >= 2, "no query was observed, so the handler is not attached"
+      assert queries <= 6, "the retry branch issued #{queries} queries"
+
+      assert hd(retried_counters).value == 5
+      assert Enum.all?(tl(Enum.drop(retried_counters, -1)), &(&1.value == 2))
+      assert List.last(retried_counters).value == 0
+      assert List.last(retried_counters).feature == "never_written"
+      assert length(retried_history) == 40
+      assert Enum.all?(retried_history, &(&1.value == 2))
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  defp count_messages(message, count \\ 0) do
+    receive do
+      ^message -> count_messages(message, count + 1)
+    after
+      0 -> count
+    end
+  end
+
   test "upsert_counters inserts, then replaces on conflict (no duplicate row)" do
     tenant = unique_tenant()
 

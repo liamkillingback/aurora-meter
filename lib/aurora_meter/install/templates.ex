@@ -21,8 +21,7 @@ defmodule AuroraMeter.Install.Templates do
          __aurora_plans__/0.
 
   Found by build unit 09c, the first unit to boot an application the installer
-  built rather than to read the file it wrote (`open-findings.md` X374, repair
-  unit R5). `Mix.Tasks.AuroraMeter.InstallTest` now evaluates the generated
+  built rather than to read the file it wrote. `Mix.Tasks.AuroraMeter.InstallTest` now evaluates the generated
   config, compiles the generated module and runs the boot-time check against the
   module the config actually names.
   """
@@ -64,8 +63,7 @@ defmodule AuroraMeter.Install.Templates do
   `AuroraMeter.Oban` is compiled **only when Oban is installed** and this module
   is compiled whenever Igniter is. A direct call from the installer was a
   compile-time reference to a module a host without Oban does not have, and it
-  warned on every single compile of the dependency in such a host
-  (`open-findings.md` X375, repair unit R5).
+  warned on every single compile of the dependency in such a host.
 
   `AuroraMeter.InstallTemplatesTest` asserts the two agree, on a build that has
   Oban, so the copy cannot drift.
@@ -305,6 +303,55 @@ defmodule AuroraMeter.Install.Templates do
     """
   end
 
+  @pro_pointer "Charging for it: Aurora Meter Pro adds Stripe checkout, top-ups, " <>
+                 "auto-recharge and metered invoicing: https://aurorameter.com/pro"
+
+  @doc """
+  The one static line pointing at Aurora Meter Pro, printed by the installer.
+  Text only: nothing is fetched, checked or reported.
+  """
+  @spec pro_pointer() :: String.t()
+  def pro_pointer, do: @pro_pointer
+
+  @doc """
+  The `config/test.exs` keys the installer creates when absent: the flush and
+  broadcast timers pushed out to an hour and the gauge timer off, so no timer
+  fires mid-test. Tests drive them with `AuroraMeter.Test.flush!/0` and
+  `AuroraMeter.Test.broadcast!/0`.
+  """
+  @spec test_config() :: keyword()
+  def test_config do
+    [flush_interval: 3_600_000, broadcast_interval: 3_600_000, metrics_interval: 0]
+  end
+
+  @doc """
+  The repo, PubSub and plans modules to print for application `app`: `repo`
+  when one is known, and otherwise the application's own namespace, never a
+  placeholder.
+
+      AuroraMeter.Install.Templates.host_modules(:shop, nil)
+      #=> %{repo: Shop.Repo, pubsub: Shop.PubSub, plans: Shop.Plans}
+
+  """
+  @spec host_modules(atom() | nil, module() | nil) :: %{
+          repo: module(),
+          pubsub: module(),
+          plans: module()
+        }
+  def host_modules(app, repo) do
+    prefix =
+      case app do
+        nil -> MyApp
+        app -> Module.concat([Macro.camelize(Atom.to_string(app))])
+      end
+
+    %{
+      repo: repo || Module.concat(prefix, Repo),
+      pubsub: Module.concat(prefix, PubSub),
+      plans: Module.concat(prefix, Plans)
+    }
+  end
+
   @doc "What to do after the installer has run."
   @spec quickstart(module(), module(), module(), AuroraMeter.Install.Options.t()) :: String.t()
   def quickstart(repo, pubsub, plans, settings) do
@@ -316,6 +363,10 @@ defmodule AuroraMeter.Install.Templates do
       AuroraMeter added to your supervision tree
       #{inspect(plans)} created with :free and :pro plans
       migration generated (run `mix ecto.migrate`)
+      config/test.exs: flush and broadcast timers set to an hour (drive them with
+        AuroraMeter.Test.flush!/0 and broadcast!/0; in an async test, allow
+        AuroraMeter.Flusher on your sandbox connection)
+      :aurora_meter added to import_deps in .formatter.exs
 
     Meter and gate (org is your tenant: the customer's org or account id as a
     string or integer, or your own struct via a custom AuroraMeter.Tenant):
@@ -325,6 +376,8 @@ defmodule AuroraMeter.Install.Templates do
       AuroraMeter.with_quota(org, :ai_generations, fn -> generate() end)
 
     Docs: https://hexdocs.pm/aurora_meter
+
+    #{@pro_pointer}
     """
   end
 
@@ -344,9 +397,10 @@ defmodule AuroraMeter.Install.Templates do
   configuration while the operator had asked for another, and the host would
   copy the printed one.
   """
-  @spec manual_steps(AuroraMeter.Install.Options.t() | nil) :: String.t()
-  def manual_steps(settings \\ nil) do
+  @spec manual_steps(AuroraMeter.Install.Options.t() | nil, map() | nil) :: String.t()
+  def manual_steps(settings \\ nil, modules \\ nil) do
     settings = settings || %{policy: Options.default_policy(), feature_sources: %{}}
+    %{repo: repo, pubsub: pubsub, plans: plans} = modules || host_modules(nil, nil)
 
     """
 
@@ -356,20 +410,26 @@ defmodule AuroraMeter.Install.Templates do
       2. Configure it:
 
          config :aurora_meter,
-           repo: MyApp.Repo,
-           pubsub: MyApp.PubSub,
-           plans: MyApp.Plans,
+           repo: #{inspect(repo)},
+           pubsub: #{inspect(pubsub)},
+           plans: #{inspect(plans)},
            undeclared_feature_policy: #{inspect(settings.policy)}#{manual_sources(settings.feature_sources)}
+
+         # config/test.exs
+         config :aurora_meter, #{Enum.map_join(test_config(), ", ", fn {k, v} -> "#{k}: #{v}" end)}
 
       3. Add it to your supervision tree, after the Repo and PubSub:
 
-         children = [MyApp.Repo, {Phoenix.PubSub, name: MyApp.PubSub}, AuroraMeter, ...]
+         children = [#{inspect(repo)}, {Phoenix.PubSub, name: #{inspect(pubsub)}}, AuroraMeter, ...]
 
-      4. Declare your plans in MyApp.Plans (use AuroraMeter.Plans).
+      4. Declare your plans in #{inspect(plans)} (use AuroraMeter.Plans), and add
+         :aurora_meter to import_deps in .formatter.exs.
 
-    Tip: add {:igniter, "~> 0.8", only: [:dev]} and run `mix igniter.install aurora_meter`
+    Tip: add {:igniter, ">= 0.8.5", only: [:dev]} and run `mix igniter.install aurora_meter`
     to have all four steps done for you. The Igniter path also takes --oban,
     --events-source and --check-support, and Igniter's own --dry-run.
+
+    #{@pro_pointer}
     """
   end
 

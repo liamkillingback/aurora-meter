@@ -56,9 +56,9 @@ it started, not where it finished.
 
 Boundary behaviour becomes testable without sleeping and without touching the
 machine clock, which is the precondition for the leap day, month end and UTC
-boundary tests in unit 02c.
+boundary tests.
 
-The calendar month stays the default (D08 and `plan.md` D11). The daily and weekly
+The calendar month stays the default. The daily and weekly
 custom source recipe is a documented example rather than a general scheduling DSL:
 a host that wants a different period writes a module, and the contract above says
 exactly what that module must return. Aurora Meter does not gain a period
@@ -81,10 +81,9 @@ under ADR 0009.
 
 ## Verification
 
-Unit 02c (leap day, month end and UTC boundary with a fixed clock; invalid source
-shapes raise), 01c (I03: a period crossing during a `with_quota` callback), 06d and
-07b (period keys for recurring grants and scheduled transitions). None of these
-tests exists yet.
+Leap day, month end and UTC boundary tests with a fixed clock, and invalid source
+shapes raising; I03 (a period crossing during a `with_quota` callback); and the
+period keys for recurring grants and scheduled transitions.
 
 I01 (one flush batch has at most one durable effect) is unchanged by this ADR and
 stays recorded by ADR 0007; I03's other half, that failed tentative quota work is

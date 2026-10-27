@@ -46,7 +46,7 @@ defmodule AuroraMeter.Credits.LotCutoverGateTest do
     :ok
   end
 
-  test "I19 X426 the cutover is permitted in a process that has never touched AuroraMeter.Credits" do
+  test "I19 the cutover is permitted in a process that has never touched AuroraMeter.Credits" do
     unload!(AuroraMeter.Credits)
 
     refute :erlang.module_loaded(AuroraMeter.Credits),
@@ -64,7 +64,7 @@ defmodule AuroraMeter.Credits.LotCutoverGateTest do
              "X250, which repair unit R1 closed."
   end
 
-  test "I19 X426 the probe still refuses when the refund path really is absent" do
+  test "I19 the probe still refuses when the refund path really is absent" do
     # The other direction, so the test above is not passing because the probe
     # has been wired open. `reverse_lot/4` cannot be removed from a compiled
     # module, so the question is put to the probe's own condition.
@@ -79,7 +79,7 @@ defmodule AuroraMeter.Credits.LotCutoverGateTest do
              function_exported?(AuroraMeter.Credits, :no_such_refund_path, 4)
   end
 
-  test "I19 X426 the escape hatch is not what permits it" do
+  test "I19 the escape hatch is not what permits it" do
     refute Application.get_env(:aurora_meter_test, :allow_lot_cutover),
            "setup did not clear the hatch"
 

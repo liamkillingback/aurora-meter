@@ -405,7 +405,7 @@ defmodule AuroraMeter.Telemetry do
             "`decision` is `:keep`, `:release`, `:none` or `{:settle, amount}`: the " <>
             "tuple makes it unbounded, so the preset maps it onto `kind` and keeps " <>
             "only the tag. `outcome` maps onto `result` the same way.",
-        since: "0.6.0",
+        since: "1.0.0",
         emitter: AuroraMeter.Credits.Reconciliation
       },
       %{
@@ -416,7 +416,7 @@ defmodule AuroraMeter.Telemetry do
         metadata: [:operation, :reference, :tenant_key],
         tags: [],
         description: "A wallet column moved by an amount the ledger cannot account for.",
-        since: "0.6.0",
+        since: "1.0.0",
         emitter: AuroraMeter.Credits.Allocator
       },
       %{
@@ -427,7 +427,7 @@ defmodule AuroraMeter.Telemetry do
         metadata: [:shadow, :state],
         tags: [:state],
         description: "One batch of the lot cutover. `shadow: true` is a dry run.",
-        since: "0.6.0",
+        since: "1.0.0",
         emitter: AuroraMeter.Credits.LotMigration
       },
       %{
@@ -440,7 +440,7 @@ defmodule AuroraMeter.Telemetry do
         description:
           "One recurring grant period. `period_start` grows one series per period " <>
             "for ever, so it is metadata only.",
-        since: "0.6.0",
+        since: "1.0.0",
         emitter: AuroraMeter.Credits.Recurrences
       },
       %{

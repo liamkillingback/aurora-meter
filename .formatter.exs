@@ -1,5 +1,6 @@
 locals_without_parens = [
   plan: 2,
+  plan: 3,
   price: 1,
   limit: 3,
   metered: 2,

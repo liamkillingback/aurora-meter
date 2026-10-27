@@ -36,7 +36,7 @@ defmodule AuroraMeter.MigrationMapTest do
   @storefront Path.expand("../..", File.cwd!())
   @map Path.join(@storefront, "docs/v1/build-plans/schema-migration-map.md")
 
-  test "I19 X362 every version the binding map calls destructive is in data_loss_versions/0" do
+  test "I19 every version the binding map calls destructive is in data_loss_versions/0" do
     {core, _pro} = parse!(@map_sentence)
 
     assert Migration.data_loss_versions() == core,
@@ -45,7 +45,7 @@ defmodule AuroraMeter.MigrationMapTest do
              "a host `down` with no confirm_data_loss on it, which is finding X362."
   end
 
-  test "I19 X362 the quotation above is still what the binding map says" do
+  test "I19 the quotation above is still what the binding map says" do
     if File.exists?(@map) do
       map = File.read!(@map)
 
@@ -64,7 +64,7 @@ defmodule AuroraMeter.MigrationMapTest do
     end
   end
 
-  test "I19 X362 every listed version is given a reason, and no unlisted version is" do
+  test "I19 every listed version is given a reason, and no unlisted version is" do
     reasons = Migration.data_loss_reasons()
 
     assert reasons |> Map.keys() |> Enum.sort() == Migration.data_loss_versions()

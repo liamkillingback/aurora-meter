@@ -1,10 +1,8 @@
 # Upgrading: 0.4.x to 1.0
 
-The last release on Hex before 1.0.0 is **0.4.0** (Aurora Meter Pro **0.3.0**).
-A 0.5.0 transition release, which would have warned about everything 1.0
-refuses while refusing nothing itself, was prepared but never published. Its
-changes are all in 1.0.0, so an installation on Hex goes from 0.4.0 straight to
-1.0 and meets every change below in one step.
+The last release on Hex before 1.0.0 is **0.4.0** (Aurora Meter Pro **0.3.0**),
+so an installation on Hex goes from 0.4.0 straight to 1.0 and meets every
+change below in one step.
 
 What the transition release would have done, you can do on 1.0 itself:
 
@@ -180,8 +178,7 @@ Check that no other copy of the task is running, then re-run it with
 a batch is a no-op, so nothing is counted twice. This was proved by killing the
 task with `kill -9` inside an open transaction at three different points and
 comparing the end state against an uninterrupted run: identical on all 25
-tables, every time
-(`docs/evidence/v1/phase-11/interrupt.md` in the storefront).
+tables, every time.
 
 **Have every node on 1.0 before step 5.** A 0.4.x node writing through the
 legacy balance while the lots are being built is the one interleaving the
@@ -192,14 +189,12 @@ After it, roll forward.
 
 The route was rehearsed against all four published states a host can be in
 (core 1, core 2, core 2 with Pro 1, and core 6 with Pro 9), with money in the
-ledger written by the published releases themselves rather than by hand. The
-numbers are in the storefront's `docs/evidence/v1/phase-11/migration-matrix.md`.
+ledger written by the published releases themselves rather than by hand.
 
 ## What it locks, and for how long
 
 Measured on **1,000,000 events**, on Postgres **16.13**, four times, on one
-machine that was busy. The full record, including the spread between runs, is
-`docs/evidence/v1/phase-11/locks.md` in the storefront.
+machine that was busy.
 
 | Step | What it holds | A reader was blocked for | Per 1,000,000 rows |
 |---|---|---|---|
@@ -267,8 +262,7 @@ short, so do not run one as part of the upgrade.
 ## What an 0.4.0 node can do while this is happening
 
 Measured with a real 0.4.0 node running against the database throughout, in its
-own OS process, doing `track`, `flush`, `usage` and `history` every 700 ms
-(`docs/evidence/v1/phase-11/rolling.md` in the storefront).
+own OS process, doing `track`, `flush`, `usage` and `history` every 700 ms.
 
 | After | An 0.4.0 node's buffered `track`, `flush`, `usage` and `history` | An 0.4.0 node's `track(durable: true)` |
 |---|---|---|
@@ -316,8 +310,7 @@ since the backup.
 Take the backup before version 7, and test it. A `pg_dump -Fc` taken before the
 upgrade, restored into a fresh database and upgraded again, produced an
 identical reconciliation document and identical per-table checksums on all 25
-tables, and a replay of the restored copy reproduced its projection exactly
-(`docs/evidence/v1/phase-11/backup-restore.md` in the storefront).
+tables, and a replay of the restored copy reproduced its projection exactly.
 
 ## Schemas and prefixes
 

@@ -29,7 +29,7 @@ defmodule AuroraMeter.Event do
     * `dimensions`: the caller's breakdown keys, string keys and scalar values.
     * `metadata`: the caller's free-form map.
     * `plan_id`, `plan_version`: the plan in force when the usage occurred.
-      Recorded for attribution, never used to reprice (decision D05).
+      Recorded for attribution, never used to reprice.
     * `attribution`: how much to trust the period and plan on this row.
     * `durability`: `:durable` when the row is committed, `:conditional` when
       it was written inside a transaction the host still owns.
@@ -44,9 +44,9 @@ defmodule AuroraMeter.Event do
       tenant had no subscription at all, or none that covers `occurred_at`, so
       there is no commercial contract to name. `plan_id` and `plan_version` are
       NULL, and they are NULL rather than today's plan on purpose: substituting
-      the current plan for a historical fact is exactly the repricing decision
-      D05 forbids. Build unit 07c added this value; before it, every row whose
-      period resolved said `:resolved` and carried no plan at all.
+      the current plan for a historical fact is exactly the repricing the
+      plan version rules forbid. Before 1.0 every row whose period resolved
+      said `:resolved` and carried no plan at all.
     * `:unresolved`: the source could not place the instant, so the calendar
       month containing it was used instead. The period on this row is an
       **approximation**, and this value is how you tell. The plan is not

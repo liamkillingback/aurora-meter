@@ -10,9 +10,10 @@ defmodule AuroraMeter.Config do
   written once, in the schema, and read back from it.
 
   `validate!/0` sees the **whole** application environment, so a misspelled key
-  is reported rather than silently discarded. In this release it is a warning;
-  in Aurora Meter 1.0 it stops the boot. See
-  [Configuration](configuration.md) for the upgrade sequence.
+  is reported rather than silently discarded: it stops the boot. `:repo` must
+  name a module that exists and `:pubsub` a PubSub server name; both are
+  refused with the key, the value given and an example. See
+  [Configuration](configuration.md).
   """
 
   require Logger
@@ -42,9 +43,8 @@ defmodule AuroraMeter.Config do
               doc:
                 "What the entitlement functions do with a feature the tenant's plan does not " <>
                   "declare: `:allow` (0.4.x behaviour), `:warn` (allow and log once per " <>
-                  "feature per node), `:deny` or `:raise`. The default is `:warn` in the " <>
-                  "0.5.x transition release and `:deny` from 1.0. `AuroraMeter.track/4` " <>
-                  "counts an undeclared feature under every policy."
+                  "feature per node), `:deny` or `:raise`. The default is `:deny`. " <>
+                  "`AuroraMeter.track/4` counts an undeclared feature under every policy."
             ],
             plan_version_conflict: [
               type: {:in, [:raise, :warn]},
@@ -54,10 +54,8 @@ defmodule AuroraMeter.Config do
                   "commercial content differs from the snapshot already registered for it: " <>
                   "`:raise` refuses the boot with " <>
                   "`AuroraMeter.PlanVersionConflictError`, `:warn` logs the same message and " <>
-                  "continues. The default is `:warn` in the 0.5.x transition release and " <>
-                  "`:raise` from 1.0, so the first exposure to an edited plan version is a " <>
-                  "log line rather than a failed deploy. Neither setting reprices anybody: " <>
-                  "a tenant stays on the stored definition either way."
+                  "continues. The default is `:raise`. Neither setting reprices anybody: " <>
+                  "the conflicted version resolves to its stored definition either way."
             ],
             durable_features: [type: {:list, :atom}, default: []],
             feature_sources: [
@@ -304,6 +302,8 @@ defmodule AuroraMeter.Config do
 
     :aurora_meter
     |> Schema.validate!(env, @schema, mode)
+    |> check_repo!()
+    |> check_pubsub!()
     |> check_modules!()
     |> check_repo_prefix!()
     |> check_outbox!()
@@ -729,6 +729,140 @@ defmodule AuroraMeter.Config do
 
   @spec get(atom()) :: term()
   defp get(key), do: Application.get_env(:aurora_meter, key, Map.fetch!(@defaults, key))
+
+  # `:repo` and `:pubsub` are plain atoms to NimbleOptions, so a value copied
+  # from an example (`MyApp.Repo`) used to pass validation and fail later with
+  # a message about something else. Both are checked here with the key, the
+  # value given and an example of a correct one.
+  #
+  # The repo has to be a module that exists. Whether it is a working Ecto repo
+  # is Ecto's to say, in its own words, the first time it is used. It does not have to be
+  # running: a host that starts Aurora Meter above its Repo is supported, and
+  # plan registration is deferred until the repo is up.
+  @spec check_repo!(keyword()) :: keyword()
+  defp check_repo!(opts) do
+    repo = opts[:repo]
+
+    cond do
+      is_nil(repo) or not is_atom(repo) ->
+        raise ArgumentError, config_message(:repo, repo, "is not set to a module", repo_example())
+
+      not Code.ensure_loaded?(repo) ->
+        raise ArgumentError,
+              config_message(
+                :repo,
+                repo,
+                "names a module that does not exist in this application",
+                repo_example()
+              )
+
+      true ->
+        opts
+    end
+  end
+
+  # The PubSub key is a server NAME, not a module, so its existence cannot be
+  # checked by loading anything. What can be refused at configuration time is
+  # the one mistake that is never right: naming the `Phoenix.PubSub` module (or
+  # the repo) instead of the name the application gave its PubSub server.
+  # Whether that server is running is checked when Aurora Meter starts, by
+  # `warn_pubsub_not_running/0`.
+  @spec check_pubsub!(keyword()) :: keyword()
+  defp check_pubsub!(opts) do
+    pubsub = opts[:pubsub]
+
+    cond do
+      is_nil(pubsub) ->
+        raise ArgumentError,
+              config_message(:pubsub, pubsub, "is not set to a PubSub name", pubsub_example())
+
+      pubsub == Phoenix.PubSub ->
+        raise ArgumentError,
+              config_message(
+                :pubsub,
+                pubsub,
+                "is the Phoenix.PubSub module, not the name your application starts it under",
+                pubsub_example()
+              )
+
+      pubsub == opts[:repo] ->
+        raise ArgumentError,
+              config_message(:pubsub, pubsub, "is the same as :repo", pubsub_example())
+
+      true ->
+        opts
+    end
+  end
+
+  @doc false
+  # Called by `AuroraMeter.start_link/1`. A PubSub name that no process has
+  # registered is either a typo or a supervision order with Aurora Meter above
+  # the PubSub child; live usage broadcasts fail in both cases. It is logged
+  # rather than raised because a host that only has the order wrong recovers
+  # once the PubSub server starts.
+  @spec warn_pubsub_not_running() :: :ok
+  def warn_pubsub_not_running do
+    pubsub =
+      case Application.fetch_env(:aurora_meter, :pubsub) do
+        {:ok, value} -> value
+        :error -> nil
+      end
+
+    if is_atom(pubsub) and not is_nil(pubsub) and is_nil(Process.whereis(pubsub)) do
+      Logger.error(
+        config_message(
+          :pubsub,
+          pubsub,
+          "names no running process. Either the name is wrong, or AuroraMeter is " <>
+            "started before {Phoenix.PubSub, name: #{inspect(pubsub)}} in your supervision " <>
+            "tree; live usage broadcasts fail until it is running",
+          pubsub_example()
+        )
+      )
+    end
+
+    :ok
+  end
+
+  @spec config_message(atom(), term(), String.t(), String.t()) :: String.t()
+  defp config_message(key, value, reason, example) do
+    "config :aurora_meter, #{key}: #{inspect(value)} #{reason}.\n\n" <>
+      "Set it in config/config.exs, for example:\n\n    #{example}\n"
+  end
+
+  defp repo_example do
+    case host_repo() do
+      nil -> "config :aurora_meter, repo: MyApp.Repo, pubsub: MyApp.PubSub"
+      repo -> "config :aurora_meter, repo: #{inspect(repo)}"
+    end
+  end
+
+  defp pubsub_example do
+    case host_repo() do
+      nil ->
+        "config :aurora_meter, pubsub: MyApp.PubSub  # the name in {Phoenix.PubSub, name: MyApp.PubSub}"
+
+      repo ->
+        prefix = repo |> Module.split() |> List.first()
+
+        "config :aurora_meter, pubsub: #{prefix}.PubSub  " <>
+          "# the name in {Phoenix.PubSub, name: #{prefix}.PubSub}"
+    end
+  end
+
+  # The first repo another loaded application lists under `:ecto_repos`, which
+  # is what `mix ecto.*` reads too. Only used to make the example concrete.
+  defp host_repo do
+    Application.loaded_applications()
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.reject(&(&1 == :aurora_meter))
+    |> Enum.find_value(fn app ->
+      case Application.fetch_env(app, :ecto_repos) do
+        {:ok, [repo | _]} when is_atom(repo) -> repo
+        _other -> nil
+      end
+    end)
+  end
 
   @spec check_modules!(keyword()) :: keyword()
   defp check_modules!(opts) do

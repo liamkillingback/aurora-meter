@@ -68,7 +68,7 @@ defmodule AuroraMeter.Retention do
 
   `AuroraMeter.Checkpoints`' documentation says the heartbeat is not a lease and
   that **nothing in this package subtracts it from anything**, because
-  `open-findings.md` X100 measured `clock_timestamp()` stepping backwards nine
+  `clock_timestamp()` was measured stepping backwards nine
   times in 300 seconds, worst 439 ms. This module does subtract it from
   something, so the distinction has to be exact rather than implied.
 
@@ -80,7 +80,7 @@ defmodule AuroraMeter.Retention do
   This decision is a different one. The smallest window it will act on is
   **one day**, refused below that at boot (`AuroraMeter.Config`), which is about
   200,000 times the measured backwards step of the shared clock and about 30,000
-  times the worst measured step of a node's own (2.6472 s, X59). For the answer
+  times the worst measured step of a node's own (2.6472 s). For the answer
   to flip, a row would have to sit within a few seconds of a cutoff a day or
   more wide, and the row that then loses its protection is one whose node was
   reporting idle at almost exactly the cutoff instant, so the batch it could

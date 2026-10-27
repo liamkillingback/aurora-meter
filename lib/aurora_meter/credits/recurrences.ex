@@ -85,7 +85,7 @@ defmodule AuroraMeter.Credits.Recurrences do
       second, weaker implementation over the legacy projection is not one this
       package will carry. See `docs/upgrading-to-lots.md`.
 
-      A tenant with **no wallet at all** is not skipped: since 0.5.0 the grant
+      A tenant with **no wallet at all** is not skipped: since 1.0.0 the grant
       that pays the allowance is what creates the wallet, and a wallet created
       now is born on the allocator. This is the ordinary case for a customer
       who has just subscribed, and an allowance is usually the first credit a

@@ -93,7 +93,7 @@ On a wallet that has **not** been cut over to lots, `spendable == available`,
 So a dashboard can render all eight figures without asking which writer owns the
 wallet.
 
-That is a wallet created before you upgraded to 0.5.0 and not yet migrated. A
+That is a wallet created before you upgraded to 1.0.0 and not yet migrated. A
 wallet created since is on lots from its first ledger call and reports all
 eight for real. See [which wallets are on lots](#which-wallets-are-on-lots).
 
@@ -201,7 +201,7 @@ credit the wallet already holds, so a payment's refund can never erase a
 promotion. That is the whole point of the pair, and it is the rule
 `AuroraMeter.Credits.Lots` exists to make checkable afterwards.
 
-The "or by any call after it" is not decoration. Until 0.6.0 the exclusion held
+The "or by any call after it" is not decoration. Before 1.0.0 the exclusion held
 for the refund's own transaction and no longer: the refund correctly left a
 `debt` rather than taking the promotion, and then the next `release` or `settle`
 repaid that debt in spend order, which takes promotional credit first. The
@@ -480,7 +480,7 @@ amount.
 
 ### Which wallets are on lots
 
-**A wallet created by 0.5.0 or later is on lots from its first ledger call**,
+**A wallet created by 1.0.0 or later is on lots from its first ledger call**,
 and there is nothing to switch on. The wallet is created by whatever writes to
 it first (a grant, a hold, even setting a low-balance threshold), and the same
 statement that creates it marks it as the allocator's.
@@ -765,7 +765,7 @@ A run walks entitled subscriptions in keyset order, skips a tenant whose plan
 declares no allowance, and works out which periods each allowance still owes.
 
 **A recurring allowance needs a wallet the allocator owns**, which is any wallet
-created by 0.5.0 or later, including one that does not exist yet: the grant that
+created by 1.0.0 or later, including one that does not exist yet: the grant that
 pays the allowance is what creates it. A tenant whose wallet predates the
 upgrade is skipped with `reason: :lots_disabled` until
 `mix aurora_meter.credits.migrate_lots` has reached it, and the run reports the
@@ -1236,3 +1236,11 @@ is waiting, so your own tests can assert that no path forgot the call.
 
 `AuroraMeter.Test` ships `fund!/3`, `drain!/1` and `credit_balance/1`; see the
 [testing guide](testing.md).
+
+## Charging for it
+
+Charging for it: Aurora Meter Pro adds Stripe checkout, top-ups, auto-recharge
+and metered invoicing: https://aurorameter.com/pro
+
+To charge for LLM tokens with this ledger, see
+[Charge customers for LLM tokens with ReqLLM](llm-billing-with-req-llm.md).

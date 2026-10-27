@@ -70,8 +70,8 @@ if Code.ensure_loaded?(Oban) do
     Its **period** is finite on every worker here, and that is not decoration
     either. `:executing` is among the uniqueness states, so a job a dead node
     left `executing` deduplicates new enqueues; with `period: :infinity` it did
-    so for ever, and one node death stopped that worker permanently
-    (`open-findings.md` X486). The periods, and the rule that produced them, are
+    so for ever, and one node death stopped that worker permanently.
+    The periods, and the rule that produced them, are
     in [the scheduler map](scheduler.md).
 
     ## Availability
@@ -250,8 +250,8 @@ if Code.ensure_loaded?(Oban) do
     This is a **warning**, logged once, and never a refusal unless you ask for
     one with `rescue: :require`. Aurora Meter's own workers no longer depend on
     it for liveness: every uniqueness period is finite, so a wedged job stops
-    that worker for at most its period rather than for ever
-    (`open-findings.md` X486). What the plugin adds is the cleanup, and
+    that worker for at most its period rather than for ever.
+    What the plugin adds is the cleanup, and
     `rescue_after` is a trade an operator makes rather than one this library can
     make for them: shorter than the harm, and **longer than your slowest
     legitimate run**, because Lifeline rescues on elapsed time alone and will

@@ -2,10 +2,9 @@ defmodule AuroraMeter.Schema.PlanTransition do
   @moduledoc """
   The audit row for one scheduled, applied or cancelled plan change.
 
-  **Created by build unit 07a and written by nobody yet.** The table and the
-  schema ship together with core schema version 10 so that 07b adds behaviour
-  rather than DDL, and so that a host upgrading to 1.0.0-rc.1 runs one core
-  migration for the whole of phase 07 rather than two.
+  The table ships with core schema version 10 and is written by
+  `AuroraMeter.Subscriptions.schedule_transition/3` and the transitions it
+  applies or cancels.
 
   `ref` is the caller's idempotency reference, unique per tenant. `confirm` says
   whether the transition may be applied locally (`"local"`) or must wait for the

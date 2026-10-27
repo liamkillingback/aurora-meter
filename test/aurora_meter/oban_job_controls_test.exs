@@ -42,7 +42,7 @@ if Code.ensure_loaded?(Oban) do
       # grant row lock this module proves are all defined over that scan. A
       # wallet the allocator owns is expired by the second phase, which walks
       # lots and takes a different lock. See `credits_new_wallet_test.exs` for
-      # what that phase does, and `open-findings.md` X384 for what it does not.
+      # what that phase does, including its own `{:lots, expires_at, id}` cursor (X384).
       LedgerFixtures.legacy_wallet!(tenant)
 
       # Each test gets its own operation name, so the checkpoint rows of two

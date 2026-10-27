@@ -44,7 +44,7 @@ defmodule AuroraMeter.Events.Backfill do
   ## What it never writes
 
   It writes no `aurora_meter_event_totals` row, enqueues no outbox item and
-  emits no PubSub (L-03a-3). Legacy events were never billed, and upgrading one
+  emits no PubSub. Legacy events were never billed, and upgrading one
   must not make it billable.
 
   ## Exclusion between two runners
@@ -57,7 +57,7 @@ defmodule AuroraMeter.Events.Backfill do
   A lock rather than a lease, deliberately. A lease is a duration compared
   against a clock, and `clock_timestamp()` is the database host's OS clock,
   which is corrected: it was measured stepping backwards 439 ms on a 32.5
-  second cadence on the development host (`open-findings.md` X100). A lock has
+  second cadence on the development host. A lock has
   no clock in it, and it releases itself when the connection holding it dies,
   which is exactly the signal a stale lease is trying to approximate.
 

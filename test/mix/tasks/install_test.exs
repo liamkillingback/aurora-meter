@@ -89,6 +89,60 @@ if Code.ensure_loaded?(Igniter.Test) do
       refute_unbounded(body)
     end
 
+    test "writes test timers, imports the plans DSL formatter and ends with the Pro pointer" do
+      igniter =
+        test_project(app_name: :demo)
+        |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
+
+      test_config = source(igniter, "config/test.exs")
+      assert test_config =~ "flush_interval: 3_600_000"
+      assert test_config =~ "broadcast_interval: 3_600_000"
+      assert test_config =~ "metrics_interval: 0"
+
+      assert source(igniter, ".formatter.exs") =~ ":aurora_meter"
+
+      notice = Enum.join(igniter.notices, "\n")
+      assert notice =~ Templates.pro_pointer()
+      assert notice =~ "https://aurorameter.com/pro"
+      assert notice =~ "config/test.exs"
+    end
+
+    test "a host's own test timer is kept" do
+      igniter =
+        test_project(
+          app_name: :demo,
+          files: %{
+            "config/test.exs" => "import Config\nconfig :aurora_meter, flush_interval: 50\n"
+          }
+        )
+        |> Igniter.compose_task("aurora_meter.install", ["--repo", "Demo.Repo"])
+
+      test_config = source(igniter, "config/test.exs")
+      assert test_config =~ "flush_interval: 50"
+      refute test_config =~ "flush_interval: 3_600_000"
+      assert test_config =~ "broadcast_interval: 3_600_000"
+    end
+
+    test "the package exports the plans DSL as locals without parens, every arity included" do
+      exported = Mix.Project.config() |> Keyword.get(:app) |> then(fn _ -> ".formatter.exs" end)
+      {formatter, _binding} = Code.eval_file(exported)
+      locals = formatter[:export][:locals_without_parens]
+
+      for {name, arity} <-
+            [plan: 2, plan: 3, price: 1, limit: 3, metered: 2, counter: 1] ++
+              [feature: 2, recurring_credits: 2] do
+        assert {name, arity} in locals, "#{name}/#{arity} is not exported"
+      end
+    end
+
+    test "the Igniter floor is the release that places the child before the Endpoint" do
+      {_, requirement, _} =
+        Enum.find(Mix.Project.config()[:deps], fn dep -> elem(dep, 0) == :igniter end)
+
+      refute Version.match?("0.8.4", requirement)
+      assert Version.match?("0.8.5", requirement)
+    end
+
     test "a second run does not duplicate the policy line" do
       igniter =
         test_project(app_name: :demo)
@@ -106,6 +160,12 @@ if Code.ensure_loaded?(Igniter.Test) do
         test_project(
           app_name: :demo,
           files: %{
+            # What `import_deps: [:aurora_meter]` gives a real host, whose deps
+            # directory holds this package's exported formatter. The test
+            # project has no deps directory, so the export is stated directly.
+            ".formatter.exs" => """
+            [inputs: ["{config,lib,test}/**/*.{ex,exs}"], locals_without_parens: [plan: 2, price: 1]]
+            """,
             "lib/demo/plans.ex" => """
             defmodule Demo.Plans do
               use AuroraMeter.Plans
@@ -803,6 +863,22 @@ if Code.ensure_loaded?(Igniter.Test) do
         assert Templates.manual_steps() =~ "undeclared_feature_policy: :deny"
         refute Templates.manual_steps() =~ "feature_sources"
       end
+
+      test "the printed block names the host's own modules, never MyApp" do
+        modules = Templates.host_modules(:shop, Shop.Repo)
+        steps = Templates.manual_steps(nil, modules)
+
+        assert steps =~ "repo: Shop.Repo"
+        assert steps =~ "pubsub: Shop.PubSub"
+        assert steps =~ "plans: Shop.Plans"
+        assert steps =~ "{Phoenix.PubSub, name: Shop.PubSub}"
+        assert steps =~ "flush_interval: 3600000"
+        assert steps =~ Templates.pro_pointer()
+        refute steps =~ "MyApp"
+
+        assert Templates.host_modules(:my_shop, nil) ==
+                 %{repo: MyShop.Repo, pubsub: MyShop.PubSub, plans: MyShop.Plans}
+      end
     end
 
     # -- helpers ---------------------------------------------------------------
@@ -813,8 +889,13 @@ if Code.ensure_loaded?(Igniter.Test) do
     # generated files, and a test that greps both of them for the same name
     # passes while they disagree.
     defp configured_plans(igniter) do
+      # The installer also writes config/test.exs, so config.exs gains an
+      # `import_config "#{config_env()}.exs"` line; that file exists only in the
+      # igniter, not on disk, and the key read here is in config.exs itself.
+      contents = String.replace(source(igniter, @config), ~r/^\s*import_config .*$/m, "")
+
       @config
-      |> Config.Reader.eval!(source(igniter, @config))
+      |> Config.Reader.eval!(contents, env: :test)
       |> get_in([:aurora_meter, :plans])
     end
 

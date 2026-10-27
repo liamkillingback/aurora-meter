@@ -134,7 +134,7 @@ The refusal names the debt: `{:error, :debt_outstanding}`, not
 clears it. A grant of **any** category clears it, including a promotional one,
 and it is the only thing that does. See [credits](../credits.md) under "Debt".
 
-A wallet that predates 0.5.0 and has not been through
+A wallet that predates 1.0.0 and has not been through
 `mix aurora_meter.credits.migrate_lots` has no `debt` column to write, so it
 goes on refusing with `:insufficient_credits` until the balance itself comes
 back above zero. [Upgrading to lots](../upgrading-to-lots.md) is the list of

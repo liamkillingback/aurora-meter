@@ -23,7 +23,7 @@ defmodule AuroraMeter.Schema.CreditBalance do
       is what stops the two writers ever running together on one wallet.
     * `projection_checked_at`: stamped by every successful conservation check.
     * `low_balance_crossing_id`: the persisted identity of the current
-      low-balance crossing (written by build unit 06c).
+      low-balance crossing.
 
   The row is only ever changed by the `AuroraMeter.Credits` ledger under a
   `FOR UPDATE` lock, alongside an `AuroraMeter.Schema.CreditTransaction`.
@@ -60,7 +60,7 @@ defmodule AuroraMeter.Schema.CreditBalance do
 
   The four `>= 0` validations mirror the CHECK constraints schema version 9 put
   on the table. Until then the changeset was the only thing asserting them and
-  nothing enforced them on a row the ledger wrote directly (finding X183), so a
+  nothing enforced them on a row the ledger wrote directly, so a
   lost row lock would have been silent corruption rather than a refused write.
   """
   @spec changeset(t(), map()) :: Ecto.Changeset.t()

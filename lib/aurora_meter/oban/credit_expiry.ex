@@ -26,7 +26,7 @@ if Code.ensure_loaded?(Oban) do
     | `"max_batches"` | `#{10}` | Batches one job runs before returning. |
 
     Both are bounded integers and neither is a cursor. **The cursor is never a
-    job argument** (L05c-1): it lives in `aurora_meter_checkpoints` under
+    job argument**: it lives in `aurora_meter_checkpoints` under
     `"credit_expiry:global"`, so two jobs for this worker read the same position
     and the second one resumes where the first got to rather than restarting
     from a stale copy of its own.
@@ -151,6 +151,21 @@ if Code.ensure_loaded?(Oban) do
 
     defp pinned_instant(_absent), do: Clock.db_now()
 
+    # The lot phase's position. `expires_at` and `id` are both absent when a
+    # page filled up exactly at the end of the grant phase.
+    defp keyset(%{"phase" => "lots"} = cursor) do
+      case {cursor["expires_at"], cursor["id"]} do
+        {at, id} when is_binary(at) and is_binary(id) ->
+          case DateTime.from_iso8601(at) do
+            {:ok, parsed, _offset} -> {:lots, parsed, id}
+            _unparseable -> {:lots, nil, nil}
+          end
+
+        _start ->
+          {:lots, nil, nil}
+      end
+    end
+
     defp keyset(%{"expires_at" => at, "id" => id}) when is_binary(at) and is_binary(id) do
       case DateTime.from_iso8601(at) do
         {:ok, parsed, _offset} -> {parsed, id}
@@ -161,6 +176,18 @@ if Code.ensure_loaded?(Oban) do
     defp keyset(_absent), do: nil
 
     defp next_cursor(_now, nil), do: nil
+
+    defp next_cursor(now, {:lots, nil, nil}),
+      do: %{"now" => DateTime.to_iso8601(now), "phase" => "lots"}
+
+    defp next_cursor(now, {:lots, expires_at, id}) do
+      %{
+        "now" => DateTime.to_iso8601(now),
+        "phase" => "lots",
+        "expires_at" => DateTime.to_iso8601(expires_at),
+        "id" => id
+      }
+    end
 
     defp next_cursor(now, {expires_at, id}) do
       %{

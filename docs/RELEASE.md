@@ -19,7 +19,7 @@ Confirm:
 - [ ] The version is not already on hex.pm. Check the registry, not this
       repository: `mix hex.info aurora_meter <version>` must say there is no
       such release. The tree has twice carried a version that told a different
-      story from the registry (build unit 11c).
+      story from the registry.
 
 `mix test` enforces the first three: `test/aurora_meter/release_metadata_test.exs`
 compares `@version` against the changelog heading, both install snippets and the
@@ -42,7 +42,7 @@ documentation set missing every guide. That is a property of the archive, not a
 fault in it: hexdocs already serves the guides and no consumer compiles them.
 
 ```bash
-git tag v1.0.0
+git tag v1.0.1
 git push origin main --tags
 mix hex.publish           # publishes the package and the docs to hexdocs.pm
 ```

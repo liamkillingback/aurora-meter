@@ -207,9 +207,9 @@ midnight; 02c introduces the seam and owns the full `with_quota` crossing test.
 - `AuroraMeter.EntitlementsTest` / `test I03 a callback that flushed and then throws is not billed`
 - `AuroraMeter.EntitlementsTest` / `test I03 a callback that flushed and then exits is not billed`
 - `AuroraMeter.EntitlementsTest` / `test I03 a reservation is never in a flush batch`
-- `AuroraMeter.EntitlementsTest` / `test I03 a reservation committed against a captured day lands in that day's bucket (partial until 02c)`
+- `AuroraMeter.EntitlementsTest` / `test I03 a reservation committed against a captured day lands in that day's bucket`
 - `AuroraMeter.KillTest` / `test I03 a with_quota caller killed with :kill is never billed and leaves a documented reservation`
-- `AuroraMeter.KillTest` / `test I03 Counter.commit_work after a Store restart seeds rather than raising (C6, fixed in 03b)`
+- `AuroraMeter.KillTest` / `test I03 Counter.commit_work after a Store restart seeds rather than raising`
 - `AuroraMeter.ExamplesTest` / `test team-saas.md with_quota/3 gives the reservation back when the work raises`
 - `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I03 with_quota releases its reservation on success and leaves the recorded quantity`
 - `AuroraMeter.FeatureSourceTest` / `test with_quota over an events-source feature I03 with_quota over an events-source feature bills nothing when the callback records nothing`
@@ -709,8 +709,8 @@ names the unit that replaces it:
 - `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a grant above the documented limit is refused at the facade, not by the driver (L17)`
 - `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 a reversal above the documented limit is refused at the facade, not by the driver (L17)`
 - `AuroraMeter.CreditsModelTest` / `test integer bounds and rounding I10 the range guard refuses before any database work (L17)`
-- `AuroraMeter.CreditsModelTest` / `test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix (L19, fixed in 06a)`
-- `AuroraMeter.CreditsModelTest` / `test the clock the ledger orders itself by I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq (L20, fixed in 06a)`
+- `AuroraMeter.CreditsModelTest` / `test ordering the query does not fix I10 two grants due in one pass expire in an order the query does not fix`
+- `AuroraMeter.CreditsModelTest` / `test the clock the ledger orders itself by I10 a backwards step in the wall clock changes nothing, because the ledger orders by seq`
 - `AuroraMeter.Credits.AllocatorTest` / `test I10 the spend order is promotional, then earliest expiry, then oldest grant, then seq`
 - `AuroraMeter.Credits.AllocatorTest` / `test I10 a 6 USD debit against promotional A=3, promotional B=5 and paid P=10 takes A=3 and B=3`
 - `AuroraMeter.Credits.AllocatorTest` / `test I10 a lot past its expires_at is not eligible for a debit and is not consumed`
@@ -873,7 +873,7 @@ being closed twice".
 - `AuroraMeter.CreditsLowBalanceTest` / `test I11 the low-balance trigger uses spendable, not balance minus held`
 - `AuroraMeter.CreditsLowBalanceTest` / `test I11 lowering the threshold below the current spendable clears the standing crossing`
 - `AuroraMeter.CreditsLowBalanceTest` / `test I11 no threshold means no crossing, no alert and no flag`
-- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a handler that needs a connection gets one while the writer holds a pinned one (X269)`
+- `AuroraMeter.CreditsLowBalanceTest` / `test I11 a handler that needs a connection gets one while the writer holds a pinned one`
 
 **Evidence.** `docs/evidence/v1/phase-05/i11.md`
 
@@ -916,8 +916,8 @@ race.
 - `AuroraMeter.CreditsTest` / `test promotional credit I12 expiry never claws back credit a hold has reserved`
 - `AuroraMeter.CreditsTest` / `test promotional credit I12 a grant expires only its own remainder`
 - `AuroraMeter.CreditsTest` / `test promotional credit I12 a new expiring grant cannot absorb spending that predates it`
-- `AuroraMeter.CreditsTest` / `test promotional credit I12 a release after the grant expired returns spendable credit (L1, fixed in 06a)`
-- `AuroraMeter.CreditsReconcileHoldsTest` / `test recovery beside expiry I12 a reconciler release on an expired grant returns spendable credit (L1, fixed in 06a)`
+- `AuroraMeter.CreditsTest` / `test promotional credit I12 a release after the grant expired returns spendable credit`
+- `AuroraMeter.CreditsReconcileHoldsTest` / `test recovery beside expiry I12 a reconciler release on an expired grant returns spendable credit`
 - `AuroraMeter.CreditsTest` / `test promotional credit expire_due/1 expires only what is left, once, and never below zero`
 - `AuroraMeter.CreditsTest` / `test promotional credit a promotional grant landing on a negative balance first repays the debt`
 - `AuroraMeter.Credits.AllocatorTest` / `test I12 a reservation released on a lot past its expiry becomes expired, never available`
@@ -1044,8 +1044,8 @@ nothing and the next run asks again.
 - `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 twelve independent connections scheduling one ref produce one transition row`
 - `AuroraMeter.PlanTransitionsConcurrencyTest` / `test I16 two Oban jobs from two nodes apply one transition`
 - `AuroraMeter.MigrationGuardsTest` / `test I16 a re-run of the whole history is a no-op I16 up(from: 1, version: latest) twice raises nothing and changes no catalogue`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-4: version 8 converges on one valid index I16 it drops the index a real aborted concurrent create left behind`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-4: version 8 converges on one valid index I16 applying version 8 twice leaves exactly one valid index`
+- `AuroraMeter.MigrationGuardsTest` / `test version 8 converges on one valid index I16 it drops the index a real aborted concurrent create left behind`
+- `AuroraMeter.MigrationGuardsTest` / `test version 8 converges on one valid index I16 applying version 8 twice leaves exactly one valid index`
 
 **Evidence.** `docs/evidence/v1/phase-05/i16.md`
 
@@ -1064,7 +1064,7 @@ Editing a version **in place** is refused rather than applied:
 content (the plan id, the version, the price, every feature and every recurring
 credit) against the stored one and raises
 `AuroraMeter.PlanVersionConflictError`, or logs the same message under
-`plan_version_conflict: :warn`, which is the 0.5.x default.
+`plan_version_conflict: :warn`. Under both settings the conflicted version keeps resolving to its stored definition.
 
 Subscriptions written before core schema version 10 are named at the first boot
 after the upgrade, with the plan's **base** version and that version's
@@ -1128,6 +1128,9 @@ took effect at rather than the instant a worker noticed.
 - `AuroraMeter.PlanVersionsPropertyTest` / `property I17 the fingerprint is a pure function of the commercial content`
 - `AuroraMeter.PlanVersionsPropertyTest` / `property I17 two plans with different commercial content have different fingerprints`
 - `AuroraMeter.PlanVersionsTest` / `test I17 a future-dated version is not effective before its instant and is after it`
+- `AuroraMeter.PlanVersionsTest` / `test I17 under plan_version_conflict warn an in-place edit reprices nobody`
+- `AuroraMeter.PlanVersionsTest` / `test I17 a registration deferred by a misordered tree runs once the repo is up and pins the edit`
+- `AuroraMeter.PlanVersionsTest` / `test I17 the deferred registration is started only when registration was deferred`
 - `AuroraMeter.PlanVersionsTest` / `test I17 a non-UTC effective instant raises at compile time and says why`
 - `AuroraMeter.PlanVersionsTest` / `test I17 a plan block without a version compiles as version 1 with no effective instant`
 - `AuroraMeter.PlanVersionsTest` / `test I17 a plan id whose only version is future dated raises at compile time`
@@ -1189,7 +1192,7 @@ took effect at rather than the instant a worker noticed.
 - `AuroraMeter.PlanPreviewTest` / `test I17 preview_transition with a provider that returns an error keeps the diff`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a cancellation wins over a sync that also names the scheduled target`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a cancelled transition is never applied by a later run`
-- `AuroraMeter.PlanTransitionPrecedenceTest` / `test X296 a provider naming the plan id without the version cancels, and Aurora Meter Pro no longer produces that shape`
+- `AuroraMeter.PlanTransitionPrecedenceTest` / `test a provider naming the plan id without the version cancels, and Aurora Meter Pro no longer produces that shape`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync that does not change the plan leaves the transition pending`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync to a different plan cancels the pending transition`
 - `AuroraMeter.PlanTransitionPrecedenceTest` / `test I17 a provider sync to exactly the scheduled target applies the transition early`
@@ -1432,23 +1435,23 @@ the storefront together.
 - `AuroraMeter.MigrationV10Test` / `test I19 version 10 refuses a plan version fingerprint that is not 32 bytes`
 - `AuroraMeter.MigrationV10Test` / `test I19 version 10 refuses a transition state it does not know`
 - `AuroraMeter.MigrationV10Test` / `test I19 version 10 run twice is a no-op`
-- `AuroraMeter.MigrationMapTest` / `test I19 X362 every version the binding map calls destructive is in data_loss_versions/0`
-- `AuroraMeter.MigrationMapTest` / `test I19 X362 the quotation above is still what the binding map says`
-- `AuroraMeter.MigrationMapTest` / `test I19 X362 every listed version is given a reason, and no unlisted version is`
-- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 X428 --no-validate-checks emits the option on the version 8 file and nowhere else`
-- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 X428 without the flag nothing is emitted, so the default stands`
-- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 X428 the emitted option is one AuroraMeter.Migration.up/1 actually accepts`
-- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 X426 the cutover is permitted in a process that has never touched AuroraMeter.Credits`
-- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 X426 the probe still refuses when the refund path really is absent`
-- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 X426 the escape hatch is not what permits it`
-- `AuroraMeter.Credits.LotCursorTest` / `test the documented operator sequence I19 X427 shadow then real, with no extra flags, migrates the wallets`
-- `AuroraMeter.Credits.LotCursorTest` / `test the documented operator sequence I19 X427 the rehearsal leaves the real cursor untouched`
-- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 X427 says so when it skipped everything, and fails`
-- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 X427 says so when there was nothing to do, and does not fail`
-- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 X427 does not erase the cursor it did not advance`
-- `AuroraMeter.Credits.LotCursorTest` / `test retry-blocked I19 X434 reaches a wallet behind the cursor`
-- `AuroraMeter.Credits.LotCursorTest` / `test retry-blocked I19 X434 does not drag the forward cursor backwards`
-- `AuroraMeter.Credits.LotCursorTest` / `test the cursor rows themselves I19 X427 the shadow cursor cannot collide with a wallet's checkpoint`
+- `AuroraMeter.MigrationMapTest` / `test I19 every version the binding map calls destructive is in data_loss_versions/0`
+- `AuroraMeter.MigrationMapTest` / `test I19 the quotation above is still what the binding map says`
+- `AuroraMeter.MigrationMapTest` / `test I19 every listed version is given a reason, and no unlisted version is`
+- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 --no-validate-checks emits the option on the version 8 file and nowhere else`
+- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 without the flag nothing is emitted, so the default stands`
+- `Mix.Tasks.AuroraMeter.Gen.MigrationTest` / `test validate_checks I19 the emitted option is one AuroraMeter.Migration.up/1 actually accepts`
+- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 the cutover is permitted in a process that has never touched AuroraMeter.Credits`
+- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 the probe still refuses when the refund path really is absent`
+- `AuroraMeter.Credits.LotCutoverGateTest` / `test I19 the escape hatch is not what permits it`
+- `AuroraMeter.Credits.LotCursorTest` / `test the documented operator sequence I19 shadow then real, with no extra flags, migrates the wallets`
+- `AuroraMeter.Credits.LotCursorTest` / `test the documented operator sequence I19 the rehearsal leaves the real cursor untouched`
+- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 says so when it skipped everything, and fails`
+- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 says so when there was nothing to do, and does not fail`
+- `AuroraMeter.Credits.LotCursorTest` / `test a run that migrates nothing I19 does not erase the cursor it did not advance`
+- `AuroraMeter.Credits.LotCursorTest` / `test retry-blocked I19 reaches a wallet behind the cursor`
+- `AuroraMeter.Credits.LotCursorTest` / `test retry-blocked I19 does not drag the forward cursor backwards`
+- `AuroraMeter.Credits.LotCursorTest` / `test the cursor rows themselves I19 the shadow cursor cannot collide with a wallet's checkpoint`
 
 Two of those bullets are about upgrades that could not be run at all rather than
 upgrades that lost money, and build unit 11a found both by building the
@@ -1512,8 +1515,8 @@ alone, and a refusal nobody can demonstrate is not a refusal:
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a row of a kind the fold has no rule for blocks the wallet`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an expire row that names no grant blocks the wallet`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 an expire row larger than the grant it names blocks the wallet`
-- `AuroraMeter.Credits.LotMigrationReplayTest` / `test X261 an expiry that destroyed a grant a hold had reserved blocks the wallet`
-- `AuroraMeter.Credits.LotMigrationReplayTest` / `test X276 an expiry the legacy attribution over-counted because a hold blocked a spend`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test an expiry that destroyed a grant a hold had reserved blocks the wallet`
+- `AuroraMeter.Credits.LotMigrationReplayTest` / `test an expiry the legacy attribution over-counted because a hold blocked a spend`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 a history no ordering can reconcile blocks rather than migrating wrong`
 - `AuroraMeter.Credits.LotMigrationReplayTest` / `test I19 every flag the fold raises is classified, and a blocking one halts the fold`
 - `AuroraMeter.CreditsLotMigrationTest` / `test I19 a blocked wallet keeps lots_enabled_at null, has no lots and records its reason`
@@ -1537,7 +1540,7 @@ The wallet migration's own run reports, fixture catalogue, blocked catalogue
 and lock durations are under `docs/evidence/v1/phase-06/`, named from the
 phase 11 evidence below.
 
-- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape (X266)`
+- `AuroraMeter.CreditsLotMigrationTest` / `test I19 a wallet holding a reverse row migrates and reconciles, and so does one holding the legacy shape`
 
 Build unit 09b, the generated host migrations. A history is only reproducible
 if the files that built it name the versions they ran: an unbounded
@@ -1558,25 +1561,25 @@ supported ways of installing one package came to produce two different files.
 - `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test the shared plan I19 Pro declares no concurrent version, so one range becomes one file` (pro)
 - `Mix.Tasks.AuroraMeterPro.Gen.MigrationTest` / `test the shared plan I19 no generated Pro file claims a data-loss confirmation nothing reads` (pro)
 - `Mix.Tasks.AuroraMeterPro.InstallTest` / `test I19 the installer and the generator emit the same migration body` (pro)
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 up/1 raises ArgumentError naming the unknown option`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 up/1 names prefix and the default schema when prefix is given`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 down/1 raises ArgumentError naming the unknown option`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 down/1 names prefix when prefix is given`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 a misspelled known option is refused too`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 every option the version modules read is accepted`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-1: an unknown option raises rather than being dropped I19 a non-keyword argument is refused by name`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when the repo sets migration_default_prefix`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when default_options carries a prefix for reads`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when default_options carries a prefix for insert_all`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! passes when the prefix is nil`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! passes when the prefix is public`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 validate! says nothing about a module that is not a repository`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a repository that would migrate into another schema refuses to boot I19 the suite's own repository passes the check`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a migration running under a prefix refuses before it creates anything I19 mix ecto.migrate --prefix raises PrefixError and creates no table`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-2: a migration running under a prefix refuses before it creates anything I19 the same migration with no prefix runs`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-3: down is refused unless the loss is confirmed I19 down(version: 10, to: 1) raises DataLossError and changes nothing`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-3: down is refused unless the loss is confirmed I19 down of a range with no destructive version needs no confirmation`
-- `AuroraMeter.MigrationGuardsTest` / `test L-11b-3: down is refused unless the loss is confirmed I19 down with confirm_data_loss: true drops the tables`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 up/1 raises ArgumentError naming the unknown option`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 up/1 names prefix and the default schema when prefix is given`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 down/1 raises ArgumentError naming the unknown option`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 down/1 names prefix when prefix is given`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 a misspelled known option is refused too`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 every option the version modules read is accepted`
+- `AuroraMeter.MigrationGuardsTest` / `test an unknown option raises rather than being dropped I19 a non-keyword argument is refused by name`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when the repo sets migration_default_prefix`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when default_options carries a prefix for reads`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 validate! raises PrefixError when default_options carries a prefix for insert_all`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 validate! passes when the prefix is nil`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 validate! passes when the prefix is public`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 validate! says nothing about a module that is not a repository`
+- `AuroraMeter.MigrationGuardsTest` / `test a repository that would migrate into another schema refuses to boot I19 the suite's own repository passes the check`
+- `AuroraMeter.MigrationGuardsTest` / `test a migration running under a prefix refuses before it creates anything I19 mix ecto.migrate --prefix raises PrefixError and creates no table`
+- `AuroraMeter.MigrationGuardsTest` / `test a migration running under a prefix refuses before it creates anything I19 the same migration with no prefix runs`
+- `AuroraMeter.MigrationGuardsTest` / `test down is refused unless the loss is confirmed I19 down(version: 10, to: 1) raises DataLossError and changes nothing`
+- `AuroraMeter.MigrationGuardsTest` / `test down is refused unless the loss is confirmed I19 down of a range with no destructive version needs no confirmation`
+- `AuroraMeter.MigrationGuardsTest` / `test down is refused unless the loss is confirmed I19 down with confirm_data_loss: true drops the tables`
 - `AuroraMeter.MigrationTest` / `test I19 the test repo applies versions in ascending order`
 
 **Evidence.** `storefront:docs/evidence/v1/phase-11/i19.md`
@@ -1628,8 +1631,7 @@ and after the request and requires them equal.
 A missing tenant is never the default tenant. Both the plug and every entry
 point of `AuroraMeter.LiveView` refuse `nil` before `AuroraMeter.Tenant.to_key/1`
 can see it, because `AuroraMeter.Tenant.Default` stringifies what it is given and
-would map `nil` to `""`, which the 0.5.x transition mode still allows with a
-warning (open finding C12). The plug answers 401 and reads nothing; the tests assert the
+would map `nil` to `""`. The plug answers 401 and reads nothing; the tests assert the
 absence of an ETS row, a database counter row and a subscription for `""` rather
 than assuming it.
 
@@ -1735,10 +1737,10 @@ compiled, so the verdict is about the build and not about the probe (X325).
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 a dependency below its floor beats the stale-build check to the verdict`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 the abort message names every problem and the command that fixes it`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --check-support I20 an absent optional dependency is neither an error nor a stale build`
-- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 no Oban at all: the message names the line to add to mix.exs`
-- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 Oban present and the workers not compiled: the stale build, and the one line that fixes it`
-- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 control: a host that has both is not refused`
-- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it (X375) I20 the version the refusal asks for is the floor the support matrix declares`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it I20 no Oban at all: the message names the line to add to mix.exs`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it I20 Oban present and the workers not compiled: the stale build, and the one line that fixes it`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it I20 control: a host that has both is not refused`
+- `AuroraMeter.InstallShellTest` / `test --oban on a host that cannot have it I20 the version the refusal asks for is the floor the support matrix declares`
 - `AuroraMeter.InstallShellTest` / `test the queue name the installer writes I20 the two places it is written agree with each other`
 - `AuroraMeter.InstallShellTest` / `test the queue name the installer writes I20 and both agree with AuroraMeter.Oban.queue/0`
 - `Mix.Tasks.AuroraMeter.InstallTest` / `test --feature-policy I20 a first run writes :deny with no flag given`
@@ -1834,11 +1836,11 @@ watched, and both were watched failing before they were trusted passing
 - `AuroraMeter.ExportedIdiomTest` / `test I20 no guarded file asks function_exported?/3 without loading the module first`
 - `AuroraMeter.ExportedIdiomTest` / `test I20 every allow-list entry still matches a real call site`
 - `AuroraMeter.ExportedIdiomTest` / `test I20 the guard sees a bare call, and does not see a wrapped one`
-- `AuroraMeter.ExportedIdiomTest` / `test I20 X426 no shipped lib file asks function_exported?/3 without loading the module first`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 no shipped lib file asks function_exported?/3 without loading the module first`
 - `AuroraMeter.ExportedIdiomTest` / `test I20 the lib sweep finds a site the file list would have missed`
-- `AuroraMeter.ExportedIdiomTest` / `test I20 X426 the guard reads the variable forms the package actually uses`
-- `AuroraMeter.ConfigSchemaColdTest` / `test I20 X426 ensure_exports!/4 accepts a module nothing has loaded`
-- `AuroraMeter.ConfigSchemaColdTest` / `test I20 X426 and still refuses a module that really lacks the function`
+- `AuroraMeter.ExportedIdiomTest` / `test I20 the guard reads the variable forms the package actually uses`
+- `AuroraMeter.ConfigSchemaColdTest` / `test I20 ensure_exports!/4 accepts a module nothing has loaded`
+- `AuroraMeter.ConfigSchemaColdTest` / `test I20 and still refuses a module that really lacks the function`
 - `AuroraMeter.ConfigSchemaColdTest` / `test I20 and still refuses a module that cannot be loaded at all`
 
 **Evidence.** `docs/evidence/v1/phase-08/i20.md`

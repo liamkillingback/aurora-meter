@@ -26,6 +26,41 @@ defmodule AuroraMeter.PackagingTest do
     assert "mix.exs" in @files
   end
 
+  test "usage-rules.md ships, exists and names the package's real entry points" do
+    assert "usage-rules.md" in @files
+    rules = File.read!("usage-rules.md")
+
+    for name <- [
+          "AuroraMeter.with_quota",
+          "AuroraMeter.Credits.with_credits",
+          "AuroraMeter.Tenant"
+        ] do
+      assert rules =~ name, "usage-rules.md does not mention #{name}"
+    end
+
+    assert Code.ensure_loaded?(AuroraMeter.Credits) and
+             function_exported?(AuroraMeter.Credits, :with_credits, 4)
+
+    assert function_exported?(AuroraMeter, :with_quota, 3)
+  end
+
+  test "the Hex description fits Hex's limit and uses the words a buyer searches for" do
+    description = Mix.Project.config()[:description]
+    assert String.length(description) <= 300
+
+    for word <- [
+          "quotas",
+          "usage limits",
+          "usage-based billing",
+          "prepaid credits",
+          "LLM",
+          "Stripe Billing Meters"
+        ] do
+      assert String.downcase(description) =~ String.downcase(word),
+             "the description does not say #{inspect(word)}"
+    end
+  end
+
   test "no entry ships the sample application" do
     offenders = Enum.filter(@files, &String.contains?(&1, "examples"))
     assert offenders == [], "package.files ships the sample: #{inspect(offenders)}"

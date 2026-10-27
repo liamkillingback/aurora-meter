@@ -67,7 +67,7 @@ defmodule AuroraMeter.Credits.CurrencyMismatchError do
   The currency is stamped once, when a balance row is created, and nothing
   re-reads it afterwards. Changing the setting on a wallet set that already has
   rows therefore used to leave two currencies side by side with no check, and
-  every figure computed across them was meaningless. V1 is USD only (D06), so
+  every figure computed across them was meaningless. V1 is USD only, so
   this stops the boot instead.
   """
 

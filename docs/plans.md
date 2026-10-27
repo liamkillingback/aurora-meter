@@ -225,8 +225,8 @@ credit **inside an existing version** is
 fingerprints and the remedy.
 
 ```elixir
-config :aurora_meter, plan_version_conflict: :raise   # the 1.0 default
-config :aurora_meter, plan_version_conflict: :warn    # the 0.5.x default
+config :aurora_meter, plan_version_conflict: :raise   # the default
+config :aurora_meter, plan_version_conflict: :warn    # log and continue
 ```
 
 `:warn` logs the same message and continues. Neither setting reprices anybody: a

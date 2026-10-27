@@ -76,11 +76,10 @@ Deprecated today:
 |---|---|---|
 | `:durable_features` configuration key | per-feature reporting sources | 2.0 |
 
-Two behaviours change their **default** rather than disappearing, and each gets
-a transition release that warns before the default moves:
-`:undeclared_feature_policy` (`:warn` in 0.5.x, `:deny` from 1.0) and unknown
-configuration keys (a warning in 0.5.x, a refusal to boot in 1.0). Setting the
-key explicitly pins the behaviour across the change in both cases.
+Two behaviours changed their **default** in 1.0 rather than disappearing:
+`:undeclared_feature_policy` (`:deny` from 1.0, `:allow` before) and unknown
+configuration keys (a refusal to boot from 1.0). Setting the key explicitly pins
+the behaviour across such a change.
 
 ## 5. Runtime support
 

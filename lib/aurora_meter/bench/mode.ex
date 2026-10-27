@@ -54,7 +54,7 @@ defmodule AuroraMeter.Bench.Mode do
   Times `fun` on the **monotonic** clock and answers `{microseconds, result}`.
 
   Monotonic and never a wall clock: the clock this host shares steps backwards
-  by up to 439 ms on a 32.5 second cadence (`open-findings.md` X100), and a
+  by up to 439 ms on a 32.5 second cadence, and a
   benchmark is exactly where that produces an absurd number rather than a
   slightly wrong one. Read in `:native` and converted through nanoseconds, so a
   sub-microsecond ETS write still has resolution.

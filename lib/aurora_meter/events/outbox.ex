@@ -36,13 +36,14 @@ defmodule AuroraMeter.Events.Outbox do
 
     * `:eligible`
     * `{:ineligible, :feature_buffered}` when the feature reports from the
-      buffered counter rather than from events (build unit 03c)
+      buffered counter rather than from events
     * `{:ineligible, :attribution_unresolved}` when the period source could not
       place `occurred_at`, so the period on the row is an approximation
     * `{:ineligible, :plan_unresolved}` when the period is a fact but no plan
-      assignment covers `occurred_at`, so the row names no commercial contract
-      (build unit 07c). The item is never delivered on a guess: substituting
-      today's plan for a historical fact is the repricing decision D05 forbids.
+      assignment covers `occurred_at`, so the row names no commercial contract.
+      The item is never delivered on a guess: substituting
+      today's plan for a historical fact is the repricing the plan version rules
+      forbid.
     * `{:ineligible, :original_ineligible}` on a **correction** whose original
       carried an unresolved attribution, of either kind. The correction of an
       unattributed fact cannot be attributed either, and the reason names which
